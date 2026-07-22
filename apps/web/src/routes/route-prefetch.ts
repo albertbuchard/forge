@@ -4,6 +4,11 @@ const routeModules = {
   artifacts: () => import("@/pages/artifacts-page"),
   calendar: () => import("@/pages/calendar-page"),
   companionLab: () => import("@/pages/companion-sync-lab-page"),
+  concepts: () => import("@/pages/concepts-page"),
+  conceptDetail: () => import("@/pages/concept-detail-page"),
+  courses: () => import("@/pages/courses-page"),
+  courseDetail: () => import("@/pages/course-detail-page"),
+  courseLearn: () => import("@/pages/course-learn-page"),
   goalDetail: () => import("@/pages/goal-detail-page"),
   goals: () => import("@/pages/goals-page"),
   habits: () => import("@/pages/habits-page"),
@@ -76,6 +81,11 @@ const routeModules = {
 export type RouteModuleKey = keyof typeof routeModules;
 
 const routeMatchers: Array<[RegExp, RouteModuleKey]> = [
+  [/^\/courses\/[^/]+\/learn\/?$/, "courseLearn"],
+  [/^\/courses\/[^/]+\/?$/, "courseDetail"],
+  [/^\/courses\/?$/, "courses"],
+  [/^\/concepts\/[^/]+\/?$/, "conceptDetail"],
+  [/^\/concepts\/?$/, "concepts"],
   [/^\/projects\/hierarchy\/?$/, "projectHierarchy"],
   [/^\/projects\/[^/]+\/?$/, "projectDetail"],
   [/^\/projects\/?$/, "projects"],

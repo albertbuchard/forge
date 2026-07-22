@@ -42,12 +42,15 @@ describe("Forge docs site agent tool reference", () => {
         notes: string[];
       }>;
     }>("plugins/openclaw/docs/agent-tools.json");
-    const toolsByName = new Map(toolDocs.tools.map((tool) => [tool.name, tool]));
+    const toolsByName = new Map(
+      toolDocs.tools.map((tool) => [tool.name, tool])
+    );
 
     for (const toolName of [
       "forge_call_movement_route",
       "forge_call_life_force_route",
-      "forge_call_workbench_route"
+      "forge_call_workbench_route",
+      "forge_call_course_route"
     ]) {
       const tool = toolsByName.get(toolName);
       expect(tool, toolName).toBeDefined();
@@ -59,15 +62,18 @@ describe("Forge docs site agent tool reference", () => {
       );
     }
 
-    expect(
-      toolsByName.get("forge_call_movement_route")?.inputShape
-    ).toMatch(/tripPointDelete/);
-    expect(
-      toolsByName.get("forge_call_life_force_route")?.inputShape
-    ).toMatch(/weekdayTemplate/);
-    expect(
-      toolsByName.get("forge_call_workbench_route")?.inputShape
-    ).toMatch(/latestNodeOutput/);
+    expect(toolsByName.get("forge_call_movement_route")?.inputShape).toMatch(
+      /tripPointDelete/
+    );
+    expect(toolsByName.get("forge_call_life_force_route")?.inputShape).toMatch(
+      /weekdayTemplate/
+    );
+    expect(toolsByName.get("forge_call_workbench_route")?.inputShape).toMatch(
+      /latestNodeOutput/
+    );
+    expect(toolsByName.get("forge_call_course_route")?.inputShape).toMatch(
+      /learningSession[\s\S]*submitAttempt[\s\S]*conceptDetail/
+    );
   });
 
   it("links the tools page from the docs navigation and uses generated data", () => {

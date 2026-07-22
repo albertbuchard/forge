@@ -40,6 +40,7 @@ describe("useShellNavigationState migrations", () => {
       "forge.nav-layout-migrations",
       JSON.stringify({
         "desktop-knowledge-graph-default-v1": true,
+        "desktop-courses-default-v1": true,
         "desktop-attention-default-v1": true
       })
     );

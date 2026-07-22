@@ -7,6 +7,15 @@ import type {
   DataRootSwitchMode
 } from "./data-management-types";
 import type {
+  AssessmentFeedback,
+  ConceptDetail,
+  CourseDetail,
+  CourseProgress,
+  ForgeConcept,
+  ForgeCourse,
+  LearningSession
+} from "./course-types";
+import type {
   AgentAction,
   AgentOnboardingPayload,
   AgentIdentity,
@@ -5996,5 +6005,106 @@ export function releaseTaskRun(taskRunId: string, input: TaskRunReleaseInput) {
       method: "POST",
       body: JSON.stringify(input)
     }
+  );
+}
+
+function withCourseUser(path: string, userId?: string) {
+  if (!userId) return path;
+  const search = new URLSearchParams({ userId });
+  return `${path}?${search.toString()}`;
+}
+
+export function listForgeCourses(userId?: string) {
+  return request<{
+    courses: Array<ForgeCourse & { progress: CourseProgress }>;
+  }>(withCourseUser("/api/v1/courses", userId));
+}
+
+export function getForgeCourse(courseId: string, userId?: string) {
+  return request<CourseDetail>(
+    withCourseUser(`/api/v1/courses/${encodeURIComponent(courseId)}`, userId)
+  );
+}
+
+export function importForgeCourse(coursePackage: unknown) {
+  return request<{
+    course: ForgeCourse;
+    imported: {
+      conceptsDefined: number;
+      conceptsReferenced: number;
+      concepts: number;
+      modules: number;
+      lessons: number;
+    };
+  }>("/api/v1/courses/import", {
+    method: "POST",
+    body: JSON.stringify(coursePackage)
+  });
+}
+
+export function exportForgeCourse(courseId: string) {
+  return requestBlob(`/api/v1/courses/${encodeURIComponent(courseId)}/export`);
+}
+
+export function getForgeLearningSession(input: {
+  courseId: string;
+  lessonId?: string;
+  userId?: string;
+}) {
+  const search = new URLSearchParams();
+  if (input.lessonId) search.set("lessonId", input.lessonId);
+  if (input.userId) search.set("userId", input.userId);
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<LearningSession>(
+    `/api/v1/courses/${encodeURIComponent(input.courseId)}/learn${suffix}`
+  );
+}
+
+export function submitForgeCourseAttempt(input: {
+  courseId: string;
+  lessonId: string;
+  activityId: string;
+  userId?: string;
+  answerMarkdown: string;
+}) {
+  return request<{
+    attemptId: string;
+    status: "assessed" | "needs_review";
+    score: number | null;
+    grade: string | null;
+    pointsAwarded: number;
+    feedback: AssessmentFeedback;
+  }>(
+    `/api/v1/courses/${encodeURIComponent(input.courseId)}/lessons/${encodeURIComponent(input.lessonId)}/activities/${encodeURIComponent(input.activityId)}/attempts`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        userId: input.userId,
+        answerMarkdown: input.answerMarkdown
+      })
+    }
+  );
+}
+
+export function listForgeConcepts(
+  input: {
+    userId?: string;
+    courseId?: string;
+    query?: string;
+    dueOnly?: boolean;
+  } = {}
+) {
+  const search = new URLSearchParams();
+  if (input.userId) search.set("userId", input.userId);
+  if (input.courseId) search.set("courseId", input.courseId);
+  if (input.query?.trim()) search.set("query", input.query.trim());
+  if (input.dueOnly) search.set("dueOnly", "true");
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ concepts: ForgeConcept[] }>(`/api/v1/concepts${suffix}`);
+}
+
+export function getForgeConcept(conceptId: string, userId?: string) {
+  return request<ConceptDetail>(
+    withCourseUser(`/api/v1/concepts/${encodeURIComponent(conceptId)}`, userId)
   );
 }

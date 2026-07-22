@@ -259,6 +259,8 @@ describe("question flow simulation cycles", () => {
     "Life Events",
     "Life Force",
     "Workbench",
+    "Course",
+    "Concept",
     "Preference Catalog",
     "Preference Catalog Item",
     "Preference Context",
@@ -308,8 +310,9 @@ describe("question flow simulation cycles", () => {
       "Save the pattern I noticed from the last three blocked work sessions.",
     "Calendar Event": "Schedule a focused review call in local time.",
     "Work Block Template":
-      "Make a repeating protected writing block that blocks other work.",
-    "Task Timebox": "Reserve tomorrow morning for one existing Forge task.",
+      "Make an overnight recurring protected-writing rule without making me calculate minutes from midnight.",
+    "Task Timebox":
+      "Read my existing thesis task, suggest a few slots, and reserve only the one I accept.",
     "Task Run": "Start live work on the current thesis task.",
     "Work Adjustment":
       "Add 35 minutes of real work that happened outside a live run.",
@@ -321,7 +324,8 @@ describe("question flow simulation cycles", () => {
       "Decide what useful work to do next without ignoring active work or current capacity.",
     "Self Observation": "Log what I noticed in the moment before I disengaged.",
     "Sleep Session": "Attach reflective context to last night's poor sleep.",
-    "Workout Session": "Connect a hard workout to mood and recovery context.",
+    "Workout Session":
+      "Add yesterday's evening ride manually, without making me supply calories or heart-rate data I do not have.",
     "Sleep Overview":
       "Review recent nights to understand whether my recovery is actually improving.",
     "Sports Overview":
@@ -345,6 +349,10 @@ describe("question flow simulation cycles", () => {
     "Life Force": "Change the model because Mondays crash after lunch.",
     Workbench:
       "Inspect a failed flow run and read the latest output for one node.",
+    Course:
+      "Continue my statistics course, help me understand the current activity, and submit my answer when I say it is ready.",
+    Concept:
+      "Show me which causal-inference concept is due, then explain the evidence behind its current mastery estimate.",
     "Preference Catalog": "Create a comparison pool for places to work from.",
     "Preference Catalog Item":
       "Add one cafe candidate without making later comparisons ambiguous.",
@@ -429,8 +437,21 @@ describe("question flow simulation cycles", () => {
     "Entity Navigation": ["list", "reopen", "touch", "human-pin-handoff"],
     Insight: ["add", "review", "link", "preserve"],
     "Calendar Event": ["add", "update", "review", "delete"],
-    "Work Block Template": ["add", "update", "review", "delete"],
-    "Task Timebox": ["add", "update", "review", "schedule"],
+    "Work Block Template": [
+      "add",
+      "guided-design",
+      "update",
+      "read-only-review",
+      "delete"
+    ],
+    "Task Timebox": [
+      "add",
+      "recommend",
+      "update",
+      "read-only-review",
+      "status-change",
+      "delete"
+    ],
     "Task Run": ["start", "continue", "complete", "release"],
     "Work Adjustment": ["add", "correct", "review", "audit"],
     "Operator Overview": ["review", "navigate", "interpret", "follow-up"],
@@ -438,7 +459,7 @@ describe("question flow simulation cycles", () => {
     "Today Priority": ["decide", "continue", "pause", "review-evidence"],
     "Self Observation": ["observe", "review", "link", "route"],
     "Sleep Session": ["add", "update", "review", "enrich", "delete"],
-    "Workout Session": ["add", "update", "review", "enrich"],
+    "Workout Session": ["add", "update", "review", "enrich", "delete"],
     "Sleep Overview": ["review", "navigate", "interpret", "follow-up"],
     "Sports Overview": ["review", "navigate", "interpret", "follow-up"],
     "Training Load": ["review", "navigate", "interpret", "follow-up"],
@@ -452,6 +473,16 @@ describe("question flow simulation cycles", () => {
     "Life Events": ["add", "calendar-sync", "ticket-import", "status"],
     "Life Force": ["overview", "profile", "weekday-template", "fatigue-signal"],
     Workbench: ["inspect", "run", "edit", "publish"],
+    Course: [
+      "choose",
+      "review-progress",
+      "continue",
+      "get-support",
+      "submit",
+      "import",
+      "export"
+    ],
+    Concept: ["search", "due-review", "read-detail", "interpret-mastery"],
     "Preference Catalog": ["add", "update", "review", "browse"],
     "Preference Catalog Item": ["add", "update", "review", "compare"],
     "Preference Context": ["add", "update", "review", "merge"],
@@ -630,6 +661,8 @@ describe("question flow simulation cycles", () => {
     "Life Events": "hybridBatchAndSpecializedDomain",
     "Life Force": "specializedDomain",
     Workbench: "specializedDomain",
+    Course: "specializedDomain",
+    Concept: "specializedDomain",
     "Preference Catalog": "batch",
     "Preference Catalog Item": "batch",
     "Preference Context": "hybridBatchAndAction",
@@ -688,6 +721,8 @@ describe("question flow simulation cycles", () => {
     movement: "Movement",
     life_force: "Life Force",
     workbench: "Workbench",
+    course: "Course",
+    concept: "Concept",
     psyche_value: "Value",
     behavior_pattern: "Behavior Pattern",
     behavior: "Behavior",
@@ -778,7 +813,9 @@ describe("question flow simulation cycles", () => {
     "life_event",
     "movement",
     "life_force",
-    "workbench"
+    "workbench",
+    "course",
+    "concept"
   ] as const;
 
   const specializedSurfaceRouteScenarios = {
@@ -854,6 +891,24 @@ describe("question flow simulation cycles", () => {
       runFlow: "Execute a known saved flow.",
       runByPayload: "Execute from a one-off input contract.",
       chatFlow: "Send a follow-up message into a saved flow chat."
+    },
+    Course: {
+      listCourses:
+        "List installed courses before asking the learner for an internal identifier.",
+      courseDetail:
+        "Read one course's syllabus and progress before asking review questions.",
+      learningSession:
+        "Open the learner-safe session for teaching, activity selection, or continuation.",
+      submitAttempt:
+        "Submit one accepted learner answer to the exact activity.",
+      importCourse:
+        "Install a trusted validated course package or accepted replacement.",
+      exportCourse:
+        "Export one exact course only for explicit package transfer.",
+      listConcepts:
+        "Find concepts by learner, course, search phrase, or due status.",
+      conceptDetail:
+        "Read one concept's definition, relationships, evidence, and mastery estimate."
     }
   } as const;
 
@@ -1168,7 +1223,8 @@ describe("question flow simulation cycles", () => {
       lifeEvents: "Life Events",
       lifeForce: "Life Force",
       life_force: "Life Force",
-      workbench: "Workbench"
+      workbench: "Workbench",
+      courses: "Course"
     } as const;
 
     for (const [surfaceKey, scenarioName] of Object.entries(
@@ -1383,7 +1439,13 @@ describe("question flow simulation cycles", () => {
       /Specialized route surface: entityNavigation[\s\S]*forge_call_entity_navigation_route[\s\S]*list[\s\S]*touch[\s\S]*Pin and unpin remain human-operator-only/i
     );
 
-    for (const entityType of ["movement", "life_force", "workbench"] as const) {
+    for (const entityType of [
+      "movement",
+      "life_force",
+      "workbench",
+      "course",
+      "concept"
+    ] as const) {
       const entry = onboarding.entityCatalog.find(
         (entry) => entry.entityType === entityType
       );
@@ -1587,15 +1649,22 @@ describe("question flow simulation cycles", () => {
     );
 
     const specializedCapsules = [
-      ["attention_inbox", "attention"],
-      ["entity_navigation", "entityNavigation"],
-      ["life_event", "lifeEvents"],
-      ["movement", "movement"],
-      ["life_force", "lifeForce"],
-      ["workbench", "workbench"]
+      { entityType: "attention_inbox", surfaceKey: "attention" },
+      { entityType: "entity_navigation", surfaceKey: "entityNavigation" },
+      { entityType: "life_event", surfaceKey: "lifeEvents" },
+      { entityType: "movement", surfaceKey: "movement" },
+      { entityType: "life_force", surfaceKey: "lifeForce" },
+      { entityType: "workbench", surfaceKey: "workbench" },
+      { entityType: "course", surfaceKey: "courses" },
+      {
+        entityType: "concept",
+        surfaceKey: "courses",
+        routeKeys: ["listConcepts", "conceptDetail"]
+      }
     ] as const;
 
-    for (const [entityType, surfaceKey] of specializedCapsules) {
+    for (const capsule of specializedCapsules) {
+      const { entityType, surfaceKey } = capsule;
       const flow = onboarding.entityCatalog.find(
         (entry) => entry.entityType === entityType
       )?.questionFlow;
@@ -1607,7 +1676,9 @@ describe("question flow simulation cycles", () => {
       expect(flow?.apiAccessHint, `${entityType} route tool`).toContain(
         `Route tool: ${surface.routeTool}.`
       );
-      for (const routeKey of surface.routeKeys) {
+      const expectedRouteKeys =
+        "routeKeys" in capsule ? capsule.routeKeys : surface.routeKeys;
+      for (const routeKey of expectedRouteKeys) {
         expect(
           flow?.apiAccessHint,
           `${entityType} apiAccessHint should include route key ${routeKey}`
@@ -1725,7 +1796,8 @@ describe("question flow simulation cycles", () => {
       "lifeEvents",
       "lifeForce",
       "life_force",
-      "workbench"
+      "workbench",
+      "courses"
     ] as const) {
       const surface =
         onboarding.entityRouteModel.specializedDomainSurfaces[surfaceKey];
@@ -2762,6 +2834,137 @@ describe("question flow simulation cycles", () => {
     );
     expect(sleep?.questionFlow.readinessCheck).toMatch(
       /Direct manual capture[\s\S]*requires only startedAt and endedAt[\s\S]*Read-only review[\s\S]*must not manufacture a write[\s\S]*provider-backed measurement fields[\s\S]*forge_update_sleep_session[\s\S]*immediate, non-restorable[\s\S]*no restore lane/i
+    );
+  });
+
+  it("2026-07-22 cycle 2 retest: Workout Session adapts capture, correction, reflection, and delete", async () => {
+    const compact = getSectionSlice(entityPlaybook, "Workout Session");
+    const onboarding = await loadOnboardingPayload();
+    const workout = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "workout_session"
+    );
+
+    expect(compact).toMatch(
+      /direct manual capture[\s\S]*exact-record review or narrow correction[\s\S]*read-only review[\s\S]*reflective enrichment[\s\S]*delete/i
+    );
+    expect(compact).toMatch(
+      /recognizable workout type[\s\S]*offset-bearing `startedAt` and `endedAt`[\s\S]*end[\s\S]*is after the start[\s\S]*nearby interval and workout type[\s\S]*one accuracy or consent question/i
+    );
+    expect(compact).toMatch(
+      /requires only `workoutType`, `startedAt`, and `endedAt`[\s\S]*defaults manual[\s\S]*source fields[\s\S]*Do not require calories, distance, steps, heart rate[\s\S]*effort, mood, meaning/i
+    );
+    expect(compact).toMatch(
+      /timezone only when[\s\S]*daylight-saving ambiguity[\s\S]*stored instants[\s\S]*do not make[\s\S]*the user format ISO timestamps or calculate duration/i
+    );
+    expect(compact).toMatch(
+      /read the exact existing Workout[\s\S]*Session first[\s\S]*Answer the read-only question before proposing a write[\s\S]*patch only what is newly true or inaccurate/i
+    );
+    expect(compact).toMatch(
+      /provider-backed or habit-generated[\s\S]*Do not rewrite measured timing,[\s\S]*calories, distance, heart rate, source, or provenance merely to add context/i
+    );
+    expect(compact).toMatch(
+      /`forge_update_workout_session`[\s\S]*`subjectiveEffort`[\s\S]*`moodBefore`[\s\S]*`moodAfter`[\s\S]*`meaningText`[\s\S]*`plannedContext`[\s\S]*`socialContext`[\s\S]*imported measurement fields remain untouched/i
+    );
+    expect(compact).toMatch(
+      /deletion is[\s\S]*immediate, non-restorable, and bypasses the settings bin[\s\S]*explicit[\s\S]*confirmation[\s\S]*`forge_delete_entities`/i
+    );
+    expect(compact).toMatch(
+      /`workout_session`[\s\S]*shared batch CRUD routes[\s\S]*search, manual[\s\S]*create, narrow correction, and delete[\s\S]*reflective enrichment[\s\S]*no restore lane/i
+    );
+    expect(workout?.minimumCreateFields).toEqual([
+      "workoutType",
+      "startedAt",
+      "endedAt"
+    ]);
+    expect(workout?.questionFlow.readinessCheck).toMatch(
+      /Direct manual capture[\s\S]*requires only workoutType, startedAt, and endedAt[\s\S]*Read-only review[\s\S]*must not manufacture a write[\s\S]*provider-backed or habit-generated measurement evidence[\s\S]*forge_update_workout_session[\s\S]*immediate, non-restorable[\s\S]*no restore lane/i
+    );
+  });
+
+  it("2026-07-22 cycle 3 retest: Work Block Template and Task Timebox adapt capture, assistance, review, and deletion", async () => {
+    const workBlockCompact = getSectionSlice(
+      entityPlaybook,
+      "Work Block Template"
+    );
+    const timeboxCompact = getSectionSlice(entityPlaybook, "Task Timebox");
+    const onboarding = await loadOnboardingPayload();
+    const workBlock = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "work_block_template"
+    );
+    const timebox = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "task_timebox"
+    );
+
+    expect(workBlockCompact).toMatch(
+      /direct capture[\s\S]*guided recurrence design[\s\S]*exact-record review or narrow update[\s\S]*read-only review[\s\S]*delete/i
+    );
+    expect(workBlockCompact).toMatch(
+      /requires only `title`, `weekDays`, `startMinute`, and `endMinute`[\s\S]*defaults[\s\S]*`custom`[\s\S]*`#60a5fa`[\s\S]*`UTC`[\s\S]*`blocked`/i
+    );
+    expect(workBlockCompact).toMatch(
+      /do not make[\s\S]*calculate minutes from midnight[\s\S]*end is earlier than the start[\s\S]*continues overnight[\s\S]*Equal start and end is invalid/i
+    );
+    expect(workBlockCompact).toMatch(
+      /read the exact template first[\s\S]*future[\s\S]*derived instances[\s\S]*immediate[\s\S]*non-restorable[\s\S]*settings bin/i
+    );
+    expect(workBlockCompact).toMatch(
+      /shared batch CRUD[\s\S]*`forge_create_work_block_template`[\s\S]*optional create convenience/i
+    );
+    expect(workBlock?.minimumCreateFields).toEqual([
+      "title",
+      "weekDays",
+      "startMinute",
+      "endMinute"
+    ]);
+    expect(workBlock?.fieldGuide).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "kind",
+          required: false,
+          defaultValue: "custom"
+        }),
+        expect.objectContaining({
+          name: "timezone",
+          required: false,
+          defaultValue: "UTC"
+        }),
+        expect.objectContaining({
+          name: "blockingState",
+          required: false,
+          defaultValue: "blocked"
+        })
+      ])
+    );
+    expect(workBlock?.questionFlow.readinessCheck).toMatch(
+      /Direct capture[\s\S]*requires only title, weekDays, startMinute, and endMinute[\s\S]*continues overnight[\s\S]*Read-only review[\s\S]*must not manufacture a write[\s\S]*Delete[\s\S]*immediate, non-restorable[\s\S]*shared batch CRUD[\s\S]*optional create convenience/i
+    );
+
+    expect(timeboxCompact).toMatch(
+      /direct manual capture[\s\S]*assisted recommendation[\s\S]*exact-record review or narrow update[\s\S]*read-only review[\s\S]*status change[\s\S]*delete/i
+    );
+    expect(timeboxCompact).toMatch(
+      /resolve and read the exact existing task[\s\S]*requires only `taskId`, `title`, `startsAt`, and `endsAt`[\s\S]*defaults to `manual`[\s\S]*`planned`/i
+    );
+    expect(timeboxCompact).toMatch(
+      /`forge_recommend_task_timeboxes`[\s\S]*Recommendations are read-only[\s\S]*timezone is optional[\s\S]*create only the[\s\S]*slot the user accepts/i
+    );
+    expect(timeboxCompact).toMatch(
+      /read the exact timebox[\s\S]*`taskId` and `source` cannot be changed[\s\S]*does not start a task run or prove work happened/i
+    );
+    expect(timeboxCompact).toMatch(
+      /hidden[\s\S]*immediately[\s\S]*non-restorable[\s\S]*settings bin[\s\S]*durable idempotent remote cleanup/i
+    );
+    expect(timeboxCompact).toMatch(
+      /shared batch CRUD[\s\S]*`forge_create_task_timebox`[\s\S]*optional create convenience[\s\S]*bounded read-only assisted lane/i
+    );
+    expect(timebox?.minimumCreateFields).toEqual([
+      "taskId",
+      "title",
+      "startsAt",
+      "endsAt"
+    ]);
+    expect(timebox?.questionFlow.readinessCheck).toMatch(
+      /Direct capture[\s\S]*exact existing task[\s\S]*requires only taskId, title, startsAt, and endsAt[\s\S]*Assisted recommendation[\s\S]*suggestions are read-only[\s\S]*taskId and source are immutable[\s\S]*never starts a task run or proves completion[\s\S]*durable idempotent remote cleanup[\s\S]*shared batch CRUD/i
     );
   });
 

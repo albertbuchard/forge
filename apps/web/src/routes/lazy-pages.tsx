@@ -20,6 +20,31 @@ export const CalendarPage = lazy(() =>
     default: module.CalendarPage
   }))
 );
+export const CoursesPage = lazy(() =>
+  import("@/pages/courses-page").then((module) => ({
+    default: module.CoursesPage
+  }))
+);
+export const CourseDetailPage = lazy(() =>
+  import("@/pages/course-detail-page").then((module) => ({
+    default: module.CourseDetailPage
+  }))
+);
+export const CourseLearnPage = lazy(() =>
+  import("@/pages/course-learn-page").then((module) => ({
+    default: module.CourseLearnPage
+  }))
+);
+export const ConceptsPage = lazy(() =>
+  import("@/pages/concepts-page").then((module) => ({
+    default: module.ConceptsPage
+  }))
+);
+export const ConceptDetailPage = lazy(() =>
+  import("@/pages/concept-detail-page").then((module) => ({
+    default: module.ConceptDetailPage
+  }))
+);
 export const CompanionSyncLabPage = lazy(() =>
   import("@/pages/companion-sync-lab-page").then((module) => ({
     default: module.CompanionSyncLabPage

@@ -1,6 +1,6 @@
 ---
 name: forge-openclaw-plugin
-description: Use when the user wants to save, search, update, review, start, stop, reward, explain, compare, or run Forge records, or when the conversation is clearly about a Forge entity or domain surface such as a goal, project, strategy, task, habit, person, People or peer sharing, note, wiki_page, artifact, calendar_event, calendar_connection, work_block_template, task_timebox, task_run, work_adjustment, insight, preference item, preference context, preference catalog, preference judgment, preference signal, questionnaire instrument, questionnaire run, self observation, operator_overview, operator_context, calendar_overview, sleep_overview, sports_overview, training_load, weight_loss, movement, life_force, workbench, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, flashcard, trigger_report, event_type, emotion_definition, sleep_session, or workout_session. Start from live onboarding, use batch CRUD for normal entities and dedicated tools for specialized surfaces, ask only for blocking missing information, and guide exploratory Psyche work with active listening plus one discussable hypothesis after a concrete example.
+description: Use when the user wants to save, search, update, review, start, stop, reward, explain, compare, learn, or run Forge records, or when the conversation is clearly about a Forge entity or domain surface such as a goal, project, strategy, task, habit, person, People or peer sharing, note, wiki_page, artifact, calendar_event, calendar_connection, work_block_template, task_timebox, task_run, work_adjustment, insight, preference item, preference context, preference catalog, preference judgment, preference signal, questionnaire instrument, questionnaire run, self observation, operator_overview, operator_context, calendar_overview, sleep_overview, sports_overview, training_load, weight_loss, movement, life_force, workbench, course, concept, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, flashcard, trigger_report, event_type, emotion_definition, sleep_session, or workout_session. Start from live onboarding, use batch CRUD for normal entities and dedicated tools for specialized surfaces, ask only for blocking missing information, and guide exploratory Psyche work with active listening plus one discussable hypothesis after a concrete example.
 ---
 
 Forge is the user's structured system for planning work, doing work, reflecting on patterns, and keeping a truthful record of what is happening. Use it when the user is clearly working inside that system, or when they are describing something that naturally belongs there and would benefit from being stored, updated, reviewed, or acted on in Forge. Keep the conversation natural first. Do not turn every message into intake. When a real Forge entity is clearly present, name the exact entity type plainly, help with the substance of the conversation, and then offer Forge once, lightly, if storing it would genuinely help.
@@ -469,6 +469,8 @@ Health rule:
   switch to a dedicated Preferences action only after the user chooses a change.
 - Use the shared batch entity tools for ordinary `sleep_session` and `workout_session` create, update, delete, and search work. Do not force agents into a large one-route-per-entity mental model when the batch routes already cover the record cleanly.
 - Use `forge_update_sleep_session` and `forge_update_workout_session` only when the job is reflective enrichment on one existing health record after review, such as attaching notes, tags, mood, meaning, or Forge links.
+- A direct manual `workout_session` needs only an accepted `workoutType`, offset-bearing `startedAt`, and `endedAt`. Resolve local clock wording with a timezone only when it changes the instants, check for a nearby type-and-time duplicate, and do not force calories, distance, heart rate, effort, mood, meaning, tags, or links.
+- Read the exact workout before review, correction, enrichment, or deletion. Preserve provider-backed or habit-generated timing, metrics, source, and provenance unless the user explicitly corrects one field. Deletion is immediate, non-restorable, and bypasses the settings bin, so require the exact target and explicit confirmation; there is no restore lane.
 - Habit-generated workouts and imported HealthKit workouts belong to the same workout record model, so do not invent a separate storage path for sport sessions.
 
 Write to Forge only with clear user consent. If the user is just thinking aloud, helping first is usually better than writing immediately. After helping, you may offer one short Forge prompt if the match is strong. If the user agrees, ask only for the missing fields and only one to three focused questions at a time. Do not offer Forge again after a decline unless the user reopens it.
@@ -695,9 +697,9 @@ Use these exact entity meanings when deciding what the user is describing.
 
 `calendar_event` is a canonical Forge event record. It lives in Forge first and can later project to a writable provider calendar.
 
-`work_block_template` is a recurring work-availability template such as Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or Custom.
+`work_block_template` is one compact recurring local-time availability rule, not a stored event per occurrence. Direct capture requires only a title, weekdays, and distinct start/end minutes; resolve human clock times yourself, preserve overnight meaning when end is earlier than start, and treat kind, color, date bounds, exclusions, activity settings, and owner as conditional. Read the exact template before review, update, or confirmed immediate non-restorable deletion.
 
-`task_timebox` is a planned or live calendar slot attached to a task. It is scheduling structure, not proof that work actually started.
+`task_timebox` is a planned or live calendar slot attached to one exact task. It is scheduling structure, not proof that work started or finished. Direct capture requires only the task, a task-shaped title, and a valid offset-bearing interval; recommendations are read-only, and exact-record update or delete must preserve immutable task/source linkage and provider-cleanup truth.
 
 `psyche_value` is a direction the user wants to live toward, such as honesty, courage, steadiness, compassion, or creativity.
 
@@ -915,7 +917,7 @@ Use the dedicated domain routes for specialized surfaces that are not simple bat
 
 OpenClaw and Hermes expose route-key tools for these surfaces when available:
 `forge_call_movement_route`, `forge_call_life_event_route`, `forge_call_life_force_route`, and
-`forge_call_workbench_route`. Choose the route key from live onboarding or the tool
+`forge_call_workbench_route`, plus `forge_call_course_route`. Choose the route key from live onboarding or the tool
 schema after the user's job is clear. Do not send Movement, Life Events, Life Force, or Workbench
 through `forge_create_entities` or `forge_update_entities`.
 
@@ -942,9 +944,11 @@ through `forge_create_entities` or `forge_update_entities`.
 - Life Events store important chronological events or periods as normal `life_event` records. They can last hours, days, weeks, or months, including stays, festivals, visits, retreats, vacations, work phases, health episodes, and custom periods. Use shared batch CRUD for create, update, search, soft delete, restore, and generic entity links. Use `/api/v1/life-events/timeline` for the chronology view, `/api/v1/life-events/:id` for one event, `/api/v1/life-events/:id/calendar-sync` when an event should find or create its matching calendar event, `/api/v1/life-events/from-calendar-event` when the user marks an existing calendar event as a Life Event, `/api/v1/life-events/import-ticket` when a trusted Artifact Store ticket should draft a travel event, and `/api/v1/life-events/:id/travel-status` for scheduled or provider-backed travel status. Ticket import starts from an `artifactId`, must keep artifact relationships as generic `entity_links`, and must not execute or autonomously open stored file bytes.
 - Life Force lives under `/api/v1/life-force*`. Use `GET /api/v1/life-force` for the current energy overview, `PATCH /api/v1/life-force/profile` for durable profile changes, `PUT /api/v1/life-force/templates/:weekday` for weekday curve edits, and `POST /api/v1/life-force/fatigue-signals` for real-time tired or recovered signals.
 - Workbench lives under `/api/v1/workbench/*`. Use those dedicated routes for flow catalog reads, flow CRUD, runs, saved-flow chat follow-ups, published outputs, node results, and latest-node-output reads instead of trying to force Workbench through the batch entity routes.
+- Course and Concept live under `/api/v1/courses*` and `/api/v1/concepts*`. Use `forge_call_course_route` for catalog/detail, learner-safe sessions, attempts, validated import/export, due concepts, and cross-course mastery. Use the learner-safe session for coaching, never expose hidden assessment fields, and never force Course or Concept through batch CRUD.
 - If you need the OpenClaw HTTP mirror instead of the raw Forge runtime path, the
   same specialized families are exposed under `/forge/v1/movement/*`,
-  `/forge/v1/life-events/*`, `/forge/v1/life-force/*`, and `/forge/v1/workbench/*`.
+  `/forge/v1/life-events/*`, `/forge/v1/life-force/*`, `/forge/v1/workbench/*`,
+  `/forge/v1/courses/*`, and `/forge/v1/concepts/*`.
 - Workbench lane hints:
   use `GET /api/v1/workbench/flows` for compact bounded flow catalog pages with
   `q`, repeated `kind`, `homeSurfaceId`, and `status`, plus `limit` and `offset`;
@@ -1015,9 +1019,9 @@ Calendar entity CRUD uses these same batch tools:
 - update or move an event with `forge_update_entities` and `entityType: "calendar_event"`
 - delete an event with `forge_delete_entities` and `entityType: "calendar_event"`
 - create, update, or delete recurring work blocks with `entityType: "work_block_template"`
-- create or update planned task slots with `entityType: "task_timebox"`
+- create, update, change status, or delete planned task slots with `entityType: "task_timebox"`
 
-Forge still runs the downstream calendar behavior after these generic mutations. For `calendar_event`, that includes provider projection sync on create or update and remote projection deletion on delete.
+Forge still runs the downstream calendar behavior after these generic mutations. For `calendar_event`, that includes provider projection sync on create or update and remote projection deletion on delete. Work-block deletion removes future derived instances immediately. Provider-backed timebox deletion hides the slot immediately and keeps durable idempotent remote cleanup pending until acknowledged.
 Calendar date/time rule: when the user gives a local time such as “1pm”, interpret it in the user's timezone, not UTC. Set the payload `timezone` to the user's real timezone and serialize `startAt`, `endAt`, `startsAt`, and `endsAt` so they represent that local wall-clock time correctly. Do not silently treat unspecified local times as `UTC+0`.
 Calendar sync default: unless the user explicitly asks for Forge-only storage, do not set `preferredCalendarId` to `null`. Omit `preferredCalendarId` on event creation so Forge can use the default writable connected calendar automatically. Use `preferredCalendarId: null` only when the user clearly wants the event to stay Forge-only.
 
@@ -1085,20 +1089,21 @@ Use the calendar tools when the request is about planning or availability rather
 - `forge_sync_calendar_connection` after a provider connection is created or when the calendar needs a fresh pull/push cycle
 - `forge_create_work_block_template` as a convenience helper for Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or Custom recurring blocks
 - `forge_recommend_task_timeboxes` to find future slots that satisfy current rules when the user wants suggestions or when the agent needs help narrowing options
-- `forge_create_task_timebox` as the main direct route for manual timeboxing once the slot is known; use it after reasoning from the live calendar overview or after accepting a suggested slot
+- `forge_create_task_timebox` as an optional create convenience once the slot is known; ordinary Task Timebox storage remains batch-first
 
 Timebox planning rules for agents:
 
 - prefer manual timeboxing when the agent already has enough calendar context to choose the slot itself
 - use `forge_get_calendar_overview` first when the current day or week matters; reason over mirrored events, work blocks, existing timeboxes, and availability before placing the block
-- use `forge_create_task_timebox` directly for the manual path with explicit `startsAt` and `endsAt`
+- use shared batch create by default for the manual path with explicit `startsAt` and `endsAt`; the named create helper is equivalent when it is simpler
 - use `forge_recommend_task_timeboxes` only for the assisted path, then confirm one returned slot with `forge_create_task_timebox`
-- keep recommendations read-only, pass the user's IANA `timezone`, and request no more than 12 slots
+- keep recommendations read-only, request no more than 12 slots, and pass the optional IANA `timezone` only when it changes fallback wall-time windows
 - when manually timeboxing, keep the title specific and task-shaped, not generic
 - direct create requires `taskId`, `title`, `startsAt`, and `endsAt`; it also accepts `status`, `overrideReason`, `activityPresetKey`, `customSustainRateApPerHour`, and `userId`
 - `activityPresetKey` must be one of `deep_work`, `admin`, `maintenance`, `meeting`, `recovery_break`, `holiday_leisure`, `light_context`, or `task_inherited`
 - use `overrideReason` for an intentional rule or calendar conflict, not as a generic note field
 - deleting a provider-backed timebox hides it from normal reads immediately and leaves durable provider cleanup pending until the remote delete is acknowledged; retries are safe
+- use shared batch CRUD for ordinary timebox and work-block lifecycle work; the named create helpers are conveniences, not invented update or delete surfaces
 
 Use the health tools when the request is about sleep or sports review:
 
@@ -1193,6 +1198,7 @@ When the user asks which Forge tools are available, list exactly these tools:
 `forge_call_movement_route`
 `forge_call_life_force_route`
 `forge_call_workbench_route`
+`forge_call_course_route`
 `forge_call_artifact_route`
 `forge_call_life_event_route`
 `forge_call_people_route`

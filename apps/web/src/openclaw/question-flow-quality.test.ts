@@ -88,13 +88,13 @@ describe("question flow quality coverage", () => {
       ],
       [
         "Work Block Template",
-        /when should this recurring block repeat/i,
-        /allows or blocks work/i
+        /setting up a recurring work rule, reviewing or changing one, or removing it/i,
+        /reusable local-time availability rule/i
       ],
       [
         "Task Timebox",
-        /reserve focused time/i,
-        /planned work with completed work/i
+        /already know the slot[\s\S]*suggest options[\s\S]*review or change an existing timebox/i,
+        /plan,[\s\S]*live[\s\S]*task run,[\s\S]*evidence of completed work/i
       ],
       [
         "Task Run",
@@ -124,8 +124,8 @@ describe("question flow quality coverage", () => {
       ],
       [
         "Workout Session",
-        /most worth remembering or connecting/i,
-        /subjective effort, mood, meaning/i
+        /adding a workout manually, reviewing or correcting one, adding context to it, or deleting it/i,
+        /effort,\s*mood,\s*meaning/i
       ],
       [
         "Sleep Overview",

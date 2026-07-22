@@ -186,6 +186,38 @@ WORKBENCH_ROUTE_EXAMPLES: List[Dict[str, Any]] = [
     },
 ]
 
+COURSE_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
+    "listCourses": {"method": "GET", "path": "/api/v1/courses"},
+    "courseDetail": {"method": "GET", "path": "/api/v1/courses/:courseId"},
+    "learningSession": {"method": "GET", "path": "/api/v1/courses/:courseId/learn"},
+    "submitAttempt": {
+        "method": "POST",
+        "path": "/api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
+        "write": True,
+    },
+    "importCourse": {"method": "POST", "path": "/api/v1/courses/import", "write": True},
+    "exportCourse": {"method": "GET", "path": "/api/v1/courses/:courseId/export"},
+    "listConcepts": {"method": "GET", "path": "/api/v1/concepts"},
+    "conceptDetail": {"method": "GET", "path": "/api/v1/concepts/:conceptId"},
+}
+
+COURSE_ROUTE_EXAMPLES: List[Dict[str, Any]] = [
+    {
+        "routeKey": "learningSession",
+        "pathParams": {"courseId": "course.polynomials-etale-triple-covers"},
+        "query": {"lessonId": "lesson.week-01.day-01"},
+    },
+    {
+        "routeKey": "submitAttempt",
+        "pathParams": {
+            "courseId": "course.polynomials-etale-triple-covers",
+            "lessonId": "lesson.week-01.day-01",
+            "activityId": "activity.check-01",
+        },
+        "body": {"answerMarkdown": "My accepted answer"},
+    },
+]
+
 ARTIFACT_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
     "list": {"method": "GET", "path": "/api/v1/artifacts"},
     "createWithBytes": {"method": "POST", "path": "/api/v1/artifacts", "write": True},
@@ -1553,6 +1585,17 @@ TOOL_CATALOG: List[ToolSpec] = [
         "write_builder": lambda args: specialized_route_write(WORKBENCH_ROUTE_SPECS, args),
     },
     {
+        "name": "forge_call_course_route",
+        "description": "Call one allowed dedicated Course or Concept route after the conversation has narrowed to installed-course discovery, progress or syllabus detail, a learner-safe lesson session, one activity attempt, validated package import/export, concept search, due review, or cross-course mastery evidence. Use the learner-safe session for coaching and do not use batch CRUD for Course or Concept.",
+        "parameters": specialized_route_parameters(
+            COURSE_ROUTE_SPECS, COURSE_ROUTE_EXAMPLES
+        ),
+        "method_builder": lambda args: specialized_route_method(COURSE_ROUTE_SPECS, args),
+        "path_builder": lambda args: specialized_route_path(COURSE_ROUTE_SPECS, args),
+        "body_builder": specialized_route_body,
+        "write_builder": lambda args: specialized_route_write(COURSE_ROUTE_SPECS, args),
+    },
+    {
         "name": "forge_call_artifact_route",
         "description": "Call one allowed dedicated Artifact Store route for metadata listing, trusted upload, metadata update, static rescan, LLM metadata enrichment, generic entity-link replacement, trust state, versions, or audit. For createWithBytes, put one stable per-file idempotencyKey in the body and reuse it only for an exact transport retry; Forge normalizes agent provenance and rejects changed-payload key reuse. Agents may read contentProtection metadata and password hints, but must not receive, store, submit, or route artifact passwords. Do not expose download, password download, decrypt, open, execute, preview, or transform stored file bytes as an agent.",
         "parameters": specialized_route_parameters(
@@ -2833,17 +2876,41 @@ TOOL_CATALOG: List[ToolSpec] = [
                         {"type": "null"},
                     ]
                 },
+                "exclusionDates": array_schema(
+                    {"type": "string", "minLength": 1},
+                    "Optional local dates where the recurrence does not apply.",
+                ),
                 "blockingState": {"enum": ["allowed", "blocked"]},
+                "activityPresetKey": {
+                    "anyOf": [
+                        {
+                            "enum": [
+                                "deep_work",
+                                "admin",
+                                "maintenance",
+                                "meeting",
+                                "recovery_break",
+                                "holiday_leisure",
+                                "light_context",
+                                "task_inherited",
+                            ]
+                        },
+                        {"type": "null"},
+                    ]
+                },
+                "customSustainRateApPerHour": {
+                    "type": ["number", "null"],
+                    "minimum": 0,
+                },
+                "userId": optional_nullable_string(
+                    "Optional owner override when the recurrence belongs to a specific Forge user."
+                ),
             },
             required=[
                 "title",
-                "kind",
-                "color",
-                "timezone",
                 "weekDays",
                 "startMinute",
                 "endMinute",
-                "blockingState",
             ],
         ),
         "method": "POST",

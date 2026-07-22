@@ -57,6 +57,8 @@ episodes, and custom periods.
 companion side includes the iPhone app and related agent/tooling surfaces. All of those
 pieces should use one shared entity language and one shared data model.
 
+The learning side spans Courses and Concepts. Courses are reusable ordered paths with modules, daily work, activities, proof rubrics, points, and grades. Concepts are durable Forge entities that sit underneath those paths: one definition and one mastery, evidence, and review record can appear in many courses. The normal Forge shell provides fast course and concept navigation; the lesson itself can take the full page while keeping Forge theme and identity context. Written proofs are reviewed through Forge's existing configured model connection, with the work saved and the grade withheld whenever a trustworthy assessment is unavailable.
+
 The gamified layer should make the operating system feel consequential without turning it
 into a toy. The Forge Smith mascot, level ring, XP progress, streak state, Trophy Hall,
 and compact content-page HUDs should help the user see momentum at a glance. Trophies and

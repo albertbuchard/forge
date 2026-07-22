@@ -12,6 +12,8 @@ from forge_hermes.catalog import (
     ARTIFACT_ROUTE_SPECS,
     ATTENTION_ROUTE_SPECS,
     CALENDAR_CONNECTION_ROUTE_SPECS,
+    COURSE_ROUTE_EXAMPLES,
+    COURSE_ROUTE_SPECS,
     ENTITY_NAVIGATION_ROUTE_SPECS,
     LIFE_FORCE_ROUTE_SPECS,
     MOVEMENT_ROUTE_SPECS,
@@ -399,6 +401,42 @@ def test_task_timebox_recommendation_is_a_read_only_post_with_timezone():
     assert tools._resolve_write(spec, {"taskId": "task_123"}, "POST") is False
 
 
+def test_work_block_template_helper_matches_the_server_minimum():
+    spec = next(
+        tool
+        for tool in TOOL_CATALOG
+        if tool["name"] == "forge_create_work_block_template"
+    )
+    parameters = spec["parameters"]
+
+    assert spec["method"] == "POST"
+    assert spec["path"] == "/api/v1/calendar/work-block-templates"
+    assert spec["write"] is True
+    assert parameters["additionalProperties"] is False
+    assert parameters["required"] == [
+        "title",
+        "weekDays",
+        "startMinute",
+        "endMinute",
+    ]
+    assert set(parameters["properties"]) == {
+        "title",
+        "kind",
+        "color",
+        "timezone",
+        "weekDays",
+        "startMinute",
+        "endMinute",
+        "startsOn",
+        "endsOn",
+        "exclusionDates",
+        "blockingState",
+        "activityPresetKey",
+        "customSustainRateApPerHour",
+        "userId",
+    }
+
+
 def test_task_timebox_direct_create_matches_the_closed_server_contract():
     spec = next(
         tool for tool in TOOL_CATALOG if tool["name"] == "forge_create_task_timebox"
@@ -606,6 +644,12 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
         "nodeResult",
         "latestNodeOutput",
     }
+    assert specs["forge_call_course_route"]["parameters"]["properties"]["routeKey"][
+        "enum"
+    ] == sorted(COURSE_ROUTE_SPECS)
+    assert specs["forge_call_course_route"]["parameters"]["examples"] == (
+        COURSE_ROUTE_EXAMPLES
+    )
     assert specs["forge_call_artifact_route"]["parameters"]["properties"][
         "routeKey"
     ]["enum"] == sorted(ARTIFACT_ROUTE_SPECS)
@@ -637,6 +681,9 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
         "properties"
     ]["routeKey"]["description"]
     workbench_route_description = specs["forge_call_workbench_route"]["parameters"][
+        "properties"
+    ]["routeKey"]["description"]
+    course_route_description = specs["forge_call_course_route"]["parameters"][
         "properties"
     ]["routeKey"]["description"]
     assert "list: GET /api/v1/attention-inbox" in attention_route_description
@@ -679,6 +726,12 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
         "latestNodeOutput: GET /api/v1/workbench/flows/:id/nodes/:nodeId/output"
         in workbench_route_description
     )
+    assert "listCourses: GET /api/v1/courses" in course_route_description
+    assert (
+        "submitAttempt: POST /api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts"
+        in course_route_description
+    )
+    assert "conceptDetail: GET /api/v1/concepts/:conceptId" in course_route_description
     for tool_name in [
         "forge_call_attention_route",
         "forge_call_entity_navigation_route",
@@ -687,6 +740,7 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
         "forge_call_movement_route",
         "forge_call_life_force_route",
         "forge_call_workbench_route",
+        "forge_call_course_route",
         "forge_call_artifact_route",
     ]:
         properties = specs[tool_name]["parameters"]["properties"]
@@ -744,6 +798,19 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
     ) == (
         "/api/v1/workbench/flows/flow_123/nodes/node_456/output"
         "?format=json&userIds=user_a&userIds=user_b"
+    )
+    assert specialized_route_path(
+        COURSE_ROUTE_SPECS,
+        {
+            "routeKey": "submitAttempt",
+            "pathParams": {
+                "courseId": "course 1",
+                "lessonId": "lesson/2",
+                "activityId": "activity 3",
+            },
+        },
+    ) == (
+        "/api/v1/courses/course%201/lessons/lesson%2F2/activities/activity%203/attempts"
     )
 
 

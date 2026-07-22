@@ -317,3 +317,44 @@ test("PLAN-10 OpenAPI publishes the complete direct timebox lifecycle", () => {
   );
   assert.ok(document.paths["/api/v1/calendar/timeboxes/recommend"]?.post);
 });
+
+test("PLAN-10 OpenAPI publishes the complete work-block lifecycle and true create minimum", () => {
+  const document = buildOpenApiDocument() as unknown as {
+    components: {
+      schemas: Record<
+        string,
+        {
+          additionalProperties?: boolean;
+          required?: string[];
+          properties?: Record<string, { default?: unknown }>;
+        }
+      >;
+    };
+    paths: Record<string, Record<string, unknown>>;
+  };
+  const create = document.components.schemas.WorkBlockTemplateCreateInput;
+  const patch = document.components.schemas.WorkBlockTemplatePatchInput;
+
+  assert.equal(create?.additionalProperties, false);
+  assert.deepEqual(create?.required, [
+    "title",
+    "weekDays",
+    "startMinute",
+    "endMinute"
+  ]);
+  assert.equal(create?.properties?.kind?.default, "custom");
+  assert.equal(create?.properties?.color?.default, "#60a5fa");
+  assert.equal(create?.properties?.timezone?.default, "UTC");
+  assert.equal(create?.properties?.blockingState?.default, "blocked");
+  assert.equal(patch?.additionalProperties, false);
+  assert.equal(patch?.required, undefined);
+
+  const collection = document.paths["/api/v1/calendar/work-block-templates"];
+  assert.ok(collection?.get);
+  assert.ok(collection?.post);
+  const detail =
+    document.paths["/api/v1/calendar/work-block-templates/{id}"];
+  assert.ok(detail?.get);
+  assert.ok(detail?.patch);
+  assert.ok(detail?.delete);
+});

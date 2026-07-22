@@ -35,6 +35,46 @@ export const ROUTE_VIEW_CATALOG = {
     tone: "core",
     skeleton: { blocks: 5, columns: 3, sideRail: true }
   },
+  "courses-index": {
+    surfaceId: "courses-index",
+    title: "Courses",
+    description:
+      "Follow structured learning paths, submit written proofs, and review progress across courses.",
+    tone: "knowledge",
+    skeleton: { blocks: 6, columns: 2, sideRail: true }
+  },
+  "course-detail": {
+    surfaceId: "course-detail",
+    title: "Course detail",
+    description:
+      "Review a course syllabus, standing, concepts, and the next daily lesson.",
+    tone: "knowledge",
+    skeleton: { blocks: 6, columns: 2, sideRail: true }
+  },
+  "course-learn": {
+    surfaceId: "course-learn",
+    title: "Course lesson",
+    description:
+      "Learn a concept, write the mathematics, and receive evidence-based assessment.",
+    tone: "knowledge",
+    skeleton: { blocks: 5, columns: 3, sideRail: true }
+  },
+  "concepts-index": {
+    surfaceId: "concepts-index",
+    title: "Concepts",
+    description:
+      "Browse durable concept entities with definitions, course links, mastery, and review schedules.",
+    tone: "knowledge",
+    skeleton: { blocks: 6, columns: 3, sideRail: false }
+  },
+  "concept-detail": {
+    surfaceId: "concept-detail",
+    title: "Concept detail",
+    description:
+      "Inspect one concept's definition, dependencies, course appearances, and proof evidence.",
+    tone: "knowledge",
+    skeleton: { blocks: 6, columns: 2, sideRail: true }
+  },
   "life-force-index": {
     surfaceId: "life-force-index",
     title: "Life Force",
@@ -634,6 +674,11 @@ function matches(pattern: RegExp) {
 
 const ROUTE_VIEW_PATH_MATCHERS: RouteViewPathMatcher[] = [
   { viewId: "overview", match: exactly("/", "/overview") },
+  { viewId: "course-learn", match: matches(/^\/courses\/[^/]+\/learn$/) },
+  { viewId: "course-detail", match: matches(/^\/courses\/[^/]+$/) },
+  { viewId: "courses-index", match: exactly("/courses") },
+  { viewId: "concept-detail", match: matches(/^\/concepts\/[^/]+$/) },
+  { viewId: "concepts-index", match: exactly("/concepts") },
   { viewId: "life-force-index", match: exactly("/life-force") },
   { viewId: "goals-index", match: exactly("/goals") },
   { viewId: "habits-index", match: exactly("/habits") },

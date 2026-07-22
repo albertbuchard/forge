@@ -933,6 +933,10 @@ still knowing the exact write/read family before it acts.
 - `workbench`: specialized domain surface. Use the dedicated Workbench routes for
   flow catalog/detail, flow CRUD, execution, run history, published output, node
   result, and latest-node-output work.
+- `course` and `concept`: specialized learning surfaces. Use
+  `forge_call_course_route` for installed-course catalog/detail, learner-safe
+  sessions, attempts, validated package import/export, concept discovery, and
+  concept evidence. Never use shared batch CRUD for either surface.
 
 ## Active-listening patterns
 
@@ -2222,59 +2226,141 @@ Preferred opening question:
 
 ## Work Block Template
 
-Aim: define a reusable availability rule, not a one-off event.
+Aim: define or maintain one reusable local-time availability rule without turning it
+into a one-off event or a field-by-field form.
+
+Choose the lane first:
+
+- direct capture
+- guided recurrence design
+- exact-record review or narrow update
+- read-only review
+- delete
 
 Arc:
 
-1. Ask what kind of block it is and what it should be called.
-2. Ask on which days and at what local times it should repeat.
-3. Ask whether it allows or blocks work.
-4. Ask whether it has a start or end date.
+1. For direct capture, reflect the accepted title and recurring weekdays, then resolve
+   ordinary local clock wording into `startMinute` and `endMinute` yourself. Forge
+   requires only `title`, `weekDays`, `startMinute`, and `endMinute`; `kind` defaults
+   to `custom`, color to `#60a5fa`, timezone to `UTC`, and `blockingState` to
+   `blocked`. Do not force the user to fill optional fields.
+2. Use the user's known IANA timezone for local recurrence. Ask about timezone only
+   when it is unknown or daylight-saving meaning could change the rule; do not make
+   the user calculate minutes from midnight. If the end is earlier than the start,
+   say that the block continues overnight. Equal start and end is invalid.
+3. Search existing templates by title or kind and compare overlapping weekdays and
+   local times. Summarize the effective title, days, times, timezone, and whether the
+   rule allows or blocks work, then ask one accuracy or consent question.
+4. In guided design, first clarify what availability decision the recurring rule
+   should make. Ask about kind or blocking state only when the purpose does not imply
+   them. Ask for `startsOn`, `endsOn`, or `exclusionDates` only when the rule is
+   temporary or has known exceptions.
+5. For review, narrow update, or delete, search for and read the exact template first.
+   Answer the read-only question before proposing a write, preserve accepted sparse
+   wording and defaults, and patch only what is newly true. Explain effects on future
+   derived instances rather than pretending the template stores repeated events.
+6. Before delete, identify the exact template and confirm that removal is immediate,
+   non-restorable, bypasses the settings bin, and removes its future derived
+   availability instances.
 
 Helpful follow-up lanes:
 
-- what the block is for
-- recurrence timing
-- blocking state
-- optional date bounds
+- the availability decision this rule should make
+- local days, times, timezone, and overnight meaning
+- allowed or blocked only when not already implied
+- temporary bounds or real exceptions only when relevant
+- exact-record review, narrow update, or confirmed delete
 
-Ready to save when:
+Ready to act when:
 
-- the block has a clear purpose
-- recurrence timing is clear
-- blocking state is clear
+- direct capture has an accepted title, at least one weekday, distinct local start and
+  end minutes, a duplicate search, and one accuracy or consent check
+- guided design has an accepted availability decision and effective recurrence
+- review or update has read the exact template and isolated the smallest change
+- delete has an exact target and explicit acknowledgement that it is immediate and
+  non-restorable
+
+Route note:
+
+- ordinary search, create, update, and delete use shared batch CRUD
+- `forge_create_work_block_template` is an optional create convenience, not a
+  separate lifecycle or a reason to guess update or delete tools
 
 Preferred opening question:
 
-- "When should this recurring block repeat?"
+- "Are you setting up a recurring work rule, reviewing or changing one, or removing it?"
 
 ## Task Timebox
 
-Aim: reserve real time for one task without confusing planned work with completed work.
+Aim: reserve or maintain real time for one exact task without confusing a plan, a live
+task run, and evidence of completed work.
+
+Choose the lane first:
+
+- direct manual capture
+- assisted recommendation
+- exact-record review or narrow update
+- read-only review
+- status change
+- delete
 
 Arc:
 
-1. Ask which task the slot belongs to.
-2. Ask when the slot should start and end.
-3. Ask whether this is a manual reservation, a suggestion, or live-run alignment only
-   if relevant.
-4. Ask about override reason only if calendar rules are being bypassed.
+1. For direct capture, resolve and read the exact existing task, derive or confirm a
+   specific calendar title, and resolve local start plus end or duration into
+   offset-bearing `startsAt` and `endsAt` with end after start. Search that task and
+   overlapping interval for an existing timebox, then ask one accuracy or consent
+   question. Forge requires only `taskId`, `title`, `startsAt`, and `endsAt`;
+   `source` defaults to `manual` and `status` to `planned`.
+2. Use `forge_get_calendar_overview` before placement when current commitments or
+   availability matter. Ask about timezone only when it changes the instants; do not
+   make the user format ISO timestamps. Ask for project, source, status, activity
+   settings, owner, or `overrideReason` only when newly meaningful. An override reason
+   records an intentional rule or calendar-pressure exception, not a generic note.
+3. For assisted scheduling, read the exact task and call
+   `forge_recommend_task_timeboxes` with `taskId` plus only the optional date window,
+   limit, or timezone that changes the suggestions. Recommendations are read-only and
+   timezone is optional. Present a small set of concrete choices and create only the
+   slot the user accepts.
+4. For review, update, status change, or delete, search for and read the exact timebox
+   first. Answer read-only questions before proposing a write, preserve accepted task
+   linkage, source, timing, status, provider mapping, and optional settings, and patch
+   only what is newly true. `taskId` and `source` cannot be changed by update; moving
+   the slot to another task requires an explicitly accepted replacement.
+5. A timebox does not start a task run or prove work happened. Use task-run actions for
+   live execution and factual closeout evidence. Use timebox status only for its own
+   `planned`, `active`, `completed`, or `cancelled` state.
+6. Before delete, identify the exact timebox and confirm that it becomes hidden
+   immediately, is non-restorable, bypasses the settings bin, and, when
+   provider-backed, leaves durable idempotent remote cleanup until acknowledged.
 
 Helpful follow-up lanes:
 
-- attached task
-- exact time window
-- scheduling context only if it changes the action
+- exact task and task-shaped calendar title
+- manual slot versus bounded read-only suggestions
+- exact offset-bearing time window
+- scheduling exception only when it changes the action
+- review, smallest patch, status change, or confirmed delete
 
-Ready to save when:
+Ready to act when:
 
-- the task is known
-- the time window is clear
-- any special scheduling context is explicit
+- direct capture has read the exact task, accepted title and valid interval, checked
+  the task and interval for overlap, and completed one accuracy or consent check
+- recommendation has read the task and is ready with only useful optional bounds
+- review or update has read the exact timebox and isolated the smallest change
+- delete has an exact target and explicit acknowledgement of immediate local hiding,
+  no restore, and durable remote cleanup when mapped
+
+Route note:
+
+- ordinary search, create, update, status change, and delete use shared batch CRUD
+- `forge_create_task_timebox` is an optional create convenience
+- `forge_recommend_task_timeboxes` is the bounded read-only assisted lane; a returned
+  suggestion is not saved until the user accepts and creates it
 
 Preferred opening question:
 
-- "When should Forge reserve focused time for this task?"
+- "Do you already know the slot for this task, want Forge to suggest options, or need to review or change an existing timebox?"
 
 ## Task Run
 
@@ -2597,29 +2683,67 @@ Preferred opening question:
 
 ## Workout Session
 
-Aim: enrich one workout with subjective effort, mood, meaning, or linked context.
+Aim: capture or correct one workout with minimal timing questions, preserve imported
+or generated evidence, and make reflective context optional and specific.
+
+Choose the lane first:
+
+- direct manual capture
+- exact-record review or narrow correction
+- read-only review
+- reflective enrichment
+- delete
 
 Arc:
 
-1. Ask what about the session the user wants to preserve.
-2. Ask whether the key layer is effort, mood, meaning, social context, or links.
-3. Ask what it connects to in Forge if links matter.
-4. Ask about tags only if they help later retrieval.
+1. For direct manual capture, identify the recognizable workout type and resolve the
+   user's start and end into offset-bearing `startedAt` and `endedAt`. Ensure the end
+   is after the start, search the nearby interval and workout type for a duplicate,
+   and ask one accuracy or consent question.
+2. Forge requires only `workoutType`, `startedAt`, and `endedAt` and defaults manual
+   source fields. Do not require calories, distance, steps, heart rate, exercise
+   minutes, effort, mood, meaning, social context, tags, links, provenance, or owner
+   when those optional details were not requested.
+3. Ask for a timezone only when local clock wording or daylight-saving ambiguity
+   would otherwise change the stored instants. Resolve the time yourself; do not make
+   the user format ISO timestamps or calculate duration.
+4. For review or narrow correction, search for and read the exact existing Workout
+   Session first. Answer the read-only question before proposing a write, preserve
+   accepted sparse timing, workout type, source, provenance, biometric metrics,
+   annotations, tags, and links, and patch only what is newly true or inaccurate.
+5. For provider-backed or habit-generated records, keep imported or generated
+   evidence separate from the user's correction. Do not rewrite measured timing,
+   calories, distance, heart rate, source, or provenance merely to add context.
+6. For reflective enrichment, read the exact workout first and reflect the one effort,
+   mood, meaning, planned or social context, tag, or link the user wants preserved.
+   Use `forge_update_workout_session` only for `subjectiveEffort`, `moodBefore`,
+   `moodAfter`, `meaningText`, `plannedContext`, `socialContext`, tags, or links so
+   imported measurement fields remain untouched.
+7. For delete, read and identify the exact workout, explain that deletion is
+   immediate, non-restorable, and bypasses the settings bin, and obtain explicit
+   confirmation before `forge_delete_entities`.
 
 Route note:
 
-- For ordinary create, update, delete, or search work on `workout_session`, stay on
-  the shared batch CRUD routes. Use the reflective review helper only when enriching
-  one already-known workout after review.
+- For `workout_session`, use the shared batch CRUD routes for ordinary search, manual
+  create, narrow correction, and delete. Use `forge_update_workout_session` only for
+  post-review reflective enrichment. Workout Session deletion has no restore lane.
 
-Ready to update when:
+Ready to act when:
 
-- the reflective point is clear
-- the key mood, effort, meaning, or links are clear when needed
+- direct capture has an accepted workout type, start, and end with end after start, a
+  duplicate search, and one accuracy or consent check
+- read-only review has read the exact workout and does not manufacture a write
+- narrow correction has isolated the smallest accepted change without replacing
+  provider-backed or habit-generated evidence with inference
+- reflective enrichment has read the exact workout and accepted only the context,
+  tags, or links that should be preserved
+- delete has an exact target and explicit acknowledgement that it is immediate and
+  non-restorable
 
 Preferred opening question:
 
-- "What about this workout feels most worth remembering or connecting?"
+- "Are you adding a workout manually, reviewing or correcting one, adding context to it, or deleting it?"
 
 ## Sleep Overview
 
@@ -3568,6 +3692,119 @@ Ready to act when:
 Preferred opening question:
 
 - "What are you trying to inspect, change, run, or publish through Workbench?"
+
+## Course
+
+Aim: help the user choose, continue, understand, submit, review, install, or export
+learning work through the dedicated Course surface without turning every request into
+an enrollment form or exposing hidden assessment material.
+
+Arc:
+
+1. Distinguish choosing a course, reviewing progress, continuing a lesson, getting
+   learning support, submitting an activity, importing a package, and exporting a
+   package.
+2. If the course is not exact, list installed courses before asking for an internal id.
+   If it is exact, read course detail or the learner-safe session before asking the user
+   to repeat syllabus, progress, lesson, or activity context.
+3. For learning support, stay with the current explanation, example, or activity. Ask
+   what is unclear and help directly; support never depends on saving an attempt.
+4. For an attempt, identify the exact course, lesson, and activity from the learner-safe
+   session, preserve the learner's answer wording, and ask for confirmation only when
+   they have not already asked to submit it.
+5. After submission, explain the saved answer, assessment status, feedback, score,
+   grade, points, and next lesson without inflating missing results. If structured
+   assessment is unavailable, say that grading was withheld.
+6. For import, identify the trusted Forge course package and whether the user intends a
+   new install or an accepted replacement. Let Forge validate references and the
+   canonical hash; report conflicts rather than bypassing them.
+7. For export, identify the exact course and confirm that the user wants the canonical
+   portable package. Never use export as a learner-facing lesson read.
+8. Skip the broad lane question when the exact course and action are already clear.
+
+Lane-to-route map:
+
+- choose or browse -> `listCourses`
+- review syllabus or progress -> `courseDetail`
+- continue, learn, or get activity help -> `learningSession`
+- submit an accepted answer -> `submitAttempt`
+- install a trusted package -> `importCourse`
+- explicitly transfer a portable package -> `exportCourse`
+- find due or matching concepts -> `listConcepts`
+- inspect one concept and its evidence -> `conceptDetail`
+
+Learner-safety rules:
+
+- Use `GET /api/v1/courses/:courseId/learn` for teaching, activity selection, and learner
+  support. It removes instructor references, correct option ids, answer explanations,
+  and extension assessment data.
+- Do not reconstruct, reveal, or hint at hidden reference answers while helping with an
+  activity. Work from the learner-safe prompt, the user's reasoning, and returned
+  feedback.
+- `GET /api/v1/courses/:courseId/export` returns the canonical package and may include
+  instructor material. Call it only for explicit package transfer.
+- `POST /api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts`
+  needs exact path identifiers and `answerMarkdown`. Preserve the user's wording.
+- Written assessment can be withheld when the configured model cannot return a valid
+  structured assessment. Never manufacture a score, grade, misconception, or mastery
+  update.
+- Course definitions are package-backed. Do not use shared batch CRUD for Course or
+  Concept.
+
+Ready to act when:
+
+- catalog, detail, progress, or learner guidance has only the learner scope and exact
+  course or lesson needed for the read
+- an attempt has exact course, lesson, and activity identifiers plus accepted answer
+  wording
+- import has the trusted package plus new-install or accepted-replacement intent
+- export has the exact course plus explicit portable-package intent
+
+Preferred opening question:
+
+- "Are you trying to choose a course, continue a lesson, submit work, review progress, or import or export a course?"
+
+## Concept
+
+Aim: explain one concept or due-review set through the dedicated learning surface
+without treating a mastery estimate as a verdict or inventing direct concept CRUD.
+
+Arc:
+
+1. Distinguish one concept explanation, due-review prioritization, concepts inside one
+   course, and interpretation of cross-course mastery evidence.
+2. If the concept is not exact, list with only the learner, course, search, or due-only
+   filter that changes the answer. Do not ask the user for an internal id they do not
+   know.
+3. Read exact concept detail before discussing prerequisites, related concepts, course
+   coverage, source lessons, evidence, or mastery dimensions.
+4. Keep the package-defined concept, observed learner evidence, and current mastery
+   estimate separate. Offer at most one correctable learning hypothesis when it helps
+   choose a prerequisite, review, or next lesson.
+5. Ask only what changes the next learning action: explanation depth, prerequisite
+   review, one due concept, one source lesson, or no action.
+6. If the user wants the definition changed, explain that concept definitions come from
+   validated course packages and clarify whether they mean to import a revised package.
+
+Lane-to-route map:
+
+- find a concept, a due set, or concepts within one course -> `listConcepts`
+- explain one concept, its prerequisites, coverage, evidence, or mastery estimate ->
+  `conceptDetail`
+- continue from explanation into the containing lesson -> `learningSession`
+- change a package-defined concept -> clarify revised-package intent, then use the
+  Course `importCourse` lane only after the package is trusted and accepted
+
+Ready to act when:
+
+- list intent has only the learner, course, query, or due filter that changes the result
+- exact detail has a concept selected from a current result or accepted id or slug
+- any proposed next review remains grounded in observed evidence and is presented as a
+  correctable learning interpretation
+
+Preferred opening question:
+
+- "Are you trying to understand one concept, see what is due for review, or make sense of your mastery evidence?"
 
 ## Preference Catalog
 

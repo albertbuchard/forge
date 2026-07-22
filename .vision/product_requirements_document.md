@@ -60,6 +60,26 @@ Forge-to-Forge sharing is an optional peer protocol between independently operat
 
 ## Core Requirements
 
+### Course and Concept Learning
+
+- `concept` is a first-class Forge entity with a stable id and slug, canonical definition, example, nonexample, prerequisites, related concepts, tags, cross-course appearances, and per-user mastery evidence.
+- `course` is a versioned path through concepts. A portable `.forge-course.json` package contains course metadata, concepts, ordered modules, daily lessons, content blocks, activities, rubrics, references, and deterministic provenance.
+- The shared TypeScript/Zod course kit under `packages/course-kit` is the authoring and validation contract. Course authors can keep source content outside Forge and export a validated package for import and sharing.
+- A package separates canonical concept definitions from `conceptRefs`. References link an installed concept without redefining it; conflicting definitions are rejected instead of becoming import-order-dependent.
+- Concept mastery stores dimension-scoped evidence (for example recall, proof reasoning, procedure, transfer, timed fluency, and oral exposition). A scalar percentage is only a summary projection. Courses may declare mastery dimensions, assessment profiles, competencies, misconceptions, remediation links, grade scales, retry aggregation, and point-award policy.
+- Strong default blocks, activities, layouts, and the Forge Paper presentation preset require no application code. Course-specific colors are limited to validated semantic theme tokens. Custom blocks or activities use versioned namespaced data plus a renderer already trusted by Forge; imported packages never execute code.
+- Import verifies a canonical SHA-256 package hash and reconciles content only before learner evidence exists. Once evidence exists, changed content must use a new immutable package snapshot. Authenticated export returns the validated package for deterministic sharing and round-trip import.
+- Course progress includes completed daily lessons, points, running numeric and letter grade, the current lesson, and a full syllabus.
+- A lesson is complete only after every required activity is assessed. Grades aggregate one declared latest-or-best attempt per activity, and retries cannot award unbounded points or mastery evidence.
+- Concept progress is global per learner rather than course-local. Each assessed response adds bounded evidence, updates mastery with a transparent weighted rule, and schedules the next review.
+- Forge provides normal-shell Course and Concept library/detail routes plus an immersive `/courses/:courseId/learn` route that retains the active Forge theme and authenticated user context while hiding the general shell chrome.
+- Mathematical notation is rendered with KaTeX. The learning view must remain responsive and touch-usable on desktop and mobile.
+- Multiple-choice activities use deterministic grading. Proofs and other written mathematics use the existing Forge LLM manager and configured model connection, an explicit instructor rubric, a hidden reference answer, and strict structured feedback.
+- Learner responses are untrusted prompt content. Assessment instructions must reject embedded role changes, grading demands, or exfiltration requests.
+- Learner read models remove proof references, correct option ids, answer explanations, and extension assessment data before serialization. Proof assessment returns criterion scores, and Forge computes rubric-weighted totals and grades server-side.
+- If no model connection is available or structured assessment fails, Forge saves the attempt with `needs_review`, awards no points, and does not invent a score.
+- The production stack for this subsystem is React 19, TypeScript 5.8, Vite 6, Tailwind CSS 4, TanStack Query, React Markdown, KaTeX, Fastify 5, SQLite, Zod 3, and the existing Forge `LlmManager` provider layer.
+
 ### 1. Project Management Hierarchy
 
 - `goal`, `strategy`, and `project` remain first-class Forge entity families.

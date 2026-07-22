@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-19T20:29:33.045Z",
+  "generatedAt": "2026-07-22T21:06:16.535Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
     "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
@@ -141,6 +141,28 @@
         "After create, update, sync, or delete, list connections again when read-back is needed to verify the user's practical goal."
       ],
       "example": "{\"routeKey\":\"update\",\"pathParams\":{\"id\":\"calendar_connection_123\"},\"body\":{\"label\":\"Work calendar\",\"selectedCalendarUrls\":[\"https://calendar.example/work/\"]}}",
+      "catalogDocumented": true
+    },
+    {
+      "name": "forge_call_course_route",
+      "groupId": "other",
+      "groupTitle": "Other Forge Tools",
+      "label": "Forge Course Route",
+      "summary": "Call one allowed dedicated Course or Concept operation after the learning job has narrowed to catalog, detail, learner session, attempt, package import/export, or concept mastery.",
+      "whenToUse": "Use for installed-course discovery, progress and syllabus reads, learner-safe lesson guidance, activity attempts, validated package import/export, concept search, due review, and cross-course concept evidence. Do not use batch CRUD for Course or Concept.",
+      "inputShape": "{ routeKey: \"listCourses\"|\"courseDetail\"|\"learningSession\"|\"submitAttempt\"|\"importCourse\"|\"exportCourse\"|\"listConcepts\"|\"conceptDetail\", pathParams?: { courseId?: string, lessonId?: string, activityId?: string, conceptId?: string }, query?: { userId?: string, lessonId?: string, courseId?: string, query?: string, dueOnly?: \"true\"|\"false\" }, body?: object }",
+      "requiredFields": [
+        "routeKey"
+      ],
+      "notes": [
+        "Choose routeKey from live onboarding specializedDomainSurfaces.courses routeKeys and methodRoutes.",
+        "Fill courseId, lessonId, activityId, and conceptId through pathParams when the selected methodRoutes path publishes those placeholders; do not hide them in query or body.",
+        "Use learningSession as the learner-safe view for guidance because it removes instructor references, correct option ids, answer explanations, and extension assessment data.",
+        "submitAttempt requires body.answerMarkdown and may include body.userId. Preserve the learner's wording and report a withheld grade truthfully when structured assessment is unavailable.",
+        "importCourse accepts one validated Forge course package as the request body. Use exportCourse only when the user explicitly wants the canonical portable package, not as a learner read.",
+        "Concept list supports query.userId, courseId, query, and dueOnly; concept detail supports query.userId. Concept definitions are package-managed and have no direct mutation route."
+      ],
+      "example": "{\"routeKey\":\"submitAttempt\",\"pathParams\":{\"courseId\":\"course.polynomials-etale-triple-covers\",\"lessonId\":\"lesson.week-01.day-01\",\"activityId\":\"activity.check-01\"},\"body\":{\"answerMarkdown\":\"My accepted answer\"}}",
       "catalogDocumented": true
     },
     {
@@ -424,7 +446,7 @@
       "label": "Forge Create Task Timebox",
       "summary": "Create a planned task timebox in the Forge calendar domain.",
       "whenToUse": "Use after choosing a valid future slot or, preferably, when the agent has already reasoned over the live calendar and wants to place a manual timebox directly.",
-      "inputShape": "{ taskId: string, projectId?: string|null, title: string, startsAt: string, endsAt: string, source?: \"manual\"|\"suggested\"|\"live_run\", overrideReason?: string|null, activityPresetKey?: string|null, customSustainRateApPerHour?: number|null, userId?: string|null }",
+      "inputShape": "{ taskId: string, projectId?: string|null, title: string, startsAt: string, endsAt: string, source?: \"manual\"|\"suggested\"|\"live_run\", status?: \"planned\"|\"active\"|\"completed\"|\"cancelled\", overrideReason?: string|null, activityPresetKey?: string|null, customSustainRateApPerHour?: number|null, userId?: string|null }",
       "requiredFields": [
         "taskId",
         "title",
@@ -433,6 +455,7 @@
       ],
       "notes": [
         "Manual timeboxing is the main direct path when the agent already understands the calendar and wants to choose the slot itself.",
+        "Only taskId, title, startsAt, and endsAt are required. source defaults to manual and status defaults to planned.",
         "Forge publishes these through the shared Forge write target during provider sync.",
         "Live task runs can later attach to matching timeboxes.",
         "This is a convenience helper; agents can also create task_timebox through forge_create_entities."
@@ -447,18 +470,17 @@
       "label": "Forge Create Work Block",
       "summary": "Create a recurring half-day, holiday, or custom work-block template.",
       "whenToUse": "Use when the operator wants recurring time windows such as Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or a custom block.",
-      "inputShape": "{ title: string, kind: \"main_activity\"|\"secondary_activity\"|\"third_activity\"|\"rest\"|\"holiday\"|\"custom\", color: string, timezone: string, weekDays: integer[], startMinute: integer, endMinute: integer, startsOn?: \"YYYY-MM-DD\"|null, endsOn?: \"YYYY-MM-DD\"|null, blockingState: \"allowed\"|\"blocked\" }",
+      "inputShape": "{ title: string, kind?: \"main_activity\"|\"secondary_activity\"|\"third_activity\"|\"rest\"|\"holiday\"|\"custom\", color?: string, timezone?: string, weekDays: integer[], startMinute: integer, endMinute: integer, startsOn?: \"YYYY-MM-DD\"|null, endsOn?: \"YYYY-MM-DD\"|null, exclusionDates?: \"YYYY-MM-DD\"[], blockingState?: \"allowed\"|\"blocked\", activityPresetKey?: string|null, customSustainRateApPerHour?: number|null, userId?: string|null }",
       "requiredFields": [
         "title",
-        "kind",
-        "timezone",
         "weekDays",
         "startMinute",
-        "endMinute",
-        "blockingState"
+        "endMinute"
       ],
       "notes": [
+        "The server defaults kind to custom, color to #60a5fa, timezone to UTC, and blockingState to blocked. Resolve the user's intended local timezone and blocking meaning in conversation rather than requiring defaults mechanically.",
         "Minutes are measured from midnight in the selected timezone.",
+        "When endMinute is earlier than startMinute the block continues overnight; equal startMinute and endMinute is invalid.",
         "startsOn and endsOn are optional date bounds. Leaving endsOn null makes the block repeat indefinitely.",
         "Use kind=holiday with weekDays [0,1,2,3,4,5,6] and minutes 0-1440 for vacations or other full-day blocked ranges.",
         "Derived instances appear in calendar overview responses immediately after creation.",
@@ -485,7 +507,7 @@
         "Use mode=hard only for explicit permanent removal.",
         "Restoration is only possible after soft delete.",
         "Deleting a Psyche-linked note requires psyche.note when Psyche authentication is enabled.",
-        "calendar_event, work_block_template, task_timebox, sleep_session, and workout_session are immediate deletions: calendar events delete remote projections too, and these records do not go through the settings bin."
+        "calendar_event, work_block_template, task_timebox, sleep_session, and workout_session are immediate deletions and do not go through the settings bin. Calendar events delete writable remote projections; provider-backed task timeboxes become hidden immediately and retain durable remote cleanup until acknowledged."
       ],
       "example": "{\"operations\":[{\"entityType\":\"task\",\"id\":\"task_123\",\"mode\":\"soft\",\"reason\":\"Merged into another task\"}]}",
       "catalogDocumented": true
@@ -1251,12 +1273,13 @@
       "label": "Forge Recommend Task Timeboxes",
       "summary": "Suggest future task slots that fit the current calendar rules and schedule.",
       "whenToUse": "Use when preparing focused work in advance and the agent wants Forge to propose candidate slots instead of picking one manually.",
-      "inputShape": "{ taskId: string, from?: string, to?: string, limit?: integer }",
+      "inputShape": "{ taskId: string, from?: string, to?: string, limit?: integer, timezone?: string }",
       "requiredFields": [
         "taskId"
       ],
       "notes": [
         "Recommendations consider mirrored calendar events, recurring work blocks, task or project scheduling rules, and the task's planned duration when available.",
+        "Only taskId is required. timezone is an optional IANA timezone for fallback wall-time windows, not mandatory user intake.",
         "Confirm a suggested slot by creating a task timebox."
       ],
       "example": "{\"taskId\":\"task_123\",\"from\":\"2026-04-02T00:00:00.000Z\",\"to\":\"2026-04-09T00:00:00.000Z\",\"limit\":6}",

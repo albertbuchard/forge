@@ -194,6 +194,19 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   `strategy`, `task`, `habit`, `tag`, `person`, `note`, `insight`, `calendar_event`, `life_event`,
   `work_block_template`, `task_timebox`, all main Psyche records, basic Preferences
   CRUD records, `questionnaire_instrument`, `sleep_session`, and `workout_session`.
+- For `work_block_template`, distinguish direct capture, guided recurrence design,
+  exact-record review or narrow update, read-only review, and delete. The real create
+  minimum is `title`, `weekDays`, `startMinute`, and `endMinute`; resolve human local
+  times yourself, preserve overnight meaning when end is earlier than start, and read
+  the exact template before a confirmed immediate non-restorable deletion. The named
+  create helper is only a convenience; ordinary lifecycle work remains batch-first.
+- For `task_timebox`, distinguish a known manual slot, bounded read-only
+  recommendations, exact-record review or narrow update, status change, and delete.
+  Read the exact task before create and the exact timebox before mutation. Only
+  `taskId`, `title`, `startsAt`, and `endsAt` are required; recommendation timezone is
+  optional, task/source linkage is immutable on update, a suggestion is not a saved
+  reservation, and a timebox is not task-run or completion evidence. Provider-backed
+  batch deletion hides it immediately and retains durable idempotent remote cleanup.
 - `person` is an owner-scoped local record about someone in the user's life. It is
   not a Forge `User`, agent identity, peer credential, pairing, or sharing grant.
   Search, create, update, soft-delete, restore, and replace its general `links`
@@ -611,7 +624,7 @@ When Hermes is trying to find the right wiki record, use these search patterns:
 7. Movement, Life Events, Life Force, and Workbench are specialized Forge API surfaces rather than simple batch entities. When Hermes needs those domains, read `forge_get_agent_onboarding`, choose the route from `entityRouteModel.specializedDomainSurfaces`, and use `forge_call_movement_route`, `forge_call_life_event_route`, `forge_call_life_force_route`, or `forge_call_workbench_route` when the route-key tools are available.
 8. Treat narrow calendar helpers as convenience helpers, not the default architecture:
    `forge_create_work_block_template` and `forge_create_task_timebox` are fine, but Hermes should still prefer the generic batch entity routes when practical.
-   `forge_recommend_task_timeboxes` is read-only, requires the user's IANA `timezone`, and returns at most 12 slots. Direct timebox create requires `taskId`, `title`, `startsAt`, and `endsAt`; it also accepts `status`, `overrideReason`, `activityPresetKey`, `customSustainRateApPerHour`, and `userId`. `activityPresetKey` must be `deep_work`, `admin`, `maintenance`, `meeting`, `recovery_break`, `holiday_leisure`, `light_context`, or `task_inherited`. Provider-backed deletion is locally hidden while durable, idempotent remote cleanup finishes.
+   `forge_recommend_task_timeboxes` is read-only, accepts an optional IANA `timezone`, and returns at most 12 slots. Direct timebox create requires `taskId`, `title`, `startsAt`, and `endsAt`; it also accepts `status`, `overrideReason`, `activityPresetKey`, `customSustainRateApPerHour`, and `userId`. `activityPresetKey` must be `deep_work`, `admin`, `maintenance`, `meeting`, `recovery_break`, `holiday_leisure`, `light_context`, or `task_inherited`. Provider-backed deletion is locally hidden while durable, idempotent remote cleanup finishes.
 9. Use the task-run tools for truthful live work:
    `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, `forge_release_task_run`.
    On completion, forward bounded `completionReport`, canonical `gitRefs`, and an
@@ -676,7 +689,9 @@ For wiki-specific recall:
   only for the matching clone, draft, or publish action. Do not represent version
   transitions as batch updates.
 - Use the high-level batch routes for ordinary health-session CRUD too. `sleep_session` and `workout_session` should normally flow through `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`. Keep `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, and `forge_get_weight_loss_overview` for read models; use the dedicated nutrition tools for food/body/gut/appearance/subjective evidence; and keep `forge_update_sleep_session` and `forge_update_workout_session` for reflective enrichment on one already-existing record.
+- A direct manual `workout_session` needs only accepted `workoutType`, offset-bearing `startedAt`, and `endedAt`. Resolve local time only when it changes the instants, search nearby type-and-time duplicates, and do not force metrics or reflection. Read the exact workout before correction or deletion, preserve provider-backed or habit-generated timing, metrics, source, and provenance unless one field is explicitly corrected, and confirm immediate, non-restorable deletion because there is no restore lane.
 - Use the dedicated API families for Movement, Life Events, Life Force, and Workbench. Those routes are published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and are the preferred contract for movement stays, trips, time-in-place and travel-behavior queries, Life Events chronology/calendar/ticket/status, life-force state, and workbench execution/result work. Prefer `forge_call_movement_route`, `forge_call_life_event_route`, `forge_call_life_force_route`, or `forge_call_workbench_route` when those route-key tools are present.
+- Course and Concept use the dedicated `forge_call_course_route`, published under `specializedDomainSurfaces.courses`. Use it for installed-course discovery, progress/detail, learner-safe sessions, attempts, validated package import/export, due concepts, and cross-course mastery. Use the learner-safe session for coaching, never expose hidden assessment fields, and never send Course or Concept through batch CRUD.
 - Life Events use both paths deliberately: shared batch CRUD for normal `life_event` create, update, search, soft delete, restore, and generic `entity_links`; dedicated `/api/v1/life-events/*` routes for chronology reads, one-event reads, calendar sync, calendar-to-Life-Event conversion, ticket artifact import, and travel-status reads.
 - When that onboarding payload includes `routeSelectionQuestions`, use them before improvising follow-up questions for Movement, Life Events, Life Force, or Workbench.
 - After the lane is clear, talk in product nouns such as timeline, overlay, calendar match, ticket import, travel status, weekday

@@ -122,6 +122,7 @@ async function loadOnboardingRouteContracts() {
     movement: surfaces.movement,
     lifeForce: surfaces.lifeForce,
     workbench: surfaces.workbench,
+    courses: surfaces.courses,
     lifeEvents: surfaces.lifeEvents,
     calendarConnection: {
       routeKeys: specializedCrudEntities.calendar_connection?.routeKeys ?? [],
@@ -216,6 +217,67 @@ describe("batch entity tool contract", () => {
       type: "array",
       items: { type: "string" }
     });
+  });
+});
+
+describe("work block template helper contract", () => {
+  it("matches the server minimum while keeping recurrence details optional", async () => {
+    mockedCallConfiguredForgeApi.mockReset();
+    mockedCallConfiguredForgeApi.mockResolvedValue({
+      status: 201,
+      body: { template: { id: "work_block_123" } }
+    });
+    const tool = requireTool(
+      collectRegisteredTools(""),
+      "forge_create_work_block_template"
+    );
+    const schema = tool.parameters as {
+      properties: Record<string, unknown>;
+      required: string[];
+      additionalProperties?: boolean;
+    };
+
+    expect(schema.additionalProperties).toBe(false);
+    expect(schema.required).toEqual([
+      "title",
+      "weekDays",
+      "startMinute",
+      "endMinute"
+    ]);
+    expect(Object.keys(schema.properties).sort()).toEqual(
+      [
+        "title",
+        "kind",
+        "color",
+        "timezone",
+        "weekDays",
+        "startMinute",
+        "endMinute",
+        "startsOn",
+        "endsOn",
+        "exclusionDates",
+        "blockingState",
+        "activityPresetKey",
+        "customSustainRateApPerHour",
+        "userId"
+      ].sort()
+    );
+
+    const payload = {
+      title: "Protected writing",
+      weekDays: [1, 3],
+      startMinute: 1320,
+      endMinute: 60
+    };
+    await tool.execute?.("create", payload);
+    expect(mockedCallConfiguredForgeApi).toHaveBeenCalledWith(
+      expect.objectContaining({ apiToken: "" }),
+      {
+        method: "POST",
+        path: "/api/v1/calendar/work-block-templates",
+        body: payload
+      }
+    );
   });
 });
 
@@ -667,7 +729,7 @@ function readHermesRouteSpecs(constantName: string) {
   return Object.fromEntries(
     [
       ...body.matchAll(
-        /"([^"]+)":\s*\{"method":\s*"([A-Z]+)",\s*"path":\s*"([^"]+)"/g
+        /"([^"]+)":\s*\{\s*"method":\s*"([A-Z]+)",\s*"path":\s*"([^"]+)"/g
       )
     ].map((match) => [match[1], `${match[2]} ${match[3]}`])
   );
@@ -1145,6 +1207,7 @@ describe("openclaw tool contracts", () => {
     const movement = requireTool(tools, "forge_call_movement_route");
     const lifeForce = requireTool(tools, "forge_call_life_force_route");
     const workbench = requireTool(tools, "forge_call_workbench_route");
+    const courses = requireTool(tools, "forge_call_course_route");
     const artifact = requireTool(tools, "forge_call_artifact_route");
     const lifeEvents = requireTool(tools, "forge_call_life_event_route");
     const onboardingSurfaces = await loadOnboardingRouteContracts();
@@ -1176,6 +1239,10 @@ describe("openclaw tool contracts", () => {
       workbench.parameters ?? {},
       "routeKey"
     );
+    const courseRouteKeys = readTypeBoxUnionValues(
+      courses.parameters ?? {},
+      "routeKey"
+    );
     const artifactRouteKeys = readTypeBoxUnionValues(
       artifact.parameters ?? {},
       "routeKey"
@@ -1205,6 +1272,9 @@ describe("openclaw tool contracts", () => {
     );
     expect(workbenchRouteKeys).toEqual(
       [...onboardingSurfaces.workbench.routeKeys].sort()
+    );
+    expect(courseRouteKeys).toEqual(
+      [...onboardingSurfaces.courses.routeKeys].sort()
     );
     expect(artifactRouteKeys).toEqual(
       [...onboardingSurfaces.artifact.routeKeys].sort()
@@ -1247,6 +1317,11 @@ describe("openclaw tool contracts", () => {
         readPropertyDescription(workbench.parameters ?? {}, "routeKey")
       )
     ).toEqual(onboardingSurfaces.workbench.methodRoutes);
+    expect(
+      readRouteGuideFromDescription(
+        readPropertyDescription(courses.parameters ?? {}, "routeKey")
+      )
+    ).toEqual(onboardingSurfaces.courses.methodRoutes);
     expect(
       readRouteGuideFromDescription(
         readPropertyDescription(artifact.parameters ?? {}, "routeKey")
@@ -1343,6 +1418,16 @@ describe("openclaw tool contracts", () => {
         "latestNodeOutput"
       ])
     );
+    expect(courseRouteKeys).toEqual([
+      "conceptDetail",
+      "courseDetail",
+      "exportCourse",
+      "importCourse",
+      "learningSession",
+      "listConcepts",
+      "listCourses",
+      "submitAttempt"
+    ]);
     expect(artifactRouteKeys).toEqual([
       "audit",
       "createWithBytes",
@@ -1373,13 +1458,14 @@ describe("openclaw tool contracts", () => {
       movement,
       lifeForce,
       workbench,
+      courses,
       artifact,
       lifeEvents
     ]) {
       expect(tool.parameters?.required).toEqual(["routeKey"]);
       expect(tool.description ?? "").toMatch(/dedicated/i);
     }
-    for (const tool of [movement, lifeForce, workbench]) {
+    for (const tool of [movement, lifeForce, workbench, courses]) {
       expect(tool.description ?? "").toMatch(
         /Do not use.*batch CRUD|normal stored entities.*batch CRUD/i
       );
@@ -1439,6 +1525,11 @@ describe("openclaw tool contracts", () => {
       /listFlows: GET \/api\/v1\/workbench\/flows[\s\S]*runFlow: POST \/api\/v1\/workbench\/flows\/:id\/run[\s\S]*latestNodeOutput: GET \/api\/v1\/workbench\/flows\/:id\/nodes\/:nodeId\/output/
     );
     expect(
+      readPropertyDescription(courses.parameters ?? {}, "routeKey")
+    ).toMatch(
+      /listCourses: GET \/api\/v1\/courses[\s\S]*learningSession: GET \/api\/v1\/courses\/:courseId\/learn[\s\S]*submitAttempt: POST \/api\/v1\/courses\/:courseId\/lessons\/:lessonId\/activities\/:activityId\/attempts[\s\S]*conceptDetail: GET \/api\/v1\/concepts\/:conceptId/
+    );
+    expect(
       readPropertyDescription(artifact.parameters ?? {}, "routeKey")
     ).toMatch(
       /list: GET \/api\/v1\/artifacts[\s\S]*createWithBytes: POST \/api\/v1\/artifacts[\s\S]*replaceGenericLinks: POST \/api\/v1\/artifacts\/:id\/links[\s\S]*audit: GET \/api\/v1\/artifacts\/:id\/audit/
@@ -1460,6 +1551,7 @@ describe("openclaw tool contracts", () => {
       movement,
       lifeForce,
       workbench,
+      courses,
       artifact,
       lifeEvents
     ]) {
@@ -1496,6 +1588,9 @@ describe("openclaw tool contracts", () => {
     );
     expect(readHermesRouteSpecs("WORKBENCH_ROUTE_SPECS")).toEqual(
       onboardingSurfaces.workbench.methodRoutes
+    );
+    expect(readHermesRouteSpecs("COURSE_ROUTE_SPECS")).toEqual(
+      onboardingSurfaces.courses.methodRoutes
     );
     expect(readHermesRouteSpecs("ARTIFACT_ROUTE_SPECS")).toEqual(
       onboardingSurfaces.artifact.methodRoutes

@@ -79,4 +79,19 @@ describe("route view copy", () => {
       "people-index"
     );
   });
+
+  it("treats courses and concepts as first-class learning destinations", () => {
+    const coursesRoute = PRIMARY_ROUTES.find((route) => route.id === "courses");
+    expect(coursesRoute).toBeDefined();
+    expect(routeMatches("/courses/math_123/learn", coursesRoute!)).toBe(true);
+    expect(routeMatches("/concepts/local-invertibility", coursesRoute!)).toBe(
+      true
+    );
+    expect(resolveRouteViewIdFromPathname("/courses/math_123/learn")).toBe(
+      "course-learn"
+    );
+    expect(
+      resolveRouteViewIdFromPathname("/concepts/local-invertibility")
+    ).toBe("concept-detail");
+  });
 });

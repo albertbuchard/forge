@@ -1,6 +1,6 @@
 ---
 name: forge-codex
-description: Use Forge's curated MCP tools to read, create, update, link, review, and navigate Forge records and specialized domain surfaces. Trigger for Forge planning, People and peer sharing, calendar, preferences, Psyche, questionnaires, health, wiki, artifacts, Movement, Life Events, Life Force, Workbench, agent-runtime, and guided question-flow requests where Codex must choose the correct batch or dedicated API path.
+description: Use Forge's curated MCP tools to read, create, update, link, review, learn, and navigate Forge records and specialized domain surfaces. Trigger for Forge planning, People and peer sharing, calendar, preferences, Psyche, questionnaires, health, wiki, artifacts, Movement, Life Events, Life Force, Workbench, Course, Concept, agent-runtime, and guided question-flow requests where Codex must choose the correct batch or dedicated API path.
 ---
 
 # Forge Codex
@@ -130,6 +130,20 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   `strategy`, `task`, `habit`, `tag`, `person`, `note`, `insight`, `calendar_event`, `life_event`,
   `work_block_template`, `task_timebox`, all main Psyche records, basic Preferences
   CRUD records, `questionnaire_instrument`, `sleep_session`, and `workout_session`.
+- For `work_block_template`, distinguish direct capture, guided recurrence design,
+  exact-record review or narrow update, read-only review, and delete. The actual
+  create minimum is `title`, `weekDays`, `startMinute`, and `endMinute`; resolve human
+  local times yourself, preserve overnight meaning when end is earlier than start,
+  ask date bounds or exclusions only for real exceptions, and read the exact template
+  before a confirmed immediate non-restorable deletion. The named create helper is a
+  convenience; ordinary lifecycle work remains batch-first.
+- For `task_timebox`, distinguish a known manual slot, bounded read-only
+  recommendations, exact-record review or narrow update, status change, and delete.
+  Read the exact task before create and the exact timebox before mutation. Only
+  `taskId`, `title`, `startsAt`, and `endsAt` are required; recommendation timezone is
+  optional, a suggestion is not a reservation, task/source linkage is immutable on
+  update, and a timebox is not a task run or completion record. Provider-backed batch
+  deletion hides it immediately and retains durable idempotent remote cleanup.
 - `person` is an owner-scoped local record about someone in the user's life. It is
   not a Forge `User`, agent identity, peer credential, pairing, or sharing grant.
   Search, create, update, soft-delete, restore, and replace its general `links`
@@ -724,6 +738,12 @@ Surface rule:
     for health read models, and use `forge_update_sleep_session` and `forge_update_workout_session`
     only for reflective enrichment on one already-existing record. Ordinary
     `sleep_session` and `workout_session` CRUD belongs on the shared batch routes.
+    A direct manual workout needs only an accepted `workoutType`, offset-bearing
+    `startedAt`, and `endedAt`; resolve local time only when needed, search nearby
+    type-and-time duplicates, and do not force metrics or reflection. Read the exact
+    workout before correction or deletion, preserve provider-backed or habit-generated
+    evidence unless one field is explicitly corrected, and confirm immediate,
+    non-restorable deletion because there is no restore lane.
     Use the dedicated nutrition tools for food/body/gut/appearance/subjective evidence:
     `forge_search_foods`, `forge_search_nutrition_foods`, `forge_lookup_nutrition_barcode`,
     `forge_log_food`, `forge_parse_food_log_with_chatgpt`,
@@ -762,6 +782,9 @@ Surface rule:
 - Preferred mutation path for `sleep_session` and `workout_session`: the same batch
   CRUD tools. Dedicated health tools are for review and post-review enrichment, not
   the default write model.
+- For `workout_session`, use the three-field manual minimum, read exact state before
+  correction, keep `forge_update_workout_session` limited to reflective fields, and
+  treat deletion as immediate, non-restorable, and outside the settings bin.
 - Preferred mutation path for Preferences actions: keep the batch tools for the
   simple entities and use the dedicated game, judgment, signal, merge, enqueue, and
   score tools only for those action-heavy flows.
@@ -818,6 +841,12 @@ Surface rule:
   route families published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces`.
   Prefer `forge_call_movement_route`, `forge_call_life_event_route`, `forge_call_life_force_route`, or
   `forge_call_workbench_route` when those route-key tools are present.
+- Course and Concept use the dedicated `forge_call_course_route`, published under
+  `specializedDomainSurfaces.courses`. Use it for installed-course discovery,
+  progress/detail, learner-safe sessions, attempts, validated package import/export,
+  due concepts, and cross-course mastery. Use the learner-safe session for coaching,
+  never expose hidden assessment fields, and never send Course or Concept through
+  batch CRUD.
 - Life Events use both paths deliberately: shared batch CRUD for normal `life_event`
   create, update, search, soft delete, restore, and generic `entity_links`; dedicated
   `/api/v1/life-events/*` routes for chronology reads, one-event reads, calendar sync,

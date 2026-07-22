@@ -2,6 +2,7 @@ import {
   buildPeerOpenApiComponents,
   buildPeerOpenApiPaths
 } from "./peer-openapi.js";
+import { buildCourseOpenApiPaths } from "./course-openapi.js";
 import { TASK_CLOSEOUT_LIMITS } from "./types.js";
 
 function arrayOf(items: Record<string, unknown>) {
@@ -1716,6 +1717,93 @@ export function buildOpenApiDocument() {
       blockingState: { type: "string", enum: ["allowed", "blocked"] },
       createdAt: { type: "string", format: "date-time" },
       updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const workBlockTemplateCreateInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["title", "weekDays", "startMinute", "endMinute"],
+    properties: {
+      title: { type: "string", minLength: 1 },
+      kind: {
+        type: "string",
+        enum: [
+          "main_activity",
+          "secondary_activity",
+          "third_activity",
+          "rest",
+          "holiday",
+          "custom"
+        ],
+        default: "custom"
+      },
+      color: {
+        type: "string",
+        pattern: "^#[0-9a-fA-F]{6}$",
+        default: "#60a5fa"
+      },
+      timezone: { type: "string", default: "UTC" },
+      weekDays: {
+        type: "array",
+        minItems: 1,
+        maxItems: 7,
+        items: { type: "integer", minimum: 0, maximum: 6 }
+      },
+      startMinute: { type: "integer", minimum: 0, maximum: 1440 },
+      endMinute: { type: "integer", minimum: 0, maximum: 1440 },
+      startsOn: nullable({ type: "string", format: "date" }),
+      endsOn: nullable({ type: "string", format: "date" }),
+      exclusionDates: {
+        type: "array",
+        maxItems: 366,
+        items: { type: "string", format: "date" }
+      },
+      blockingState: {
+        type: "string",
+        enum: ["allowed", "blocked"],
+        default: "blocked"
+      },
+      activityPresetKey: nullable({
+        type: "string",
+        enum: [
+          "deep_work",
+          "admin",
+          "maintenance",
+          "meeting",
+          "recovery_break",
+          "holiday_leisure",
+          "light_context",
+          "task_inherited"
+        ]
+      }),
+      customSustainRateApPerHour: nullable({ type: "number", minimum: 0 }),
+      userId: nullable({ type: "string", minLength: 1 })
+    }
+  };
+
+  const workBlockTemplatePatchInput = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      ...workBlockTemplateCreateInput.properties,
+      kind: {
+        type: "string",
+        enum: [
+          "main_activity",
+          "secondary_activity",
+          "third_activity",
+          "rest",
+          "holiday",
+          "custom"
+        ]
+      },
+      color: { type: "string", pattern: "^#[0-9a-fA-F]{6}$" },
+      timezone: { type: "string" },
+      blockingState: {
+        type: "string",
+        enum: ["allowed", "blocked"]
+      }
     }
   };
 
@@ -10834,6 +10922,8 @@ export function buildOpenApiDocument() {
         CalendarEvent: calendarEvent,
         CalendarProjectionResult: calendarProjectionResult,
         WorkBlockTemplate: workBlockTemplate,
+        WorkBlockTemplateCreateInput: workBlockTemplateCreateInput,
+        WorkBlockTemplatePatchInput: workBlockTemplatePatchInput,
         WorkBlockInstance: workBlockInstance,
         TaskTimebox: taskTimebox,
         TaskTimeboxCreateInput: taskTimeboxCreateInput,
@@ -11083,6 +11173,7 @@ export function buildOpenApiDocument() {
     },
     paths: {
       ...buildPeerOpenApiPaths(),
+      ...buildCourseOpenApiPaths(),
       "/api/v1/artifacts": {
         get: {
           summary: "List artifact metadata",
@@ -17900,6 +17991,18 @@ export function buildOpenApiDocument() {
         },
         post: {
           summary: "Create a recurring work-block template",
+          description:
+            "Creates one compact local-time recurrence rule. An end minute earlier than the start minute continues overnight; equal start and end minutes are invalid.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/WorkBlockTemplateCreateInput"
+                }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
@@ -17918,6 +18021,14 @@ export function buildOpenApiDocument() {
       "/api/v1/calendar/work-block-templates/{id}": {
         get: {
           summary: "Get one recurring work-block template",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -17930,6 +18041,71 @@ export function buildOpenApiDocument() {
               "Work-block template"
             ),
             default: { $ref: "#/components/responses/Error" }
+          }
+        },
+        patch: {
+          summary: "Update one recurring work-block template",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/WorkBlockTemplatePatchInput"
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["template"],
+                properties: {
+                  template: { $ref: "#/components/schemas/WorkBlockTemplate" }
+                }
+              },
+              "Updated work-block template"
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        },
+        delete: {
+          summary: "Delete one recurring work-block template immediately",
+          description:
+            "Removes the template and its future derived instances. Work-block templates do not enter the settings bin and cannot be restored.",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["template"],
+                properties: {
+                  template: { $ref: "#/components/schemas/WorkBlockTemplate" }
+                }
+              },
+              "Deleted work-block template"
+            ),
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" }
           }
         }
       },

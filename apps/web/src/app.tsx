@@ -11,6 +11,11 @@ import {
   AttentionInboxPage,
   CalendarPage,
   CompanionSyncLabPage,
+  ConceptDetailPage,
+  ConceptsPage,
+  CourseDetailPage,
+  CourseLearnPage,
+  CoursesPage,
   GoalDetailPage,
   GoalsPage,
   HabitsPage,
@@ -195,6 +200,51 @@ export function App() {
               "Habits",
               "Recurring commitments, streaks, and check-ins.",
               <HabitsPage />
+            )}
+          />
+          <Route
+            path="courses"
+            element={surface(
+              "courses-index",
+              "Courses",
+              "Structured learning paths and proof-based progress.",
+              <CoursesPage />
+            )}
+          />
+          <Route
+            path="courses/:courseId/learn"
+            element={surface(
+              "course-learn",
+              "Course lesson",
+              "Immersive concept learning and proof assessment.",
+              <CourseLearnPage />
+            )}
+          />
+          <Route
+            path="courses/:courseId"
+            element={surface(
+              "course-detail",
+              "Course detail",
+              "Course syllabus, standing, and concept coverage.",
+              <CourseDetailPage />
+            )}
+          />
+          <Route
+            path="concepts"
+            element={surface(
+              "concepts-index",
+              "Concepts",
+              "Durable concept entities, mastery, and review.",
+              <ConceptsPage />
+            )}
+          />
+          <Route
+            path="concepts/:conceptId"
+            element={surface(
+              "concept-detail",
+              "Concept detail",
+              "Definition, course appearances, and proof evidence.",
+              <ConceptDetailPage />
             )}
           />
           <Route

@@ -1,0 +1,26 @@
+{
+  "name": "@forge/course-kit",
+  "version": "0.1.0",
+  "description": "Portable course package schema and learning-evidence utilities for Forge.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": false,
+  "scripts": {
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "dependencies": {
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

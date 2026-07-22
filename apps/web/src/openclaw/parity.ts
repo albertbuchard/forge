@@ -20,6 +20,7 @@ export type ForgeSupportedPluginApiRoute = {
     | "movement"
     | "life_force"
     | "workbench"
+    | "courses"
     | "attention"
     | "entity_navigation"
     | "artifact"
@@ -223,6 +224,34 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
       method: "GET",
       path: "/api/v1/workbench/flows/:id/nodes/:nodeId/output",
       purpose: "workbench"
+    },
+    { method: "GET", path: "/api/v1/courses", purpose: "courses" },
+    { method: "POST", path: "/api/v1/courses/import", purpose: "courses" },
+    {
+      method: "GET",
+      path: "/api/v1/courses/:courseId/export",
+      purpose: "courses"
+    },
+    {
+      method: "GET",
+      path: "/api/v1/courses/:courseId",
+      purpose: "courses"
+    },
+    {
+      method: "GET",
+      path: "/api/v1/courses/:courseId/learn",
+      purpose: "courses"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
+      purpose: "courses"
+    },
+    { method: "GET", path: "/api/v1/concepts", purpose: "courses" },
+    {
+      method: "GET",
+      path: "/api/v1/concepts/:conceptId",
+      purpose: "courses"
     },
     { method: "GET", path: "/api/v1/attention-inbox", purpose: "attention" },
     {

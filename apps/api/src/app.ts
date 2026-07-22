@@ -694,6 +694,8 @@ import {
 import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
 import { registerPeopleRoutes } from "./routes/people.js";
+import { registerCourseRoutes } from "./routes/courses.js";
+import { ensureBuiltInCourses } from "./repositories/courses.js";
 import { registerPeerSharingRoutes } from "./routes/peer-sharing.js";
 import { PEER_ROUTE_CONTRACTS } from "./peer-route-contract.js";
 import { persistPeerPairingConfirmation } from "./repositories/peer-pairing.js";
@@ -1653,22 +1655,15 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
     entityType: "work_block_template",
     purpose:
       "A recurring work-availability template such as Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or Custom.",
-    minimumCreateFields: [
-      "title",
-      "kind",
-      "timezone",
-      "weekDays",
-      "startMinute",
-      "endMinute",
-      "blockingState"
-    ],
+    minimumCreateFields: ["title", "weekDays", "startMinute", "endMinute"],
     relationshipRules: [
       "Work block templates derive visible calendar instances for the requested range instead of storing one repeated event per day.",
       "startsOn and endsOn are optional active-date bounds. Leaving endsOn null makes the block repeat indefinitely.",
-      "They are Forge-owned scheduling structures, not mirrored provider events."
+      "They are Forge-owned scheduling structures, not mirrored provider events.",
+      "When endMinute is earlier than startMinute, the generated block continues overnight into the next local day. startMinute and endMinute cannot be equal."
     ],
     searchHints: [
-      "Search by title or kind before creating a duplicate recurring block."
+      "Search by title or kind and compare overlapping weekdays and local times before creating a duplicate recurring block."
     ],
     examples: [
       '{"title":"Main Activity","kind":"main_activity","color":"#f97316","timezone":"Europe/Zurich","weekDays":[1,2,3,4,5],"startMinute":480,"endMinute":720,"startsOn":"2026-04-06","endsOn":null,"blockingState":"blocked"}',
@@ -1684,7 +1679,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
       {
         name: "kind",
         type: "main_activity|secondary_activity|third_activity|rest|holiday|custom",
-        required: true,
+        required: false,
         description: "Preset or custom block type.",
         enumValues: [
           "main_activity",
@@ -1693,7 +1688,8 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
           "rest",
           "holiday",
           "custom"
-        ]
+        ],
+        defaultValue: "custom"
       },
       {
         name: "color",
@@ -1705,8 +1701,9 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
       {
         name: "timezone",
         type: "string",
-        required: true,
-        description: "IANA timezone that defines the recurring window."
+        required: false,
+        description: "IANA timezone that defines the recurring local-time window.",
+        defaultValue: "UTC"
       },
       {
         name: "weekDays",
@@ -1746,9 +1743,10 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
       {
         name: "blockingState",
         type: "allowed|blocked",
-        required: true,
+        required: false,
         description: "Whether this block generally allows or blocks work.",
-        enumValues: ["allowed", "blocked"]
+        enumValues: ["allowed", "blocked"],
+        defaultValue: "blocked"
       }
     ]
   },
@@ -1758,10 +1756,11 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
     minimumCreateFields: ["taskId", "title", "startsAt", "endsAt"],
     relationshipRules: [
       "Task timeboxes belong to a task and can optionally carry the parent project id.",
-      "Live task runs can attach to matching timeboxes later; creating a timebox does not start work by itself."
+      "Live task runs can attach to matching timeboxes later; creating a timebox does not start work by itself.",
+      "The linked task and source are fixed after creation. Moving an existing timebox to another task requires an explicitly accepted replacement rather than an update."
     ],
     searchHints: [
-      "Search by task linkage or title before creating another slot for the same work block."
+      "Search by exact task linkage and overlapping time before creating another slot for the same work."
     ],
     examples: [
       '{"taskId":"task_123","projectId":"project_456","title":"Draft the methods section","startsAt":"2026-04-03T08:00:00.000Z","endsAt":"2026-04-03T09:30:00.000Z","source":"suggested"}'
@@ -3274,7 +3273,9 @@ function classifyOnboardingEntity(
     entityType === "entity_navigation" ||
     entityType === "movement" ||
     entityType === "life_force" ||
-    entityType === "workbench"
+    entityType === "workbench" ||
+    entityType === "course" ||
+    entityType === "concept"
   ) {
     return "specialized_domain_surface";
   }
@@ -3334,6 +3335,10 @@ function buildPreferredMutationPath(entityType: string) {
       return "Use the dedicated Life Force route family for overview, profile edits, weekday templates, and fatigue signals.";
     case "workbench":
       return "Use the dedicated Workbench route family for flow CRUD, execution, saved-flow chat follow-ups, run history, published outputs, node results, and latest-node-output reads.";
+    case "course":
+      return "Use the dedicated Course route family for catalog reads, exact course detail, learner-safe lesson sessions, activity attempts, validated package import, and canonical package export. Do not use shared batch CRUD for courses.";
+    case "concept":
+      return "Use the dedicated Course route family for concept search, due-review filtering, and exact cross-course mastery detail. Concept definitions are installed from validated course packages and are not ordinary batch CRUD records.";
     case "self_observation":
       return "Read the calendar surface; mutate it by creating or updating note-backed observations with frontmatter.observedAt.";
     case "sleep_overview":
@@ -3427,6 +3432,9 @@ function buildPreferredMutationTool(entityType: string) {
       return "forge_call_life_force_route";
     case "workbench":
       return "forge_call_workbench_route";
+    case "course":
+    case "concept":
+      return "forge_call_course_route";
     case "weight_loss":
       return "forge_get_weight_loss_overview | forge_search_foods | forge_search_nutrition_foods | forge_lookup_nutrition_barcode | forge_log_food | forge_parse_food_log_with_chatgpt | forge_log_body_checkin | forge_log_appearance_checkin | forge_log_subjective_food_effect | forge_log_gut_checkin | forge_get_nutrition_patterns | forge_start_nutrition_experiment | forge_update_nutrition_experiment";
     case "preferences_workspace":
@@ -3485,6 +3493,10 @@ function buildPreferredReadPath(entityType: string) {
       return "Read /api/v1/life-force first when the current energy picture matters; focused write lanes are /api/v1/life-force/profile, /api/v1/life-force/templates/:weekday, and /api/v1/life-force/fatigue-signals.";
     case "workbench":
       return "/api/v1/workbench/flows | /api/v1/workbench/flows/:id | /api/v1/workbench/flows/by-slug/:slug | /api/v1/workbench/flows/:id/output | /api/v1/workbench/flows/:id/runs | /api/v1/workbench/flows/:id/runs/:runId | /api/v1/workbench/flows/:id/runs/:runId/nodes | /api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId | /api/v1/workbench/flows/:id/nodes/:nodeId/output | /api/v1/workbench/catalog/boxes";
+    case "course":
+      return "/api/v1/courses | /api/v1/courses/:courseId | /api/v1/courses/:courseId/learn | /api/v1/courses/:courseId/export";
+    case "concept":
+      return "/api/v1/concepts | /api/v1/concepts/:conceptId";
     case "self_observation":
       return "/api/v1/psyche/self-observation/calendar";
     default:
@@ -3508,7 +3520,11 @@ const QUESTION_FLOW_SPECIALIZED_ROUTE_HINTS = {
   life_force:
     "Specialized route surface: lifeForce. Route tool: forge_call_life_force_route. Route keys: overview, profile, weekdayTemplate, fatigueSignal.",
   workbench:
-    "Specialized route surface: workbench. Route tool: forge_call_workbench_route. Route keys: listFlows, flowDetail, flowById, flowBySlug, publishedOutput, runHistory, runs, runDetail, runNodes, nodeResult, latestNodeOutput, boxCatalog, createFlow, updateFlow, deleteFlow, runFlow, runByPayload, chatFlow. Catalog reads are paged; follow hasMore with the returned offset plus item count."
+    "Specialized route surface: workbench. Route tool: forge_call_workbench_route. Route keys: listFlows, flowDetail, flowById, flowBySlug, publishedOutput, runHistory, runs, runDetail, runNodes, nodeResult, latestNodeOutput, boxCatalog, createFlow, updateFlow, deleteFlow, runFlow, runByPayload, chatFlow. Catalog reads are paged; follow hasMore with the returned offset plus item count.",
+  course:
+    "Specialized route surface: courses. Route tool: forge_call_course_route. Route keys: listCourses, courseDetail, learningSession, submitAttempt, importCourse, exportCourse, listConcepts, conceptDetail. Use learningSession as the learner-safe guidance view so hidden assessment references stay out of the response.",
+  concept:
+    "Specialized route surface: courses. Route tool: forge_call_course_route. Route keys: listConcepts and conceptDetail for mastery reads; concept definitions change only through validated package import, never batch CRUD."
 } as const satisfies Record<string, string>;
 
 function enrichOnboardingEntityGuide<
@@ -3791,10 +3807,12 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Use batch CRUD for ordinary workout_session create, update, delete, and search work.",
       "The direct PATCH route remains useful for reflective enrichment after reviewing an existing imported or habit-generated workout.",
       "Do not reach for the reflective helper when a normal batch create or patch already fits the job.",
-      "Workout deletions are immediate and do not go through the settings bin."
+      "Read the exact workout before correction or deletion and preserve provider timing, metrics, source, and provenance unless the user explicitly corrects one of those fields.",
+      "Workout deletions are immediate, non-restorable, and do not go through the settings bin."
     ],
     searchHints: [
-      "Search by workoutType, linked entity, or nearby timestamps before creating another manual workout."
+      "Search by workoutType, linked entity, or nearby timestamps before creating another manual workout.",
+      "For local clock wording, resolve the accepted timezone into offset-bearing startedAt and endedAt values before writing."
     ],
     examples: [
       '{"workoutType":"walk","startedAt":"2026-04-11T10:00:00.000Z","endedAt":"2026-04-11T10:45:00.000Z","subjectiveEffort":6,"meaningText":"Reset after a long planning block."}'
@@ -4556,6 +4574,44 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     fieldGuide: []
   }),
   enrichOnboardingEntityGuide({
+    entityType: "course",
+    purpose:
+      "A validated, package-backed learning program with a syllabus, learner-safe lesson sessions, assessment attempts, and progress.",
+    minimumCreateFields: [],
+    relationshipRules: [
+      "Course is a specialized learning surface, not a normal batch CRUD entity.",
+      "Use the dedicated Course routes for catalog, detail, learner session, attempt, package import, and package export work.",
+      "Use the learner-safe session when guiding a learner; do not expose instructor references, correct option ids, answer explanations, or extension assessment data.",
+      "Import changes course definitions only through a validated canonical package. Existing learner evidence can block a conflicting replacement."
+    ],
+    searchHints: [
+      "List installed courses before asking the user to reconstruct a course id or progress state.",
+      "Read exact course detail before discussing syllabus or progress, and read the learner-safe session before teaching or collecting an answer.",
+      "For an attempt, identify the exact course, lesson, and activity from the learner-safe session, preserve the learner's answer wording, and do not ask them to restate the rubric.",
+      "For import, establish package provenance and intended installation, then let Forge validate references and the canonical hash; do not imitate import with generic entity writes.",
+      "Use export only when the user wants the canonical portable package, not as a shortcut for learner guidance."
+    ],
+    fieldGuide: []
+  }),
+  enrichOnboardingEntityGuide({
+    entityType: "concept",
+    purpose:
+      "A first-class learning concept with cross-course definition, prerequisites, evidence, multidimensional mastery, and review timing.",
+    minimumCreateFields: [],
+    relationshipRules: [
+      "Concept is a specialized read surface inside the Course API, not a normal batch CRUD entity.",
+      "Concept definitions are supplied by validated course packages; use list and detail routes for agent review rather than inventing direct concept mutations.",
+      "Mastery evidence belongs to the selected learner and can span courses and lesson attempts."
+    ],
+    searchHints: [
+      "List or search concepts before asking the user to recall an exact concept id.",
+      "Use dueOnly when the user wants review priorities, and courseId only when they want concepts from one course.",
+      "Read exact concept detail before explaining mastery, prerequisites, related concepts, course coverage, or evidence.",
+      "Separate the stored concept definition from the learner's current mastery and evidence; do not present a low score as a fixed trait."
+    ],
+    fieldGuide: []
+  }),
+  enrichOnboardingEntityGuide({
     entityType: "self_observation",
     purpose:
       "The note-backed Psyche self-observation calendar surface for observed events and reflections.",
@@ -4901,25 +4957,34 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   },
   {
     focus: "work_block_template",
-    openingQuestion: "When should this recurring block repeat?",
+    openingQuestion:
+      "Are you setting up a recurring work rule, reviewing or changing one, or removing it?",
     coachingGoal:
-      "Define a reusable availability rule rather than a one-off event.",
+      "Define or maintain one reusable local-time availability rule without turning it into a one-off event or a field-by-field form.",
     askSequence: [
-      "Ask what kind of block it is and what it should be called.",
-      "Ask on which days and at what local times it should repeat.",
-      "Ask whether it allows or blocks work.",
-      "Ask whether it has a start or end date."
+      "Distinguish direct capture, guided recurrence design, exact-record review or narrow update, read-only review, and delete. Skip the lane question when the user's verb is already clear.",
+      "For direct capture, reflect the accepted title and recurring weekdays, then resolve ordinary local clock wording into startMinute and endMinute yourself. Forge requires only title, weekDays, startMinute, and endMinute; kind defaults to custom, color to #60a5fa, timezone to UTC, and blockingState to blocked. Do not force kind, color, date bounds, exclusions, activity settings, or ownership when they do not change the intended rule.",
+      "Use the user's known IANA timezone for local recurrence. Ask about timezone only when it is unknown or daylight-saving interpretation could change the rule; do not make the user calculate minutes from midnight. If the end is earlier than the start, state that the block continues overnight; equal start and end is invalid.",
+      "Search existing templates by title or kind and compare overlapping weekdays and local times before creating. Ask one accuracy or consent question after summarizing the effective title, days, times, timezone, and whether the block allows or blocks work.",
+      "For guided design, first clarify what availability decision the recurring rule should make. Ask about kind or blocking state only when the purpose does not already imply them, and ask for startsOn, endsOn, or exclusionDates only when the rule is temporary or has known exceptions.",
+      "For review, narrow update, or delete, search for and read the exact template first. Answer read-only questions before proposing a write, preserve accepted sparse wording and defaults, and patch only the newly true field. Explain the effect on future derived calendar instances rather than pretending the template stores repeated events.",
+      "For delete, identify the exact template and obtain explicit confirmation that removal is immediate, non-restorable, bypasses the settings bin, and removes its future derived availability instances. Use shared batch CRUD for ordinary search, create, update, and delete; forge_create_work_block_template is an optional create convenience, not a separate lifecycle or a reason to guess update or delete tools."
     ]
   },
   {
     focus: "task_timebox",
-    openingQuestion: "When should Forge reserve focused time for this task?",
+    openingQuestion:
+      "Do you already know the slot for this task, want Forge to suggest options, or need to review or change an existing timebox?",
     coachingGoal:
-      "Reserve real time for one task without confusing planned work with completed work.",
+      "Reserve or maintain real time for one exact task without confusing a plan, a live task run, and evidence of completed work.",
     askSequence: [
-      "Ask which task the slot belongs to.",
-      "Ask when the slot should start and end.",
-      "Ask about source or override reason only when that context matters."
+      "Distinguish direct manual capture, assisted recommendation, exact-record review or narrow update, read-only review, status change, and delete. Skip the lane question when the user's intent is already explicit.",
+      "For direct capture, resolve and read the exact existing task first, derive or confirm a specific calendar title, and resolve the user's local start plus end or duration into offset-bearing startsAt and endsAt with end after start. Search that task and overlapping interval for an existing timebox, then ask one accuracy or consent question. Forge requires only taskId, title, startsAt, and endsAt and defaults source to manual and status to planned.",
+      "Use forge_get_calendar_overview before placement when current commitments or availability matter. Ask about timezone only when it changes the instants; do not make the user format ISO timestamps. Ask for projectId, source, status, activity settings, owner, or overrideReason only when those fields are newly meaningful. overrideReason records an intentional scheduling-rule or calendar-pressure exception, not a generic note.",
+      "For assisted scheduling, read the exact task and call forge_recommend_task_timeboxes with taskId plus only the date window, limit, or timezone that changes the suggestions. Recommendations are read-only and timezone is optional. Present a small set of concrete choices and create only the slot the user accepts; never treat a suggestion as a saved reservation.",
+      "For review, update, status change, or delete, search for and read the exact timebox first. Answer read-only questions before proposing a write, preserve accepted task linkage, source, timing, status, provider mapping, and optional settings, and patch only what is newly true. taskId and source cannot be changed by update; moving the slot to another task requires an explicitly accepted replacement.",
+      "A timebox does not start a task run or prove work happened. Use task_run actions for live execution and factual closeout evidence; use status only for the timebox's own planned, active, completed, or cancelled state.",
+      "For delete, identify the exact timebox and obtain explicit confirmation that it becomes hidden immediately, is non-restorable, bypasses the settings bin, and, when provider-backed, leaves durable idempotent remote cleanup until acknowledged. Use shared batch CRUD for ordinary search, create, update, status change, and delete. forge_create_task_timebox is an optional create convenience and forge_recommend_task_timeboxes is the bounded read-only assisted lane."
     ]
   },
   {
@@ -5057,15 +5122,17 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "workout_session",
     openingQuestion:
-      "What about this workout feels most worth remembering or connecting?",
+      "Are you adding a workout manually, reviewing or correcting one, adding context to it, or deleting it?",
     coachingGoal:
-      "Enrich one workout with subjective effort, mood, meaning, or linked context.",
+      "Capture or correct one workout with only the needed timing details, preserve imported evidence, and make reflective context optional.",
     askSequence: [
-      "Ask what about the session the user wants to preserve.",
-      "Ask whether the key layer is effort, mood, meaning, social context, or links.",
-      "Use the shared batch CRUD path for ordinary workout_session create or update work, and reserve the reflective helper for enrichment after review.",
-      "Ask what it connects to in Forge if links matter.",
-      "Ask about tags only if they help later retrieval."
+      "Choose among direct manual capture, exact-record review or narrow correction, read-only review, reflective enrichment, and delete before asking for details.",
+      "For direct manual capture, identify the recognizable workout type and resolve the start and end into offset-bearing startedAt and endedAt, ensure the end is after the start, search the nearby interval and workout type for a duplicate, and ask one accuracy or consent question. Forge requires only workoutType, startedAt, and endedAt and defaults manual source fields; do not require calories, distance, steps, heart rate, exercise minutes, effort, mood, meaning, social context, tags, links, provenance, or owner when already clear.",
+      "Ask for a timezone only when local clock wording or daylight-saving ambiguity would otherwise change the stored instants. Do not make the user format ISO timestamps or calculate duration.",
+      "For review or narrow correction, search for and read the exact existing Workout Session first. Answer the read-only question before proposing a write, preserve accepted sparse timing, workout type, source, provenance, biometric metrics, annotations, tags, and links, and patch only what is newly true or inaccurate. For provider-backed or habit-generated records, keep imported or generated evidence separate from the user's correction and do not rewrite measured timing, calories, distance, heart rate, source, or provenance merely to add context.",
+      "For reflective enrichment, read the exact workout first, briefly reflect the one effort, mood, meaning, planned or social context, tag, or link the user wants preserved, and ask only for optional context that changes later review. Use forge_update_workout_session so imported measurement fields remain untouched.",
+      "For delete, read and identify the exact workout, explain that deletion is immediate, non-restorable, and bypasses the settings bin, then obtain explicit confirmation before forge_delete_entities.",
+      "Use the shared batch CRUD path for ordinary workout_session create or update work, and use those same batch tools for search, narrow correction, and delete. The named workout helper is only the post-review reflective-enrichment path; there is no restore lane."
     ]
   },
   {
@@ -5378,6 +5445,39 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "If the user is debugging one failed run, ask whether the useful artifact is the run summary, one node result, the latest node output, or the published output before you start asking for edits.",
       "Prefer flow detail or published-output reads for stable contracts, and use run or node-result routes only when the user is asking about execution history or debugging.",
       "Route to the dedicated workbench route family once the execution lane is clear."
+    ]
+  },
+  {
+    focus: "course",
+    openingQuestion:
+      "Are you trying to choose a course, continue a lesson, submit work, review progress, or import or export a course?",
+    coachingGoal:
+      "Clarify the learning job, read the current course or learner-safe lesson state first when it exists, and use the exact dedicated Course operation without exposing hidden assessment material.",
+    askSequence: [
+      "Start from the user's learning intent: choose, continue, understand, answer, review progress, install, or export.",
+      "If the course is not exact, list installed courses before asking for an id; if it is exact, read course detail or the learner-safe session before asking the user to repeat syllabus or activity context.",
+      "For learning support, use the learner-safe session and ask what part of the current explanation, example, or activity is unclear. Support does not depend on submitting an attempt.",
+      "For an attempt, identify the exact course, lesson, and activity from the current session, preserve answerMarkdown as the learner expressed it, and ask only for a missing answer or an explicit submission choice when the user has not already asked to submit.",
+      "Never reveal or infer hidden reference answers, correct option ids, answer explanations, extension assessment data, or instructor-only material while coaching the learner.",
+      "After submission, distinguish saved answer, assessment status, feedback, score, grade, points, and next lesson. If structured assessment is unavailable, say that grading was withheld rather than inventing a result.",
+      "For import, ask which trusted Forge course package should be installed and whether the intent is a new install or an accepted replacement; let Forge validate references and canonical hash and report conflicts truthfully.",
+      "For export, confirm the exact course and that the user wants the canonical portable package. Do not use export as the learner view.",
+      "Skip the broad lane question when the user has already named the exact course and action; ask only for the missing lesson, activity, learner scope, package, answer, or confirmation that changes the call."
+    ]
+  },
+  {
+    focus: "concept",
+    openingQuestion:
+      "Are you trying to understand one concept, see what is due for review, or make sense of your mastery evidence?",
+    coachingGoal:
+      "Clarify the learner's practical concept question, read the bounded list or exact cross-course detail first, and explain definition, prerequisites, evidence, and mastery without treating the score as a verdict.",
+    askSequence: [
+      "Ask whether the user wants one concept explained, a due-review list, concepts within one course, or an explanation of mastery evidence.",
+      "If the concept is not exact, list with only the query, course, learner, or due filter that changes the answer instead of asking the user for an internal id.",
+      "Read exact concept detail before explaining prerequisites, related concepts, course coverage, learner evidence, or multidimensional mastery.",
+      "Keep the concept definition, observed attempt evidence, and current mastery estimate separate. Offer one tentative learning interpretation only when it helps choose a next review or lesson, and make it easy to correct.",
+      "Do not invent direct concept CRUD. If the definition itself must change, explain that definitions come from validated course packages and clarify whether the user is actually asking to import a revised package.",
+      "After the read, ask only what changes the next learning action: explanation depth, prerequisite review, one due concept, one source lesson, or no action."
     ]
   },
   {
@@ -5963,6 +6063,12 @@ function buildQuestionFlowReadinessCheck(
   if (guide.entityType === "calendar_event") {
     return "Ready on the selected Calendar Event lane. Direct capture is ready for shared batch CRUD when an accepted title, offset-bearing startAt and endAt with end after start, a duplicate search in the overlapping interval, and one accuracy or consent check are complete; Forge requires only title, startAt, and endAt, so do not require description, location, place, links, event type, categories, availability, all-day state, activity settings, owner, or calendar selection. Resolve local clock wording through the intended IANA timezone and ask only when timezone or daylight-saving ambiguity changes the instant. Read-only review is ready after reading the exact existing event and must not manufacture a write. Narrow update is ready only after that exact read isolates the smallest accepted change and verifies ownership and recurrence: external provider mirrors remain read-only for updates; recurring provider sources require recurrenceEditScope, with single supported for an editable occurrence and expanded-occurrence series edits handled in the provider. Omit preferredCalendarId for the default writable connected calendar; set null only for an explicit Forge-only choice. Delete is ready only after an exact read of ownership and provider mapping plus explicit confirmation that Forge marks the local event deleted immediately, has no restore, and attempts to delete every associated writable remote provider event or projected copy. All Calendar Event search, create, update, and delete operations remain on shared batch CRUD; provider projection is downstream.";
   }
+  if (guide.entityType === "work_block_template") {
+    return "Ready on the selected Work Block Template lane. Direct capture is ready for shared batch CRUD when an accepted title, at least one weekday, distinct local start and end minutes, an overlapping title-or-kind/day/time duplicate search, and one accuracy or consent check confirm the effective recurrence. Forge requires only title, weekDays, startMinute, and endMinute; kind defaults to custom, color to #60a5fa, timezone to UTC, and blockingState to blocked, so do not require date bounds, exclusions, activity settings, owner, or nonessential presentation fields. Resolve ordinary local times yourself using the user's known IANA timezone; ask only when timezone or daylight-saving meaning is unclear, explain that an earlier end continues overnight, and reject equal start and end. Guided design is ready once the availability decision plus effective days, times, timezone, and allowed-or-blocked meaning are accepted; ask date bounds or exclusions only for a temporary rule or real exception. Read-only review is ready after reading the exact template and must not manufacture a write. Narrow update is ready only after that read isolates the smallest accepted change while preserving sparse wording and defaults. Delete is ready only after exact identification and explicit acknowledgement that removal is immediate, non-restorable, bypasses the settings bin, and removes future derived instances. Ordinary lifecycle work remains on shared batch CRUD; forge_create_work_block_template is only an optional create convenience.";
+  }
+  if (guide.entityType === "task_timebox") {
+    return "Ready on the selected Task Timebox lane. Direct capture is ready for shared batch CRUD when the exact existing task has been read, an accepted task-shaped title and offset-bearing startsAt and endsAt form an interval with end after start, that task and interval have been checked for an overlapping timebox, and one accuracy or consent check confirms the reservation. Forge requires only taskId, title, startsAt, and endsAt and defaults source to manual and status to planned; do not require projectId, activity settings, owner, source, status, or overrideReason unless they change the action. Use the calendar overview first when live commitments matter, resolve local clock wording yourself, and ask about timezone only when it changes the instants. Assisted recommendation is ready after reading the task and calling forge_recommend_task_timeboxes with taskId plus only useful optional bounds, limit, or timezone; suggestions are read-only and only an accepted choice may be created. Read-only review is ready after reading the exact timebox and must not manufacture a write. Narrow update or status change is ready only after that read isolates the smallest accepted patch while preserving task linkage, source, provider mapping, and optional settings; taskId and source are immutable, so changing the task requires an explicitly accepted replacement. A timebox never starts a task run or proves completion. Delete is ready only after exact identification and explicit acknowledgement that it is immediately hidden, non-restorable, bypasses the settings bin, and retains durable idempotent remote cleanup when provider-backed. Ordinary lifecycle work remains on shared batch CRUD; forge_create_task_timebox is an optional create convenience, while forge_recommend_task_timeboxes is the bounded read-only assisted lane.";
+  }
   if (guide.entityType === "task") {
     return "Ready on the selected Task lane. Direct capture is ready for shared batch CRUD when an accepted title, normalized-title duplicate search, and one accuracy or consent check are complete; Forge requires only title, defaults an omitted level to task, and permits an ordinary task to remain in the inbox without a parent, so do not require a rewritten action, hierarchy choice, goal, project, parent, description, status, priority, owner, assignees, timing, aiInstructions, execution mode, acceptance criteria, blockers, scheduling, tags, points, notes, or completion evidence. Read-only review is ready after reading the exact existing work item and must not manufacture a write. Narrow update is ready only after that exact read isolates the smallest accepted change while preserving sparse level, hierarchy, wording, status, ownership, execution, blocker, scheduling, tag, git-ref, and completion state. Guided breakdown is ready when the concrete outcome and any hierarchy that materially changes the work are clear: an issue requires a project, a task parent must be an issue, and a subtask parent must be a task. Closeout is ready after an exact read and accepted status change; preserve only factual workSummary, modifiedFiles, and linkedGitRefIds, and allow closeout to remain deferred when the user requests only a status change. All Task record writes remain on shared batch CRUD; task_run lifecycle actions use their published dedicated tools.";
   }
@@ -5996,6 +6102,9 @@ function buildQuestionFlowReadinessCheck(
   if (guide.entityType === "sleep_session") {
     return "Ready on the selected Sleep Session lane. Direct manual capture is ready for shared batch CRUD when accepted offset-bearing startedAt and endedAt form an interval with end after start, an overlapping-interval or local-wake-date duplicate search is complete, and one accuracy or consent check confirms the night; Forge requires only startedAt and endedAt, defaults source fields for a manual record, and derives duration, score, and localDateKey, so do not require quality, stages, metrics, reflection, tags, links, source detail, or ownership when already clear. Resolve local clock wording with an IANA timezone only when it changes the instants or wake date. Read-only review is ready after reading the exact existing night and must not manufacture a write. Narrow correction is ready only after that exact read isolates the smallest accepted change while preserving sparse timing, source, provenance, stage, metric, annotation, tag, and link evidence; do not rewrite provider-backed measurement fields merely to add context. Reflective enrichment is ready after reading the exact night and accepting the qualitySummary, notes, tags, or links to preserve through forge_update_sleep_session, which leaves imported measurement fields untouched. Delete is ready only after identifying the exact night and receiving explicit confirmation that deletion is immediate, non-restorable, and bypasses the settings bin. Ordinary search, manual create, narrow correction, and delete use shared batch CRUD; the named helper is only for post-review reflection, and sleep_session has no restore lane.";
   }
+  if (guide.entityType === "workout_session") {
+    return "Ready on the selected Workout Session lane. Direct manual capture is ready for shared batch CRUD when an accepted workoutType plus offset-bearing startedAt and endedAt form an interval with end after start, a nearby type-and-time duplicate search is complete, and one accuracy or consent check confirms the workout; Forge requires only workoutType, startedAt, and endedAt and defaults manual source fields, so do not require calories, distance, steps, heart rate, exercise minutes, effort, mood, meaning, social context, tags, links, provenance, or ownership when already clear. Resolve local clock wording with a timezone only when it changes the stored instants. Read-only review is ready after reading the exact existing workout and must not manufacture a write. Narrow correction is ready only after that exact read isolates the smallest accepted change while preserving sparse timing, workout type, source, provenance, metrics, annotations, tags, and links; do not rewrite provider-backed or habit-generated measurement evidence merely to add context. Reflective enrichment is ready after reading the exact workout and accepting only subjectiveEffort, moodBefore, moodAfter, meaningText, plannedContext, socialContext, tags, or links for forge_update_workout_session, which leaves imported measurement fields untouched. Delete is ready only after identifying the exact workout and receiving explicit confirmation that deletion is immediate, non-restorable, and bypasses the settings bin. Ordinary search, manual create, narrow correction, and delete use shared batch CRUD; the named helper is only for post-review reflection, and workout_session has no restore lane.";
+  }
   if (guide.entityType === "attention_inbox") {
     return "Ready to list through the published route key without guessing when the user wants help finding what needs a next move. Ready to snooze, dismiss, or restore only after a current Attention read confirms the stable item id and requested action in allowedActions; snooze also needs a future return time. Blocked or overdue work is ready for source resolution, never dismissal.";
   }
@@ -6010,6 +6119,12 @@ function buildQuestionFlowReadinessCheck(
   }
   if (guide.entityType === "workbench") {
     return "Ready when the Workbench lane and the saved flow, input contract, run, node, latest output, published result, edit, execution, or preservation choice are clear enough to call the published route key without guessing.";
+  }
+  if (guide.entityType === "course") {
+    return "Ready on the selected Course lane after selecting the published route key without guessing. Catalog, detail, progress, and learner guidance are ready when the learner scope and any exact course or lesson that changes the read are clear; list first when the course is not exact. An attempt is ready only after the learner-safe session identifies the exact courseId, lessonId, and activityId and accepted answerMarkdown is present; ask for submission confirmation only when the user has not already asked to submit. Import is ready when the trusted validated canonical package and new-install or accepted-replacement intent are clear; export is ready when the exact course and portable-package intent are clear. Never use batch CRUD or expose hidden assessment references.";
+  }
+  if (guide.entityType === "concept") {
+    return "Ready on the selected Concept lane after selecting the published route key without guessing. Ready to list when the practical concept question and only the learner, course, search, or due-review filters that change the answer are clear. Ready for exact detail when the concept is identified from a current result or accepted id or slug. Explain definition, evidence, and mastery separately; there is no direct concept mutation, and definition changes require a validated course-package import.";
   }
   if (guide.entityType === "weight_loss") {
     return "Ready when the practical food-body question and answer-changing scope are clear enough to read before asking write-shaped follow-ups, or when the dedicated nutrition action path is clear: food log, body check-in, appearance check-in, subjective food effect, gut check-in, pattern read, or N-of-1 experiment.";
@@ -6379,7 +6494,7 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       "Use mode=hard only for explicit permanent removal.",
       "Restoration is only possible after soft delete.",
       "Deleting a Psyche-linked note requires psyche.note when Psyche authentication is enabled.",
-      "calendar_event, work_block_template, task_timebox, sleep_session, and workout_session are immediate deletions: calendar events delete remote projections too, and these records do not go through the settings bin."
+      "calendar_event, work_block_template, task_timebox, sleep_session, and workout_session are immediate deletions and do not go through the settings bin. Calendar events delete writable remote projections; provider-backed task timeboxes become hidden immediately and retain durable remote cleanup until acknowledged."
     ],
     example:
       '{"operations":[{"entityType":"task","id":"task_123","mode":"soft","reason":"Merged into another task"}]}'
@@ -6741,6 +6856,26 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     ],
     example:
       '{"routeKey":"nodeResult","pathParams":{"id":"flow_research_digest","runId":"run_123","nodeId":"node_summary"}}'
+  },
+  {
+    toolName: "forge_call_course_route",
+    summary:
+      "Call one allowed dedicated Course or Concept operation after the learning job has narrowed to catalog, detail, learner session, attempt, package import/export, or concept mastery.",
+    whenToUse:
+      "Use for installed-course discovery, progress and syllabus reads, learner-safe lesson guidance, activity attempts, validated package import/export, concept search, due review, and cross-course concept evidence. Do not use batch CRUD for Course or Concept.",
+    inputShape:
+      '{ routeKey: "listCourses"|"courseDetail"|"learningSession"|"submitAttempt"|"importCourse"|"exportCourse"|"listConcepts"|"conceptDetail", pathParams?: { courseId?: string, lessonId?: string, activityId?: string, conceptId?: string }, query?: { userId?: string, lessonId?: string, courseId?: string, query?: string, dueOnly?: "true"|"false" }, body?: object }',
+    requiredFields: ["routeKey"],
+    notes: [
+      "Choose routeKey from live onboarding specializedDomainSurfaces.courses routeKeys and methodRoutes.",
+      "Fill courseId, lessonId, activityId, and conceptId through pathParams when the selected methodRoutes path publishes those placeholders; do not hide them in query or body.",
+      "Use learningSession as the learner-safe view for guidance because it removes instructor references, correct option ids, answer explanations, and extension assessment data.",
+      "submitAttempt requires body.answerMarkdown and may include body.userId. Preserve the learner's wording and report a withheld grade truthfully when structured assessment is unavailable.",
+      "importCourse accepts one validated Forge course package as the request body. Use exportCourse only when the user explicitly wants the canonical portable package, not as a learner read.",
+      "Concept list supports query.userId, courseId, query, and dueOnly; concept detail supports query.userId. Concept definitions are package-managed and have no direct mutation route."
+    ],
+    example:
+      '{"routeKey":"submitAttempt","pathParams":{"courseId":"course.polynomials-etale-triple-covers","lessonId":"lesson.week-01.day-01","activityId":"activity.check-01"},"body":{"answerMarkdown":"My accepted answer"}}'
   },
   {
     toolName: "forge_get_preferences_workspace",
@@ -7340,18 +7475,12 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     whenToUse:
       "Use when the operator wants recurring time windows such as Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or a custom block.",
     inputShape:
-      '{ title: string, kind: "main_activity"|"secondary_activity"|"third_activity"|"rest"|"holiday"|"custom", color: string, timezone: string, weekDays: integer[], startMinute: integer, endMinute: integer, startsOn?: "YYYY-MM-DD"|null, endsOn?: "YYYY-MM-DD"|null, blockingState: "allowed"|"blocked" }',
-    requiredFields: [
-      "title",
-      "kind",
-      "timezone",
-      "weekDays",
-      "startMinute",
-      "endMinute",
-      "blockingState"
-    ],
+      '{ title: string, kind?: "main_activity"|"secondary_activity"|"third_activity"|"rest"|"holiday"|"custom", color?: string, timezone?: string, weekDays: integer[], startMinute: integer, endMinute: integer, startsOn?: "YYYY-MM-DD"|null, endsOn?: "YYYY-MM-DD"|null, exclusionDates?: "YYYY-MM-DD"[], blockingState?: "allowed"|"blocked", activityPresetKey?: string|null, customSustainRateApPerHour?: number|null, userId?: string|null }',
+    requiredFields: ["title", "weekDays", "startMinute", "endMinute"],
     notes: [
+      "The server defaults kind to custom, color to #60a5fa, timezone to UTC, and blockingState to blocked. Resolve the user's intended local timezone and blocking meaning in conversation rather than requiring defaults mechanically.",
       "Minutes are measured from midnight in the selected timezone.",
+      "When endMinute is earlier than startMinute the block continues overnight; equal startMinute and endMinute is invalid.",
       "startsOn and endsOn are optional date bounds. Leaving endsOn null makes the block repeat indefinitely.",
       "Use kind=holiday with weekDays [0,1,2,3,4,5,6] and minutes 0-1440 for vacations or other full-day blocked ranges.",
       "Derived instances appear in calendar overview responses immediately after creation.",
@@ -7367,10 +7496,11 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     whenToUse:
       "Use when preparing focused work in advance and the agent wants Forge to propose candidate slots instead of picking one manually.",
     inputShape:
-      "{ taskId: string, from?: string, to?: string, limit?: integer }",
+      "{ taskId: string, from?: string, to?: string, limit?: integer, timezone?: string }",
     requiredFields: ["taskId"],
     notes: [
       "Recommendations consider mirrored calendar events, recurring work blocks, task or project scheduling rules, and the task's planned duration when available.",
+      "Only taskId is required. timezone is an optional IANA timezone for fallback wall-time windows, not mandatory user intake.",
       "Confirm a suggested slot by creating a task timebox."
     ],
     example:
@@ -7382,10 +7512,11 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     whenToUse:
       "Use after choosing a valid future slot or, preferably, when the agent has already reasoned over the live calendar and wants to place a manual timebox directly.",
     inputShape:
-      '{ taskId: string, projectId?: string|null, title: string, startsAt: string, endsAt: string, source?: "manual"|"suggested"|"live_run", overrideReason?: string|null, activityPresetKey?: string|null, customSustainRateApPerHour?: number|null, userId?: string|null }',
+      '{ taskId: string, projectId?: string|null, title: string, startsAt: string, endsAt: string, source?: "manual"|"suggested"|"live_run", status?: "planned"|"active"|"completed"|"cancelled", overrideReason?: string|null, activityPresetKey?: string|null, customSustainRateApPerHour?: number|null, userId?: string|null }',
     requiredFields: ["taskId", "title", "startsAt", "endsAt"],
     notes: [
       "Manual timeboxing is the main direct path when the agent already understands the calendar and wants to choose the slot itself.",
+      "Only taskId, title, startsAt, and endsAt are required. source defaults to manual and status defaults to planned.",
       "Forge publishes these through the shared Forge write target during provider sync.",
       "Live task runs can later attach to matching timeboxes.",
       "This is a convenience helper; agents can also create task_timebox through forge_create_entities."
@@ -8752,6 +8883,71 @@ function buildAgentOnboardingPayload(request: {
             "After a Workbench read, translate the artifact into one next action: rerun with clearer input, inspect a specific node, edit the saved flow, publish or preserve the output, or stop because the answer is already sufficient. Ask only for the missing input, node, run, preservation choice, or confirmation that would change that action.",
             "If the user already named the flow and wants one output or one run, skip the broad lane question and ask only for the missing run, node, or output scope."
           ]
+        },
+        courses: {
+          classification: "specialized_domain_surface",
+          aliases: [
+            "course",
+            "courses",
+            "concept",
+            "concepts",
+            "learning",
+            "Course",
+            "Concept"
+          ],
+          routeTool: "forge_call_course_route",
+          summary:
+            "Dedicated package-backed learning API for installed courses, learner-safe lesson sessions, attempts, validated package transfer, and cross-course concept mastery.",
+          routeKeys: [
+            "listCourses",
+            "courseDetail",
+            "learningSession",
+            "submitAttempt",
+            "importCourse",
+            "exportCourse",
+            "listConcepts",
+            "conceptDetail"
+          ],
+          routeSelectionQuestions: [
+            "Is the user choosing a course, reviewing progress, continuing a lesson, submitting one activity, importing or exporting a package, finding due concepts, or inspecting one concept's mastery evidence?",
+            "If this is learner guidance or an attempt, which exact course, lesson, and activity does the learner-safe session identify?",
+            "If this is concept work, does the answer need one course, a search phrase, due-only review, one exact concept, or cross-course evidence?",
+            "If this is package transfer, is the intent a trusted validated import or an explicit canonical export?"
+          ],
+          methodRoutes: {
+            listCourses: "GET /api/v1/courses",
+            courseDetail: "GET /api/v1/courses/:courseId",
+            learningSession: "GET /api/v1/courses/:courseId/learn",
+            submitAttempt:
+              "POST /api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
+            importCourse: "POST /api/v1/courses/import",
+            exportCourse: "GET /api/v1/courses/:courseId/export",
+            listConcepts: "GET /api/v1/concepts",
+            conceptDetail: "GET /api/v1/concepts/:conceptId"
+          },
+          readRoutes: {
+            listCourses: "/api/v1/courses",
+            courseDetail: "/api/v1/courses/:courseId",
+            learningSession: "/api/v1/courses/:courseId/learn",
+            exportCourse: "/api/v1/courses/:courseId/export",
+            listConcepts: "/api/v1/concepts",
+            conceptDetail: "/api/v1/concepts/:conceptId"
+          },
+          writeRoutes: {
+            submitAttempt:
+              "/api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
+            importCourse: "/api/v1/courses/import"
+          },
+          notes: [
+            "Course and Concept are dedicated learning surfaces, not shared batch CRUD entities.",
+            "List installed courses before asking for an internal course id. Read exact course detail for syllabus and progress, and use learningSession for learner guidance or activity selection.",
+            "The learner-safe session removes instructor references, correct option ids, answer explanations, and extension assessment data. Never reconstruct or expose those hidden fields while helping with an activity.",
+            "submitAttempt requires exact courseId, lessonId, and activityId path parameters plus answerMarkdown in the body. Preserve the learner's wording. Deterministic multiple-choice grading is local; written grading can be withheld when structured model assessment is unavailable.",
+            "Import validates package references and the canonical SHA-256 hash. Conflicting concept definitions and mutation of a course with learner evidence are rejected; report those conflicts rather than bypassing them.",
+            "Export returns the canonical portable package and may contain instructor material. Use it only for explicit package transfer, never as the learner view.",
+            "Concept list accepts userId, courseId, query, and dueOnly. Concept detail combines definition, prerequisites, related concepts, course coverage, lesson references, learner evidence, and multidimensional mastery.",
+            "Concept definitions come from validated packages and have no direct create, patch, or delete route. Keep definition truth separate from learner evidence and mastery estimates."
+          ]
         }
       },
       readModelOnlySurfaces: AGENT_ONBOARDING_READ_MODEL_ROUTES
@@ -8919,6 +9115,15 @@ function buildAgentOnboardingPayload(request: {
         "/api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId",
       workbenchLatestNodeOutput:
         "/api/v1/workbench/flows/:id/nodes/:nodeId/output",
+      courses: "/api/v1/courses",
+      courseDetail: "/api/v1/courses/:courseId",
+      courseLearningSession: "/api/v1/courses/:courseId/learn",
+      courseAttempt:
+        "/api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
+      courseImport: "/api/v1/courses/import",
+      courseExport: "/api/v1/courses/:courseId/export",
+      concepts: "/api/v1/concepts",
+      conceptDetail: "/api/v1/concepts/:conceptId",
       artifacts: "/api/v1/artifacts",
       artifactDetail: "/api/v1/artifacts/:id",
       artifactDownloadHumanOnly: "/api/v1/artifacts/:id/download",
@@ -8990,8 +9195,10 @@ function buildAgentOnboardingPayload(request: {
         "forge_call_movement_route",
         "forge_call_life_event_route",
         "forge_call_life_force_route",
-        "forge_call_workbench_route"
+        "forge_call_workbench_route",
+        "forge_call_course_route"
       ],
+      courseWorkflow: ["forge_call_course_route"],
       artifactWorkflow: [
         "forge_call_artifact_route",
         "forge_search_entities",
@@ -9105,7 +9312,7 @@ function buildAgentOnboardingPayload(request: {
       depthCalibrationRule:
         "Before deepening an intake, decide whether this is quick capture, guided formulation, review-first help, or action-first execution. Quick capture means the user already supplied usable wording and wants it saved, remembered, or logged; reflect the working shape once, ask only the one structural, accuracy, or consent detail that changes the write, and do not force full exploration. Guided formulation means the user asks to understand, name, map, decide, or work through unclear or charged material; use active listening, one lane at a time, and Psyche hypotheses when appropriate before saving. Review-first means read the relevant stored entity, overview, or specialized surface before asking write-shaped questions. Action-first means the target task run, work adjustment, preference signal or judgment, questionnaire run, Movement correction, Life Force signal or weekday template, or Workbench run or output is already clear, so act or ask only for the missing target, span, flow, run, node, weekday, correction, or consent. Do not downgrade psychologically meaningful material into quick capture when the user wants exploration, and do not expand a simple storage request into therapy or project planning.",
       operationLaneRule:
-        "Keep the operation lane explicit before asking for lower-level details. Normal stored entities can be added, updated, reviewed or navigated, linked, or placed. Action workflows use verbs such as start, continue, complete, adjust, judge, signal, publish, sync, or observe. Specialized CRUD surfaces use lifecycle verbs such as create, read, update, sync, reconnect, delete, or browse. Read-model surfaces need a practical read question and scope before any write-shaped follow-up. Attention uses list, snooze, dismiss, or restore after a current bounded read; Entity Navigation uses list or touch after an exact view, while pin and unpin stay human-only. Movement, Life Events, Life Force, and Workbench use review, correct, repair, run, inspect, publish, preserve, calendar-sync, ticket-import, or status lanes through their dedicated route keys. Psyche entities need a formulation lane before the storage lane when the user wants understanding; direct saves can move to one accuracy or consent question.",
+        "Keep the operation lane explicit before asking for lower-level details. Normal stored entities can be added, updated, reviewed or navigated, linked, or placed. Action workflows use verbs such as start, continue, complete, adjust, judge, signal, publish, sync, or observe. Specialized CRUD surfaces use lifecycle verbs such as create, read, update, sync, reconnect, delete, or browse. Read-model surfaces need a practical read question and scope before any write-shaped follow-up. Attention uses list, snooze, dismiss, or restore after a current bounded read; Entity Navigation uses list or touch after an exact view, while pin and unpin stay human-only. Movement, Life Events, Life Force, and Workbench use review, correct, repair, run, inspect, publish, preserve, calendar-sync, ticket-import, or status lanes through their dedicated route keys. Course and Concept use choose, continue, explain, submit, review mastery, import, or export lanes through the dedicated Course family. Psyche entities need a formulation lane before the storage lane when the user wants understanding; direct saves can move to one accuracy or consent question.",
       psycheExplorationRule:
         "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, wait for the user's answer before offering a fuller formulation, ask permission before moving from charged exploration into naming or challenge when needed, make the next question help the user feel more able to name the experience rather than more examined, do not widen into adjacent entities until the current one has a working sentence the user recognizes, and once the lived experience is coherent stop deepening and help the user name it cleanly. After one concrete example is clear and a hypothesis lands or is corrected, translate it into a saveable record shape such as a belief sentence, functional loop, behavior, mode, trigger report, value, event type, or emotion definition; do not leave the user with interpretation alone, name the primary Forge record it is becoming, and ask one accuracy or consent question instead of reopening broad exploration, then use the shared batch entity routes after the user accepts the wording or explicitly asks to save. When the user is updating a Psyche record because of one fresh episode, anchor in that episode before renaming the durable formulation, begin with the smallest part of the old wording that no longer fits, and do not reopen the full origin story unless the new understanding is truly structural. If the user accepts the wording, move toward the save instead of reopening deeper exploration.",
       progressiveDisclosureRule:
@@ -9113,7 +9320,7 @@ function buildAgentOnboardingPayload(request: {
       writeConfirmationRule:
         "After create, update, delete, restore, run, read, or repair actions, confirm the user-facing record, action, and result in the user's language instead of reopening intake. For batch creates and updates, confirm the working title or accepted wording, container, and owner or placement only when those changed retrieval, accountability, or execution; if optional tags, priority, status, color, links, dates, or assignees were left provisional, say that plainly once instead of asking for all of them. For action workflows, confirm the real product action such as task run started or completed, work adjustment applied, preference judgment or signal submitted, questionnaire run updated or completed, calendar connection synced, or self-observation note written. For Psyche saves, confirm the accepted wording and whether it was saved as a first version, update, link, archive, or distinct version; do not reopen origin, evidence, repair, or adjacent entity mapping after the save unless that next object is already visible and materially useful. Ask a follow-up only if it changes the next action: correction, link, schedule, run, publish, enrichment, preservation choice, or UI handoff.",
       specializedSurfaceRule:
-        "Attention and Entity Navigation are dedicated bounded operational surfaces, not generic read models or batch CRUD. Use forge_call_attention_route for list, snooze, dismiss, or restore only after a current item and allowed action are known. Use forge_call_entity_navigation_route for bounded list or touch, touch only an exact record actually viewed, and keep pin or unpin human-only. For Movement, Life Events, Life Force, and Workbench, clarify the job first, then choose the dedicated route family internally and do not guess at a generic CRUD path. Use specializedDomainSurfaces.routeSelectionQuestions when they are present so the next follow-up selects the right route instead of asking generic questions. Before every dedicated call, run a route-contract handshake internally: select the product lane in plain language, verify the matching routeKey against live onboarding routeKeys and methodRoutes, fill any placeholders through pathParams, and ask the user only for the missing product noun that fills the placeholder. When available, use forge_call_movement_route, forge_call_life_event_route, forge_call_life_force_route, or forge_call_workbench_route after the lane is clear. If a route-key tool is unavailable, stale, or missing the needed key, read live onboarding and use the exact specializedDomainSurfaces.methodRoutes entry for the selected lane; cross-check OpenAPI only to confirm the same method and path, do not fall back to generic batch CRUD, do not invent a nearby raw path, and treat schema disagreement as a Forge contract bug to fix. Before calling a specialized route, inspect its methodRoutes entry for placeholders such as :id, :weekday, :slug, :runId, :nodeId, or :pointId, then fill each one through pathParams with the same placeholder name; do not hide IDs in query, body, or routeKey. If the contract is missing a lane the product clearly supports, report a contract bug instead of silently using generic batch CRUD or a nearby route. In user-facing language, talk about an Attention item, pinned or recent record, timeline, overlay, calendar match, ticket import, travel status, weekday template, published output, run detail, or node result rather than surfaces, payloads, read paths, mutation paths, or CRUD. If the truth of the current state is still uncertain, read the relevant dedicated view before you mutate it. When the user already named a precise correction or review target, confirm only the route-selecting detail that is still missing. After a concrete Movement, Life Events, Life Force, or Workbench correction, mutation, or result-producing run, read the relevant view back when the user is trying to understand the result rather than just store it: timeline or place/settings detail for Movement, event detail or timeline for Life Events, the Life Force overview for energy-planning impact, and flow detail, run detail, node result, latest node output, published output, or run history for Workbench. After any dedicated read, translate the result into one next action: no change, Attention source resolution or valid defer/restore, Entity Navigation reopen or exact touch, Movement overlay/place/settings/link, Life Event link/calendar/ticket/status/update, Life Force workload/recovery/timebox/meeting/task-choice change, or Workbench rerun/node inspection/flow edit/publish/preserve/stop. Ask only for the missing item, action, record, span, place, event, artifact, weekday, flow, run, node, output, correction, preservation choice, or confirmation that would change that action. The canonical runtime routes stay under /api/v1/*, and the OpenClaw HTTP mirror exposes the same families under /forge/v1/attention, /forge/v1/entity-navigation, /forge/v1/movement, /forge/v1/life-events, /forge/v1/life-force, and /forge/v1/workbench.",
+        "Attention and Entity Navigation are dedicated bounded operational surfaces, not generic read models or batch CRUD. Use forge_call_attention_route for list, snooze, dismiss, or restore only after a current item and allowed action are known. Use forge_call_entity_navigation_route for bounded list or touch, touch only an exact record actually viewed, and keep pin or unpin human-only. For Movement, Life Events, Life Force, and Workbench, clarify the job first, then choose the dedicated route family internally and do not guess at a generic CRUD path. Course and Concept also use one dedicated family: use forge_call_course_route for catalog/detail, learner-safe sessions, attempts, package import/export, and concept mastery, never batch CRUD. Use specializedDomainSurfaces.routeSelectionQuestions when they are present so the next follow-up selects the right route instead of asking generic questions. Before every dedicated call, run a route-contract handshake internally: select the product lane in plain language, verify the matching routeKey against live onboarding routeKeys and methodRoutes, fill any placeholders through pathParams, and ask the user only for the missing product noun that fills the placeholder. When available, use forge_call_movement_route, forge_call_life_event_route, forge_call_life_force_route, or forge_call_workbench_route after the lane is clear; use forge_call_course_route for Course and Concept. If a route-key tool is unavailable, stale, or missing the needed key, read live onboarding and use the exact specializedDomainSurfaces.methodRoutes entry for the selected lane; cross-check OpenAPI only to confirm the same method and path, do not fall back to generic batch CRUD, do not invent a nearby raw path, and treat schema disagreement as a Forge contract bug to fix. Before calling a specialized route, inspect its methodRoutes entry for placeholders such as :id, :weekday, :slug, :runId, :nodeId, :pointId, :courseId, :lessonId, :activityId, or :conceptId, then fill each one through pathParams with the same placeholder name; do not hide IDs in query, body, or routeKey. If the contract is missing a lane the product clearly supports, report a contract bug instead of silently using generic batch CRUD or a nearby route. In user-facing language, talk about an Attention item, pinned or recent record, timeline, overlay, calendar match, ticket import, travel status, weekday template, published output, run detail, node result, course, lesson, activity, or concept rather than surfaces, payloads, read paths, mutation paths, or CRUD. If the truth of the current state is still uncertain, read the relevant dedicated view before you mutate it. When the user already named a precise correction or review target, confirm only the route-selecting detail that is still missing. After a concrete Movement, Life Events, Life Force, or Workbench correction, mutation, or result-producing run, read the relevant view back when the user is trying to understand the result rather than just store it: timeline or place/settings detail for Movement, event detail or timeline for Life Events, the Life Force overview for energy-planning impact, and flow detail, run detail, node result, latest node output, published output, or run history for Workbench. After Course activity submission, read or use the returned assessment and next-lesson state truthfully; learner guidance must stay on the learner-safe session, while export remains explicit package transfer. After any dedicated read, translate the result into one next action: no change, Attention source resolution or valid defer/restore, Entity Navigation reopen or exact touch, Movement overlay/place/settings/link, Life Event link/calendar/ticket/status/update, Life Force workload/recovery/timebox/meeting/task-choice change, Workbench rerun/node inspection/flow edit/publish/preserve/stop, or Course explain/submit/review-next/import/export. Ask only for the missing item, action, record, span, place, event, artifact, weekday, flow, run, node, output, course, lesson, activity, concept, answer, correction, preservation choice, or confirmation that would change that action. The canonical runtime routes stay under /api/v1/*, and the OpenClaw HTTP mirror exposes the same families under /forge/v1/attention, /forge/v1/entity-navigation, /forge/v1/movement, /forge/v1/life-events, /forge/v1/life-force, /forge/v1/workbench, /forge/v1/courses, and /forge/v1/concepts.",
       attentionRule:
         "For Attention, use forge_call_attention_route with list, snooze, dismiss, or restore. Read list first unless the user supplied an item id from a current queue; verify allowedActions before acting; fill pathParams.id with the stable returned id; and do not use batch CRUD, invent an attention record, or dismiss blocked or overdue work. The canonical path is /api/v1/attention-inbox and the OpenClaw HTTP mirror is /forge/v1/attention.",
       entityNavigationRule:
@@ -9121,7 +9328,7 @@ function buildAgentOnboardingPayload(request: {
       artifactStoreRule:
         "For artifacts, ask only for the metadata that changes preservation and retrieval: what the file is, where it came from, why it should be kept, whether it should link to a Forge record, and whether optional LLM enrichment should fill missing title or description. Use dedicated Artifacts routes for upload, scan, enrichment, generic links, trust state, versions, and audit. Use batch CRUD only for artifact metadata search/update/delete/restore. Never download, decrypt, open, run, execute, transform, preview stored file bytes, or submit artifact passwords as an agent; downloads and password encryption actions are human-operator-only.",
       reviewShortcutRule:
-        "When the user is reviewing or correcting an existing record, ask what practical question they want the read or correction to answer, then narrow the saved object, timeframe, or route family first. Use the correct read posture before asking write-shaped questions: shared batch search or read hints for normal entities, wiki/calendar dedicated reads for specialized CRUD, read-model routes for overviews, and Movement, Life Events, Life Force, or Workbench dedicated reads for those domain surfaces. After the read, answer the practical question before asking for any save, correction, link, run, enrichment, or publish detail, and state what the read rules in, rules out, or leaves uncertain. If several actions are possible, narrow to the one most directly supported by the read instead of handing the user a broad menu. Do not reopen the whole intake unless the user is actually redefining the record.",
+        "When the user is reviewing or correcting an existing record, ask what practical question they want the read or correction to answer, then narrow the saved object, timeframe, or route family first. Use the correct read posture before asking write-shaped questions: shared batch search or read hints for normal entities, wiki/calendar dedicated reads for specialized CRUD, read-model routes for overviews, Movement, Life Events, Life Force, or Workbench dedicated reads for those domain surfaces, and Course detail, learner-safe session, or Concept detail for learning work. After the read, answer the practical question before asking for any save, correction, link, run, enrichment, publish, submission, import, or export detail, and state what the read rules in, rules out, or leaves uncertain. If several actions are possible, narrow to the one most directly supported by the read instead of handing the user a broad menu. Do not reopen the whole intake unless the user is actually redefining the record.",
       readModelWriteRule:
         "Self-observation is note-backed and should be written through observed notes with frontmatter.observedAt only when a lightweight episode observation is the right container. Do not use it as the default bucket for Psyche material: prefer trigger_report for one emotionally meaningful episode, behavior_pattern for functional analysis of a recurring loop, behavior for one repeated move, belief_entry for a core sentence, mode_guide_session or mode_profile for a central part-state, and wiki_page for durable memory such as books, articles, concepts, sources, or personal manuals. Sleep and workout sessions stay on batch CRUD by default; use the reflective review helpers only when enriching one already-known record after review.",
       psycheOpeningQuestionRule:
@@ -9266,7 +9473,21 @@ function buildAgentOnboardingPayload(request: {
         workbenchRunByPayload:
           '{"routeKey":"runByPayload","body":{"flow":{"title":"One-off digest","nodes":[]},"input":{"topic":"question flow quality"}}}',
         workbenchChatFlow:
-          '{"routeKey":"chatFlow","pathParams":{"id":"flow_research_digest"},"body":{"message":"Refine the summary around API route risks and keep the published output stable."}}'
+          '{"routeKey":"chatFlow","pathParams":{"id":"flow_research_digest"},"body":{"message":"Refine the summary around API route risks and keep the published output stable."}}',
+        courseCatalog: '{"routeKey":"listCourses"}',
+        courseDetail:
+          '{"routeKey":"courseDetail","pathParams":{"courseId":"course.polynomials-etale-triple-covers"}}',
+        courseLearningSession:
+          '{"routeKey":"learningSession","pathParams":{"courseId":"course.polynomials-etale-triple-covers"},"query":{"lessonId":"lesson.week-01.day-01"}}',
+        courseAttempt:
+          '{"routeKey":"submitAttempt","pathParams":{"courseId":"course.polynomials-etale-triple-covers","lessonId":"lesson.week-01.day-01","activityId":"activity.check-01"},"body":{"answerMarkdown":"My accepted answer"}}',
+        courseImport:
+          '{"routeKey":"importCourse","body":{"schemaVersion":"1.0","course":{},"modules":[],"lessons":[],"provenance":{}}}',
+        courseExport:
+          '{"routeKey":"exportCourse","pathParams":{"courseId":"course.polynomials-etale-triple-covers"}}',
+        conceptList: '{"routeKey":"listConcepts","query":{"dueOnly":"true"}}',
+        conceptDetail:
+          '{"routeKey":"conceptDetail","pathParams":{"conceptId":"concept.etale-algebra"}}'
       }
     }
   };
@@ -11441,6 +11662,7 @@ export async function buildServer(
   getSettings();
   ensureDefaultRewardRules();
   ensureLegacyProcessorsMigrated();
+  ensureBuiltInCourses();
   const app = Fastify({
     logger: false,
     rewriteUrl: (request) => rewriteMountPath(request.url ?? "/")
@@ -11886,7 +12108,18 @@ export async function buildServer(
           title: string;
           taskId?: string;
           status?: string;
+          connectionId?: string | null;
+          remoteEventId?: string | null;
         };
+        if (
+          action === "delete" &&
+          (timebox.remoteEventId || timebox.connectionId)
+        ) {
+          result.projection = await deleteTaskTimeboxProjection(
+            result.id,
+            managers.secrets
+          );
+        }
         recordActivityEvent({
           entityType: "task_timebox",
           entityId: timebox.id,
@@ -11902,12 +12135,18 @@ export async function buildServer(
               ? "A future work slot was planned in Forge."
               : action === "update"
                 ? "The planned work slot was updated."
-                : "The planned work slot was removed.",
+                : "The planned work slot was removed and any mapped provider cleanup was attempted.",
           actor: auth.actor ?? null,
           source: auth.source,
           metadata: {
             taskId: timebox.taskId ?? null,
-            status: action === "delete" ? null : (timebox.status ?? null)
+            status: action === "delete" ? null : (timebox.status ?? null),
+            projectionState:
+              action === "delete"
+                ? (result.projection?.state ?? "not_requested")
+                : null,
+            projectionCode:
+              action === "delete" ? (result.projection?.code ?? null) : null
           }
         });
       }
@@ -12621,6 +12860,11 @@ export async function buildServer(
     llm: managers.llm,
     secrets: managers.secrets,
     peerCore
+  });
+  await registerCourseRoutes(app, {
+    authenticate: authenticateRequest,
+    authorization: managers.authorization,
+    llm: managers.llm
   });
   await registerPeerSharingRoutes(app, {
     authenticate: authenticateRequest,

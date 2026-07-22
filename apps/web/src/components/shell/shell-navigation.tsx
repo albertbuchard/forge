@@ -54,6 +54,7 @@ const DESKTOP_KNOWLEDGE_GRAPH_MIGRATION = "desktop-knowledge-graph-default-v1";
 const MOBILE_KNOWLEDGE_GRAPH_MIGRATION = "mobile-knowledge-graph-default-v1";
 const DESKTOP_ATTENTION_MIGRATION = "desktop-attention-default-v1";
 const MOBILE_ATTENTION_MIGRATION = "mobile-attention-default-v1";
+const DESKTOP_COURSES_MIGRATION = "desktop-courses-default-v1";
 
 export function shouldCaptureRouteIntent(event: ReactMouseEvent) {
   return (
@@ -146,10 +147,15 @@ function readStoredNavIds(storageKey: string, defaults: string[]) {
     if (storageKey === DESKTOP_NAV_STORAGE_KEY) {
       return applyMissingRouteMigration(
         applyMissingRouteMigration(
-          resolved,
-          DESKTOP_KNOWLEDGE_GRAPH_MIGRATION,
-          "knowledge-graph",
-          "calendar"
+          applyMissingRouteMigration(
+            resolved,
+            DESKTOP_KNOWLEDGE_GRAPH_MIGRATION,
+            "knowledge-graph",
+            "calendar"
+          ),
+          DESKTOP_COURSES_MIGRATION,
+          "courses",
+          "knowledge-graph"
         ),
         DESKTOP_ATTENTION_MIGRATION,
         "attention",

@@ -320,6 +320,31 @@ const workbenchRouteSpecs = {
   }
 } as const satisfies Record<string, SpecializedRouteSpec>;
 
+const courseRouteSpecs = {
+  listCourses: { method: "GET", path: "/api/v1/courses" },
+  courseDetail: { method: "GET", path: "/api/v1/courses/:courseId" },
+  learningSession: {
+    method: "GET",
+    path: "/api/v1/courses/:courseId/learn"
+  },
+  submitAttempt: {
+    method: "POST",
+    path: "/api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
+    requiresToken: true
+  },
+  importCourse: {
+    method: "POST",
+    path: "/api/v1/courses/import",
+    requiresToken: true
+  },
+  exportCourse: {
+    method: "GET",
+    path: "/api/v1/courses/:courseId/export"
+  },
+  listConcepts: { method: "GET", path: "/api/v1/concepts" },
+  conceptDetail: { method: "GET", path: "/api/v1/concepts/:conceptId" }
+} as const satisfies Record<string, SpecializedRouteSpec>;
+
 const artifactRouteSpecs = {
   list: { method: "GET", path: "/api/v1/artifacts" },
   createWithBytes: {
@@ -1727,6 +1752,14 @@ export function registerForgePluginTools(
     description:
       "Call one allowed dedicated Workbench route after the conversation has narrowed to flow catalog, flow CRUD, execution, run history, published output, node result, or latest node output. Flow and box catalogs are bounded pages: start with limit 24, use their published q and repeated facet filters, and continue with offset only while hasMore is true. Workbench exposes enabled or disabled endpoint state, not includeArchived. Do not use batch CRUD for Workbench.",
     routeSpecs: workbenchRouteSpecs
+  });
+
+  registerSpecializedRouteTool(api, config, {
+    name: "forge_call_course_route",
+    label: "Forge Course Route",
+    description:
+      "Call one allowed dedicated Course or Concept route after the conversation has narrowed to installed-course discovery, progress or syllabus detail, a learner-safe lesson session, one activity attempt, validated package import/export, concept search, due review, or cross-course mastery evidence. Use the learner-safe session for coaching and do not use batch CRUD for Course or Concept.",
+    routeSpecs: courseRouteSpecs
   });
 
   registerSpecializedRouteTool(api, config, {
@@ -3366,16 +3399,18 @@ export function registerForgePluginTools(
       "Create a recurring work-block template such as Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or Custom. This is a planning helper; agents can also use forge_create_entities with entityType work_block_template.",
     parameters: Type.Object({
       title: Type.String({ minLength: 1 }),
-      kind: Type.Union([
-        Type.Literal("main_activity"),
-        Type.Literal("secondary_activity"),
-        Type.Literal("third_activity"),
-        Type.Literal("rest"),
-        Type.Literal("holiday"),
-        Type.Literal("custom")
-      ]),
-      color: Type.String({ minLength: 1 }),
-      timezone: Type.String({ minLength: 1 }),
+      kind: Type.Optional(
+        Type.Union([
+          Type.Literal("main_activity"),
+          Type.Literal("secondary_activity"),
+          Type.Literal("third_activity"),
+          Type.Literal("rest"),
+          Type.Literal("holiday"),
+          Type.Literal("custom")
+        ])
+      ),
+      color: Type.Optional(Type.String({ minLength: 1 })),
+      timezone: Type.Optional(Type.String({ minLength: 1 })),
       weekDays: Type.Array(Type.Integer({ minimum: 0, maximum: 6 })),
       startMinute: Type.Integer({ minimum: 0, maximum: 1440 }),
       endMinute: Type.Integer({ minimum: 0, maximum: 1440 }),
@@ -3385,11 +3420,30 @@ export function registerForgePluginTools(
       endsOn: Type.Optional(
         Type.Union([Type.String({ minLength: 1 }), Type.Null()])
       ),
-      blockingState: Type.Union([
-        Type.Literal("allowed"),
-        Type.Literal("blocked")
-      ])
-    }),
+      exclusionDates: Type.Optional(
+        Type.Array(Type.String({ minLength: 1 }), { maxItems: 366 })
+      ),
+      blockingState: Type.Optional(
+        Type.Union([Type.Literal("allowed"), Type.Literal("blocked")])
+      ),
+      activityPresetKey: Type.Optional(
+        Type.Union([
+          Type.Literal("deep_work"),
+          Type.Literal("admin"),
+          Type.Literal("maintenance"),
+          Type.Literal("meeting"),
+          Type.Literal("recovery_break"),
+          Type.Literal("holiday_leisure"),
+          Type.Literal("light_context"),
+          Type.Literal("task_inherited"),
+          Type.Null()
+        ])
+      ),
+      customSustainRateApPerHour: Type.Optional(
+        Type.Union([Type.Number({ minimum: 0 }), Type.Null()])
+      ),
+      userId: optionalNullableString()
+    }, { additionalProperties: false }),
     method: "POST",
     path: "/api/v1/calendar/work-block-templates"
   });
@@ -3405,7 +3459,7 @@ export function registerForgePluginTools(
       to: optionalString(),
       limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 12 })),
       timezone: optionalString()
-    }),
+    }, { additionalProperties: false }),
     path: "/api/v1/calendar/timeboxes/recommend"
   });
 
@@ -3453,7 +3507,7 @@ export function registerForgePluginTools(
         Type.Union([Type.Number({ minimum: 0 }), Type.Null()])
       ),
       userId: optionalNullableString()
-    }),
+    }, { additionalProperties: false }),
     method: "POST",
     path: "/api/v1/calendar/timeboxes"
   });

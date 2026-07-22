@@ -699,6 +699,83 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
     ]
   },
   {
+    path: "/forge/v1/courses",
+    match: "prefix",
+    operations: [
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/courses$/,
+        upstreamPath: "/api/v1/courses",
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/courses", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/courses\/import$/,
+        upstreamPath: "/api/v1/courses/import",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/courses/import", url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/courses\/([^/]+)\/export$/,
+        upstreamPath: "/api/v1/courses/:courseId/export",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/courses/${match[1]}/export`, url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/courses\/([^/]+)\/learn$/,
+        upstreamPath: "/api/v1/courses/:courseId/learn",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/courses/${match[1]}/learn`, url)
+      },
+      {
+        method: "POST",
+        pattern:
+          /^\/forge\/v1\/courses\/([^/]+)\/lessons\/([^/]+)\/activities\/([^/]+)\/attempts$/,
+        upstreamPath:
+          "/api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(
+            `/api/v1/courses/${match[1]}/lessons/${match[2]}/activities/${match[3]}/attempts`,
+            url
+          )
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/courses\/([^/]+)$/,
+        upstreamPath: "/api/v1/courses/:courseId",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/courses/${match[1]}`, url)
+      }
+    ]
+  },
+  {
+    path: "/forge/v1/concepts",
+    match: "prefix",
+    operations: [
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/concepts$/,
+        upstreamPath: "/api/v1/concepts",
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/concepts", url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/concepts\/([^/]+)$/,
+        upstreamPath: "/api/v1/concepts/:conceptId",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/concepts/${match[1]}`, url)
+      }
+    ]
+  },
+  {
     path: "/forge/v1/attention",
     match: "prefix",
     operations: [

@@ -14200,6 +14200,270 @@
           }
         }
       },
+      "WorkBlockTemplateCreateInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "weekDays",
+          "startMinute",
+          "endMinute"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "main_activity",
+              "secondary_activity",
+              "third_activity",
+              "rest",
+              "holiday",
+              "custom"
+            ],
+            "default": "custom"
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "default": "#60a5fa"
+          },
+          "timezone": {
+            "type": "string",
+            "default": "UTC"
+          },
+          "weekDays": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 7,
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 6
+            }
+          },
+          "startMinute": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1440
+          },
+          "endMinute": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1440
+          },
+          "startsOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endsOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exclusionDates": {
+            "type": "array",
+            "maxItems": 366,
+            "items": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          "blockingState": {
+            "type": "string",
+            "enum": [
+              "allowed",
+              "blocked"
+            ],
+            "default": "blocked"
+          },
+          "activityPresetKey": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "deep_work",
+                  "admin",
+                  "maintenance",
+                  "meeting",
+                  "recovery_break",
+                  "holiday_leisure",
+                  "light_context",
+                  "task_inherited"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "customSustainRateApPerHour": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "userId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "WorkBlockTemplatePatchInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "main_activity",
+              "secondary_activity",
+              "third_activity",
+              "rest",
+              "holiday",
+              "custom"
+            ]
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "weekDays": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 7,
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 6
+            }
+          },
+          "startMinute": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1440
+          },
+          "endMinute": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1440
+          },
+          "startsOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endsOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exclusionDates": {
+            "type": "array",
+            "maxItems": 366,
+            "items": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          "blockingState": {
+            "type": "string",
+            "enum": [
+              "allowed",
+              "blocked"
+            ]
+          },
+          "activityPresetKey": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "deep_work",
+                  "admin",
+                  "maintenance",
+                  "meeting",
+                  "recovery_break",
+                  "holiday_leisure",
+                  "light_context",
+                  "task_inherited"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "customSustainRateApPerHour": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "userId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
       "WorkBlockInstance": {
         "type": "object",
         "additionalProperties": false,
@@ -42755,6 +43019,667 @@
         "x-forge-mcp-exposed": true
       }
     },
+    "/api/v1/courses": {
+      "get": {
+        "summary": "List installed courses and learner progress",
+        "tags": [
+          "Courses"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Installed courses",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "courses"
+                  ],
+                  "properties": {
+                    "courses": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forge error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getcourses"
+      }
+    },
+    "/api/v1/courses/import": {
+      "post": {
+        "summary": "Validate and import a Forge course package",
+        "description": "Verifies package references and the canonical SHA-256 hash. Conflicting concept definitions and mutation of a course with learner evidence are rejected.",
+        "tags": [
+          "Courses"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "schemaVersion",
+                  "course",
+                  "modules",
+                  "lessons",
+                  "provenance"
+                ],
+                "additionalProperties": true,
+                "properties": {
+                  "schemaVersion": {
+                    "type": "string",
+                    "enum": [
+                      "1.0"
+                    ]
+                  },
+                  "course": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "presentation": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "grading": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "concepts": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  },
+                  "conceptRefs": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  },
+                  "modules": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  },
+                  "lessons": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  },
+                  "provenance": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Imported course and entity counts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Forge error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Forge error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postcourses_import"
+      }
+    },
+    "/api/v1/courses/{courseId}/export": {
+      "get": {
+        "summary": "Export the canonical validated Forge course package",
+        "tags": [
+          "Courses"
+        ],
+        "parameters": [
+          {
+            "name": "courseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Portable Forge course package",
+            "content": {
+              "application/vnd.forge.course+json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "schemaVersion",
+                    "course",
+                    "modules",
+                    "lessons",
+                    "provenance"
+                  ],
+                  "additionalProperties": true,
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "string",
+                      "enum": [
+                        "1.0"
+                      ]
+                    },
+                    "course": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "presentation": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "grading": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "concepts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "conceptRefs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "modules": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "lessons": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "provenance": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "schemaVersion",
+                    "course",
+                    "modules",
+                    "lessons",
+                    "provenance"
+                  ],
+                  "additionalProperties": true,
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "string",
+                      "enum": [
+                        "1.0"
+                      ]
+                    },
+                    "course": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "presentation": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "grading": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "concepts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "conceptRefs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "modules": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "lessons": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "provenance": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Forge error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Forge error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getcourses_courseId_export"
+      }
+    },
+    "/api/v1/courses/{courseId}": {
+      "get": {
+        "summary": "Read a course syllabus, concepts, and learner progress",
+        "tags": [
+          "Courses"
+        ],
+        "parameters": [
+          {
+            "name": "courseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Course detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Forge error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getcourses_courseId"
+      }
+    },
+    "/api/v1/courses/{courseId}/learn": {
+      "get": {
+        "summary": "Read a learner-safe immersive lesson session",
+        "description": "Instructor references, correct option ids, answer explanations, and extension assessment data are removed before serialization.",
+        "tags": [
+          "Courses"
+        ],
+        "parameters": [
+          {
+            "name": "courseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "lessonId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Learner-safe lesson session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Forge error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getcourses_courseId_learn"
+      }
+    },
+    "/api/v1/courses/{courseId}/lessons/{lessonId}/activities/{activityId}/attempts": {
+      "post": {
+        "summary": "Submit and assess one course activity attempt",
+        "description": "Deterministic activities are graded locally. Written mathematics uses the configured Forge model and withholds the grade when structured assessment is unavailable.",
+        "tags": [
+          "Courses"
+        ],
+        "parameters": [
+          {
+            "name": "courseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "lessonId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "activityId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "answerMarkdown"
+                ],
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "maxLength": 160
+                  },
+                  "answerMarkdown": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Saved attempt and structured assessment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Forge error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Forge error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postcourses_courseId_lessons_lessonId_activities_activityId_attempts"
+      }
+    },
+    "/api/v1/concepts": {
+      "get": {
+        "summary": "List first-class concepts and learner mastery",
+        "tags": [
+          "Concepts"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "courseId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "dueOnly",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Concept entities and mastery dimensions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "concepts"
+                  ],
+                  "properties": {
+                    "concepts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getconcepts"
+      }
+    },
+    "/api/v1/concepts/{conceptId}": {
+      "get": {
+        "summary": "Read a concept entity and its cross-course evidence",
+        "tags": [
+          "Concepts"
+        ],
+        "parameters": [
+          {
+            "name": "conceptId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Concept detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Forge error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getconcepts_conceptId"
+      }
+    },
     "/api/v1/artifacts": {
       "get": {
         "summary": "List artifact metadata",
@@ -55054,6 +55979,17 @@
       },
       "post": {
         "summary": "Create a recurring work-block template",
+        "description": "Creates one compact local-time recurrence rule. An end minute earlier than the start minute continues overnight; equal start and end minutes are invalid.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkBlockTemplateCreateInput"
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "Created work-block template",
@@ -55086,6 +56022,16 @@
     "/api/v1/calendar/work-block-templates/{id}": {
       "get": {
         "summary": "Get one recurring work-block template",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Work-block template",
@@ -55113,6 +56059,112 @@
           "Calendar"
         ],
         "operationId": "getcalendar_work_block_templates_id"
+      },
+      "patch": {
+        "summary": "Update one recurring work-block template",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkBlockTemplatePatchInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated work-block template",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "template"
+                  ],
+                  "properties": {
+                    "template": {
+                      "$ref": "#/components/schemas/WorkBlockTemplate"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Calendar"
+        ],
+        "operationId": "patchcalendar_work_block_templates_id"
+      },
+      "delete": {
+        "summary": "Delete one recurring work-block template immediately",
+        "description": "Removes the template and its future derived instances. Work-block templates do not enter the settings bin and cannot be restored.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted work-block template",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "template"
+                  ],
+                  "properties": {
+                    "template": {
+                      "$ref": "#/components/schemas/WorkBlockTemplate"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Calendar"
+        ],
+        "operationId": "deletecalendar_work_block_templates_id"
       }
     },
     "/api/v1/calendar/timeboxes": {

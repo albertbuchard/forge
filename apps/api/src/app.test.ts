@@ -19,7 +19,17 @@ import { closeDatabase, configureDatabase, getDatabase } from "./db.js";
 import { getSleepViewData } from "./health.js";
 import { BackgroundJobManager } from "./managers/platform/background-job-manager.js";
 import { recordActivityEvent } from "./repositories/activity-events.js";
-import { createCalendarEvent } from "./repositories/calendar.js";
+import {
+  claimTaskTimeboxProviderOperation,
+  completeTaskTimeboxProviderOperation,
+  createCalendarConnectionRecord,
+  createCalendarEvent,
+  getTaskTimeboxById,
+  getTaskTimeboxByIdIncludingPendingDeletion,
+  storeEncryptedSecret,
+  updateCalendarConnectionRecord,
+  upsertCalendarRecord
+} from "./repositories/calendar.js";
 import { upsertDeletedEntityRecord } from "./repositories/deleted-entities.js";
 import { setEntityOwner } from "./repositories/entity-ownership.js";
 import {
@@ -19840,6 +19850,49 @@ test("calendar entities work through the generic batch routes and keep calendar-
       "active"
     );
 
+    storeEncryptedSecret(
+      "secret_batch_timebox_delete",
+      "invalid-encrypted-fixture",
+      "Batch timebox deletion failure fixture"
+    );
+    const timeboxConnection = createCalendarConnectionRecord({
+      provider: "google",
+      label: "Batch timebox deletion",
+      accountLabel: "batch-timebox-delete",
+      config: {},
+      credentialsSecretId: "secret_batch_timebox_delete",
+      userId: "user_operator"
+    });
+    const timeboxCalendar = upsertCalendarRecord(timeboxConnection.id, {
+      remoteId: "https://calendar.example/batch-timebox-delete/",
+      title: "Batch timebox deletion",
+      timezone: "UTC",
+      canWrite: true,
+      selectedForSync: true,
+      forgeManaged: true
+    });
+    updateCalendarConnectionRecord(timeboxConnection.id, {
+      status: "connected",
+      forgeCalendarId: timeboxCalendar.id
+    });
+    const timeboxProjectionClaim = claimTaskTimeboxProviderOperation({
+      timeboxId: createdTimebox!.id,
+      connectionId: timeboxConnection.id
+    });
+    assert.ok(timeboxProjectionClaim);
+    assert.equal(
+      completeTaskTimeboxProviderOperation({
+        timeboxId: createdTimebox!.id,
+        operation: "upsert",
+        claimToken: timeboxProjectionClaim.claimToken,
+        claimVersion: timeboxProjectionClaim.claimVersion,
+        connectionId: timeboxConnection.id,
+        calendarId: timeboxCalendar.id,
+        remoteEventId: "remote_batch_timebox_delete"
+      }),
+      true
+    );
+
     const deleteResponse = await app.inject({
       method: "POST",
       url: "/api/v1/entities/delete",
@@ -19859,12 +19912,20 @@ test("calendar entities work through the generic batch routes and keep calendar-
         ok: boolean;
         entityType?: string;
         entity?: { id: string };
+        projection?: { state: string; retryable: boolean };
       }>;
     };
     assert.equal(
       deleteBody.results.every((result) => result.ok),
       true
     );
+    const deletedTimebox = deleteBody.results.find(
+      (result) => result.entityType === "task_timebox"
+    );
+    assert.equal(deletedTimebox?.projection?.state, "error");
+    assert.equal(deletedTimebox?.projection?.retryable, true);
+    assert.equal(getTaskTimeboxById(createdTimebox!.id), undefined);
+    assert.ok(getTaskTimeboxByIdIncludingPendingDeletion(createdTimebox!.id));
 
     const overviewAfterDelete = await app.inject({
       method: "GET",
@@ -20905,7 +20966,11 @@ test("settings and local agent token management persist through the versioned AP
           preferredMutationTool?: string | null;
           minimumCreateFields: string[];
           relationshipRules: string[];
-          fieldGuide: Array<{ name: string; required: boolean }>;
+          fieldGuide: Array<{
+            name: string;
+            required: boolean;
+            defaultValue?: unknown;
+          }>;
           questionFlow?: { readinessCheck: string };
         }>;
         entityRouteModel: {
@@ -21216,7 +21281,7 @@ test("settings and local agent token management persist through the versioned AP
     const taskConversationPlaybook =
       onboardingBody.onboarding.entityConversationPlaybooks.find(
         (playbook) => playbook.focus === "task"
-    );
+      );
     assert.ok(taskConversationPlaybook);
     assert.match(
       taskConversationPlaybook.openingQuestion,
@@ -21403,7 +21468,48 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(workoutConversationPlaybook);
     assert.match(
       workoutConversationPlaybook.openingQuestion,
-      /workout feels most worth remembering or connecting/i
+      /adding a workout manually[\s\S]*reviewing or correcting one[\s\S]*adding context[\s\S]*deleting it/i
+    );
+    assert.ok(
+      workoutConversationPlaybook.askSequence.some((step) =>
+        /direct manual capture, exact-record review or narrow correction, read-only review, reflective enrichment, and delete/i.test(
+          step
+        )
+      )
+    );
+    assert.ok(
+      workoutConversationPlaybook.askSequence.some((step) =>
+        /requires only workoutType, startedAt, and endedAt[\s\S]*do not require calories, distance, steps, heart rate/i.test(
+          step
+        )
+      )
+    );
+    assert.ok(
+      workoutConversationPlaybook.askSequence.some((step) =>
+        /provider-backed or habit-generated[\s\S]*do not rewrite measured timing, calories, distance, heart rate, source, or provenance/i.test(
+          step
+        )
+      )
+    );
+    assert.ok(
+      workoutConversationPlaybook.askSequence.some((step) =>
+        /deletion is immediate, non-restorable, and bypasses the settings bin[\s\S]*explicit confirmation/i.test(
+          step
+        )
+      )
+    );
+    const workoutEntityGuide = onboardingBody.onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "workout_session"
+    );
+    assert.ok(workoutEntityGuide);
+    assert.deepEqual(workoutEntityGuide.minimumCreateFields, [
+      "workoutType",
+      "startedAt",
+      "endedAt"
+    ]);
+    assert.match(
+      workoutEntityGuide.questionFlow?.readinessCheck ?? "",
+      /Direct manual capture[\s\S]*requires only workoutType, startedAt, and endedAt[\s\S]*Read-only review[\s\S]*must not manufacture a write[\s\S]*provider-backed or habit-generated measurement evidence[\s\S]*forge_update_workout_session[\s\S]*immediate, non-restorable[\s\S]*no restore lane/i
     );
     const preferenceCatalogConversationPlaybook =
       onboardingBody.onboarding.entityConversationPlaybooks.find(
@@ -21593,12 +21699,46 @@ test("settings and local agent token management persist through the versioned AP
       (entity) => entity.entityType === "work_block_template"
     );
     assert.ok(workBlockEntity);
-    assert.ok(workBlockEntity.minimumCreateFields.includes("weekDays"));
+    assert.deepEqual(workBlockEntity.minimumCreateFields, [
+      "title",
+      "weekDays",
+      "startMinute",
+      "endMinute"
+    ]);
+    assert.ok(
+      workBlockEntity.fieldGuide.some(
+        (field) =>
+          field.name === "kind" &&
+          field.required === false &&
+          field.defaultValue === "custom"
+      )
+    );
+    assert.ok(
+      workBlockEntity.fieldGuide.some(
+        (field) =>
+          field.name === "timezone" &&
+          field.required === false &&
+          field.defaultValue === "UTC"
+      )
+    );
+    assert.ok(
+      workBlockEntity.fieldGuide.some(
+        (field) =>
+          field.name === "blockingState" &&
+          field.required === false &&
+          field.defaultValue === "blocked"
+      )
+    );
     const timeboxEntity = onboardingBody.onboarding.entityCatalog.find(
       (entity) => entity.entityType === "task_timebox"
     );
     assert.ok(timeboxEntity);
-    assert.ok(timeboxEntity.minimumCreateFields.includes("taskId"));
+    assert.deepEqual(timeboxEntity.minimumCreateFields, [
+      "taskId",
+      "title",
+      "startsAt",
+      "endsAt"
+    ]);
     const emotionEntity = onboardingBody.onboarding.entityCatalog.find(
       (entity) => entity.entityType === "emotion_definition"
     );
@@ -21724,6 +21864,47 @@ test("settings and local agent token management persist through the versioned AP
     assert.equal(
       workbenchEntity.preferredMutationTool,
       "forge_call_workbench_route"
+    );
+    const courseEntity = onboardingBody.onboarding.entityCatalog.find(
+      (entity) => entity.entityType === "course"
+    );
+    const conceptEntity = onboardingBody.onboarding.entityCatalog.find(
+      (entity) => entity.entityType === "concept"
+    );
+    assert.ok(courseEntity);
+    assert.ok(conceptEntity);
+    assert.equal(courseEntity.classification, "specialized_domain_surface");
+    assert.equal(conceptEntity.classification, "specialized_domain_surface");
+    assert.equal(courseEntity.preferredMutationTool, "forge_call_course_route");
+    assert.equal(
+      conceptEntity.preferredMutationTool,
+      "forge_call_course_route"
+    );
+    const courseSurface = onboardingBody.onboarding.entityRouteModel
+      .specializedDomainSurfaces.courses as unknown as {
+      routeKeys: string[];
+      routeTool: string;
+    };
+    assert.deepEqual(courseSurface.routeKeys, [
+      "listCourses",
+      "courseDetail",
+      "learningSession",
+      "submitAttempt",
+      "importCourse",
+      "exportCourse",
+      "listConcepts",
+      "conceptDetail"
+    ]);
+    assert.equal(courseSurface.routeTool, "forge_call_course_route");
+    const courseTool = onboardingBody.onboarding.toolInputCatalog.find(
+      (tool) => tool.toolName === "forge_call_course_route"
+    );
+    assert.ok(courseTool);
+    assert.match(courseTool.inputShape, /learningSession/);
+    assert.match(courseTool.inputShape, /submitAttempt/);
+    assert.match(
+      ((courseTool as { notes?: string[] }).notes ?? []).join(" "),
+      /learner-safe/i
     );
     const createTool = onboardingBody.onboarding.toolInputCatalog.find(
       (tool) => tool.toolName === "forge_create_entities"
@@ -22119,6 +22300,24 @@ test("settings and local agent token management persist through the versioned AP
         "forge_create_task_timebox"
       ]
     );
+    const workBlockToolGuide =
+      onboardingBody.onboarding.toolInputCatalog.find(
+        (guide) => guide.toolName === "forge_create_work_block_template"
+      );
+    assert.ok(workBlockToolGuide);
+    assert.deepEqual(workBlockToolGuide.requiredFields, [
+      "title",
+      "weekDays",
+      "startMinute",
+      "endMinute"
+    ]);
+    const timeboxRecommendationToolGuide =
+      onboardingBody.onboarding.toolInputCatalog.find(
+        (guide) => guide.toolName === "forge_recommend_task_timeboxes"
+      );
+    assert.ok(timeboxRecommendationToolGuide);
+    assert.deepEqual(timeboxRecommendationToolGuide.requiredFields, ["taskId"]);
+    assert.match(timeboxRecommendationToolGuide.inputShape, /timezone\?: string/);
     assert.deepEqual(
       onboardingBody.onboarding.recommendedPluginTools.workWorkflow,
       [

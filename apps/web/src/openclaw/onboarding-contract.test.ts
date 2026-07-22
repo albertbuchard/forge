@@ -273,6 +273,8 @@ describe("forge onboarding contract", () => {
       "movement",
       "life_force",
       "workbench",
+      "course",
+      "concept",
       "psyche_value",
       "behavior_pattern",
       "behavior",
@@ -425,6 +427,12 @@ describe("forge onboarding contract", () => {
     expect(readinessByType.get("workbench")).not.toMatch(
       /\bmovement|weekday|fatigue|Life Event\b/i
     );
+    expect(readinessByType.get("course")).toMatch(
+      /Course lane[\s\S]*learner-safe session[\s\S]*courseId[\s\S]*lessonId[\s\S]*activityId[\s\S]*answerMarkdown[\s\S]*validated[\s\S]*hidden assessment/i
+    );
+    expect(readinessByType.get("concept")).toMatch(
+      /practical concept question[\s\S]*learner[\s\S]*course[\s\S]*search[\s\S]*due-review[\s\S]*exact detail[\s\S]*no direct concept mutation/i
+    );
     expect(readinessByType.get("calendar_connection")).toMatch(
       /calendar provider or existing connection[\s\S]*intended workflow[\s\S]*lifecycle action[\s\S]*writable\/read-only mode[\s\S]*selected-calendar change[\s\S]*sync[\s\S]*rediscovery[\s\S]*removal target[\s\S]*published calendar connection route[\s\S]*batch CRUD/i
     );
@@ -571,6 +579,8 @@ describe("forge onboarding contract", () => {
       "movement",
       "life_force",
       "workbench",
+      "course",
+      "concept",
       "event_type",
       "emotion_definition"
     ] as const) {
@@ -1073,6 +1083,51 @@ describe("forge onboarding contract", () => {
       ])
     );
 
+    expect(routeModel.specializedDomainSurfaces.courses).toEqual(
+      expect.objectContaining({
+        classification: "specialized_domain_surface",
+        aliases: expect.arrayContaining(["course", "concept", "learning"]),
+        routeTool: "forge_call_course_route",
+        routeKeys: [
+          "listCourses",
+          "courseDetail",
+          "learningSession",
+          "submitAttempt",
+          "importCourse",
+          "exportCourse",
+          "listConcepts",
+          "conceptDetail"
+        ],
+        methodRoutes: {
+          listCourses: "GET /api/v1/courses",
+          courseDetail: "GET /api/v1/courses/:courseId",
+          learningSession: "GET /api/v1/courses/:courseId/learn",
+          submitAttempt:
+            "POST /api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
+          importCourse: "POST /api/v1/courses/import",
+          exportCourse: "GET /api/v1/courses/:courseId/export",
+          listConcepts: "GET /api/v1/concepts",
+          conceptDetail: "GET /api/v1/concepts/:conceptId"
+        },
+        readRoutes: expect.objectContaining({
+          listCourses: "/api/v1/courses",
+          learningSession: "/api/v1/courses/:courseId/learn",
+          listConcepts: "/api/v1/concepts",
+          conceptDetail: "/api/v1/concepts/:conceptId"
+        }),
+        writeRoutes: {
+          submitAttempt:
+            "/api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
+          importCourse: "/api/v1/courses/import"
+        }
+      })
+    );
+    expect(
+      routeModel.specializedDomainSurfaces.courses.notes.join(" ")
+    ).toMatch(
+      /learner-safe[\s\S]*hidden[\s\S]*withheld[\s\S]*canonical SHA-256[\s\S]*no direct create, patch, or delete/i
+    );
+
     expect(routeModel.readModelOnlySurfaces).toEqual(
       expect.objectContaining({
         todayPriority: "/api/v1/today/priority",
@@ -1353,6 +1408,28 @@ describe("forge onboarding contract", () => {
         preferredMutationTool: "forge_call_workbench_route"
       })
     );
+    expect(entityByType.get("course")).toEqual(
+      expect.objectContaining({
+        classification: "specialized_domain_surface",
+        preferredMutationPath: expect.stringMatching(
+          /dedicated Course route family[\s\S]*learner-safe lesson sessions[\s\S]*validated package import[\s\S]*Do not use shared batch CRUD/i
+        ),
+        preferredReadPath: expect.stringMatching(
+          /\/api\/v1\/courses[\s\S]*\/api\/v1\/courses\/:courseId[\s\S]*\/api\/v1\/courses\/:courseId\/learn[\s\S]*\/api\/v1\/courses\/:courseId\/export/
+        ),
+        preferredMutationTool: "forge_call_course_route"
+      })
+    );
+    expect(entityByType.get("concept")).toEqual(
+      expect.objectContaining({
+        classification: "specialized_domain_surface",
+        preferredMutationPath: expect.stringMatching(
+          /concept search[\s\S]*due-review[\s\S]*validated course packages[\s\S]*not ordinary batch CRUD/i
+        ),
+        preferredReadPath: "/api/v1/concepts | /api/v1/concepts/:conceptId",
+        preferredMutationTool: "forge_call_course_route"
+      })
+    );
   });
 
   it("publishes high-level interaction rules for review shortcuts and write-model selection", async () => {
@@ -1399,7 +1476,11 @@ describe("forge onboarding contract", () => {
       "forge_call_movement_route",
       "forge_call_life_event_route",
       "forge_call_life_force_route",
-      "forge_call_workbench_route"
+      "forge_call_workbench_route",
+      "forge_call_course_route"
+    ]);
+    expect(onboarding.recommendedPluginTools?.courseWorkflow).toEqual([
+      "forge_call_course_route"
     ]);
     expect(onboarding.recommendedPluginTools?.readModels).toEqual(
       expect.arrayContaining([
@@ -1556,6 +1637,28 @@ describe("forge onboarding contract", () => {
         ),
         workbenchChatFlow: expect.stringMatching(
           /routeKey[\s\S]*chatFlow[\s\S]*message/
+        ),
+        courseCatalog: expect.stringMatching(/routeKey[\s\S]*listCourses/),
+        courseDetail: expect.stringMatching(
+          /routeKey[\s\S]*courseDetail[\s\S]*courseId/
+        ),
+        courseLearningSession: expect.stringMatching(
+          /routeKey[\s\S]*learningSession[\s\S]*courseId[\s\S]*lessonId/
+        ),
+        courseAttempt: expect.stringMatching(
+          /routeKey[\s\S]*submitAttempt[\s\S]*courseId[\s\S]*lessonId[\s\S]*activityId[\s\S]*answerMarkdown/
+        ),
+        courseImport: expect.stringMatching(
+          /routeKey[\s\S]*importCourse[\s\S]*schemaVersion/
+        ),
+        courseExport: expect.stringMatching(
+          /routeKey[\s\S]*exportCourse[\s\S]*courseId/
+        ),
+        conceptList: expect.stringMatching(
+          /routeKey[\s\S]*listConcepts[\s\S]*dueOnly/
+        ),
+        conceptDetail: expect.stringMatching(
+          /routeKey[\s\S]*conceptDetail[\s\S]*conceptId/
         )
       })
     );
@@ -1642,7 +1745,8 @@ describe("forge onboarding contract", () => {
       ["lifeEvents", "forge_call_life_event_route"],
       ["movement", "forge_call_movement_route"],
       ["lifeForce", "forge_call_life_force_route"],
-      ["workbench", "forge_call_workbench_route"]
+      ["workbench", "forge_call_workbench_route"],
+      ["courses", "forge_call_course_route"]
     ] as const;
 
     for (const [surfaceKey, toolName] of surfaceToolPairs) {
@@ -2042,10 +2146,7 @@ describe("forge onboarding contract", () => {
     const sleepGuide = onboarding.entityCatalog.find(
       (entry) => entry.entityType === "sleep_session"
     );
-    expect(sleepGuide?.minimumCreateFields).toEqual([
-      "startedAt",
-      "endedAt"
-    ]);
+    expect(sleepGuide?.minimumCreateFields).toEqual(["startedAt", "endedAt"]);
     expect(sleepGuide?.fieldGuide).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -2113,6 +2214,22 @@ describe("forge onboarding contract", () => {
       expect.objectContaining({
         routePosture: "specialized_domain_surface",
         apiAccessHint: expect.stringMatching(/\/api\/v1\/workbench\/flows/)
+      })
+    );
+    expect(playbookByFocus.get("course")).toEqual(
+      expect.objectContaining({
+        routePosture: "specialized_domain_surface",
+        apiAccessHint: expect.stringMatching(
+          /forge_call_course_route[\s\S]*learner-safe/i
+        )
+      })
+    );
+    expect(playbookByFocus.get("concept")).toEqual(
+      expect.objectContaining({
+        routePosture: "specialized_domain_surface",
+        apiAccessHint: expect.stringMatching(
+          /forge_call_course_route[\s\S]*package/i
+        )
       })
     );
     expect(psycheByFocus.get("behavior_pattern")).toEqual(
@@ -2335,6 +2452,15 @@ describe("forge onboarding contract", () => {
     );
     expect(playbookByFocus.get("workbench")?.askSequence.join(" ")).toMatch(
       /follow-up message in a saved flow chat[\s\S]*not treating it as a new run or note|saved flow[\s\S]*message should accomplish[\s\S]*new run or note/i
+    );
+    const courseSequence =
+      playbookByFocus.get("course")?.askSequence.join(" ") ?? "";
+    expect(courseSequence).toMatch(
+      /learner-safe[\s\S]*preserve answerMarkdown[\s\S]*withheld[\s\S]*canonical hash/i
+    );
+    expect(courseSequence).toMatch(/hidden reference answers/i);
+    expect(playbookByFocus.get("concept")?.askSequence.join(" ")).toMatch(
+      /due-review[\s\S]*exact concept detail[\s\S]*definition[\s\S]*evidence[\s\S]*mastery estimate[\s\S]*do not invent direct concept CRUD/i
     );
 
     expect(psycheByFocus.get("psyche_value")?.askSequence.join(" ")).toMatch(

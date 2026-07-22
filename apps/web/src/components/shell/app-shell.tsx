@@ -1124,6 +1124,9 @@ export function AppShell() {
     Set<string>
   >(() => new Set());
   const routePathKey = buildRoutePathKey(routerLocation);
+  const immersiveCourseSurface = /^\/courses\/[^/]+\/learn\/?$/u.test(
+    routerLocation.pathname
+  );
   const optimisticRoutePathKey = optimisticRouteLocation
     ? buildRoutePathKey(optimisticRouteLocation)
     : null;
@@ -1709,178 +1712,192 @@ export function AppShell() {
         initialTheme={settingsQuery.data.settings.gamificationTheme}
       >
         <ShellContext.Provider value={contextValue}>
-          <>
-            <GamificationAssetSetupDialog />
-            <ShellFrame
-              routeLocation={visibleLocation}
-              onRouteIntent={handleRouteIntent}
-              settings={settingsQuery.data.settings}
-              timerPending={
-                focusTaskRunMutationState.isLoading ||
-                releaseTaskRunMutationState.isLoading ||
-                completeTaskRunMutationState.isLoading
-              }
-              startWorkOpen={startWorkOpen}
-              startWorkPending={
-                claimTaskRunMutationState.isLoading ||
-                createAndStartTaskMutation.isPending
-              }
-              startWorkError={startWorkError}
-              startWorkDefaults={startWorkDefaults}
-              onOpenStartWork={(defaults) => {
-                setStartWorkDefaults(defaults ?? {});
-                setStartWorkError(null);
-                setStartWorkOpen(true);
-              }}
-              onCloseStartWork={() => {
-                setStartWorkOpen(false);
-                setStartWorkError(null);
-              }}
-              onStartExistingTask={async (taskId, input) => {
-                try {
-                  const operatorName =
-                    settingsQuery.data.settings.profile.operatorName;
-                  const started = await startTaskRunWithOverride(taskId, {
-                    actor: operatorName,
-                    timerMode: input.timerMode,
-                    plannedDurationSeconds: input.plannedDurationSeconds,
-                    isCurrent: true,
-                    leaseTtlSeconds: 1800,
-                    note: "",
-                    gitContext: input.gitContext
-                  });
-                  if (started) {
-                    setStartWorkOpen(false);
-                    setStartWorkError(null);
-                  }
-                } catch (error) {
-                  setStartWorkError(
-                    error instanceof Error
-                      ? error.message
-                      : "Could not start work."
-                  );
+          {immersiveCourseSurface ? (
+            <div className="min-h-dvh">
+              {displayedLocationContext ? (
+                <UNSAFE_LocationContext.Provider
+                  value={displayedLocationContext}
+                >
+                  {displayedRoute.node}
+                </UNSAFE_LocationContext.Provider>
+              ) : (
+                displayedRoute.node
+              )}
+            </div>
+          ) : (
+            <>
+              <GamificationAssetSetupDialog />
+              <ShellFrame
+                routeLocation={visibleLocation}
+                onRouteIntent={handleRouteIntent}
+                settings={settingsQuery.data.settings}
+                timerPending={
+                  focusTaskRunMutationState.isLoading ||
+                  releaseTaskRunMutationState.isLoading ||
+                  completeTaskRunMutationState.isLoading
                 }
-              }}
-              onCreateAndStartTask={async (input) => {
-                try {
-                  await createAndStartTaskMutation.mutateAsync(input);
+                startWorkOpen={startWorkOpen}
+                startWorkPending={
+                  claimTaskRunMutationState.isLoading ||
+                  createAndStartTaskMutation.isPending
+                }
+                startWorkError={startWorkError}
+                startWorkDefaults={startWorkDefaults}
+                onOpenStartWork={(defaults) => {
+                  setStartWorkDefaults(defaults ?? {});
+                  setStartWorkError(null);
+                  setStartWorkOpen(true);
+                }}
+                onCloseStartWork={() => {
                   setStartWorkOpen(false);
                   setStartWorkError(null);
-                } catch (error) {
-                  setStartWorkError(
-                    error instanceof Error
-                      ? error.message
-                      : "Could not create and start the task."
-                  );
-                }
-              }}
-              onFocusRun={async (runId) => {
-                await focusTaskRunMutation(runId).unwrap();
-                await refreshLegacySnapshotQueries();
-              }}
-              onPauseRun={async (runId) => {
-                const run = snapshotQuery.data.activeTaskRuns.find(
-                  (entry) => entry.id === runId
-                );
-                await releaseTaskRunMutation({
-                  runId,
-                  input: {
-                    actor: run?.actor,
-                    note: run?.note ?? ""
-                  }
-                }).unwrap();
-                await refreshLegacySnapshotQueries();
-              }}
-              onCompleteRun={async (runId) => {
-                const run = snapshotQuery.data.activeTaskRuns.find(
-                  (entry) => entry.id === runId
-                );
-                if (run) {
-                  openTaskCloseout(run.taskId, run.id);
-                }
-              }}
-            >
-              <div className="relative min-w-0">
-                {displayedLocationContext ? (
-                  <UNSAFE_LocationContext.Provider
-                    value={displayedLocationContext}
-                  >
-                    {displayedRoute.node}
-                  </UNSAFE_LocationContext.Provider>
-                ) : (
-                  displayedRoute.node
-                )}
-              </div>
-            </ShellFrame>
-            <TaskCompletionWorkLogDialog
-              prompt={taskCompletionPrompt}
-              setPrompt={setTaskCompletionPrompt}
-              onSubmit={(completedTodayWorkSeconds) => {
-                void submitCompletionPrompt(completedTodayWorkSeconds);
-              }}
-            />
-            {closeoutTask ? (
-              <TaskCloseoutFlowDialog
-                key={`${closeoutTask.id}:${closeoutRun?.id ?? "direct"}`}
-                open={taskCloseoutPrompt !== null}
-                task={closeoutTask}
-                activeTaskRun={closeoutRun}
-                selectedUserIds={selectedUserIds}
-                requireWorkTime={closeoutRun === null}
-                pending={
-                  completeTaskRunMutationState.isLoading ||
-                  patchTaskMutationState.isLoading
-                }
-                error={taskCloseoutError}
-                onOpenChange={(open) => {
-                  if (!open) {
-                    setTaskCloseoutPrompt(null);
-                    setTaskCloseoutError(null);
+                }}
+                onStartExistingTask={async (taskId, input) => {
+                  try {
+                    const operatorName =
+                      settingsQuery.data.settings.profile.operatorName;
+                    const started = await startTaskRunWithOverride(taskId, {
+                      actor: operatorName,
+                      timerMode: input.timerMode,
+                      plannedDurationSeconds: input.plannedDurationSeconds,
+                      isCurrent: true,
+                      leaseTtlSeconds: 1800,
+                      note: "",
+                      gitContext: input.gitContext
+                    });
+                    if (started) {
+                      setStartWorkOpen(false);
+                      setStartWorkError(null);
+                    }
+                  } catch (error) {
+                    setStartWorkError(
+                      error instanceof Error
+                        ? error.message
+                        : "Could not start work."
+                    );
                   }
                 }}
-                onSubmit={submitGuidedTaskCloseout}
+                onCreateAndStartTask={async (input) => {
+                  try {
+                    await createAndStartTaskMutation.mutateAsync(input);
+                    setStartWorkOpen(false);
+                    setStartWorkError(null);
+                  } catch (error) {
+                    setStartWorkError(
+                      error instanceof Error
+                        ? error.message
+                        : "Could not create and start the task."
+                    );
+                  }
+                }}
+                onFocusRun={async (runId) => {
+                  await focusTaskRunMutation(runId).unwrap();
+                  await refreshLegacySnapshotQueries();
+                }}
+                onPauseRun={async (runId) => {
+                  const run = snapshotQuery.data.activeTaskRuns.find(
+                    (entry) => entry.id === runId
+                  );
+                  await releaseTaskRunMutation({
+                    runId,
+                    input: {
+                      actor: run?.actor,
+                      note: run?.note ?? ""
+                    }
+                  }).unwrap();
+                  await refreshLegacySnapshotQueries();
+                }}
+                onCompleteRun={async (runId) => {
+                  const run = snapshotQuery.data.activeTaskRuns.find(
+                    (entry) => entry.id === runId
+                  );
+                  if (run) {
+                    openTaskCloseout(run.taskId, run.id);
+                  }
+                }}
+              >
+                <div className="relative min-w-0">
+                  {displayedLocationContext ? (
+                    <UNSAFE_LocationContext.Provider
+                      value={displayedLocationContext}
+                    >
+                      {displayedRoute.node}
+                    </UNSAFE_LocationContext.Provider>
+                  ) : (
+                    displayedRoute.node
+                  )}
+                </div>
+              </ShellFrame>
+              <TaskCompletionWorkLogDialog
+                prompt={taskCompletionPrompt}
+                setPrompt={setTaskCompletionPrompt}
+                onSubmit={(completedTodayWorkSeconds) => {
+                  void submitCompletionPrompt(completedTodayWorkSeconds);
+                }}
               />
-            ) : null}
-            {knowledgeGraphOverlayFocus?.focusNode ? (
-              <div className="pointer-events-none fixed inset-y-0 right-0 z-[64] hidden lg:flex lg:max-w-[min(30rem,calc(100vw-4rem))] lg:items-start lg:justify-end lg:p-4">
-                <div className="pointer-events-auto h-full w-[min(30rem,calc(100vw-4rem))] max-w-full overflow-hidden rounded-[28px] border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--surface-glass)_94%,transparent)] pt-[calc(var(--forge-shell-desktop-header-padding-top)+4.8rem)] shadow-[var(--ui-shadow-floating)] backdrop-blur-xl">
-                  <div className="h-full min-h-0 overflow-hidden">
-                    <KnowledgeGraphFocusDrawer
-                      focus={knowledgeGraphOverlayFocus}
-                      onOpenPage={(node) => {
-                        if (node.href) {
-                          navigate(node.href);
-                        }
-                      }}
-                      onOpenNotes={(node) => {
-                        const href = getKnowledgeGraphNodeNotesHref(node);
-                        if (href) {
-                          navigate(href);
-                        }
-                      }}
-                      onOpenHierarchy={openKnowledgeGraphHierarchy}
-                      onSelectNode={setKnowledgeGraphRouteFocus}
-                      onClose={() => setKnowledgeGraphRouteFocus(null)}
-                    />
+              {closeoutTask ? (
+                <TaskCloseoutFlowDialog
+                  key={`${closeoutTask.id}:${closeoutRun?.id ?? "direct"}`}
+                  open={taskCloseoutPrompt !== null}
+                  task={closeoutTask}
+                  activeTaskRun={closeoutRun}
+                  selectedUserIds={selectedUserIds}
+                  requireWorkTime={closeoutRun === null}
+                  pending={
+                    completeTaskRunMutationState.isLoading ||
+                    patchTaskMutationState.isLoading
+                  }
+                  error={taskCloseoutError}
+                  onOpenChange={(open) => {
+                    if (!open) {
+                      setTaskCloseoutPrompt(null);
+                      setTaskCloseoutError(null);
+                    }
+                  }}
+                  onSubmit={submitGuidedTaskCloseout}
+                />
+              ) : null}
+              {knowledgeGraphOverlayFocus?.focusNode ? (
+                <div className="pointer-events-none fixed inset-y-0 right-0 z-[64] hidden lg:flex lg:max-w-[min(30rem,calc(100vw-4rem))] lg:items-start lg:justify-end lg:p-4">
+                  <div className="pointer-events-auto h-full w-[min(30rem,calc(100vw-4rem))] max-w-full overflow-hidden rounded-[28px] border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--surface-glass)_94%,transparent)] pt-[calc(var(--forge-shell-desktop-header-padding-top)+4.8rem)] shadow-[var(--ui-shadow-floating)] backdrop-blur-xl">
+                    <div className="h-full min-h-0 overflow-hidden">
+                      <KnowledgeGraphFocusDrawer
+                        focus={knowledgeGraphOverlayFocus}
+                        onOpenPage={(node) => {
+                          if (node.href) {
+                            navigate(node.href);
+                          }
+                        }}
+                        onOpenNotes={(node) => {
+                          const href = getKnowledgeGraphNodeNotesHref(node);
+                          if (href) {
+                            navigate(href);
+                          }
+                        }}
+                        onOpenHierarchy={openKnowledgeGraphHierarchy}
+                        onSelectNode={setKnowledgeGraphRouteFocus}
+                        onClose={() => setKnowledgeGraphRouteFocus(null)}
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-            ) : null}
-            <GamificationCelebrationLayer
-              xpNotice={xpNotice}
-              celebrations={visibleCelebrations}
-              onSeen={(celebrationId) => {
-                setLocallySeenCelebrationIds((current) => {
-                  const next = new Set(current);
-                  next.add(celebrationId);
-                  return next;
-                });
-                return markCelebrationSeen(celebrationId)
-                  .unwrap()
-                  .then(() => undefined);
-              }}
-            />
-          </>
+              ) : null}
+              <GamificationCelebrationLayer
+                xpNotice={xpNotice}
+                celebrations={visibleCelebrations}
+                onSeen={(celebrationId) => {
+                  setLocallySeenCelebrationIds((current) => {
+                    const next = new Set(current);
+                    next.add(celebrationId);
+                    return next;
+                  });
+                  return markCelebrationSeen(celebrationId)
+                    .unwrap()
+                    .then(() => undefined);
+                }}
+              />
+            </>
+          )}
         </ShellContext.Provider>
       </GamificationThemeProvider>
     </I18nProvider>

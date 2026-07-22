@@ -11,6 +11,7 @@ import {
   Dumbbell,
   Gauge,
   GitBranch,
+  GraduationCap,
   HeartPulse,
   Inbox,
   LayoutDashboard,
@@ -129,6 +130,13 @@ export const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     label: "Knowledge Graph",
     detail: ROUTE_VIEW_CATALOG["knowledge-graph-index"].description,
     icon: Orbit
+  },
+  {
+    id: "courses",
+    to: "/courses",
+    label: "Courses",
+    detail: ROUTE_VIEW_CATALOG["courses-index"].description,
+    icon: GraduationCap
   },
   {
     id: "artifacts",
@@ -327,6 +335,9 @@ export function isPsycheRoute(pathname: string) {
 }
 
 export function routeMatches(pathname: string, route: ShellRouteDefinition) {
+  if (route.id === "courses") {
+    return pathname.startsWith("/courses") || pathname.startsWith("/concepts");
+  }
   if (route.to === "/psyche") {
     return isPsycheRoute(pathname);
   }

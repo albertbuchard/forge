@@ -17,6 +17,11 @@ describe("route module prefetch", () => {
     ["/strategies/strategy_123", "strategyDetail"],
     ["/people", "people"],
     ["/people/person_123", "personDetail"],
+    ["/courses", "courses"],
+    ["/courses/math_123", "courseDetail"],
+    ["/courses/math_123/learn?lesson=week_1", "courseLearn"],
+    ["/concepts", "concepts"],
+    ["/concepts/local-invertibility", "conceptDetail"],
     ["/sports/workouts/workout_123", "workoutDetail"],
     [
       "/psyche/questionnaires/instrument_123/edit",
