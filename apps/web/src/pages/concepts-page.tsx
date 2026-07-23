@@ -28,7 +28,7 @@ export function ConceptsPage() {
     <div>
       <PageHero
         eyebrow="Forge entities"
-        title={<span className="font-editorial">Concept atlas</span>}
+        title={<h1 className="font-editorial">Concept atlas</h1>}
         titleText="Concept atlas"
         description="Browse the durable ideas behind your courses. Each concept carries definitions, dependencies, proof evidence, mastery, and its own recall schedule."
         copyMode="title_plus_orientation"

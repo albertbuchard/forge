@@ -42,6 +42,12 @@ const peerSocketPath = path.join(
 const peerStateRoot = path.join(tempRoot, "forge-peer-state");
 const port = 43170 + Math.floor(Math.random() * 1000);
 const ownerUserId = "user_operator";
+const referenceCourse = {
+  id: "course.polynomials-etale-triple-covers",
+  slug: "from-polynomials-to-etale-triple-covers",
+  version: "1.1.0",
+  fileName: "from-polynomials-to-etale-triple-covers.forge-course.json"
+};
 const releaseMode = (process.env.FORGE_RELEASE_MODE ?? "").trim();
 const smokeMode = (
   process.env.FORGE_PACKED_RUNTIME_SMOKE_MODE ?? "full"
@@ -294,7 +300,7 @@ function cookiePairFromSetCookie(headers) {
   return null;
 }
 
-async function verifyPackedIrohPairing() {
+async function getOperatorCookie() {
   const sessionResponse = await fetch(
     `http://127.0.0.1:${port}/api/v1/auth/operator-session`,
     {
@@ -315,7 +321,36 @@ async function verifyPackedIrohPairing() {
   if (!cookie) {
     throw new Error("operator session bootstrap did not return a cookie");
   }
+  return cookie;
+}
 
+async function verifyPackedCourseApi(cookie) {
+  const response = await fetch(
+    `http://127.0.0.1:${port}/api/v1/courses?userId=${ownerUserId}`,
+    {
+      headers: {
+        accept: "application/json",
+        cookie,
+        host: `127.0.0.1:${port}`
+      }
+    }
+  );
+  const body = await response.json().catch(() => null);
+  const course = body?.courses?.find(
+    (entry) => entry.id === referenceCourse.id
+  );
+  if (
+    !response.ok ||
+    course?.slug !== referenceCourse.slug ||
+    course?.version !== referenceCourse.version
+  ) {
+    throw new Error(
+      `packed runtime omitted the reference course: HTTP ${response.status}: ${JSON.stringify(body)}`
+    );
+  }
+}
+
+async function verifyPackedIrohPairing(cookie) {
   const response = await fetch(
     `http://127.0.0.1:${port}/api/v1/health/pairing-sessions`,
     {
@@ -409,7 +444,7 @@ async function verifyPackedPeopleApi(cookie) {
 }
 
 async function verifyPackedWebRoutes() {
-  for (const route of ["/forge/", "/forge/vitals"]) {
+  for (const route of ["/forge/", "/forge/vitals", "/forge/courses"]) {
     const response = await fetch(`http://127.0.0.1:${port}${route}`);
     if (!response.ok) {
       throw new Error(
@@ -443,6 +478,37 @@ try {
     "node_modules",
     "forge-openclaw-plugin"
   );
+  const packedCoursePath = path.join(
+    installedPluginRoot,
+    "dist",
+    "server",
+    "apps",
+    "api",
+    "src",
+    "course-catalog",
+    referenceCourse.fileName
+  );
+  if (!existsSync(packedCoursePath)) {
+    throw new Error(
+      `packed runtime omitted ${path.relative(installedPluginRoot, packedCoursePath)}`
+    );
+  }
+  const packedCourse = JSON.parse(readFileSync(packedCoursePath, "utf8"));
+  if (
+    packedCourse?.course?.id !== referenceCourse.id ||
+    packedCourse?.course?.slug !== referenceCourse.slug ||
+    packedCourse?.course?.version !== referenceCourse.version ||
+    packedCourse?.lessons?.length !== 330
+  ) {
+    throw new Error(
+      `packed reference course is invalid: ${JSON.stringify({
+        id: packedCourse?.course?.id,
+        slug: packedCourse?.course?.slug,
+        version: packedCourse?.course?.version,
+        lessons: packedCourse?.lessons?.length
+      })}`
+    );
+  }
   const sourceManifest = path.join(
     installedPluginRoot,
     "dist",
@@ -526,9 +592,11 @@ try {
     );
   }
   await verifyPackedWebRoutes();
+  const operatorCookie = await getOperatorCookie();
+  await verifyPackedCourseApi(operatorCookie);
   if (!runtimeOnly) {
     await verifyPackedPeerDaemon(installedPluginRoot, peerRuntime.binaryPath);
-    const pairing = await verifyPackedIrohPairing();
+    const pairing = await verifyPackedIrohPairing(operatorCookie);
     await verifyPackedPeopleApi(pairing.cookie);
     if (!pairing.body?.qrPayload?.transport?.pairPayload?.node_id) {
       throw new Error(

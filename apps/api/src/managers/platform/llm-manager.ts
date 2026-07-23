@@ -68,6 +68,7 @@ export interface WikiLlmProvider {
     profile: WikiLlmProfileLike;
     systemPrompt?: string;
     prompt: string;
+    format?: Record<string, unknown>;
     logger?: WikiLlmDiagnosticLogger;
   }): Promise<{ outputText: string }>;
 }
@@ -219,12 +220,15 @@ export class LlmManager extends AbstractManager {
       explicitApiKey?: string | null;
       systemPrompt?: string;
       prompt: string;
+      format?: Record<string, unknown>;
     },
     logger?: WikiLlmDiagnosticLogger
   ) {
     const provider = this.resolveProvider(profile.provider);
     if (!provider?.runText) {
-      throw new Error("This LLM provider does not support text prompt execution.");
+      throw new Error(
+        "This LLM provider does not support text prompt execution."
+      );
     }
     const apiKey =
       input.explicitApiKey?.trim() || (await this.readApiKey(profile.secretId));
@@ -236,6 +240,7 @@ export class LlmManager extends AbstractManager {
       profile,
       systemPrompt: input.systemPrompt,
       prompt: input.prompt,
+      format: input.format,
       logger
     });
   }

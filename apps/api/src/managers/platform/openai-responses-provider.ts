@@ -222,7 +222,9 @@ function buildOutputTextPayload(text: string): Record<string, unknown> {
   };
 }
 
-function parseCodexEventStreamPayload(streamText: string): Record<string, unknown> {
+function parseCodexEventStreamPayload(
+  streamText: string
+): Record<string, unknown> {
   const chunks: string[] = [];
   let latestResponse: Record<string, unknown> | null = null;
   let failedError: unknown = null;
@@ -243,8 +245,7 @@ function parseCodexEventStreamPayload(streamText: string): Record<string, unknow
     } catch {
       return;
     }
-    const payloadType =
-      typeof payload.type === "string" ? payload.type : null;
+    const payloadType = typeof payload.type === "string" ? payload.type : null;
     if (payloadType === "response.output_text.delta") {
       if (typeof payload.delta === "string") {
         chunks.push(payload.delta);
@@ -441,7 +442,8 @@ function extractCodexAccountId(accessToken: string) {
     if (!auth || typeof auth !== "object") {
       throw new Error("Missing auth claim");
     }
-    const accountId = (auth as { chatgpt_account_id?: unknown }).chatgpt_account_id;
+    const accountId = (auth as { chatgpt_account_id?: unknown })
+      .chatgpt_account_id;
     if (typeof accountId !== "string" || accountId.trim().length === 0) {
       throw new Error("Missing account id");
     }
@@ -644,29 +646,26 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
     });
     let response: Response;
     try {
-      response = await fetch(
-        buildResponsesUrl(profile),
-        {
-          method: "POST",
-          headers: buildRequestHeaders(profile, apiKey, {
-            includeJsonContentType: true
-          }),
-          body: JSON.stringify({
-            model: profile.model,
-            ...buildInstructionsPayload(
-              profile,
-              "Reply with the single word ok."
-            ),
-            input: isCodexProfile(profile)
-              ? "Connection test."
-              : "Reply with the single word ok.",
-            ...(isCodexProfile(profile) ? { stream: true, store: false } : {}),
-            ...(isCodexProfile(profile) ? {} : { max_output_tokens: 24 }),
-            reasoning: buildReasoningConfiguration(profile),
-            text: buildTextConfiguration({ profile })
-          })
-        }
-      );
+      response = await fetch(buildResponsesUrl(profile), {
+        method: "POST",
+        headers: buildRequestHeaders(profile, apiKey, {
+          includeJsonContentType: true
+        }),
+        body: JSON.stringify({
+          model: profile.model,
+          ...buildInstructionsPayload(
+            profile,
+            "Reply with the single word ok."
+          ),
+          input: isCodexProfile(profile)
+            ? "Connection test."
+            : "Reply with the single word ok.",
+          ...(isCodexProfile(profile) ? { stream: true, store: false } : {}),
+          ...(isCodexProfile(profile) ? {} : { max_output_tokens: 24 }),
+          reasoning: buildReasoningConfiguration(profile),
+          text: buildTextConfiguration({ profile })
+        })
+      });
     } catch (error) {
       emitDiagnostic(logger, {
         level: "error",
@@ -735,6 +734,7 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
     profile,
     systemPrompt,
     prompt,
+    format,
     logger
   }: NonNullable<WikiLlmProvider["runText"]> extends (
     input: infer T
@@ -788,9 +788,10 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
             ],
         ...(isCodexProfile(profile) ? { stream: true, store: false } : {}),
         reasoning: buildReasoningConfiguration(profile),
-        text: buildTextConfiguration({ profile }),
+        text: buildTextConfiguration({ profile, format }),
         ...(isCodexProfile(profile) ? {} : { max_output_tokens: 1200 })
-      })
+      }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
     if (!response.ok) {
       await response.body?.cancel().catch(() => undefined);
@@ -1062,45 +1063,42 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
     } else {
       let createResponse: Response;
       try {
-        createResponse = await fetch(
-          buildResponsesUrl(profile),
-          {
-            method: "POST",
-            headers: buildRequestHeaders(profile, apiKey, {
-              includeJsonContentType: true
-            }),
-            body: JSON.stringify({
-              model: profile.model,
-              ...buildInstructionsPayload(profile, prompt),
-              input: requestInputs,
-              store: useStoredBackgroundResponse,
-              ...(isCodexProfile(profile) ? { stream: true } : {}),
-              ...(useStoredBackgroundResponse
-                ? {
-                    background: true,
-                    prompt_cache_retention:
-                      profile.model === "gpt-5.4" ? "24h" : "in_memory",
-                    prompt_cache_key: `forge-wiki-ingest:${profile.model}:${input.parseStrategy}:${input.mimeType}`
-                  }
-                : {}),
-              reasoning: buildReasoningConfiguration(profile),
-              text: buildTextConfiguration({
-                profile,
-                format: {
-                  type: "json_schema",
-                  name: "forge_wiki_ingest_compilation",
-                  strict: true,
-                  schema: buildWikiIngestSchema()
+        createResponse = await fetch(buildResponsesUrl(profile), {
+          method: "POST",
+          headers: buildRequestHeaders(profile, apiKey, {
+            includeJsonContentType: true
+          }),
+          body: JSON.stringify({
+            model: profile.model,
+            ...buildInstructionsPayload(profile, prompt),
+            input: requestInputs,
+            store: useStoredBackgroundResponse,
+            ...(isCodexProfile(profile) ? { stream: true } : {}),
+            ...(useStoredBackgroundResponse
+              ? {
+                  background: true,
+                  prompt_cache_retention:
+                    profile.model === "gpt-5.4" ? "24h" : "in_memory",
+                  prompt_cache_key: `forge-wiki-ingest:${profile.model}:${input.parseStrategy}:${input.mimeType}`
                 }
-              })
-            }),
-            signal: AbortSignal.timeout(
-              isCodexProfile(profile)
-                ? CODEX_FOREGROUND_COMPILE_TIMEOUT_MS
-                : REQUEST_TIMEOUT_MS
-            )
-          }
-        );
+              : {}),
+            reasoning: buildReasoningConfiguration(profile),
+            text: buildTextConfiguration({
+              profile,
+              format: {
+                type: "json_schema",
+                name: "forge_wiki_ingest_compilation",
+                strict: true,
+                schema: buildWikiIngestSchema()
+              }
+            })
+          }),
+          signal: AbortSignal.timeout(
+            isCodexProfile(profile)
+              ? CODEX_FOREGROUND_COMPILE_TIMEOUT_MS
+              : REQUEST_TIMEOUT_MS
+          )
+        });
       } catch (error) {
         const finalError =
           error instanceof Error ? error : new Error(String(error));
@@ -1248,7 +1246,8 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
           }
         });
       } catch (error) {
-        const finalError = error instanceof Error ? error : new Error(String(error));
+        const finalError =
+          error instanceof Error ? error : new Error(String(error));
         const isRetriableTransport =
           finalError.name === "TypeError" ||
           finalError.name === "TimeoutError" ||

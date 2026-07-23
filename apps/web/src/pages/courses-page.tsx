@@ -123,7 +123,7 @@ export function CoursesPage() {
     <div className="grid gap-0">
       <PageHero
         eyebrow="Learn in Forge"
-        title={<span className="font-editorial">Courses & concepts</span>}
+        title={<h1 className="font-editorial">Courses & concepts</h1>}
         titleText="Courses and concepts"
         description="Follow structured courses, write real proofs, and build a concept record that carries across every course you take."
         copyMode="title_plus_orientation"

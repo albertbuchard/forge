@@ -51,7 +51,7 @@ export function ConceptDetailPage() {
     <div>
       <PageHero
         eyebrow="Forge concept entity"
-        title={<span className="font-editorial">{concept.title}</span>}
+        title={<h1 className="font-editorial">{concept.title}</h1>}
         titleText={concept.title}
         description={concept.summary}
         copyMode="title_plus_orientation"

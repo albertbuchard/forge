@@ -756,10 +756,7 @@ export function nextReviewIntervalDays(input: {
     ? [...input.scheduleDays].sort((a, b) => a - b)
     : [1, 3, 8, 16];
   if (input.score < 70) return schedule[0] ?? 1;
-  const nextIndex = Math.min(
-    input.successfulReviewCount + 1,
-    schedule.length - 1
-  );
+  const nextIndex = Math.min(input.successfulReviewCount, schedule.length - 1);
   return schedule[nextIndex] ?? schedule.at(-1) ?? 16;
 }
 

@@ -313,6 +313,8 @@ test("imports a modular course and carries proof evidence into concept mastery",
 
     const firstCheck = completeAutomatic("shared-check-one", "invalid");
     assert.equal(firstCheck.pointsAwarded, 0);
+    const secondCheck = completeAutomatic("shared-check-two", "justified");
+    assert.equal(secondCheck.pointsAwarded, 10);
     const partiallyCompleted = getCourseDetail(
       "course.shared-concept-contract-test",
       userId
@@ -337,8 +339,6 @@ test("imports a modular course and carries proof evidence into concept mastery",
     assert.equal(misconceptionRows[0]?.evidence_count, 1);
     const repairedFirstCheck = completeAutomatic("shared-check-one", "valid");
     assert.equal(repairedFirstCheck.pointsAwarded, 10);
-    const secondCheck = completeAutomatic("shared-check-two", "justified");
-    assert.equal(secondCheck.pointsAwarded, 10);
     const completedShared = getCourseDetail(
       "course.shared-concept-contract-test",
       userId
@@ -347,6 +347,11 @@ test("imports a modular course and carries proof evidence into concept mastery",
     assert.equal(completedShared.progress.progressPercent, 100);
     assert.equal(completedShared.progress.pointsEarned, 20);
     assert.equal(completedShared.lessons[0]?.completed, true);
+    const masteryBeforeRepeat = getDatabase()
+      .prepare(
+        "SELECT mastery_score FROM concept_mastery WHERE user_id = ? AND concept_id = ?"
+      )
+      .get(userId, "concept.proof") as { mastery_score: number };
 
     const retry = completeAutomatic("shared-check-one", "invalid");
     assert.equal(retry.pointsAwarded, 0);
@@ -355,7 +360,51 @@ test("imports a modular course and carries proof evidence into concept mastery",
       userId
     );
     assert.equal(afterRetry.progress.pointsEarned, 20);
-    assert.equal(afterRetry.progress.progressPercent, 100);
+    assert.equal(afterRetry.progress.progressPercent, 0);
+    assert.equal(afterRetry.lessons[0]?.completed, false);
+    const masteryAfterMiss = getDatabase()
+      .prepare(
+        `SELECT mastery_score, evidence_count, successful_review_count,
+                review_interval_days
+         FROM concept_mastery WHERE user_id = ? AND concept_id = ?`
+      )
+      .get(userId, "concept.proof") as {
+      mastery_score: number;
+      evidence_count: number;
+      successful_review_count: number;
+      review_interval_days: number;
+    };
+    assert.equal(
+      masteryAfterMiss.mastery_score,
+      masteryBeforeRepeat.mastery_score
+    );
+    assert.equal(masteryAfterMiss.evidence_count, 4);
+    assert.equal(masteryAfterMiss.successful_review_count, 2);
+    assert.equal(masteryAfterMiss.review_interval_days, 1);
+
+    const reviewPass = completeAutomatic("shared-check-one", "valid");
+    assert.equal(reviewPass.pointsAwarded, 0);
+    const masteryAfterReview = getDatabase()
+      .prepare(
+        `SELECT mastery_score, evidence_count, successful_review_count,
+                review_interval_days, next_review_at
+         FROM concept_mastery WHERE user_id = ? AND concept_id = ?`
+      )
+      .get(userId, "concept.proof") as {
+      mastery_score: number;
+      evidence_count: number;
+      successful_review_count: number;
+      review_interval_days: number;
+      next_review_at: string;
+    };
+    assert.equal(
+      masteryAfterReview.mastery_score,
+      masteryBeforeRepeat.mastery_score
+    );
+    assert.equal(masteryAfterReview.evidence_count, 5);
+    assert.equal(masteryAfterReview.successful_review_count, 3);
+    assert.equal(masteryAfterReview.review_interval_days, 8);
+    assert.ok(Date.parse(masteryAfterReview.next_review_at) > Date.now());
 
     assert.throws(
       () =>

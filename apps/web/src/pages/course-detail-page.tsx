@@ -62,7 +62,7 @@ export function CourseDetailPage() {
     <div>
       <PageHero
         eyebrow="Forge course"
-        title={<span className="font-editorial">{course.title}</span>}
+        title={<h1 className="font-editorial">{course.title}</h1>}
         titleText={course.title}
         description={course.subtitle || course.description}
         copyMode="title_plus_orientation"

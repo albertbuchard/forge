@@ -26,7 +26,10 @@ import {
   X
 } from "lucide-react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { CourseMarkdown } from "@/components/courses/course-markdown";
+import {
+  CourseFeedbackMarkdown,
+  CourseMarkdown
+} from "@/components/courses/course-markdown";
 import {
   CourseContentBlockView,
   CourseExtensionActivityView,
@@ -53,11 +56,101 @@ function activityLabel(type: CourseActivity["type"]) {
   return "Explain in your own words";
 }
 
+export function activitySubmissionLabel(type: CourseActivity["type"]) {
+  if (type === "multiple_choice") return "Check answer";
+  if (type === "extension") return "Submit activity";
+  if (type === "proof") return "Submit for proof review";
+  return "Submit for written review";
+}
+
+export function recallWeekCheckpoints(
+  currentWeek: number,
+  promptMarkdown: string
+) {
+  const checkpoints = new Map<number, number>();
+  for (const match of promptMarkdown.matchAll(/\bWeek\s+(\d+)\b/giu)) {
+    const sourceWeek = Number(match[1]);
+    const intervalWeeks = currentWeek - sourceWeek;
+    if (
+      Number.isInteger(sourceWeek) &&
+      sourceWeek > 0 &&
+      intervalWeeks > 0 &&
+      !checkpoints.has(intervalWeeks)
+    ) {
+      checkpoints.set(intervalWeeks, sourceWeek);
+    }
+  }
+  return [...checkpoints.entries()]
+    .map(([intervalWeeks, sourceWeek]) => ({ intervalWeeks, sourceWeek }))
+    .sort((left, right) => left.intervalWeeks - right.intervalWeeks);
+}
+
 function gradeTone(score: number | null) {
   if (score === null) return "var(--course-muted)";
   if (score >= 85) return "var(--course-green)";
   if (score >= 70) return "var(--course-gold)";
   return "var(--course-red)";
+}
+
+type CourseDraft = {
+  version: 1;
+  answer: string;
+  selectedOptions: string[];
+  updatedAt: string;
+};
+
+export function courseDraftStorageKey(input: {
+  userId?: string;
+  courseId: string;
+  lessonId: string;
+  activityId: string;
+}) {
+  return [
+    "forge:course-draft:v1",
+    input.userId || "operator",
+    input.courseId,
+    input.lessonId,
+    input.activityId
+  ]
+    .map(encodeURIComponent)
+    .join(":");
+}
+
+export function parseCourseDraft(value: string | null): CourseDraft | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Partial<CourseDraft>;
+    if (
+      parsed.version !== 1 ||
+      typeof parsed.answer !== "string" ||
+      !Array.isArray(parsed.selectedOptions) ||
+      parsed.selectedOptions.some((option) => typeof option !== "string") ||
+      typeof parsed.updatedAt !== "string"
+    ) {
+      return null;
+    }
+    return parsed as CourseDraft;
+  } catch {
+    return null;
+  }
+}
+
+export function courseAccentStyle(
+  theme?: LearningSession["course"]["presentation"]["theme"]
+) {
+  return {
+    "--course-package-accent": theme?.accent,
+    "--course-package-highlight": theme?.highlight
+  } as CSSProperties;
+}
+
+function attemptStatusLabel(
+  attempt: LearningSession["latestAttempts"][number] | undefined
+) {
+  if (!attempt) return "Not started";
+  if (attempt.status === "assessing") return "Reviewing";
+  if (attempt.status === "needs_review") return "Needs review";
+  return attempt.feedback?.verdict === "pass" ? "Passed" : "Revise";
 }
 
 export function CourseDrawer({
@@ -163,10 +256,29 @@ function CourseOutline({
   const [expanded, setExpanded] = useState(
     () => new Set([session.lesson.moduleId])
   );
+  const outlineNavRef = useRef<HTMLElement>(null);
+  const currentLessonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setExpanded((current) => new Set([...current, session.lesson.moduleId]));
   }, [session.lesson.moduleId]);
+
+  useEffect(() => {
+    if (!expanded.has(session.lesson.moduleId)) return;
+    const frame = window.requestAnimationFrame(() => {
+      const nav = outlineNavRef.current;
+      const current = currentLessonRef.current;
+      if (!nav || !current) return;
+      const navBox = nav.getBoundingClientRect();
+      const currentBox = current.getBoundingClientRect();
+      nav.scrollTop +=
+        currentBox.top -
+        navBox.top -
+        nav.clientHeight / 2 +
+        currentBox.height / 2;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [expanded, session.lesson.id, session.lesson.moduleId]);
 
   return (
     <aside className="course-outline">
@@ -218,7 +330,11 @@ function CourseOutline({
         </div>
       </div>
 
-      <nav className="course-outline__nav" aria-label="Course outline">
+      <nav
+        ref={outlineNavRef}
+        className="course-outline__nav"
+        aria-label="Course outline"
+      >
         {session.modules.map((module) => {
           const open = expanded.has(module.id);
           const lessons = session.navigation.filter(
@@ -260,6 +376,14 @@ function CourseOutline({
                   {lessons.map((lesson) => (
                     <button
                       key={lesson.id}
+                      ref={
+                        lesson.id === session.lesson.id
+                          ? currentLessonRef
+                          : undefined
+                      }
+                      aria-current={
+                        lesson.id === session.lesson.id ? "step" : undefined
+                      }
                       className={cn(
                         "course-outline__lesson",
                         lesson.id === session.lesson.id && "is-current"
@@ -279,6 +403,7 @@ function CourseOutline({
                       <span className="min-w-0">
                         <span className="block text-[10px] text-[var(--course-outline-ink-subtle)]">
                           Week {lesson.week} · Day {lesson.day}
+                          {lesson.id === session.lesson.id ? " · Current" : ""}
                         </span>
                         <span className="block truncate text-[11px] text-[var(--course-outline-ink-body)]">
                           {lesson.title.split(" · ")[0]}
@@ -305,21 +430,23 @@ function CourseOutline({
   );
 }
 
-function FeedbackPanel({ feedback }: { feedback: AssessmentFeedback }) {
+export function FeedbackPanel({ feedback }: { feedback: AssessmentFeedback }) {
   const pending = feedback.score === null;
   return (
     <section className="course-feedback" aria-live="polite">
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="course-kicker">
-            <Sparkles className="size-3.5" /> Forge proof reviewer
+            <Sparkles className="size-3.5" /> Forge automated proof review
           </div>
           <h3 className="mt-2 font-editorial text-2xl text-[var(--course-navy)]">
             {pending
               ? "Your work is safely saved"
               : feedback.verdict === "pass"
-                ? "Proof accepted"
-                : "A promising proof to revise"}
+                ? "Automated review passed"
+                : feedback.verdict === "revise"
+                  ? "Automated review suggests a revision"
+                  : "Automated review found major gaps"}
           </h3>
         </div>
         {feedback.score !== null ? (
@@ -334,9 +461,16 @@ function FeedbackPanel({ feedback }: { feedback: AssessmentFeedback }) {
           <CircleAlert className="mt-1 size-6 text-[var(--course-gold)]" />
         )}
       </div>
-      <p className="mt-3 text-sm leading-6 text-[var(--course-ink-soft)]">
-        {feedback.summary}
-      </p>
+      {!pending ? (
+        <p className="course-feedback__notice">
+          Model-generated feedback can be wrong. Check the rubric evidence and
+          revise whenever the reasoning can be stronger.
+        </p>
+      ) : null}
+      <CourseFeedbackMarkdown
+        markdown={feedback.summary}
+        className="course-feedback__markdown mt-3"
+      />
       {feedback.strengths.length > 0 ? (
         <div className="mt-5">
           <div className="course-feedback__label text-[var(--course-green)]">
@@ -345,8 +479,11 @@ function FeedbackPanel({ feedback }: { feedback: AssessmentFeedback }) {
           <ul className="mt-2 grid gap-2">
             {feedback.strengths.map((strength) => (
               <li key={strength} className="flex gap-2 text-sm leading-5">
-                <Check className="mt-0.5 size-4 shrink-0 text-[var(--course-green)]" />{" "}
-                {strength}
+                <Check className="mt-0.5 size-4 shrink-0 text-[var(--course-green)]" />
+                <CourseFeedbackMarkdown
+                  markdown={strength}
+                  className="course-feedback__markdown"
+                />
               </li>
             ))}
           </ul>
@@ -360,8 +497,11 @@ function FeedbackPanel({ feedback }: { feedback: AssessmentFeedback }) {
           <ul className="mt-2 grid gap-2">
             {feedback.issues.map((issue) => (
               <li key={issue} className="flex gap-2 text-sm leading-5">
-                <CircleAlert className="mt-0.5 size-4 shrink-0 text-[var(--course-red)]" />{" "}
-                {issue}
+                <CircleAlert className="mt-0.5 size-4 shrink-0 text-[var(--course-red)]" />
+                <CourseFeedbackMarkdown
+                  markdown={issue}
+                  className="course-feedback__markdown"
+                />
               </li>
             ))}
           </ul>
@@ -377,9 +517,10 @@ function FeedbackPanel({ feedback }: { feedback: AssessmentFeedback }) {
                   <span>{criterion.criterionId.replaceAll("_", " ")}</span>
                   <span>{Math.round(criterion.score)}/100</span>
                 </div>
-                <p className="mt-1 text-xs leading-5 text-[var(--course-ink-soft)]">
-                  {criterion.rationale}
-                </p>
+                <CourseFeedbackMarkdown
+                  markdown={criterion.rationale}
+                  className="course-feedback__markdown mt-1 text-xs"
+                />
               </div>
             ))}
           </div>
@@ -393,25 +534,37 @@ function FeedbackPanel({ feedback }: { feedback: AssessmentFeedback }) {
               className="course-line-feedback"
             >
               {entry.quote ? (
-                <p className="font-editorial italic">“{entry.quote}”</p>
+                <CourseFeedbackMarkdown
+                  markdown={`“${entry.quote}”`}
+                  className="course-feedback__markdown font-editorial italic"
+                />
               ) : null}
-              <p className="mt-1 text-sm text-[var(--course-ink-soft)]">
-                {entry.comment}
-              </p>
+              <CourseFeedbackMarkdown
+                markdown={entry.comment}
+                className="course-feedback__markdown mt-1"
+              />
             </blockquote>
           ))}
         </div>
       ) : null}
       <div className="mt-5 rounded-sm border-l-2 border-[var(--course-gold)] bg-[var(--course-gold-soft)] px-4 py-3">
         <div className="course-feedback__label">Next move</div>
-        <p className="mt-1 text-sm leading-5">{feedback.nextStep}</p>
+        <CourseFeedbackMarkdown
+          markdown={feedback.nextStep}
+          className="course-feedback__markdown mt-1"
+        />
       </div>
     </section>
   );
 }
 
 function ConceptRail({ session }: { session: LearningSession }) {
-  const currentAttempt = session.latestAttempts.find(Boolean);
+  const currentAttempt = session.latestAttempts
+    .filter((attempt) => attempt !== null)
+    .sort(
+      (left, right) =>
+        Date.parse(right.submittedAt) - Date.parse(left.submittedAt)
+    )[0];
   return (
     <aside className="course-concepts-rail">
       <div className="course-concepts-rail__heading">
@@ -490,7 +643,7 @@ function ConceptRail({ session }: { session: LearningSession }) {
               {session.progress.grade ?? "—"}
             </div>
             <div className="mt-1 text-[11px] text-[var(--course-muted)]">
-              Running proof grade
+              Running course grade
             </div>
           </div>
           <div className="text-right">
@@ -503,9 +656,13 @@ function ConceptRail({ session }: { session: LearningSession }) {
           </div>
         </div>
         {currentAttempt?.feedback ? (
-          <p className="mt-4 border-t border-[var(--course-line)] pt-3 text-xs leading-5 text-[var(--course-ink-soft)]">
-            Latest: {currentAttempt.feedback.summary}
-          </p>
+          <div className="mt-4 border-t border-[var(--course-line)] pt-3 text-xs leading-5 text-[var(--course-ink-soft)]">
+            <span className="font-semibold">Latest: </span>
+            <CourseFeedbackMarkdown
+              markdown={currentAttempt.feedback.summary}
+              className="course-feedback__markdown inline"
+            />
+          </div>
         ) : null}
       </div>
     </aside>
@@ -523,7 +680,10 @@ export function CourseLearnPage() {
   const [conceptsOpen, setConceptsOpen] = useState(false);
   const [answer, setAnswer] = useState("");
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
+  const [hydratedDraftKey, setHydratedDraftKey] = useState<string | null>(null);
   const [activeActivityId, setActiveActivityId] = useState<string | null>(null);
+  const activitySwitcherRef = useRef<HTMLDivElement>(null);
+  const activeActivityTabRef = useRef<HTMLButtonElement>(null);
   const [localFeedback, setLocalFeedback] = useState<AssessmentFeedback | null>(
     null
   );
@@ -538,22 +698,89 @@ export function CourseLearnPage() {
     session?.lesson.activities[0];
 
   useEffect(() => {
-    const firstPending = session?.lesson.activities.find((candidate) => {
+    if (!session) {
+      setActiveActivityId(null);
+      return;
+    }
+    const needsWork = (candidate: CourseActivity) => {
       const latest = session.latestAttempts.find(
         (attempt) => attempt?.activityId === candidate.id
       );
-      return latest?.status !== "assessed";
-    });
+      return (
+        latest?.status !== "assessed" || latest.feedback?.verdict !== "pass"
+      );
+    };
+    const firstPending =
+      session.lesson.activities.find(
+        (candidate) => candidate.required && needsWork(candidate)
+      ) ?? session.lesson.activities.find(needsWork);
     setActiveActivityId(
       firstPending?.id ?? session?.lesson.activities[0]?.id ?? null
     );
-  }, [session?.lesson.id, session?.lesson.activities, session?.latestAttempts]);
+  }, [session]);
 
   useEffect(() => {
-    setAnswer("");
-    setSelectedOptions([]);
+    const frame = window.requestAnimationFrame(() => {
+      const switcher = activitySwitcherRef.current;
+      const activeTab = activeActivityTabRef.current;
+      if (!switcher || !activeTab) return;
+      const switcherBox = switcher.getBoundingClientRect();
+      const activeBox = activeTab.getBoundingClientRect();
+      const nextLeft =
+        activeBox.left < switcherBox.left
+          ? switcher.scrollLeft - (switcherBox.left - activeBox.left)
+          : activeBox.right > switcherBox.right
+            ? switcher.scrollLeft + (activeBox.right - switcherBox.right)
+            : switcher.scrollLeft;
+      switcher.scrollTo({
+        left: nextLeft,
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth"
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeActivityId]);
+
+  const draftKey = useMemo(() => {
+    if (!session || !activity) return null;
+    return courseDraftStorageKey({
+      userId,
+      courseId: session.course.id,
+      lessonId: session.lesson.id,
+      activityId: activity.id
+    });
+  }, [activity, session, userId]);
+
+  useEffect(() => {
+    if (!draftKey || !activity) return;
+    const stored = parseCourseDraft(window.localStorage.getItem(draftKey));
+    const latestAttempt = session?.latestAttempts.find(
+      (attempt) => attempt?.activityId === activity.id
+    );
+    const restoredAnswer =
+      stored?.answer ?? latestAttempt?.answerMarkdown ?? "";
+    setAnswer(restoredAnswer);
+    setSelectedOptions(
+      stored?.selectedOptions ??
+        (activity.type === "multiple_choice" && restoredAnswer
+          ? restoredAnswer.split(",").filter(Boolean)
+          : [])
+    );
     setLocalFeedback(null);
-  }, [session?.lesson.id, activeActivityId]);
+    setHydratedDraftKey(draftKey);
+  }, [activity, draftKey, session?.latestAttempts]);
+
+  useEffect(() => {
+    if (!draftKey || hydratedDraftKey !== draftKey) return;
+    const draft: CourseDraft = {
+      version: 1,
+      answer,
+      selectedOptions,
+      updatedAt: new Date().toISOString()
+    };
+    window.localStorage.setItem(draftKey, JSON.stringify(draft));
+  }, [answer, draftKey, hydratedDraftKey, selectedOptions]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -600,6 +827,16 @@ export function CourseLearnPage() {
     session?.latestAttempts.find((entry) => entry?.activityId === activity?.id)
       ?.feedback ??
     null;
+  const currentAttempt = session?.latestAttempts.find(
+    (entry) => entry?.activityId === activity?.id
+  );
+  const recallCheckpoints =
+    activity?.type === "recall"
+      ? recallWeekCheckpoints(
+          session?.lesson.week ?? 0,
+          activity.promptMarkdown
+        )
+      : [];
   const canSubmit = useMemo(() => {
     if (!activity) return false;
     if (activity.type === "extension") {
@@ -610,16 +847,16 @@ export function CourseLearnPage() {
       : answer.trim().length >= 8;
   }, [activity, answer, selectedOptions]);
 
-  const courseTheme = {
-    "--course-red": session?.course.presentation.theme.accent,
-    "--course-gold": session?.course.presentation.theme.highlight,
-    "--course-paper": session?.course.presentation.theme.paper,
-    "--course-navy": session?.course.presentation.theme.ink
-  } as CSSProperties;
+  const courseTheme = courseAccentStyle(session?.course.presentation.theme);
 
   const navigateLesson = (nextLessonId: string) => {
     setSearchParams({ lesson: nextLessonId });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({
+      top: 0,
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth"
+    });
   };
 
   if (query.isLoading) {
@@ -654,7 +891,7 @@ export function CourseLearnPage() {
         <header className="course-topbar">
           <div className="flex min-w-0 items-center gap-2">
             <button
-              className="course-icon-button lg:hidden"
+              className="course-icon-button course-outline-trigger"
               onClick={() => setOutlineOpen(true)}
               aria-label="Open course outline"
             >
@@ -672,8 +909,8 @@ export function CourseLearnPage() {
                 {session.course.title}
               </div>
               <div className="mt-0.5 truncate font-label text-[9px] uppercase tracking-[0.13em] text-[var(--course-muted)]">
-                Week {session.lesson.week} · Day {session.lesson.day} ·{" "}
-                {activityLabel(activity.type)}
+                Forge course · Week {session.lesson.week} · Day{" "}
+                {session.lesson.day} · {activityLabel(activity.type)}
               </div>
             </div>
           </div>
@@ -703,12 +940,30 @@ export function CourseLearnPage() {
             </div>
           </div>
           <button
-            className="course-icon-button xl:hidden"
+            className="course-icon-button course-concepts-trigger"
             onClick={() => setConceptsOpen(true)}
             aria-label="Open concept ledger"
           >
             <Brain className="size-4" />
           </button>
+          <div
+            className="course-mobile-standing md:hidden"
+            aria-label="Course standing"
+          >
+            <span>
+              <strong>{session.progress.completedLessons}</strong>/
+              {session.progress.totalLessons} days
+            </span>
+            <span>
+              <strong>{session.progress.progressPercent}%</strong> complete
+            </span>
+            <span>
+              <strong>{session.progress.grade ?? "—"}</strong> grade
+            </span>
+            <span>
+              <strong>{session.progress.pointsEarned}</strong> pts
+            </span>
+          </div>
         </header>
 
         <CourseLessonLayoutView
@@ -746,7 +1001,9 @@ export function CourseLearnPage() {
                 </div>
                 <ul>
                   {session.lesson.objectives.map((objective) => (
-                    <li key={objective}>{objective}</li>
+                    <li key={objective}>
+                      <CourseMarkdown markdown={objective} />
+                    </li>
                   ))}
                 </ul>
               </div>
@@ -765,22 +1022,32 @@ export function CourseLearnPage() {
               <section className="course-proof-studio">
                 {session.lesson.activities.length > 1 ? (
                   <div
+                    ref={activitySwitcherRef}
                     className="course-activity-switcher"
                     role="tablist"
                     aria-label="Lesson activities"
                   >
                     {session.lesson.activities.map((candidate, index) => {
-                      const completed = session.latestAttempts.some(
-                        (attempt) =>
-                          attempt?.activityId === candidate.id &&
-                          attempt.status === "assessed"
+                      const latestAttempt = session.latestAttempts.find(
+                        (attempt) => attempt?.activityId === candidate.id
                       );
+                      const statusLabel = attemptStatusLabel(latestAttempt);
+                      const completed = statusLabel === "Passed";
                       return (
                         <button
                           key={candidate.id}
+                          ref={
+                            candidate.id === activity.id
+                              ? activeActivityTabRef
+                              : undefined
+                          }
                           type="button"
                           role="tab"
                           aria-selected={candidate.id === activity.id}
+                          aria-label={`${candidate.title}: ${statusLabel}`}
+                          data-activity-status={statusLabel
+                            .toLowerCase()
+                            .replaceAll(" ", "-")}
                           className={cn(
                             "course-activity-switcher__item",
                             candidate.id === activity.id && "is-active",
@@ -788,14 +1055,17 @@ export function CourseLearnPage() {
                           )}
                           onClick={() => setActiveActivityId(candidate.id)}
                         >
-                          <span>
+                          <span aria-hidden="true">
                             {completed ? (
                               <Check className="size-3" />
                             ) : (
                               index + 1
                             )}
                           </span>
-                          {candidate.title}
+                          <span className="course-activity-switcher__copy">
+                            <strong>{candidate.title}</strong>
+                            <small>{statusLabel}</small>
+                          </span>
                         </button>
                       );
                     })}
@@ -812,6 +1082,10 @@ export function CourseLearnPage() {
                     </h2>
                   </div>
                   <div className="text-right font-label text-[9px] uppercase tracking-[0.12em] text-[var(--course-muted)]">
+                    <div>
+                      {activity.required ? "Required" : "Optional"} ·{" "}
+                      {attemptStatusLabel(currentAttempt)}
+                    </div>
                     <div>{activity.points} points</div>
                     <div className="mt-1">{activity.estimatedMinutes} min</div>
                   </div>
@@ -820,6 +1094,27 @@ export function CourseLearnPage() {
                   markdown={activity.promptMarkdown}
                   className="mt-4 text-[15px]"
                 />
+                {recallCheckpoints.length > 0 ? (
+                  <section
+                    className="course-recall-schedule"
+                    aria-label="Spaced retrieval intervals"
+                  >
+                    <div className="course-kicker">Spaced retrieval</div>
+                    <ul>
+                      {recallCheckpoints.map(
+                        ({ intervalWeeks, sourceWeek }) => (
+                          <li key={`${intervalWeeks}-${sourceWeek}`}>
+                            <strong>
+                              {intervalWeeks}{" "}
+                              {intervalWeeks === 1 ? "week" : "weeks"} ago
+                            </strong>
+                            <span>Week {sourceWeek}</span>
+                          </li>
+                        )
+                      )}
+                    </ul>
+                  </section>
+                ) : null}
 
                 {activity.type === "proof" ? (
                   <details className="course-rubric">
@@ -907,9 +1202,9 @@ export function CourseLearnPage() {
 
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                   <p className="max-w-md text-[11px] leading-5 text-[var(--course-muted)]">
-                    Forge sends written work to your configured model
-                    connection. The reference solution remains hidden; your
-                    response is saved even if assessment is unavailable.
+                    {activity.type === "multiple_choice"
+                      ? "Forge checks this answer deterministically and records the result as auditable course evidence."
+                      : "Forge sends written work to your configured model connection. The reference solution remains hidden; your response is saved even if assessment is unavailable."}
                   </p>
                   <Button
                     size="lg"
@@ -920,11 +1215,7 @@ export function CourseLearnPage() {
                     onClick={() => submission.mutate()}
                   >
                     <Sparkles className="size-4" />
-                    {activity.type === "multiple_choice"
-                      ? "Check answer"
-                      : activity.type === "extension"
-                        ? "Submit activity"
-                        : "Submit for proof review"}
+                    {activitySubmissionLabel(activity.type)}
                   </Button>
                 </div>
               </section>

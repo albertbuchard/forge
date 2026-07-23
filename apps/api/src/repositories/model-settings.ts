@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { WikiLlmProfileLike } from "../managers/platform/llm-manager.js";
 import type { SecretsManager } from "../managers/platform/secrets-manager.js";
 import { getDatabase } from "../db.js";
 import {
@@ -161,6 +162,36 @@ export function getAiModelConnectionById(connectionId: string) {
     )
     .get(connectionId) as AiModelConnectionRow | undefined;
   return row ? mapConnection(row) : null;
+}
+
+export function getPromptProfileForModelConnection(
+  connectionId: string
+): WikiLlmProfileLike | null {
+  const connection = getAiModelConnectionById(connectionId);
+  if (!connection?.enabled || !connection.hasStoredCredential) {
+    return null;
+  }
+  const row = getDatabase()
+    .prepare(
+      `SELECT secret_id
+       FROM ai_model_connections
+       WHERE id = ?`
+    )
+    .get(connectionId) as { secret_id: string | null } | undefined;
+  if (connection.provider !== "mock" && !row?.secret_id) {
+    return null;
+  }
+  return {
+    provider: connection.provider,
+    baseUrl: connection.baseUrl,
+    model: connection.model,
+    systemPrompt: "",
+    secretId: row?.secret_id ?? null,
+    metadata: {
+      connectionId: connection.id,
+      authMode: connection.authMode
+    }
+  };
 }
 
 export function readModelConnectionCredential(

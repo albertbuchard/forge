@@ -108,8 +108,10 @@ test("wiki ingest response schema is strict and fully required for nested propos
       items?: Record<string, unknown>;
     }
   ).items as Record<string, unknown>;
-  const articleCandidateProperties =
-    articleCandidateItems.properties as Record<string, unknown>;
+  const articleCandidateProperties = articleCandidateItems.properties as Record<
+    string,
+    unknown
+  >;
   const suggestedFieldPropertyNames = Object.keys(
     suggestedFields.properties as Record<string, unknown>
   );
@@ -301,26 +303,19 @@ test("OpenAI Codex connection tests use the ChatGPT Codex backend and headers", 
   }
 
   if (!capturedRequest) {
-    throw new Error("Expected Codex test connection to issue one HTTP request.");
+    throw new Error(
+      "Expected Codex test connection to issue one HTTP request."
+    );
   }
   const request = capturedRequest;
-  assert.equal(
-    request.url,
-    "https://chatgpt.com/backend-api/codex/responses"
-  );
+  assert.equal(request.url, "https://chatgpt.com/backend-api/codex/responses");
   assert.equal(
     request.headers.get("authorization"),
     `Bearer ${oauthAccessToken}`
   );
-  assert.equal(
-    request.headers.get("chatgpt-account-id"),
-    "acct_codex_123"
-  );
+  assert.equal(request.headers.get("chatgpt-account-id"), "acct_codex_123");
   assert.equal(request.headers.get("originator"), "pi");
-  assert.equal(
-    request.headers.get("OpenAI-Beta"),
-    "responses=experimental"
-  );
+  assert.equal(request.headers.get("OpenAI-Beta"), "responses=experimental");
   assert.equal(request.body.model, "gpt-5.4-mini");
   assert.equal(request.body.instructions, "Reply with the single word ok.");
   assert.equal(request.body.input, "Connection test.");
@@ -502,13 +497,12 @@ test("OpenAI Codex wiki ingest sends instructions as a top-level field", async (
 test("OpenAI Codex text prompts read event-stream responses", async () => {
   const provider = new OpenAiResponsesProvider();
   const originalFetch = globalThis.fetch;
-  let capturedBody:
-    | {
-        stream?: unknown;
-        store?: unknown;
-        instructions?: unknown;
-      }
-    | null = null;
+  let capturedBody: {
+    stream?: unknown;
+    store?: unknown;
+    instructions?: unknown;
+  } | null = null;
+  const capturedSignals: Array<AbortSignal | null> = [];
 
   const jwtPayload = Buffer.from(
     JSON.stringify({
@@ -520,6 +514,7 @@ test("OpenAI Codex text prompts read event-stream responses", async () => {
   const oauthAccessToken = `header.${jwtPayload}.sig`;
 
   globalThis.fetch = (async (_request, init) => {
+    capturedSignals.push(init?.signal ?? null);
     capturedBody = JSON.parse(String(init?.body ?? "{}")) as Record<
       string,
       unknown
@@ -549,7 +544,18 @@ test("OpenAI Codex text prompts read event-stream responses", async () => {
         metadata: {}
       },
       systemPrompt: "Answer briefly.",
-      prompt: "Say done."
+      prompt: "Say done.",
+      format: {
+        type: "json_schema",
+        name: "test_result",
+        strict: true,
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: { result: { type: "string" } },
+          required: ["result"]
+        }
+      }
     });
     assert.equal(result?.outputText, "done");
   } finally {
@@ -561,10 +567,25 @@ test("OpenAI Codex text prompts read event-stream responses", async () => {
     store?: unknown;
     instructions?: unknown;
     max_output_tokens?: unknown;
+    text?: unknown;
   } | null;
   assert.ok(body);
   assert.equal(body.stream, true);
   assert.equal(body.store, false);
   assert.equal(body.instructions, "Answer briefly.");
   assert.equal(body.max_output_tokens, undefined);
+  assert.ok(capturedSignals[0] instanceof AbortSignal);
+  assert.deepEqual(body.text, {
+    format: {
+      type: "json_schema",
+      name: "test_result",
+      strict: true,
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: { result: { type: "string" } },
+        required: ["result"]
+      }
+    }
+  });
 });

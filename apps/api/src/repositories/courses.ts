@@ -269,16 +269,19 @@ function selectedAttempts(
 ) {
   const attempts = getDatabase()
     .prepare(
-      `SELECT activity_id, lesson_id, score, submitted_at
-       FROM course_attempts
-       WHERE course_id = ? AND user_id = ? AND status = 'assessed'
-       ORDER BY submitted_at ASC, id ASC`
+      `SELECT a.activity_id, a.lesson_id, a.score, a.submitted_at,
+              s.verdict
+       FROM course_attempts a
+       JOIN course_assessments s ON s.attempt_id = a.id
+       WHERE a.course_id = ? AND a.user_id = ? AND a.status = 'assessed'
+       ORDER BY a.submitted_at ASC, a.rowid ASC`
     )
     .all(courseId, userId) as Array<{
     activity_id: string;
     lesson_id: string;
     score: number;
     submitted_at: string;
+    verdict: CourseAssessmentFeedback["verdict"];
   }>;
   const selected = new Map<string, (typeof attempts)[number]>();
   for (const attempt of attempts) {
@@ -304,7 +307,9 @@ function completedLessonIdSet(
         (activity) => activity.required
       );
       return requiredActivities.length > 0 &&
-        requiredActivities.every((activity) => selected.has(activity.id))
+        requiredActivities.every(
+          (activity) => selected.get(activity.id)?.verdict === "pass"
+        )
         ? [lesson.id]
         : [];
     })
@@ -848,7 +853,7 @@ export function getLearningSession(
          FROM course_attempts a
          LEFT JOIN course_assessments s ON s.attempt_id = a.id
          WHERE a.course_id = ? AND a.user_id = ? AND a.activity_id = ?
-         ORDER BY a.submitted_at DESC LIMIT 1`
+         ORDER BY a.submitted_at DESC, a.rowid DESC LIMIT 1`
       )
       .get(courseRow.id, userId, activity.id) as
       | (JsonRecord & { feedback_json?: string | null })
@@ -1186,11 +1191,15 @@ export function completeCourseAttempt(input: {
   };
   const prior = getDatabase()
     .prepare(
-      `SELECT COUNT(*) AS count, MAX(score) AS best_score,
+      `SELECT COUNT(*) AS count,
+              COALESCE(SUM(CASE WHEN s.verdict = 'pass' THEN 1 ELSE 0 END), 0)
+                AS pass_count,
+              MAX(a.score) AS best_score,
               MAX(points_awarded) AS best_points
-       FROM course_attempts
-       WHERE course_id = ? AND user_id = ? AND activity_id = ?
-         AND status = 'assessed' AND id <> ?`
+       FROM course_attempts a
+       JOIN course_assessments s ON s.attempt_id = a.id
+       WHERE a.course_id = ? AND a.user_id = ? AND a.activity_id = ?
+         AND a.status = 'assessed' AND a.id <> ?`
     )
     .get(
       attempt.course_id,
@@ -1199,23 +1208,25 @@ export function completeCourseAttempt(input: {
       input.attemptId
     ) as {
     count: number;
+    pass_count: number;
     best_score: number | null;
     best_points: number | null;
   };
-  const possiblePoints = assessed
+  const eligibleForPoints = assessed && normalizedFeedback.verdict === "pass";
+  const possiblePoints = eligibleForPoints
     ? Math.max(
         0,
         Math.round((input.activity.points * normalizedFeedback.score!) / 100)
       )
     : 0;
-  const points = !assessed
+  const points = !eligibleForPoints
     ? 0
     : coursePackage.grading.pointsPolicy === "positive_delta"
       ? Math.max(0, possiblePoints - (prior.best_points ?? 0))
-      : prior.count === 0
+      : prior.pass_count === 0
         ? possiblePoints
         : 0;
-  const masteryEvidenceEligible =
+  const masteryImprovementEligible =
     assessed &&
     (prior.best_score === null || normalizedFeedback.score! > prior.best_score);
   const now = nowIso();
@@ -1250,27 +1261,10 @@ export function completeCourseAttempt(input: {
         now
       );
     if (assessed) {
-      const assessedActivityIds = new Set(
-        (
-          getDatabase()
-            .prepare(
-              `SELECT DISTINCT activity_id FROM course_attempts
-               WHERE course_id = ? AND lesson_id = ? AND user_id = ?
-                 AND status = 'assessed'`
-            )
-            .all(attempt.course_id, attempt.lesson_id, input.userId) as Array<{
-            activity_id: string;
-          }>
-        ).map((entry) => entry.activity_id)
-      );
-      const requiredActivities = lesson.activities.filter(
-        (activity) => activity.required
-      );
-      const lessonCompleted =
-        requiredActivities.length > 0 &&
-        requiredActivities.every((activity) =>
-          assessedActivityIds.has(activity.id)
-        );
+      const lessonCompleted = completedLessonIdSet(
+        coursePackage,
+        selectedAttempts(coursePackage, attempt.course_id, input.userId)
+      ).has(lesson.id);
       getDatabase()
         .prepare(
           `UPDATE course_enrollments SET
@@ -1286,7 +1280,7 @@ export function completeCourseAttempt(input: {
           input.userId
         );
     }
-    if (masteryEvidenceEligible) {
+    if (assessed) {
       const scores = new Map(
         normalizedFeedback.conceptScores.map((entry) => [
           entry.conceptId,
@@ -1304,10 +1298,9 @@ export function completeCourseAttempt(input: {
             `SELECT * FROM concept_mastery WHERE user_id = ? AND concept_id = ?`
           )
           .get(input.userId, conceptId) as MasteryRow | undefined;
-        const nextMastery = updateMastery(
-          previous?.mastery_score ?? null,
-          conceptScore.score
-        );
+        const nextMastery = masteryImprovementEligible
+          ? updateMastery(previous?.mastery_score ?? null, conceptScore.score)
+          : (previous?.mastery_score ?? conceptScore.score);
         const successfulReviews =
           (previous?.successful_review_count ?? 0) +
           (conceptScore.score >= 70 ? 1 : 0);
@@ -1392,10 +1385,12 @@ export function completeCourseAttempt(input: {
                 conceptScore.score) /
               dimensionEvidenceCount
             : conceptScore.score;
-          const dimensionMastery = updateMastery(
-            previousDimension?.mastery_score ?? null,
-            conceptScore.score
-          );
+          const dimensionMastery = masteryImprovementEligible
+            ? updateMastery(
+                previousDimension?.mastery_score ?? null,
+                conceptScore.score
+              )
+            : (previousDimension?.mastery_score ?? conceptScore.score);
           getDatabase()
             .prepare(
               `INSERT INTO concept_mastery_dimensions (

@@ -1,6 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { CourseMarkdown } from "@/components/courses/course-markdown";
+import {
+  CourseFeedbackMarkdown,
+  CourseMarkdown,
+  normalizeCourseMarkdown
+} from "@/components/courses/course-markdown";
 
 describe("CourseMarkdown", () => {
   it("renders prose and LaTeX without exposing raw delimiters", () => {
@@ -13,5 +17,42 @@ describe("CourseMarkdown", () => {
     expect(screen.getByText("local inverse")).toBeInTheDocument();
     expect(container.querySelector(".katex")).not.toBeNull();
     expect(container.textContent).not.toContain("$f'");
+  });
+
+  it("normalizes common model-style TeX delimiters before rendering", () => {
+    const markdown = String.raw`Use \(w_0\in\mathbb C^\times\), then show \[f(w_0)=w_0^3.\]`;
+    const normalized = normalizeCourseMarkdown(markdown);
+
+    expect(normalized).toContain(String.raw`$w_0\in\mathbb C^\times$`);
+    expect(normalized).toContain("$$");
+
+    const { container } = render(<CourseMarkdown markdown={markdown} />);
+    expect(container.querySelectorAll(".katex").length).toBeGreaterThanOrEqual(
+      2
+    );
+    expect(container.querySelector(".katex-html")?.textContent).not.toContain(
+      String.raw`\mathbb`
+    );
+  });
+
+  it("blocks remote media and hardens links in generated feedback", () => {
+    const { container } = render(
+      <CourseFeedbackMarkdown
+        markdown={
+          "![tracking pixel](https://tracker.example/pixel.png) [Reference](https://example.com) <script>alert(1)</script>"
+        }
+      />
+    );
+
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("script")).toBeNull();
+    expect(screen.getByRole("link", { name: "Reference" })).toHaveAttribute(
+      "target",
+      "_blank"
+    );
+    expect(screen.getByRole("link", { name: "Reference" })).toHaveAttribute(
+      "rel",
+      "noopener noreferrer"
+    );
   });
 });

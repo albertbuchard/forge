@@ -38,6 +38,13 @@ const codexRuntimeMigrationsDir = path.join(
 );
 const repoWebDistDir = path.join(repoRoot, "dist");
 const repoMigrationsDir = path.join(repoRoot, "apps", "api", "migrations");
+const repoCourseCatalogDir = path.join(
+  repoRoot,
+  "apps",
+  "api",
+  "src",
+  "course-catalog"
+);
 const companionIrohRoot = path.join(repoRoot, "packages", "companion-iroh");
 const companionIrohManifest = path.join(companionIrohRoot, "Cargo.toml");
 const companionIrohBinaryName =
@@ -613,6 +620,11 @@ await mkdir(path.join(pluginDistDir, "server", "apps", "api"), {
 await cp(
   repoMigrationsDir,
   path.join(pluginDistDir, "server", "apps", "api", "migrations"),
+  { recursive: true, force: true }
+);
+await cp(
+  repoCourseCatalogDir,
+  path.join(pluginDistDir, "server", "apps", "api", "src", "course-catalog"),
   { recursive: true, force: true }
 );
 await mkdir(path.join(pluginServerDir), { recursive: true });

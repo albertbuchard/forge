@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { defineCoursePackage, stableJson, toLearnerLesson } from "./index";
+import {
+  defineCoursePackage,
+  nextReviewIntervalDays,
+  stableJson,
+  toLearnerLesson
+} from "./index";
 
 function basePackage() {
   return {
@@ -80,6 +85,23 @@ function basePackage() {
 }
 
 describe("Forge Course Kit", () => {
+  it("advances successful reviews through the authored schedule and resets misses", () => {
+    const interval = (score: number, successfulReviewCount: number) =>
+      nextReviewIntervalDays({
+        score,
+        successfulReviewCount,
+        previousIntervalDays: null,
+        scheduleDays: [1, 3, 8, 16]
+      });
+
+    expect(interval(90, 0)).toBe(1);
+    expect(interval(90, 1)).toBe(3);
+    expect(interval(90, 2)).toBe(8);
+    expect(interval(90, 3)).toBe(16);
+    expect(interval(90, 12)).toBe(16);
+    expect(interval(60, 12)).toBe(1);
+  });
+
   it("applies strong defaults and strips every answer-bearing proof field", () => {
     const parsed = defineCoursePackage(basePackage());
     expect(parsed.presentation.preset).toBe("forge.paper");
