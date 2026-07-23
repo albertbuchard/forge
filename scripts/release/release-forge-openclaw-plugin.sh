@@ -39,6 +39,7 @@ RELEASE_TARGET_VERSION=""
 VERIFY_TESTS=(
   "npm --prefix plugins/openclaw audit --omit=dev --omit=peer"
   "npm --prefix packages/forge-memory ci"
+  "npm --prefix packages/forge-memory audit --omit=dev"
   "npm run test:forge-memory"
   "npm exec -- vitest run apps/web/src/openclaw/parity.test.ts apps/web/src/openclaw/index.test.ts apps/web/src/openclaw/api-client.test.ts apps/web/src/openclaw/manifest.test.ts apps/web/src/openclaw/tool-contract.test.ts"
   "npm run check -- --pretty false"

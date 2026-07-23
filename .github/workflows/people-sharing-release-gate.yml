@@ -162,6 +162,7 @@ jobs:
         run: |
           npm ci
           npm --prefix packages/forge-memory ci --ignore-scripts
+          npm --prefix packages/forge-memory audit --omit=dev
 
       - name: Install Python test dependencies
         if: ${{ inputs.full_test }}

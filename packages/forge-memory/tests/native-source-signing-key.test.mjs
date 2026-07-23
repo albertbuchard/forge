@@ -167,6 +167,10 @@ test("the shared release gate installs Forge Memory dependencies", () => {
     install.run,
     /npm --prefix packages\/forge-memory ci --ignore-scripts/
   );
+  assert.match(
+    install.run,
+    /npm --prefix packages\/forge-memory audit --omit=dev/
+  );
 });
 
 test("every release workflow supports an exact manual publication dispatch", () => {
@@ -232,6 +236,10 @@ test("prepare releases use fast gates and unsigned integration smoke without wea
   );
   assert.match(releaseSource, /FULL_VERIFY_TESTS=\(\s*"npm run test:server"/);
   assert.match(releaseSource, /npm run test:people-sharing-release-fast/);
+  assert.match(
+    releaseSource,
+    /npm --prefix packages\/forge-memory audit --omit=dev/
+  );
   assert.match(
     smokeSource,
     /\["full", "publish-from-tag"\]\.includes\(releaseMode\)/
