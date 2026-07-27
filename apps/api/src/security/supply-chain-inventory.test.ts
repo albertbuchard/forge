@@ -142,7 +142,7 @@ test("shipped plugin audits exclude host peer dependencies", () => {
 
   assert.ok(openClaw);
   assert.deepEqual(openClaw.auditCommands, [
-    "npm --prefix plugins/openclaw audit --omit=dev --omit=peer --json"
+    "node --import tsx scripts/security/npm-audit-policy.ts --prefix plugins/openclaw --omit=dev --omit=peer"
   ]);
 });
 

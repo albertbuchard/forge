@@ -8,8 +8,6 @@ import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase } from "./db.js";
 
-type TestApp = Awaited<ReturnType<typeof buildServer>>;
-
 type DownloadOperation = {
   responses: Record<string, { content?: Record<string, unknown> }>;
 };

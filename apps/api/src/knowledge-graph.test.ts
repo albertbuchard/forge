@@ -7,8 +7,6 @@ import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase } from "./db.js";
 
-type TestApp = Awaited<ReturnType<typeof buildServer>>;
-
 const issueOperatorCookie = issueTestOperatorSessionCookie;
 
 test("knowledge graph route applies filters before limiting and returns matching facets", async () => {

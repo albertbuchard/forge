@@ -143,6 +143,9 @@
     "ip-address": "^10.2.0",
     "linkify-it": "5.0.2",
     "markdown-it": "^14.2.0",
+    "minimatch@3.1.5": {
+      "brace-expansion": "1.1.16"
+    },
     "protobufjs": "7.6.5",
     "tar": "7.5.22"
   },

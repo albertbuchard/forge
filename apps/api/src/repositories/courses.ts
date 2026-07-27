@@ -66,19 +66,6 @@ type CourseRow = {
   updated_at: string;
 };
 
-type LessonRow = {
-  course_id: string;
-  id: string;
-  module_id: string;
-  week: number;
-  day: number;
-  order_index: number;
-  title: string;
-  summary: string;
-  estimated_minutes: number;
-  definition_json: string;
-};
-
 type MasteryRow = {
   user_id: string;
   concept_id: string;
@@ -259,18 +246,6 @@ function requireCourseRow(courseId: string) {
     .get(courseId, courseId) as CourseRow | undefined;
   if (!row) {
     throw new HttpError(404, "course_not_found", "Course not found.");
-  }
-  return row;
-}
-
-function requireLessonRow(courseId: string, lessonId: string) {
-  const row = getDatabase()
-    .prepare(
-      "SELECT * FROM course_lessons WHERE course_id = ? AND id = ? LIMIT 1"
-    )
-    .get(courseId, lessonId) as LessonRow | undefined;
-  if (!row) {
-    throw new HttpError(404, "lesson_not_found", "Lesson not found.");
   }
   return row;
 }

@@ -400,20 +400,6 @@ server.listen(0, "127.0.0.1", () => {
   return { child, port, pid: child.pid };
 }
 
-async function waitForExit(child, label) {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  await new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      child.kill("SIGKILL");
-      reject(new Error(`${label} did not exit after stop/uninstall`));
-    }, 5_000);
-    child.once("exit", () => {
-      clearTimeout(timeout);
-      resolve();
-    });
-  });
-}
-
 function pidExists(pid) {
   try {
     process.kill(pid, 0);

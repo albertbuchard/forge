@@ -607,7 +607,7 @@ try {
     child.stderrLog += chunk.toString();
   });
 
-  const health = await waitForHealth();
+  await waitForHealth();
   await verifyPackedWebRoutes();
   const protectedHealth = await requestForge({
     method: "GET",

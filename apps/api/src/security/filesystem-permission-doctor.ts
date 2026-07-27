@@ -8,8 +8,7 @@ import {
   readFile,
   realpath,
   rename,
-  rm,
-  writeFile
+  rm
 } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";

@@ -37,7 +37,7 @@ ORIGINAL_FORGE_MEMORY_PACKAGE_VERSION=""
 ORIGINAL_FORGE_MEMORY_PACKAGE_LOCK_VERSION=""
 RELEASE_TARGET_VERSION=""
 VERIFY_TESTS=(
-  "npm --prefix plugins/openclaw audit --omit=dev --omit=peer"
+  "node --import tsx scripts/security/npm-audit-policy.ts --prefix plugins/openclaw --omit=dev --omit=peer"
   "npm --prefix packages/forge-memory ci"
   "npm --prefix packages/forge-memory audit --omit=dev"
   "npm run test:forge-memory"

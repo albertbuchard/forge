@@ -29,7 +29,7 @@ export const SUPPLY_CHAIN_INVENTORY = [
     lockfiles: ["package-lock.json"],
     generatedMirrors: [],
     auditCommands: [
-      "npm audit --omit=dev --json",
+      "node --import tsx scripts/security/npm-audit-policy.ts --omit=dev",
       "npm sbom --omit=dev --sbom-format spdx"
     ],
     lockRequiredBeforeRelease: true
@@ -63,7 +63,7 @@ export const SUPPLY_CHAIN_INVENTORY = [
     lockfiles: ["plugins/openclaw/package-lock.json"],
     generatedMirrors: [],
     auditCommands: [
-      "npm --prefix plugins/openclaw audit --omit=dev --omit=peer --json"
+      "node --import tsx scripts/security/npm-audit-policy.ts --prefix plugins/openclaw --omit=dev --omit=peer"
     ],
     lockRequiredBeforeRelease: true
   },
@@ -73,7 +73,9 @@ export const SUPPLY_CHAIN_INVENTORY = [
     canonicalManifests: ["packages/course-kit/package.json"],
     lockfiles: ["package-lock.json"],
     generatedMirrors: [],
-    auditCommands: ["npm audit --omit=dev --json"],
+    auditCommands: [
+      "node --import tsx scripts/security/npm-audit-policy.ts --omit=dev"
+    ],
     lockRequiredBeforeRelease: true
   },
   {

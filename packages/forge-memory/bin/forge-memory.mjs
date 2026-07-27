@@ -573,10 +573,6 @@ function webUrl(config) {
   return `${baseUrl(config)}/forge/`;
 }
 
-function localHostHeader(config) {
-  return `127.0.0.1:${config.port || DEFAULT_PORT}`;
-}
-
 function forgeApiUrl(config, pathname) {
   return new URL(pathname, baseUrl(config));
 }
@@ -2797,7 +2793,9 @@ async function recordManagedChild(role, child) {
   }
   const identity = await waitForProcessIdentity(child.pid);
   if (!identity) {
-    signalDetachedProcessGroup(child.pid, "SIGTERM") || child.kill("SIGTERM");
+    if (!signalDetachedProcessGroup(child.pid, "SIGTERM")) {
+      child.kill("SIGTERM");
+    }
     throw new Error(
       `Forge refused to manage the ${role} runtime without a verifiable process identity.`
     );
@@ -3544,7 +3542,7 @@ function assertRuntimeStartedForPairing(result, config) {
   );
 }
 
-async function stopRuntime(_config = null) {
+async function stopRuntime() {
   const state = await readRuntimeState();
   const stopped = [];
   for (const child of state?.children ?? []) {
@@ -4104,19 +4102,6 @@ function normalizePublicPairingUrl(value) {
       `Invalid --public-url value: ${value}. Use a full URL such as https://your-mac.tailnet.ts.net/forge/`
     );
   }
-}
-
-function readSetCookieHeader(headers) {
-  if (typeof headers.getSetCookie === "function") {
-    const values = headers.getSetCookie();
-    if (values.length > 0) return values[0];
-  }
-  return headers.get("set-cookie");
-}
-
-function cookiePairFromSetCookie(value) {
-  if (!value) return null;
-  return value.split(";")[0]?.trim() || null;
 }
 
 class PairingAuthError extends Error {
