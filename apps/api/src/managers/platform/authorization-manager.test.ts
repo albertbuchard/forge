@@ -81,3 +81,20 @@ test("operator sessions satisfy all-scope authorization", () => {
     ])
   );
 });
+
+test("the verified local-service wildcard satisfies token-scope checks", () => {
+  const manager = new AuthorizationManager();
+  const localService = context({ scopes: ["*"] });
+  assert.doesNotThrow(() =>
+    manager.requireTokenScope(localService, "read")
+  );
+  assert.doesNotThrow(() =>
+    manager.requireAnyTokenScope(localService, ["read", "write"])
+  );
+  assert.doesNotThrow(() =>
+    manager.requireAllTokenScopes(localService, [
+      "people:write",
+      "wiki:read"
+    ])
+  );
+});

@@ -373,7 +373,7 @@ function GoogleCredentialsPanel({
   googleSession: GoogleCalendarOauthSession | null;
 }) {
   const hasStoredGoogleOverride = Boolean(
-    activeGoogleSetup.storedClientId || activeGoogleSetup.storedClientSecret
+    activeGoogleSetup.storedClientId || activeGoogleSetup.hasStoredClientSecret
   );
 
   return (
@@ -483,15 +483,14 @@ function GoogleCredentialsPanel({
               </FlowField>
 
               <FlowField
-                label="Effective client secret"
-                description="Forge uses this value on the local backend when exchanging and refreshing Google tokens."
+                label="Effective client secret status"
+                description="Forge uses the secret only on the backend and never returns its value to this browser."
               >
                 <div className={READONLY_FIELD_CLASS}>
-                  <span
-                    className="block min-w-0 truncate"
-                    title={activeGoogleSetup.clientSecret || ""}
-                  >
-                    {activeGoogleSetup.clientSecret || ""}
+                  <span className="block min-w-0 truncate">
+                    {activeGoogleSetup.hasEffectiveClientSecret
+                      ? "Configured on server"
+                      : "Not configured"}
                   </span>
                 </div>
               </FlowField>
@@ -534,7 +533,11 @@ function GoogleCredentialsPanel({
                     setGoogleSetupMessage(null);
                     setGoogleSettingsDraft({
                       ...googleSettingsDraft,
-                      clientId: event.target.value
+                      clientId: event.target.value,
+                      hasStoredClientSecret:
+                        event.target.value.trim() ===
+                          savedGoogleSettingsDraft.clientId.trim() &&
+                        savedGoogleSettingsDraft.hasStoredClientSecret
                     });
                   }}
                   placeholder="1234567890-abcdef.apps.googleusercontent.com"
@@ -557,7 +560,13 @@ function GoogleCredentialsPanel({
                     setGoogleSetupMessage(null);
                     setGoogleSettingsDraft({
                       ...googleSettingsDraft,
-                      clientSecret: event.target.value
+                      clientSecret: event.target.value,
+                      hasStoredClientSecret:
+                        event.target.value.length > 0
+                          ? false
+                          : googleSettingsDraft.clientId.trim() ===
+                                savedGoogleSettingsDraft.clientId.trim() &&
+                              savedGoogleSettingsDraft.hasStoredClientSecret
                     });
                   }}
                   placeholder="GOCSPX-..."
@@ -588,19 +597,21 @@ function GoogleCredentialsPanel({
                     setGoogleSetupMessage(null);
                     setGoogleSettingsDraft({
                       clientId: "",
-                      clientSecret: ""
+                      clientSecret: "",
+                      hasStoredClientSecret: false
                     });
                   }}
                   disabled={
                     saveGoogleSettingsPending ||
                     (!savedGoogleSettingsDraft.clientId &&
-                      !savedGoogleSettingsDraft.clientSecret &&
+                      !savedGoogleSettingsDraft.hasStoredClientSecret &&
                       googleSettingsDraft.clientId.length === 0 &&
-                      googleSettingsDraft.clientSecret.length === 0)
+                      googleSettingsDraft.clientSecret.length === 0 &&
+                      !googleSettingsDraft.hasStoredClientSecret)
                   }
                 >
                   {savedGoogleSettingsDraft.clientId ||
-                  savedGoogleSettingsDraft.clientSecret
+                  savedGoogleSettingsDraft.hasStoredClientSecret
                     ? "Clear override"
                     : "Use packaged default"}
                 </Button>

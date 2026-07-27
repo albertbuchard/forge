@@ -298,7 +298,15 @@ async function parseResponseBody(response: Response) {
 }
 
 const DIAGNOSTICS_LOGS_PATH = "/api/v1/diagnostics/logs";
-const OPERATOR_SESSION_PATH = "/api/v1/auth/operator-session";
+const LOCAL_BROWSER_BEGIN_PATH = "/api/v1/auth/local/browser/begin";
+const LOCAL_BROWSER_EXCHANGE_PATH = "/api/v1/auth/local/browser/exchange";
+const REMOTE_DEVICE_BEGIN_PATH = "/api/v1/auth/device";
+const REMOTE_DEVICE_TOKEN_PATH = "/api/v1/auth/token";
+const REMOTE_DEVICE_CANCEL_PATH = "/api/v1/auth/device/cancel";
+const REMOTE_BROWSER_REFRESH_PATH = "/api/v1/auth/browser/refresh";
+const BROWSER_CSRF_STORAGE_KEY = "forge.browser.csrf";
+const REMOTE_BROWSER_RENEWED_AT_KEY = "forge.browser.renewed-at";
+const REMOTE_BROWSER_RENEWAL_INTERVAL_MS = 12 * 60 * 60 * 1_000;
 const UI_SOURCE_HEADER = "x-forge-source";
 const UI_SOURCE_VALUE = "ui";
 
@@ -323,7 +331,138 @@ function readApiErrorCode(body: unknown) {
 }
 
 function isAuthRequiredResponse(response: Response, body: unknown) {
-  return response.status === 401 && readApiErrorCode(body) === "auth_required";
+  return (
+    response.status === 401 &&
+    ["auth_required", "gateway_authentication_required"].includes(
+      readApiErrorCode(body)
+    )
+  );
+}
+
+function readBrowserCsrfToken() {
+  try {
+    return globalThis.localStorage?.getItem(BROWSER_CSRF_STORAGE_KEY) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberBrowserCsrfToken(value: string) {
+  try {
+    globalThis.localStorage?.setItem(BROWSER_CSRF_STORAGE_KEY, value);
+  } catch {
+    // A restrictive browser storage policy may disable same-origin storage.
+    // The protected request will fail closed instead of persisting the
+    // non-authenticating CSRF value.
+  }
+}
+
+function readRemoteBrowserRenewedAt() {
+  try {
+    const value = Number(
+      globalThis.localStorage?.getItem(REMOTE_BROWSER_RENEWED_AT_KEY)
+    );
+    return Number.isFinite(value) && value > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberRemoteBrowserRenewal(value = Date.now()) {
+  try {
+    globalThis.localStorage?.setItem(
+      REMOTE_BROWSER_RENEWED_AT_KEY,
+      String(value)
+    );
+  } catch {
+    // This value is only a renewal throttle, never an authentication secret.
+  }
+}
+
+function forgetRemoteBrowserRenewal() {
+  try {
+    globalThis.localStorage?.removeItem(REMOTE_BROWSER_RENEWED_AT_KEY);
+  } catch {
+    // A missing marker simply falls back to explicit pairing on expiry.
+  }
+}
+
+function encodeBase64Url(value: ArrayBuffer | Uint8Array) {
+  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/, "");
+}
+
+function isExactLoopbackHttpOrigin(value: string) {
+  try {
+    const parsed = new URL(value);
+    return (
+      parsed.protocol === "http:" &&
+      ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) &&
+      !parsed.username &&
+      !parsed.password &&
+      parsed.pathname === "/" &&
+      !parsed.search &&
+      !parsed.hash &&
+      parsed.origin === value
+    );
+  } catch {
+    return false;
+  }
+}
+
+function validateLocalBrowserHandlerUrl(input: {
+  value: unknown;
+  transactionId: string;
+  browserOrigin: string;
+  browserNonce: string;
+}) {
+  if (typeof input.value !== "string") {
+    return null;
+  }
+  try {
+    const parsed = new URL(input.value);
+    const keys = [...parsed.searchParams.keys()].sort();
+    const apiOrigin = parsed.searchParams.get("apiOrigin");
+    if (
+      parsed.protocol !== "forge:" ||
+      parsed.hostname !== "local-auth" ||
+      parsed.pathname !== "" ||
+      parsed.username ||
+      parsed.password ||
+      parsed.hash ||
+      keys.join(",") !== "apiOrigin,browserNonce,browserOrigin,transactionId" ||
+      !apiOrigin ||
+      !isExactLoopbackHttpOrigin(apiOrigin) ||
+      parsed.searchParams.get("browserOrigin") !== input.browserOrigin ||
+      parsed.searchParams.get("transactionId") !== input.transactionId ||
+      parsed.searchParams.get("browserNonce") !== input.browserNonce
+    ) {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function invokeLocalBrowserOwnerHandler(handlerUrl: string) {
+  if (typeof document === "undefined" || !document.body) {
+    throw new Error("The Forge browser owner handler cannot be opened.");
+  }
+  const link = document.createElement("a");
+  link.href = handlerUrl;
+  link.hidden = true;
+  link.rel = "noreferrer";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 function isDiagnosticsLogPath(path: string) {
@@ -358,14 +497,18 @@ function canReplayRequestBody(init?: RequestInit) {
   return false;
 }
 
-function shouldBootstrapAndRetryOperatorSession(input: {
+function shouldBootstrapAndRetryBrowserSession(input: {
   path: string;
   init?: RequestInit;
   response: Response;
   body: unknown;
 }) {
   return (
-    input.path !== OPERATOR_SESSION_PATH &&
+    input.path !== LOCAL_BROWSER_BEGIN_PATH &&
+    input.path !== LOCAL_BROWSER_EXCHANGE_PATH &&
+    input.path !== REMOTE_DEVICE_BEGIN_PATH &&
+    input.path !== REMOTE_DEVICE_TOKEN_PATH &&
+    input.path !== REMOTE_DEVICE_CANCEL_PATH &&
     isAuthRequiredResponse(input.response, input.body) &&
     canReplayRequestBody(input.init)
   );
@@ -443,6 +586,10 @@ async function sendApiRequest(
 async function fetchApi(path: string, init?: RequestInit) {
   const headers = new Headers(init?.headers);
   headers.set(UI_SOURCE_HEADER, UI_SOURCE_VALUE);
+  const csrfToken = readBrowserCsrfToken();
+  if (csrfToken && !headers.has("x-forge-csrf")) {
+    headers.set("x-forge-csrf", csrfToken);
+  }
 
   if (
     init?.body !== undefined &&
@@ -486,28 +633,682 @@ async function fetchApi(path: string, init?: RequestInit) {
   return response;
 }
 
-let operatorSessionBootstrapPromise: Promise<void> | null = null;
+type PreparedLocalBrowserAuthorization = {
+  transactionId: string;
+  browserOrigin: string;
+  browserNonce: string;
+  handlerUrl: string;
+  privateKey: CryptoKey;
+};
 
-async function bootstrapOperatorSession() {
-  if (!operatorSessionBootstrapPromise) {
-    operatorSessionBootstrapPromise = (async () => {
-      const { response, body } = await sendApiRequest(OPERATOR_SESSION_PATH);
-      if (!response.ok) {
-        publishRequestFailure(OPERATOR_SESSION_PATH, response, body);
-        throw createApiError(OPERATOR_SESSION_PATH, response, body);
-      }
-    })().finally(() => {
-      operatorSessionBootstrapPromise = null;
+let browserSessionBootstrapPromise: Promise<void> | null = null;
+let remoteBrowserRenewalPromise: Promise<boolean> | null = null;
+let browserAuthorizationPreparationPromise:
+  | Promise<PreparedLocalBrowserAuthorization>
+  | null = null;
+let preparedLocalBrowserAuthorization: PreparedLocalBrowserAuthorization | null =
+  null;
+let browserSessionBootstrapBlocked = false;
+
+async function performRemoteBrowserRenewal() {
+  const renewed = await sendApiRequest(REMOTE_BROWSER_REFRESH_PATH, {
+    method: "POST"
+  });
+  if (!renewed.response.ok) {
+    if (renewed.response.status === 401 || renewed.response.status === 403) {
+      forgetRemoteBrowserRenewal();
+      return false;
+    }
+    throw createApiError(
+      REMOTE_BROWSER_REFRESH_PATH,
+      renewed.response,
+      renewed.body
+    );
+  }
+  const body = readResponseObject(renewed.body);
+  if (typeof body?.csrfToken !== "string") {
+    throw new ForgeApiError({
+      status: 502,
+      code: "browser_refresh_response_invalid",
+      message: "Forge returned an invalid paired-browser renewal response.",
+      requestPath: REMOTE_BROWSER_REFRESH_PATH,
+      details: []
     });
   }
-  await operatorSessionBootstrapPromise;
+  rememberBrowserCsrfToken(body.csrfToken);
+  rememberRemoteBrowserRenewal();
+  return true;
+}
+
+async function renewRemoteBrowserSession(force: boolean) {
+  const lastRenewedAt = readRemoteBrowserRenewedAt();
+  if (
+    lastRenewedAt === null ||
+    (!force && Date.now() - lastRenewedAt < REMOTE_BROWSER_RENEWAL_INTERVAL_MS)
+  ) {
+    return false;
+  }
+  if (!remoteBrowserRenewalPromise) {
+    remoteBrowserRenewalPromise = (async () => {
+      const locks = (
+        globalThis.navigator as Navigator & {
+          locks?: {
+            request<T>(
+              name: string,
+              callback: () => Promise<T>
+            ): Promise<T>;
+          };
+        }
+      )?.locks;
+      const renewAfterCrossTabCheck = async () => {
+        const current = readRemoteBrowserRenewedAt();
+        if (
+          !force &&
+          current !== null &&
+          Date.now() - current < REMOTE_BROWSER_RENEWAL_INTERVAL_MS
+        ) {
+          return false;
+        }
+        return performRemoteBrowserRenewal();
+      };
+      return locks
+        ? locks.request("forge-remote-browser-renewal", renewAfterCrossTabCheck)
+        : renewAfterCrossTabCheck();
+    })().finally(() => {
+      remoteBrowserRenewalPromise = null;
+    });
+  }
+  return remoteBrowserRenewalPromise;
+}
+
+function assertLocalBrowserAuthorizationSupport() {
+  if (
+    typeof window === "undefined" ||
+    !isExactLoopbackHttpOrigin(window.location.origin)
+  ) {
+    throw new ForgeApiError({
+      status: 401,
+      code: "browser_pairing_required",
+      message:
+        "This browser is not authorized for Forge. Local loopback browsers can use the owner handler; remote browsers must complete device pairing.",
+      requestPath: LOCAL_BROWSER_BEGIN_PATH,
+      details: []
+    });
+  }
+  if (!globalThis.crypto?.subtle) {
+    throw new ForgeApiError({
+      status: 503,
+      code: "browser_proof_unavailable",
+      message:
+        "This browser cannot create the proof required for secure local authorization.",
+      requestPath: LOCAL_BROWSER_BEGIN_PATH,
+      details: []
+    });
+  }
+}
+
+async function prepareLocalBrowserAuthorizationTransaction() {
+  assertLocalBrowserAuthorizationSupport();
+  if (preparedLocalBrowserAuthorization) {
+    return preparedLocalBrowserAuthorization;
+  }
+  if (!browserAuthorizationPreparationPromise) {
+    browserAuthorizationPreparationPromise = (async () => {
+      const browserOrigin = window.location.origin;
+      const browserNonceBytes = new Uint8Array(32);
+      globalThis.crypto.getRandomValues(browserNonceBytes);
+      const browserNonce = encodeBase64Url(browserNonceBytes);
+      const browserKeys = await globalThis.crypto.subtle.generateKey(
+        {
+          name: "ECDSA",
+          namedCurve: "P-256"
+        },
+        true,
+        ["sign", "verify"]
+      );
+      const browserPublicKey = await globalThis.crypto.subtle.exportKey(
+        "jwk",
+        browserKeys.publicKey
+      );
+      const begin = await sendApiRequest(LOCAL_BROWSER_BEGIN_PATH, {
+        method: "POST",
+        body: JSON.stringify({
+          browserOrigin,
+          browserNonce,
+          browserPublicKey
+        })
+      });
+      if (!begin.response.ok) {
+        publishRequestFailure(
+          LOCAL_BROWSER_BEGIN_PATH,
+          begin.response,
+          begin.body
+        );
+        throw createApiError(
+          LOCAL_BROWSER_BEGIN_PATH,
+          begin.response,
+          begin.body
+        );
+      }
+      const transaction = readResponseObject(begin.body);
+      const transactionId =
+        typeof transaction?.transactionId === "string"
+          ? transaction.transactionId
+          : "";
+      if (!/^[A-Za-z0-9._-]{16,160}$/.test(transactionId)) {
+        throw new ForgeApiError({
+          status: 502,
+          code: "local_browser_transaction_invalid",
+          message:
+            "Forge returned an invalid local browser authorization transaction.",
+          requestPath: LOCAL_BROWSER_BEGIN_PATH,
+          details: []
+        });
+      }
+      const handlerUrl = validateLocalBrowserHandlerUrl({
+        value: transaction?.handlerUrl,
+        transactionId,
+        browserOrigin,
+        browserNonce
+      });
+      if (!handlerUrl) {
+        throw new ForgeApiError({
+          status: 502,
+          code: "local_browser_handler_invalid",
+          message:
+            "Forge returned an invalid local browser owner-handler request.",
+          requestPath: LOCAL_BROWSER_BEGIN_PATH,
+          details: []
+        });
+      }
+      const prepared = {
+        transactionId,
+        browserOrigin,
+        browserNonce,
+        handlerUrl,
+        privateKey: browserKeys.privateKey
+      };
+      preparedLocalBrowserAuthorization = prepared;
+      return prepared;
+    })().finally(() => {
+      browserAuthorizationPreparationPromise = null;
+    });
+  }
+  return browserAuthorizationPreparationPromise;
+}
+
+async function exchangePreparedLocalBrowserAuthorization() {
+  const prepared = preparedLocalBrowserAuthorization;
+  if (!prepared) {
+    throw new ForgeApiError({
+      status: 409,
+      code: "local_browser_transaction_missing",
+      message: "Prepare local browser authorization before approving it.",
+      requestPath: LOCAL_BROWSER_EXCHANGE_PATH,
+      details: []
+    });
+  }
+  const proofPayload = new TextEncoder().encode(
+    [
+      "forge-local-browser-exchange/1",
+      prepared.transactionId,
+      prepared.browserOrigin,
+      prepared.browserNonce
+    ].join("\n")
+  );
+  const browserProof = encodeBase64Url(
+    await globalThis.crypto.subtle.sign(
+      {
+        name: "ECDSA",
+        hash: "SHA-256"
+      },
+      prepared.privateKey,
+      proofPayload
+    )
+  );
+  const { response, body } = await sendApiRequest(
+    LOCAL_BROWSER_EXCHANGE_PATH,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        transactionId: prepared.transactionId,
+        browserOrigin: prepared.browserOrigin,
+        browserNonce: prepared.browserNonce,
+        browserProof
+      })
+    }
+  );
+  if (!response.ok) {
+    preparedLocalBrowserAuthorization = null;
+    publishRequestFailure(LOCAL_BROWSER_EXCHANGE_PATH, response, body);
+    throw createApiError(LOCAL_BROWSER_EXCHANGE_PATH, response, body);
+  }
+  const parsed = readResponseObject(body);
+  if (typeof parsed?.csrfToken !== "string") {
+    preparedLocalBrowserAuthorization = null;
+    throw new ForgeApiError({
+      status: 502,
+      code: "local_browser_exchange_invalid",
+      message: "Forge returned an invalid browser authorization response.",
+      requestPath: LOCAL_BROWSER_EXCHANGE_PATH,
+      details: []
+    });
+  }
+  rememberBrowserCsrfToken(parsed.csrfToken);
+  preparedLocalBrowserAuthorization = null;
+  browserSessionBootstrapBlocked = false;
+}
+
+export function getPreparedLocalBrowserAuthorizationUrl() {
+  return preparedLocalBrowserAuthorization?.handlerUrl ?? null;
+}
+
+export async function prepareLocalBrowserAuthorization() {
+  const prepared = await prepareLocalBrowserAuthorizationTransaction();
+  return prepared.handlerUrl;
+}
+
+export async function completePreparedLocalBrowserAuthorization() {
+  await exchangePreparedLocalBrowserAuthorization();
+}
+
+export function retryLocalBrowserAuthorization() {
+  browserSessionBootstrapBlocked = false;
+}
+
+type RemoteBrowserPairing = {
+  requestId: string;
+  deviceCode: string;
+  userCode: string;
+  verificationUri: string;
+  expiresAt: number;
+  intervalSeconds: number;
+  privateKey: CryptoKey;
+  publicJwk: JsonWebKey;
+};
+
+function randomProofId(prefix: string) {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return `${prefix}-${globalThis.crypto.randomUUID()}`;
+  }
+  const bytes = new Uint8Array(24);
+  globalThis.crypto.getRandomValues(bytes);
+  return `${prefix}-${encodeBase64Url(bytes)}`;
+}
+
+async function p256Thumbprint(publicJwk: JsonWebKey) {
+  if (
+    publicJwk.kty !== "EC" ||
+    publicJwk.crv !== "P-256" ||
+    typeof publicJwk.x !== "string" ||
+    typeof publicJwk.y !== "string"
+  ) {
+    throw new Error("Forge browser pairing produced an invalid public key.");
+  }
+  const canonical = JSON.stringify({
+    crv: publicJwk.crv,
+    kty: publicJwk.kty,
+    x: publicJwk.x,
+    y: publicJwk.y
+  });
+  return encodeBase64Url(
+    await globalThis.crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(canonical)
+    )
+  );
+}
+
+async function signPairingProof(
+  pairing: RemoteBrowserPairing,
+  operation: "poll" | "cancel"
+) {
+  const encodedHeader = encodeBase64Url(
+    new TextEncoder().encode(
+      JSON.stringify({
+        alg: "ES256",
+        typ: "forge-pairing+jwt",
+        jwk: pairing.publicJwk
+      })
+    )
+  );
+  const encodedPayload = encodeBase64Url(
+    new TextEncoder().encode(
+      JSON.stringify({
+        request_id: pairing.requestId,
+        operation,
+        iat: Math.floor(Date.now() / 1_000),
+        jti: randomProofId("browser-pairing")
+      })
+    )
+  );
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+  const signature = await globalThis.crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" },
+    pairing.privateKey,
+    new TextEncoder().encode(signingInput)
+  );
+  return `${signingInput}.${encodeBase64Url(signature)}`;
+}
+
+export async function beginRemoteBrowserPairing() {
+  if (
+    typeof window === "undefined" ||
+    !globalThis.crypto?.subtle ||
+    window.location.protocol !== "https:"
+  ) {
+    throw new ForgeApiError({
+      status: 400,
+      code: "remote_browser_https_required",
+      message: "Remote Forge browser pairing requires HTTPS.",
+      requestPath: REMOTE_DEVICE_BEGIN_PATH,
+      details: []
+    });
+  }
+  const keys = await globalThis.crypto.subtle.generateKey(
+    { name: "ECDSA", namedCurve: "P-256" },
+    true,
+    ["sign", "verify"]
+  );
+  const publicJwk = await globalThis.crypto.subtle.exportKey(
+    "jwk",
+    keys.publicKey
+  );
+  const started = await sendApiRequest(REMOTE_DEVICE_BEGIN_PATH, {
+    method: "POST",
+    body: JSON.stringify({
+      clientName: `Forge browser on ${navigator.platform || "this device"}`,
+      clientType: "browser",
+      clientKeyThumbprint: await p256Thumbprint(publicJwk),
+      requestedScopes: ["read", "write"],
+      requestedProfile: "trusted_personal_assistant"
+    })
+  });
+  if (!started.response.ok) {
+    throw createApiError(
+      REMOTE_DEVICE_BEGIN_PATH,
+      started.response,
+      started.body
+    );
+  }
+  const body = readResponseObject(started.body);
+  if (
+    typeof body?.requestId !== "string" ||
+    typeof body.deviceCode !== "string" ||
+    typeof body.userCode !== "string" ||
+    typeof body.verificationUri !== "string" ||
+    typeof body.expiresIn !== "number" ||
+    typeof body.interval !== "number"
+  ) {
+    throw new ForgeApiError({
+      status: 502,
+      code: "remote_pairing_response_invalid",
+      message: "Forge returned an invalid remote pairing response.",
+      requestPath: REMOTE_DEVICE_BEGIN_PATH,
+      details: []
+    });
+  }
+  return {
+    requestId: body.requestId,
+    deviceCode: body.deviceCode,
+    userCode: body.userCode,
+    verificationUri: body.verificationUri,
+    expiresAt: Date.now() + body.expiresIn * 1_000,
+    intervalSeconds: Math.max(5, body.interval),
+    privateKey: keys.privateKey,
+    publicJwk
+  } satisfies RemoteBrowserPairing;
+}
+
+export async function pollRemoteBrowserPairing(
+  pairing: RemoteBrowserPairing
+) {
+  if (Date.now() >= pairing.expiresAt) {
+    return { status: "expired_token" as const };
+  }
+  const polled = await sendApiRequest(REMOTE_DEVICE_TOKEN_PATH, {
+    method: "POST",
+    body: JSON.stringify({
+      grantType: "device_code",
+      deviceCode: pairing.deviceCode,
+      clientProof: await signPairingProof(pairing, "poll")
+    })
+  });
+  const body = readResponseObject(polled.body);
+  if (polled.response.ok) {
+    if (typeof body?.csrfToken !== "string") {
+      throw new ForgeApiError({
+        status: 502,
+        code: "remote_pairing_exchange_invalid",
+        message: "Forge returned an invalid browser session exchange.",
+        requestPath: REMOTE_DEVICE_TOKEN_PATH,
+        details: []
+      });
+    }
+    rememberBrowserCsrfToken(body.csrfToken);
+    rememberRemoteBrowserRenewal();
+    return { status: "approved" as const };
+  }
+  if (
+    body?.status === "authorization_pending" ||
+    body?.status === "slow_down" ||
+    body?.status === "access_denied" ||
+    body?.status === "expired_token"
+  ) {
+    const intervalSeconds =
+      typeof body.intervalSeconds === "number"
+        ? Math.max(5, body.intervalSeconds)
+        : pairing.intervalSeconds;
+    return { status: body.status, intervalSeconds };
+  }
+  throw createApiError(
+    REMOTE_DEVICE_TOKEN_PATH,
+    polled.response,
+    polled.body
+  );
+}
+
+export async function cancelRemoteBrowserPairing(
+  pairing: RemoteBrowserPairing
+) {
+  const cancelled = await sendApiRequest(REMOTE_DEVICE_CANCEL_PATH, {
+    method: "POST",
+    body: JSON.stringify({
+      deviceCode: pairing.deviceCode,
+      clientProof: await signPairingProof(pairing, "cancel")
+    })
+  });
+  if (!cancelled.response.ok) {
+    throw createApiError(
+      REMOTE_DEVICE_CANCEL_PATH,
+      cancelled.response,
+      cancelled.body
+    );
+  }
+}
+
+export type RemotePairingReview = {
+  requestId: string;
+  clientName: string;
+  clientType: "api" | "browser";
+  audience: string;
+  requestedScopes: string[];
+  requestedProfile:
+    | "viewer"
+    | "trusted_personal_assistant"
+    | "executor"
+    | "operator"
+    | "custom";
+  expiresAt: string;
+  installationFingerprint: string;
+  endpoint: {
+    origin: string | null;
+    fingerprint: string;
+  };
+  boundaries: {
+    resources: {
+      profile: string;
+      scopes: string[];
+      enforcement: "profile_scopes_and_route_policy";
+    };
+    egress: {
+      requestedScopes: string[];
+      enforcement: "capability_policy_and_destination_validation";
+      default: "denied_unless_capability_explicitly_allows";
+    };
+  };
+};
+
+export function reviewRemotePairing(userCode: string) {
+  return request<RemotePairingReview>("/api/v1/auth/device/review", {
+    method: "POST",
+    body: JSON.stringify({ userCode })
+  });
+}
+
+export function approveRemotePairing(
+  userCode: string,
+  review: RemotePairingReview
+) {
+  return request("/api/v1/auth/device/approve", {
+    method: "POST",
+    body: JSON.stringify({
+      userCode,
+      scopes: review.requestedScopes,
+      profile: review.requestedProfile
+    })
+  });
+}
+
+export type PrivilegedPairingStepUpOptions = {
+  challengeId: string;
+  ceremony: "register" | "authenticate";
+  options: unknown;
+  review: RemotePairingReview;
+};
+
+export function beginPrivilegedPairingStepUp(
+  userCode: string,
+  credentialLabel = "Forge owner passkey"
+) {
+  return request<PrivilegedPairingStepUpOptions>(
+    "/api/v1/auth/device/step-up/options",
+    {
+      method: "POST",
+      body: JSON.stringify({ userCode, credentialLabel })
+    }
+  );
+}
+
+export function completePrivilegedPairingStepUp(input: {
+  userCode: string;
+  review: RemotePairingReview;
+  challengeId: string;
+  response: unknown;
+  credentialLabel?: string;
+}) {
+  return request("/api/v1/auth/device/step-up/verify", {
+    method: "POST",
+    body: JSON.stringify({
+      userCode: input.userCode,
+      requestId: input.review.requestId,
+      scopes: input.review.requestedScopes,
+      profile: input.review.requestedProfile,
+      challengeId: input.challengeId,
+      response: input.response,
+      credentialLabel: input.credentialLabel ?? "Forge owner passkey"
+    })
+  });
+}
+
+export function denyRemotePairing(userCode: string) {
+  return request("/api/v1/auth/device/deny", {
+    method: "POST",
+    body: JSON.stringify({ userCode })
+  });
+}
+
+export type RemoteClientRegistration = {
+  id: string;
+  clientName: string;
+  clientType: "api" | "browser";
+  audience: string;
+  profile: RemotePairingReview["requestedProfile"];
+  scopes: string[];
+  createdAt: string;
+  revokedAt: string | null;
+};
+
+export function listRemoteClients() {
+  return request<{ clients: RemoteClientRegistration[] }>(
+    "/api/v1/auth/clients"
+  );
+}
+
+export function revokeRemoteClient(clientId: string) {
+  return request<{ revoked: boolean }>(
+    `/api/v1/auth/clients/${encodeURIComponent(clientId)}/revoke`,
+    { method: "POST" }
+  );
+}
+
+async function bootstrapBrowserSession() {
+  if (browserSessionBootstrapBlocked) {
+    throw new ForgeApiError({
+      status: 401,
+      code: "browser_pairing_required",
+      message:
+        "This browser is not authorized for Forge. Use the visible local authorization control, or complete remote device pairing.",
+      requestPath: LOCAL_BROWSER_BEGIN_PATH,
+      details: []
+    });
+  }
+  if (!browserSessionBootstrapPromise) {
+    browserSessionBootstrapPromise = (async () => {
+      const prepared = await prepareLocalBrowserAuthorizationTransaction();
+      invokeLocalBrowserOwnerHandler(prepared.handlerUrl);
+      try {
+        await exchangePreparedLocalBrowserAuthorization();
+      } catch (error) {
+        try {
+          await prepareLocalBrowserAuthorizationTransaction();
+        } catch {
+          // The original exchange error is more useful. A failed replacement
+          // staging attempt does not launch or retry the owner handler.
+        }
+        throw error;
+      }
+    })()
+      .catch((error) => {
+        browserSessionBootstrapBlocked = true;
+        throw error;
+      })
+      .finally(() => {
+        browserSessionBootstrapPromise = null;
+      });
+  }
+  await browserSessionBootstrapPromise;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const remoteRenewalEligible =
+    path !== REMOTE_BROWSER_REFRESH_PATH &&
+    path !== REMOTE_DEVICE_BEGIN_PATH &&
+    path !== REMOTE_DEVICE_TOKEN_PATH &&
+    path !== REMOTE_DEVICE_CANCEL_PATH;
+  if (remoteRenewalEligible) {
+    await renewRemoteBrowserSession(false);
+  }
   let { response, body } = await sendApiRequest(path, init);
 
-  if (shouldBootstrapAndRetryOperatorSession({ path, init, response, body })) {
-    await bootstrapOperatorSession();
+  if (shouldBootstrapAndRetryBrowserSession({ path, init, response, body })) {
+    const renewed =
+      remoteRenewalEligible && readRemoteBrowserRenewedAt() !== null
+        ? await renewRemoteBrowserSession(true)
+        : false;
+    if (!renewed) {
+      await bootstrapBrowserSession();
+    }
     ({ response, body } = await sendApiRequest(path, init));
   }
 
@@ -528,8 +1329,8 @@ async function requestBlob(
   if (!response.ok) {
     body = await parseResponseBody(response);
   }
-  if (shouldBootstrapAndRetryOperatorSession({ path, init, response, body })) {
-    await bootstrapOperatorSession();
+  if (shouldBootstrapAndRetryBrowserSession({ path, init, response, body })) {
+    await bootstrapBrowserSession();
     response = await fetchApi(path, init);
     body = response.ok ? null : await parseResponseBody(response);
   }
@@ -1949,6 +2750,10 @@ function uploadArtifactWithProgress(
     xhr.withCredentials = true;
     xhr.setRequestHeader("content-type", "application/json");
     xhr.setRequestHeader(UI_SOURCE_HEADER, UI_SOURCE_VALUE);
+    const csrfToken = readBrowserCsrfToken();
+    if (csrfToken) {
+      xhr.setRequestHeader("x-forge-csrf", csrfToken);
+    }
     const idempotencyKey = options.idempotencyKey ?? input.idempotencyKey;
     if (idempotencyKey) {
       xhr.setRequestHeader("Idempotency-Key", idempotencyKey);
@@ -1985,7 +2790,7 @@ function uploadArtifactWithProgress(
       });
       if (
         retryWithFreshSession &&
-        shouldBootstrapAndRetryOperatorSession({
+        shouldBootstrapAndRetryBrowserSession({
           path,
           init: { method: "POST", body: JSON.stringify(input) },
           response,
@@ -1993,7 +2798,7 @@ function uploadArtifactWithProgress(
         })
       ) {
         settled = true;
-        void bootstrapOperatorSession()
+        void bootstrapBrowserSession()
           .then(() => {
             if (options.signal?.aborted) {
               throw artifactUploadAbortError();

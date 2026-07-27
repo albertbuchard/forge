@@ -3,22 +3,78 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { buildServer } from "./app.js";
+import type { InjectOptions } from "light-my-request";
+import { buildServer as buildForgeServer } from "./app.js";
+import type { ApplicationSecurityRuntime } from "./security/application-security-runtime.js";
+
+const testOperatorAuthority = new WeakMap<
+  Awaited<ReturnType<typeof buildForgeServer>>,
+  { cookie: string; csrf: string }
+>();
+
+async function buildServer(
+  options: Parameters<typeof buildForgeServer>[0] = {}
+) {
+  const captured: { security?: ApplicationSecurityRuntime } = {};
+  const app = await buildForgeServer({
+    ...options,
+    onSecurityRuntimeReady(runtime) {
+      captured.security = runtime;
+      options.onSecurityRuntimeReady?.(runtime);
+    }
+  });
+  const security = captured.security;
+  assert.ok(security);
+  const ownerEpoch = security.store.readOwnerSecurityEpoch("user_operator");
+  assert.ok(ownerEpoch);
+  const issued = security.browserSessions.create({
+    kind: "operator_session",
+    subjectId: "user_operator",
+    ownerId: "user_operator",
+    clientId: null,
+    installationId: null,
+    audience: security.audience,
+    scopes: ["*"],
+    profile: "operator",
+    ownerSecurityEpoch: ownerEpoch,
+    clientSecurityEpoch: null,
+    authenticatedAt: new Date().toISOString()
+  });
+  const authority = {
+    cookie: `forge_session=${encodeURIComponent(issued.sessionToken)}`,
+    csrf: issued.csrfToken
+  };
+  testOperatorAuthority.set(app, authority);
+  const inject = app.inject.bind(app);
+  app.inject = ((request: string | InjectOptions) => {
+    if (typeof request === "string") {
+      return inject(request);
+    }
+    const headers = Object.fromEntries(
+      Object.entries(request.headers ?? {}).map(([name, value]) => [
+        name,
+        String(value)
+      ])
+    );
+    if (
+      headers.cookie === authority.cookie &&
+      !["GET", "HEAD", "OPTIONS"].includes(
+        String(request.method ?? "GET").toUpperCase()
+      )
+    ) {
+      headers["x-forge-csrf"] = authority.csrf;
+    }
+    return inject({ ...request, headers });
+  }) as typeof app.inject;
+  return app;
+}
 
 async function issueOperatorSessionCookie(
   app: Awaited<ReturnType<typeof buildServer>>
 ) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: {
-      host: "127.0.0.1:4317"
-    }
-  });
-  assert.equal(response.statusCode, 200);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
+  const authority = testOperatorAuthority.get(app);
+  assert.ok(authority);
+  return authority.cookie;
 }
 
 test("workbench flows can be created, run, and expose published outputs", async () => {
@@ -569,7 +625,7 @@ test("workbench mock chat flows keep conversation continuity and validate requir
     assert.equal(missingInputResponse.statusCode, 500);
     assert.equal(
       (missingInputResponse.json() as { error: string }).error,
-      'Flow input "Topic" is required.'
+      "Forge could not complete the request."
     );
 
     const firstChatResponse = await app.inject({

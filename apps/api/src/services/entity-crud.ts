@@ -84,7 +84,8 @@ import {
 import {
   clearEntityOwner,
   filterOwnedEntities,
-  getEntityOwnerId
+  getEntityOwnerId,
+  setEntityOwner
 } from "../repositories/entity-ownership.js";
 import {
   deleteEntityLinksForEntity,
@@ -1671,12 +1672,200 @@ export function getCrudEntityCapabilityMatrix() {
     routeBase: capability.routeBase,
     pluginExposed: true,
     deleteMode: capability.deleteMode,
-    inBin: capability.inBin
+    inBin: capability.inBin,
+    minimalCreatePayload: buildMinimalExamplePayload(
+      getCreateSchema(capability.entityType)
+    )
   }));
 }
 
 function getCapability(entityType: CrudEntityType) {
   return CRUD_ENTITY_CAPABILITIES[entityType];
+}
+
+export const CRUD_OWNERSHIP_AUTHORIZATION_MATRIX = Object.freeze(
+  (Object.keys(CRUD_ENTITY_CAPABILITIES) as CrudEntityType[]).map(
+    (entityType) =>
+      Object.freeze({
+        entityType,
+        routeBase: CRUD_ENTITY_CAPABILITIES[entityType].routeBase,
+        collectionKey:
+          (
+            {
+              goal: "goals",
+              project: "projects",
+              task: "tasks",
+              strategy: "strategies",
+              habit: "habits",
+              tag: "tags",
+              note: "notes",
+              person: "people",
+              insight: "insights",
+              calendar_event: "events",
+              work_block_template: "templates",
+              task_timebox: "timeboxes",
+              artifact: "artifacts",
+              sleep_session: "sleep",
+              psyche_value: "values",
+              behavior_pattern: "patterns",
+              behavior: "behaviors",
+              belief_entry: "beliefs",
+              mode_profile: "modes",
+              mode_guide_session: "modeGuides",
+              event_type: "eventTypes",
+              emotion_definition: "emotions",
+              trigger_report: "reports",
+              preference_catalog: "catalogs",
+              preference_catalog_item: "items",
+              preference_context: "contexts",
+              preference_item: "items",
+              questionnaire_instrument: "questionnaires"
+            } as Partial<Record<CrudEntityType, string>>
+          )[entityType] ?? null,
+        actions: Object.freeze([
+          ...(entityType === "artifact" ? [] : (["create"] as const)),
+          "read",
+          "update",
+          "delete",
+          ...(CRUD_ENTITY_CAPABILITIES[entityType].inBin
+            ? (["restore"] as const)
+            : []),
+          "search"
+        ]),
+        boundary: "entity_owner_and_scope_policy" as const
+      })
+  )
+);
+
+function stringValues(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : [];
+}
+
+function linkedEntityIds(
+  entity: Record<string, unknown>,
+  entityType: string
+) {
+  if (!Array.isArray(entity.links)) {
+    return [];
+  }
+  return entity.links.flatMap((link) => {
+    if (
+      !link ||
+      typeof link !== "object" ||
+      Array.isArray(link) ||
+      (link as Record<string, unknown>).entityType !== entityType &&
+        (link as Record<string, unknown>).targetEntityType !== entityType
+    ) {
+      return [];
+    }
+    const entityId =
+      typeof (link as Record<string, unknown>).entityId === "string"
+        ? ((link as Record<string, unknown>).entityId as string)
+        : typeof (link as Record<string, unknown>).targetEntityId === "string"
+          ? ((link as Record<string, unknown>).targetEntityId as string)
+          : null;
+    return entityId ? [entityId] : [];
+  });
+}
+
+export function entityMatchesCrudScope(
+  entityType: CrudEntityType,
+  entity: Record<string, unknown> & { id: string },
+  context: Pick<CrudContext, "userIds" | "projectIds" | "tagIds">
+) {
+  const globallyVisibleSystemTaxonomy =
+    (entityType === "event_type" ||
+      entityType === "emotion_definition") &&
+    entity.system === true;
+  if (
+    context.userIds?.length &&
+    !globallyVisibleSystemTaxonomy &&
+    filterOwnedEntities(entityType, [entity], context.userIds).length === 0
+  ) {
+    return false;
+  }
+
+  if (context.projectIds?.length) {
+    const projectIds = new Set(context.projectIds);
+    const linkedProjectIds = [
+      ...(entityType === "project" ? [entity.id] : []),
+      ...(typeof entity.projectId === "string" ? [entity.projectId] : []),
+      ...stringValues(entity.projectIds),
+      ...stringValues(entity.linkedProjectIds),
+      ...linkedEntityIds(entity, "project")
+    ];
+    if (
+      entityType === "goal" &&
+      listProjects().some(
+        (project) => project.goalId === entity.id && projectIds.has(project.id)
+      )
+    ) {
+      linkedProjectIds.push(...context.projectIds);
+    }
+    if (!linkedProjectIds.some((projectId) => projectIds.has(projectId))) {
+      return false;
+    }
+  }
+
+  if (context.tagIds?.length) {
+    const tagIds = new Set(context.tagIds);
+    const linkedTagIds = [
+      ...(entityType === "tag" ? [entity.id] : []),
+      ...stringValues(entity.tagIds),
+      ...stringValues(entity.linkedTagIds),
+      ...linkedEntityIds(entity, "tag")
+    ];
+    if (!linkedTagIds.some((tagId) => tagIds.has(tagId))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function getScopedCrudEntity(
+  entityType: CrudEntityType,
+  id: string,
+  context: Pick<CrudContext, "userIds" | "projectIds" | "tagIds">
+) {
+  const entity = getCapability(entityType).get(id) as
+    | (Record<string, unknown> & { id: string })
+    | undefined;
+  return entity && entityMatchesCrudScope(entityType, entity, context)
+    ? entity
+    : undefined;
+}
+
+export function resolveCrudRouteOwnership(routePath: string) {
+  const matches = CRUD_OWNERSHIP_AUTHORIZATION_MATRIX.filter(
+    (entry) =>
+      entry.routeBase !== "/api/v1/entities" &&
+      (routePath === entry.routeBase ||
+        routePath.startsWith(`${entry.routeBase}/`))
+  ).sort((left, right) => right.routeBase.length - left.routeBase.length);
+  return matches[0] ?? null;
+}
+
+export function crudEntityIsVisible(
+  entityType: CrudEntityType,
+  id: string,
+  context: Pick<CrudContext, "userIds" | "projectIds" | "tagIds">
+) {
+  if (
+    entityType === "artifact" &&
+    !canAccessArtifact(id, { source: "system", ...context })
+  ) {
+    return false;
+  }
+  if (getScopedCrudEntity(entityType, id, context)) {
+    return true;
+  }
+  const deleted = getDeletedEntityRecord(entityType, id);
+  return Boolean(
+    deleted &&
+    entityMatchesCrudScope(entityType, { ...deleted.snapshot, id }, context)
+  );
 }
 
 export function getEntityById(
@@ -2410,6 +2599,25 @@ export function deleteEntity(
 ) {
   const capability = getCapability(entityType);
   const mode = options.mode ?? "soft";
+  const live = (
+    entityType === "task_timebox"
+      ? getTaskTimeboxByIdIncludingPendingDeletion(id)
+      : capability.get(id)
+  ) as (Record<string, unknown> & { id: string }) | undefined;
+  const deletedForScope = live ? null : getDeletedEntityRecord(entityType, id);
+  const liveOrDeleted =
+    live ??
+    (deletedForScope
+      ? ({ ...deletedForScope.snapshot, id } as Record<string, unknown> & {
+          id: string;
+        })
+      : undefined);
+  if (
+    !liveOrDeleted ||
+    !entityMatchesCrudScope(entityType, liveOrDeleted, context)
+  ) {
+    return undefined;
+  }
   if (entityType === "artifact" && !canAccessArtifact(id, context)) {
     return undefined;
   }
@@ -2519,6 +2727,17 @@ export function restoreEntity(
   id: string,
   context: CrudContext
 ) {
+  const deletedForScope = getDeletedEntityRecord(entityType, id);
+  if (
+    !deletedForScope ||
+    !entityMatchesCrudScope(
+      entityType,
+      { ...deletedForScope.snapshot, id },
+      context
+    )
+  ) {
+    return undefined;
+  }
   if (entityType === "artifact" && !canAccessArtifact(id, context)) {
     return undefined;
   }
@@ -2569,10 +2788,26 @@ export function createEntities(
 ): { results: EntityOperationResult[] } {
   return executeBatchOperation(input.operations, input.atomic, (entry) => {
     try {
-      const entity = getCapability(entry.entityType).create(
-        parseCreateInput(entry.entityType, entry.data),
-        { ...context, idempotencyKey: entry.idempotencyKey ?? null }
-      );
+      const entity = runInTransaction(() => {
+        const created = getCapability(entry.entityType).create(
+          parseCreateInput(entry.entityType, entry.data),
+          { ...context, idempotencyKey: entry.idempotencyKey ?? null }
+        ) as Record<string, unknown> & { id: string };
+        if (
+          !getEntityOwnerId(entry.entityType, created.id) &&
+          context.userIds?.length === 1
+        ) {
+          setEntityOwner(entry.entityType, created.id, context.userIds[0]);
+        }
+        if (!entityMatchesCrudScope(entry.entityType, created, context)) {
+          throw new HttpError(
+            403,
+            "entity_scope_forbidden",
+            "The created entity is outside this credential's owner scope."
+          );
+        }
+        return created;
+      });
       return {
         ok: true,
         entityType: entry.entityType,
@@ -2616,11 +2851,27 @@ export function updateEntities(
 ): { results: EntityOperationResult[] } {
   return executeBatchOperation(input.operations, input.atomic, (entry) => {
     try {
-      const entity = getCapability(entry.entityType).update(
-        entry.id,
-        parseUpdatePatch(entry.entityType, entry.patch),
-        context
-      );
+      const entity = runInTransaction(() => {
+        if (!getScopedCrudEntity(entry.entityType, entry.id, context)) {
+          return undefined;
+        }
+        const updated = getCapability(entry.entityType).update(
+          entry.id,
+          parseUpdatePatch(entry.entityType, entry.patch),
+          context
+        ) as (Record<string, unknown> & { id: string }) | undefined;
+        if (
+          updated &&
+          !entityMatchesCrudScope(entry.entityType, updated, context)
+        ) {
+          throw new HttpError(
+            403,
+            "entity_scope_forbidden",
+            "The update would move the entity outside this credential's owner scope."
+          );
+        }
+        return updated;
+      });
       if (!entity) {
         return {
           ok: false,
@@ -2819,6 +3070,19 @@ export function searchEntities(
           candidates as Array<Record<string, unknown> & { id: string }>,
           search.userIds
         )
+          .filter((entity) =>
+            entityMatchesCrudScope(entityType, entity, {
+              userIds: search.userIds,
+              projectIds:
+                entityType === "artifact"
+                  ? context.artifactScope?.projectIds
+                  : context.taskScope?.projectIds,
+              tagIds:
+                entityType === "artifact"
+                  ? context.artifactScope?.tagIds
+                  : context.taskScope?.tagIds
+            })
+          )
           .map((entity) =>
             context.transformEntityForRead
               ? context.transformEntityForRead(entityType, entity)
@@ -2853,6 +3117,23 @@ export function searchEntities(
       const deletedMatches = search.includeDeleted
         ? deletedForSearch
             .filter((item) => entityTypes.includes(item.entityType))
+            .filter((item) =>
+              entityMatchesCrudScope(
+                item.entityType,
+                { ...item.snapshot, id: item.entityId },
+                {
+                  userIds: search.userIds,
+                  projectIds:
+                    item.entityType === "artifact"
+                      ? context.artifactScope?.projectIds
+                      : context.taskScope?.projectIds,
+                  tagIds:
+                    item.entityType === "artifact"
+                      ? context.artifactScope?.tagIds
+                      : context.taskScope?.tagIds
+                }
+              )
+            )
             .filter(
               (item) =>
                 item.entityType !== "task" ||

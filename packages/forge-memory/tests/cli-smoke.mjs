@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -7,6 +8,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 const packageRoot = path.resolve(import.meta.dirname, "..");
+const forgeRepoRoot = path.resolve(packageRoot, "../..");
 const bin = path.join(packageRoot, "bin", "forge-memory.mjs");
 const packageVersion = JSON.parse(
   fs.readFileSync(path.join(packageRoot, "package.json"), "utf8")
@@ -30,6 +32,15 @@ if (
 ) {
   throw new Error(
     "Forge Memory dev Vite must proxy to the configured API port"
+  );
+}
+if (
+  !cliSource.includes(
+    "environment.FORGE_CANONICAL_EXTERNAL_ORIGIN ="
+  )
+) {
+  throw new Error(
+    "Forge Memory must pass its persisted canonical HTTPS origin only to the managed runtime"
   );
 }
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "forge-memory-home-"));
@@ -78,10 +89,13 @@ fs.writeFileSync(
 if (process.platform !== "win32") fs.chmodSync(fakeTailscaleBin, 0o755);
 const env = {
   ...process.env,
+  NODE_ENV: "test",
   HOME: tempHome,
   USERPROFILE: tempHome,
   PATH: `${fakeBinDir}${path.delimiter}${process.env.PATH ?? ""}`,
   FORGE_COMPANION_IROH_BIN: fakeIrohBin,
+  FORGE_API_TOKEN: "forge-memory-cli-smoke-token",
+  FORGE_MEMORY_TEST_DISABLE_MACOS_BROWSER_HANDLER: "1",
   FORGE_MEMORY_SKIP_TAILSCALE_AUTODETECT: "1"
 };
 
@@ -210,11 +224,22 @@ function writeSmokeConfig(overrides = {}) {
   return JSON.parse(fs.readFileSync(configPath, "utf8"));
 }
 
+function writePairingSmokeConfig(port) {
+  return writeSmokeConfig({
+    mode: "dev",
+    repo: forgeRepoRoot,
+    port,
+    dataRoot,
+    adapters: [],
+    canonicalExternalOrigin: null
+  });
+}
+
 function countText(source, pattern) {
   return source.match(new RegExp(pattern, "gm"))?.length ?? 0;
 }
 
-async function withFakeForgeServer(handler, callback) {
+async function withFakeForgeServer(handler, callback, options = {}) {
   const requests = [];
   const server = http.createServer(async (request, response) => {
     let body = "";
@@ -229,7 +254,16 @@ async function withFakeForgeServer(handler, callback) {
         headers: request.headers,
         body
       });
-      const result = await handler(request, body);
+      const result =
+        request.url === "/api/health" && options.forgeLiveness !== false
+          ? {
+              body: {
+                ok: true,
+                app: "forge",
+                security: "credential-required"
+              }
+            }
+          : await handler(request, body);
       response.statusCode = result.statusCode ?? 200;
       for (const [key, value] of Object.entries(result.headers ?? {})) {
         response.setHeader(key, value);
@@ -263,7 +297,8 @@ async function withPlainServer(callback) {
 
 function forgeHealthResponse({
   packageName = runtimePackageName,
-  runtimeVersion = packageVersion
+  runtimeVersion = packageVersion,
+  pid = null
 } = {}) {
   return {
     app: "forge",
@@ -273,7 +308,8 @@ function forgeHealthResponse({
       basePath: "/forge/",
       storageRoot: dataRoot,
       packageName,
-      packageVersion: runtimeVersion
+      packageVersion: runtimeVersion,
+      ...(Number.isInteger(pid) && pid > 0 ? { pid } : {})
     }
   };
 }
@@ -385,6 +421,21 @@ function pidExists(pid) {
   } catch {
     return false;
   }
+}
+
+function processIdentity(pid) {
+  const result = spawnSync(
+    "ps",
+    ["-p", String(pid), "-o", "lstart=", "-o", "comm="],
+    { encoding: "utf8" }
+  );
+  const text = result.status === 0 ? result.stdout.trim() : "";
+  if (!text) {
+    throw new Error(`Could not read process identity for ${pid}`);
+  }
+  return createHash("sha256")
+    .update(`${process.platform}\0${pid}\0${text}`)
+    .digest("hex");
 }
 
 async function waitForPidExit(pid, label) {
@@ -509,6 +560,33 @@ const conflictingPeerIrohFlags = runFailure([
 if (!conflictingPeerIrohFlags.stderr.includes("cannot be used together")) {
   throw new Error("Expected conflicting peer Iroh flags to fail");
 }
+const missingAdapter = runFailure(
+  [
+    "configure",
+    "--dev",
+    "--yes",
+    "--dry-run",
+    "--no-start",
+    "--no-doctor",
+    "--skip-pair-ios",
+    "--adapters",
+    "openclaw",
+    "--json"
+  ],
+  {
+    env: { ...env, PATH: fakeBinDir }
+  }
+);
+const missingAdapterPayload = JSON.parse(missingAdapter.stdout);
+if (
+  missingAdapterPayload.ok !== false ||
+  missingAdapterPayload.adapterResults?.[0]?.adapter !== "openclaw" ||
+  missingAdapterPayload.adapterResults?.[0]?.ok !== false
+) {
+  throw new Error(
+    `Expected a required adapter failure to fail the one-command install, got ${missingAdapter.stdout}`
+  );
+}
 const guidedDryRun = run(
   [
     "install",
@@ -555,6 +633,25 @@ run([
   "0",
   "--json"
 ]);
+const devRepoPreview = JSON.parse(
+  run([
+    "configure",
+    "--dev",
+    "--yes",
+    "--dry-run",
+    "--no-start",
+    "--no-doctor",
+    "--skip-pair-ios",
+    "--adapters",
+    "none",
+    "--json"
+  ]).stdout
+);
+if (devRepoPreview.config.repo !== forgeRepoRoot) {
+  throw new Error(
+    `Expected --dev to discover the current Forge source tree, got ${devRepoPreview.config.repo}`
+  );
+}
 run([
   "install",
   "--yes",
@@ -687,6 +784,15 @@ fs.writeFileSync(
 );
 await withFakeForgeServer(
   async (request) => {
+    if (request.url === "/api/health") {
+      return {
+        body: {
+          ok: true,
+          app: "forge",
+          security: "credential-required"
+        }
+      };
+    }
     if (request.url === "/api/v1/health")
       return { body: forgeHealthResponse() };
     return { statusCode: 404, body: { error: "not found" } };
@@ -906,6 +1012,41 @@ if (
     `Expected unrelated Codex MCP server config to survive Forge MCP patching:\n${codexConfig}`
   );
 }
+const expectedDevMcpBin = path.join(
+  forgeRepoRoot,
+  "packages",
+  "forge-memory",
+  "bin",
+  "forge-memory.mjs"
+);
+if (
+  !codexConfig.includes(`command = ${JSON.stringify(process.execPath)}`) ||
+  !codexConfig.includes(`args = [${JSON.stringify(expectedDevMcpBin)}, "mcp"]`)
+) {
+  throw new Error(
+    `Expected a source-backed install to connect Codex through the current Forge Memory checkout:\n${codexConfig}`
+  );
+}
+writeSmokeConfig({ mode: "packaged", repo: null, adapters: ["codex"] });
+run([
+  "configure",
+  "--yes",
+  "--no-start",
+  "--no-doctor",
+  "--skip-pair-ios",
+  "--adapters",
+  "codex",
+  "--json"
+]);
+const packagedCodexConfig = fs.readFileSync(codexConfigPath, "utf8");
+if (
+  !packagedCodexConfig.includes('command = "npx"') ||
+  !packagedCodexConfig.includes('args = ["forge-memory", "mcp"]')
+) {
+  throw new Error(
+    `Expected a packaged install to preserve the public npx Forge Memory path:\n${packagedCodexConfig}`
+  );
+}
 const claudeConfigPath = path.join(tempHome, ".claude.json");
 const claudeRulesPath = path.join(
   tempHome,
@@ -1053,7 +1194,9 @@ await withFakeForgeServer(
       };
     }
     if (request.url === "/api/v1/health/pairing-sessions") {
-      if (request.headers.cookie !== "forge_operator_session=test-session") {
+      if (
+        request.headers.authorization !== "Bearer forge-memory-cli-smoke-token"
+      ) {
         return {
           statusCode: 401,
           body: {
@@ -1097,7 +1240,7 @@ await withFakeForgeServer(
     return { statusCode: 404, body: { error: "not found" } };
   },
   async ({ port, requests }) => {
-    writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+    writePairingSmokeConfig(port);
     const pairing = await runAsync(["pair-ios", "--json", "--no-start"]);
     const payload = JSON.parse(pairing.stdout);
     if (payload.qrPayload.sessionId !== "pair_test") {
@@ -1105,22 +1248,15 @@ await withFakeForgeServer(
         "Expected pair-ios --json to return the fake pairing payload"
       );
     }
-    const authRequest = requests.find(
-      (entry) => entry.url === "/api/v1/auth/operator-session"
-    );
-    if (!authRequest) {
-      throw new Error(
-        "Expected pair-ios to bootstrap a local operator session before pairing"
-      );
-    }
     const pairingRequest = requests.find(
       (entry) => entry.url === "/api/v1/health/pairing-sessions"
     );
     if (
-      pairingRequest?.headers.cookie !== "forge_operator_session=test-session"
+      pairingRequest?.headers.authorization !==
+      "Bearer forge-memory-cli-smoke-token"
     ) {
       throw new Error(
-        "Expected pair-ios to send the local operator session cookie to the pairing route"
+        "Expected pair-ios to send its configured scoped credential to the pairing route"
       );
     }
     const humanPairing = await runAsync(["pair-ios", "--no-start"]);
@@ -1249,7 +1385,7 @@ await withFakeForgeServer(
     return { statusCode: 404, body: { error: "not found" } };
   },
   async ({ port, requests }) => {
-    writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+    writePairingSmokeConfig(port);
     const pairing = await runAsync(["pair-ios", "--json", "--no-start"], {
       env: {
         ...env,
@@ -1274,6 +1410,20 @@ await withFakeForgeServer(
     ) {
       throw new Error(
         `Expected Tailscale to be primary pairing transport, got ${pairingRequest?.body}`
+      );
+    }
+    const persisted = JSON.parse(
+      fs.readFileSync(
+        path.join(tempHome, ".forge", "config.json"),
+        "utf8"
+      )
+    );
+    if (
+      persisted.canonicalExternalOrigin !==
+      "https://mac.tailnet.ts.net"
+    ) {
+      throw new Error(
+        `Expected the verified Tailscale origin to persist for DPoP, got ${persisted.canonicalExternalOrigin}`
       );
     }
   }
@@ -1317,7 +1467,7 @@ await withFakeForgeServer(
     return { statusCode: 404, body: { error: "not found" } };
   },
   async ({ port }) => {
-    writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+    writePairingSmokeConfig(port);
     const serveLog = path.join(tempHome, "tailscale-serve.log");
     const probeSequence = path.join(tempHome, "tailscale-probe-sequence.txt");
     fs.rmSync(serveLog, { force: true });
@@ -1386,7 +1536,7 @@ await withFakeForgeServer(
     return { statusCode: 404, body: { error: "not found" } };
   },
   async ({ port }) => {
-    writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+    writePairingSmokeConfig(port);
     const failure = await runAsyncFailure(["pair-ios", "--json", "--no-start"]);
     const payload = JSON.parse(failure.stderr);
     if (payload.code !== "pairing_transport_unavailable") {
@@ -1442,7 +1592,7 @@ await withFakeForgeServer(
     return { statusCode: 404, body: { error: "not found" } };
   },
   async ({ port }) => {
-    writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+    writePairingSmokeConfig(port);
     const failure = await runAsyncFailure(["pair-ios", "--json", "--no-start"]);
     const payload = JSON.parse(failure.stderr);
     if (payload.code !== "pairing_transport_unavailable") {
@@ -1464,21 +1614,29 @@ await withFakeForgeServer(
   async (request) => {
     if (request.url === "/api/v1/health")
       return { body: forgeHealthResponse() };
-    if (request.url === "/api/v1/auth/operator-session") {
-      return { body: { session: { id: "ses_missing_cookie" } } };
+    if (request.url === "/api/v1/health/pairing-sessions") {
+      return {
+        statusCode: 403,
+        body: {
+          code: "insufficient_scope",
+          error: "The credential cannot create a companion pairing."
+        }
+      };
     }
     return { statusCode: 404, body: { error: "not found" } };
   },
-  async ({ port }) => {
-    writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+  async ({ port, requests }) => {
+    writePairingSmokeConfig(port);
     const failure = await runAsyncFailure(["pair-ios", "--json", "--no-start"]);
     const payload = JSON.parse(failure.stderr);
-    if (payload.code !== "pairing_auth_failed") {
-      throw new Error(`Expected pairing_auth_failed, got ${payload.code}`);
+    if (payload.code !== "pairing_request_failed") {
+      throw new Error(`Expected pairing_request_failed, got ${payload.code}`);
     }
-    if (payload.error.includes("doctor --repair")) {
+    if (
+      requests.some((entry) => entry.url === "/api/v1/auth/operator-session")
+    ) {
       throw new Error(
-        "Expected auth bootstrap failure not to point primarily at doctor --repair"
+        "Expected scoped-token pairing not to fall back to the removed network-trust operator bootstrap"
       );
     }
   }
@@ -1507,7 +1665,7 @@ await withFakeForgeServer(
     return { statusCode: 404, body: { error: "not found" } };
   },
   async ({ port }) => {
-    writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+    writePairingSmokeConfig(port);
     const failure = await runAsyncFailure(["pair-ios", "--json", "--no-start"]);
     const payload = JSON.parse(failure.stderr);
     if (payload.code !== "pairing_request_failed") {
@@ -1539,6 +1697,14 @@ await withFakeForgeServer(
         `Expected healthy runtime adoption without spawning, got ${start.stdout}`
       );
     }
+    if (
+      payload.state?.adopted !== true ||
+      payload.state?.children?.length !== 0
+    ) {
+      throw new Error(
+        `Expected adopted runtime state to own no processes, got ${start.stdout}`
+      );
+    }
     writeSmokeConfig({
       peer: {
         enabled: true,
@@ -1568,6 +1734,87 @@ await withFakeForgeServer(
     });
   }
 );
+if (process.platform !== "win32") {
+  await withFakeForgeServer(
+    async (request) => {
+      if (request.url === "/api/v1/health") {
+        return { body: forgeHealthResponse({ pid: process.pid }) };
+      }
+      return { statusCode: 404, body: { error: "not found" } };
+    },
+    async ({ port }) => {
+      const unrelatedRuntime = await startDetachedRecordedRuntimeGroup();
+      try {
+        writeSmokeConfig({ mode: "dev", port, dataRoot, adapters: [] });
+        const statePath = path.join(
+          tempHome,
+          ".forge",
+          "run",
+          "forge-memory-runtime.json"
+        );
+        fs.mkdirSync(path.dirname(statePath), { recursive: true });
+        fs.writeFileSync(
+          statePath,
+          `${JSON.stringify(
+            {
+              mode: "dev",
+              baseUrl: `http://127.0.0.1:${port}`,
+              webUrl: `http://127.0.0.1:${port}/forge/`,
+              dataRoot,
+              peer: {
+                enabled: false,
+                irohEnabled: false,
+                directEndpoints: [],
+                allowLoopbackDirect: false
+              },
+              children: [
+                {
+                  role: "server",
+                  pid: unrelatedRuntime.parentPid,
+                  identity: processIdentity(unrelatedRuntime.parentPid)
+                }
+              ],
+              startedAt: new Date().toISOString()
+            },
+            null,
+            2
+          )}\n`
+        );
+        const start = await runAsync(["start"]);
+        const payload = JSON.parse(start.stdout);
+        if (
+          !payload.ok ||
+          payload.state?.adopted !== true ||
+          payload.state?.observedPid !== process.pid ||
+          payload.state?.children?.length !== 0
+        ) {
+          throw new Error(
+            `Expected stale state to become a non-owning adoption, got ${start.stdout}`
+          );
+        }
+        const stop = run(["stop", "--json"]);
+        const stopPayload = JSON.parse(stop.stdout);
+        if (
+          stopPayload.stopped ||
+          !pidExists(unrelatedRuntime.parentPid) ||
+          !stopPayload.message?.includes("no external process was stopped")
+        ) {
+          throw new Error(
+            `Expected adopted runtime stop to preserve unowned processes, got ${stop.stdout}`
+          );
+        }
+      } finally {
+        if (pidExists(unrelatedRuntime.parentPid)) {
+          try {
+            process.kill(-unrelatedRuntime.parentPid, "SIGKILL");
+          } catch {
+            // Best-effort test cleanup.
+          }
+        }
+      }
+    }
+  );
+}
 await withFakeForgeServer(
   async () => ({
     statusCode: 404,
@@ -1582,7 +1829,8 @@ await withFakeForgeServer(
         `Expected occupied non-Forge port to be reported as a port conflict, got ${start.stdout}`
       );
     }
-  }
+  },
+  { forgeLiveness: false }
 );
 if (process.platform !== "win32") {
   await withPlainServer(async ({ port }) => {
@@ -1604,7 +1852,41 @@ if (process.platform !== "win32") {
             baseUrl: `http://127.0.0.1:${port}`,
             webUrl: `http://127.0.0.1:${port}/forge/`,
             dataRoot,
-            children: [{ role: "web", pid: recordedRuntime.parentPid }],
+            children: [
+              {
+                role: "web",
+                pid: recordedRuntime.parentPid,
+                identity: "0".repeat(64)
+              }
+            ],
+            startedAt: new Date().toISOString()
+          },
+          null,
+          2
+        )}\n`
+      );
+      const staleStop = run(["stop", "--json"]);
+      const stalePayload = JSON.parse(staleStop.stdout);
+      if (stalePayload.stopped || !pidExists(recordedRuntime.parentPid)) {
+        throw new Error(
+          `Expected stale process identity not to be signaled, got ${staleStop.stdout}`
+        );
+      }
+      fs.writeFileSync(
+        runtimeStatePath,
+        `${JSON.stringify(
+          {
+            mode: "dev",
+            baseUrl: `http://127.0.0.1:${port}`,
+            webUrl: `http://127.0.0.1:${port}/forge/`,
+            dataRoot,
+            children: [
+              {
+                role: "web",
+                pid: recordedRuntime.parentPid,
+                identity: processIdentity(recordedRuntime.parentPid)
+              }
+            ],
             startedAt: new Date().toISOString()
           },
           null,
@@ -1756,19 +2038,31 @@ if (configAfterSkipUpdate.adapters.join(",") !== "codex") {
   );
 }
 
-fs.writeFileSync(
-  configPath,
-  `${JSON.stringify(
-    {
-      ...config,
-      mode: "dev",
-      repo: path.resolve(packageRoot, "../..")
-    },
-    null,
-    2
-  )}\n`
+let mcp;
+await withFakeForgeServer(
+  async (request) => {
+    if (request.url === "/api/v1/health") {
+      return { body: forgeHealthResponse() };
+    }
+    return { statusCode: 404, body: { error: "not found" } };
+  },
+  async ({ port }) => {
+    fs.writeFileSync(
+      configPath,
+      `${JSON.stringify(
+        {
+          ...config,
+          mode: "dev",
+          port,
+          repo: path.resolve(packageRoot, "../..")
+        },
+        null,
+        2
+      )}\n`
+    );
+    mcp = await inspectMcp();
+  }
 );
-const mcp = await inspectMcp();
 const mcpTools = mcp.tools;
 const mcpToolNames = mcpTools.tools.map((tool) => tool.name);
 if (!mcpToolNames.includes("forge_memory_mcp_diagnostics")) {
@@ -1782,7 +2076,6 @@ if (!mcpToolNames.includes("forge_search_wiki")) {
     );
   }
 }
-
 const liveRuntime = await startLiveForgeHealthChild();
 try {
   const openClawConfigPath = path.join(tempHome, ".openclaw", "openclaw.json");
@@ -1834,17 +2127,19 @@ try {
   });
   const uninstall = run(["uninstall", "--yes", "--remove-adapters", "--json"]);
   const uninstallPayload = JSON.parse(uninstall.stdout);
-  if (!uninstallPayload.stop?.stopped) {
+  if (uninstallPayload.stop?.stopped) {
     throw new Error(
-      `Expected uninstall to stop a live adopted Forge runtime, got ${uninstall.stdout}`
+      `Expected uninstall not to signal an attached runtime it did not launch, got ${uninstall.stdout}`
     );
   }
-  if (!uninstallPayload.stop.pids?.includes(liveRuntime.pid)) {
+  if (
+    liveRuntime.child.exitCode !== null ||
+    liveRuntime.child.signalCode !== null
+  ) {
     throw new Error(
-      `Expected uninstall to stop pid ${liveRuntime.pid}, got ${uninstall.stdout}`
+      `Expected attached runtime pid ${liveRuntime.pid} to remain alive for its actual owner`
     );
   }
-  await waitForExit(liveRuntime.child, "live Forge runtime child");
   const openClawConfig = JSON.parse(
     fs.readFileSync(openClawConfigPath, "utf8")
   );

@@ -58,9 +58,15 @@ const PACKAGED_DEFAULT_GOOGLE_CLIENT_SECRET = decryptPackagedGoogleOauthValue(
 
 export type GoogleCalendarOauthPublicConfig = {
   clientId: string;
-  clientSecret: string;
   storedClientId: string;
-  storedClientSecret: string;
+  hasStoredClientSecret: boolean;
+  hasEffectiveClientSecret: boolean;
+  clientSecretStorage:
+    | "encrypted"
+    | "legacy_quarantined"
+    | "environment"
+    | "packaged"
+    | "none";
   appBaseUrl: string;
   redirectUri: string;
   allowedOrigins: string[];
@@ -78,7 +84,10 @@ export type GoogleCalendarOauthPublicConfig = {
 export type GoogleCalendarOauthPrivateConfig =
   GoogleCalendarOauthPublicConfig & {
     clientSecret: string;
+    storedClientSecret: string;
   };
+
+type GoogleCalendarOauthResolvedConfig = GoogleCalendarOauthPrivateConfig;
 
 function runtimeOriginFromEnv(env: NodeJS.ProcessEnv) {
   const port = env.PORT?.trim() || DEFAULT_APP_PORT;
@@ -173,18 +182,17 @@ export function getGoogleCalendarOauthCallbackPath() {
   return GOOGLE_CALLBACK_PATH;
 }
 
-export function resolveGoogleCalendarOauthPublicConfig(
+function resolveGoogleCalendarOauthConfig(
   env: NodeJS.ProcessEnv = process.env,
   overrides?: {
     clientId?: string | null;
     clientSecret?: string | null;
+    clientSecretStorage?: "encrypted" | "legacy_quarantined" | "none";
   }
-): GoogleCalendarOauthPublicConfig {
+): GoogleCalendarOauthResolvedConfig {
   const runtimeOrigin = runtimeOriginFromEnv(env);
   const appBaseUrl = normalizeLoopbackOrigin(
-    env.APP_BASE_URL?.trim() ||
-      env.APP_URL?.trim() ||
-      DEFAULT_APP_BASE_URL,
+    env.APP_BASE_URL?.trim() || env.APP_URL?.trim() || DEFAULT_APP_BASE_URL,
     env.APP_BASE_URL?.trim() ? "APP_BASE_URL" : "APP_URL"
   );
   const redirectUri = normalizeRedirectUri(
@@ -199,7 +207,8 @@ export function resolveGoogleCalendarOauthPublicConfig(
   const storedClientSecret = overrides?.clientSecret?.trim() || "";
   const envClientId = env.GOOGLE_CLIENT_ID?.trim() || "";
   const envClientSecret = env.GOOGLE_CLIENT_SECRET?.trim() || "";
-  const hasStoredOverride = storedClientId.length > 0 || storedClientSecret.length > 0;
+  const hasStoredOverride =
+    storedClientId.length > 0 || storedClientSecret.length > 0;
   const hasEnvOverride = envClientId.length > 0 || envClientSecret.length > 0;
   const clientId = hasStoredOverride
     ? storedClientId
@@ -214,6 +223,14 @@ export function resolveGoogleCalendarOauthPublicConfig(
   const isConfigured = clientId.length > 0;
   const hasIncompleteStoredOverride =
     storedClientId.length > 0 !== storedClientSecret.length > 0;
+  const clientSecretStorage =
+    storedClientSecret.length > 0
+      ? (overrides?.clientSecretStorage ?? "legacy_quarantined")
+      : hasEnvOverride
+        ? "environment"
+        : clientSecret.length > 0
+          ? "packaged"
+          : "none";
 
   const setupMessage = hasIncompleteStoredOverride
     ? "Google OAuth override is incomplete for this Forge install. Save both the client ID and client secret together, or clear both fields to use the packaged default."
@@ -226,6 +243,9 @@ export function resolveGoogleCalendarOauthPublicConfig(
     clientSecret,
     storedClientId,
     storedClientSecret,
+    hasStoredClientSecret: storedClientSecret.length > 0,
+    hasEffectiveClientSecret: clientSecret.length > 0,
+    clientSecretStorage,
     appBaseUrl,
     redirectUri,
     allowedOrigins,
@@ -241,14 +261,31 @@ export function resolveGoogleCalendarOauthPublicConfig(
   };
 }
 
+export function resolveGoogleCalendarOauthPublicConfig(
+  env: NodeJS.ProcessEnv = process.env,
+  overrides?: {
+    clientId?: string | null;
+    clientSecret?: string | null;
+    clientSecretStorage?: "encrypted" | "legacy_quarantined" | "none";
+  }
+): GoogleCalendarOauthPublicConfig {
+  const {
+    clientSecret: _clientSecret,
+    storedClientSecret: _stored,
+    ...safe
+  } = resolveGoogleCalendarOauthConfig(env, overrides);
+  return safe;
+}
+
 export function resolveGoogleCalendarOauthPrivateConfig(
   env: NodeJS.ProcessEnv = process.env,
   overrides?: {
     clientId?: string | null;
     clientSecret?: string | null;
+    clientSecretStorage?: "encrypted" | "legacy_quarantined" | "none";
   }
 ): GoogleCalendarOauthPrivateConfig {
-  return resolveGoogleCalendarOauthPublicConfig(env, overrides);
+  return resolveGoogleCalendarOauthConfig(env, overrides);
 }
 
 export function isGoogleCalendarOriginAllowed(

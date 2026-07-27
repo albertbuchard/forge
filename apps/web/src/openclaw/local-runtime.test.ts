@@ -107,8 +107,12 @@ describe("forge local runtime", () => {
 
       const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
         const url = input instanceof URL ? input : new URL(typeof input === "string" ? input : input.url);
-        if (runtimeStarted && url.port === String(nextPort) && url.pathname === "/api/v1/health") {
-          return new Response(JSON.stringify({ ok: true }), {
+        if (runtimeStarted && url.port === String(nextPort) && url.pathname === "/api/health") {
+          return new Response(JSON.stringify({
+            ok: true,
+            app: "forge",
+            security: "credential-required"
+          }), {
             status: 200,
             headers: { "content-type": "application/json" }
           });
@@ -231,6 +235,8 @@ describe("forge local runtime", () => {
           return new Response(
             JSON.stringify({
               ok: true,
+              app: "forge",
+              security: "credential-required",
               runtime: {
                 pid: process.pid,
                 storageRoot: "/tmp/shared-forge-root",
@@ -260,7 +266,7 @@ describe("forge local runtime", () => {
     }
   });
 
-  it("rejects a healthy runtime when the configured dataRoot does not match", async () => {
+  it("attaches to secured liveness without making an unauthenticated data-root decision", async () => {
     const tempHome = mkdtempSync(path.join(tmpdir(), "forge-runtime-home-"));
     vi.stubEnv("HOME", tempHome);
     try {
@@ -283,6 +289,8 @@ describe("forge local runtime", () => {
           new Response(
             JSON.stringify({
               ok: true,
+              app: "forge",
+              security: "credential-required",
               runtime: {
                 storageRoot: "/tmp/other-forge-root",
                 basePath: "/forge/"
@@ -302,14 +310,14 @@ describe("forge local runtime", () => {
         portSource: "configured"
       });
 
-      await expect(ensureForgeRuntimeReady(config)).rejects.toThrow("The OpenClaw plugin is configured to use /tmp/expected-forge-root");
+      await expect(ensureForgeRuntimeReady(config)).resolves.toBeUndefined();
       expect(spawnMock).not.toHaveBeenCalled();
     } finally {
       rmSync(tempHome, { recursive: true, force: true });
     }
   });
 
-  it("adopts a healthy runtime on the configured dataRoot so restart can manage it later", async () => {
+  it("does not adopt an attached healthy runtime as manager-owned", async () => {
     const tempHome = mkdtempSync(path.join(tmpdir(), "forge-runtime-home-"));
     vi.stubEnv("HOME", tempHome);
     try {
@@ -319,6 +327,8 @@ describe("forge local runtime", () => {
           new Response(
             JSON.stringify({
               ok: true,
+              app: "forge",
+              security: "credential-required",
               runtime: {
                 pid: process.pid,
                 storageRoot: "/tmp/adopted-forge-root",
@@ -342,14 +352,14 @@ describe("forge local runtime", () => {
       await ensureForgeRuntimeReady(config);
 
       const runtimeStatePath = path.join(tempHome, ".openclaw", "run", "forge-openclaw-plugin", "127.0.0.1-4317.json");
-      const runtimeState = JSON.parse(readFileSync(runtimeStatePath, "utf8")) as { pid: number };
-      expect(runtimeState.pid).toBe(process.pid);
+      const { existsSync } = await import("node:fs");
+      expect(existsSync(runtimeStatePath)).toBe(false);
     } finally {
       rmSync(tempHome, { recursive: true, force: true });
     }
   });
 
-  it("stops superseded plugin-managed runtimes on alternate ports when the configured runtime is healthy", async () => {
+  it("never signals a saved alternate PID while attaching to a healthy runtime", async () => {
     const tempHome = mkdtempSync(path.join(tmpdir(), "forge-runtime-home-"));
     vi.stubEnv("HOME", tempHome);
     try {
@@ -376,12 +386,14 @@ describe("forge local runtime", () => {
         "fetch",
         vi.fn(async (input: RequestInfo | URL) => {
           const url = input instanceof URL ? input : new URL(typeof input === "string" ? input : input.url);
-          if (url.pathname !== "/api/v1/health") {
+          if (url.pathname !== "/api/health") {
             throw new Error(`unexpected probe ${url.toString()}`);
           }
           return new Response(
             JSON.stringify({
               ok: true,
+              app: "forge",
+              security: "credential-required",
               runtime: {
                 pid: url.port === "4317" ? process.pid : stalePid,
                 storageRoot: "/tmp/shared-forge-root",
@@ -422,8 +434,9 @@ describe("forge local runtime", () => {
 
       await ensureForgeRuntimeReady(config);
 
-      expect(killSpy).toHaveBeenCalledWith(stalePid, "SIGTERM");
-      expect(existsSync(staleStatePath)).toBe(false);
+      expect(killSpy).not.toHaveBeenCalledWith(stalePid, "SIGTERM");
+      expect(killSpy).not.toHaveBeenCalledWith(stalePid, "SIGKILL");
+      expect(existsSync(staleStatePath)).toBe(true);
       expect(config.port).toBe(4317);
     } finally {
       rmSync(tempHome, { recursive: true, force: true });
@@ -462,7 +475,11 @@ describe("forge local runtime", () => {
         "fetch",
         vi.fn(async () => {
           if (runtimeStarted) {
-            return new Response(JSON.stringify({ ok: true }), {
+            return new Response(JSON.stringify({
+              ok: true,
+              app: "forge",
+              security: "credential-required"
+            }), {
               status: 200,
               headers: { "content-type": "application/json" }
             });

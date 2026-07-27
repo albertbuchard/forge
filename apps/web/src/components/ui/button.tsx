@@ -3,7 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
-const buttonVariants = cva(
+export const buttonVariants = cva(
   "inline-flex min-w-0 max-w-full items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-[var(--radius-control)] font-medium leading-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--primary)_45%,transparent)] disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {

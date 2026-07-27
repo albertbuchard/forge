@@ -658,7 +658,14 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
             "Reply with the single word ok."
           ),
           input: isCodexProfile(profile)
-            ? "Connection test."
+            ? [
+                {
+                  role: "user",
+                  content: [
+                    { type: "input_text", text: "Connection test." }
+                  ]
+                }
+              ]
             : "Reply with the single word ok.",
           ...(isCodexProfile(profile) ? { stream: true, store: false } : {}),
           ...(isCodexProfile(profile) ? {} : { max_output_tokens: 24 }),
@@ -827,8 +834,29 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
       });
       throw new OpenAiTextPromptError(response.status);
     }
+    const usage =
+      payload.usage && typeof payload.usage === "object"
+        ? (payload.usage as Record<string, unknown>)
+        : null;
+    const inputTokens = Number(usage?.input_tokens);
+    const outputTokens = Number(usage?.output_tokens);
+    const totalTokens = Number(usage?.total_tokens);
     return {
-      outputText: parseOutputText(payload)?.trim() || ""
+      outputText: parseOutputText(payload)?.trim() || "",
+      ...(Number.isSafeInteger(inputTokens) &&
+      inputTokens >= 0 &&
+      Number.isSafeInteger(outputTokens) &&
+      outputTokens >= 0 &&
+      Number.isSafeInteger(totalTokens) &&
+      totalTokens >= inputTokens + outputTokens
+        ? {
+            usage: {
+              inputTokens,
+              outputTokens,
+              totalTokens
+            }
+          }
+        : {})
     };
   }
 

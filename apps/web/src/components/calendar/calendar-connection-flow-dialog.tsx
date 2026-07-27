@@ -490,9 +490,20 @@ export function CalendarConnectionFlowDialog({
   const saveGoogleSettingsMutation = useMutation({
     mutationFn: async (input: GoogleSettingsDraft) => {
       const normalized = normalizeGoogleSettingsDraft(input);
+      const google =
+        normalized.clientId.length === 0 &&
+        normalized.clientSecret.length === 0 &&
+        !normalized.hasStoredClientSecret
+          ? { clientId: "", clientSecret: "" }
+          : {
+              clientId: normalized.clientId,
+              ...(normalized.clientSecret
+                ? { clientSecret: normalized.clientSecret }
+                : {})
+            };
       const response = await patchSettings({
         calendarProviders: {
-          google: normalized
+          google
         }
       });
       return {

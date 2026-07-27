@@ -1,12 +1,8 @@
-import { execFile as execFileCallback } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { promisify } from "node:util";
 import { getDatabase, runInTransaction } from "../db.js";
 import type { SecretsManager } from "../managers/platform/secrets-manager.js";
 import {
-  LlmManager,
+  type TextPromptRunner,
   type WikiLlmProfileLike
 } from "../managers/platform/llm-manager.js";
 import {
@@ -54,8 +50,9 @@ import {
   buildWorkbenchRunDetail,
   buildWorkbenchRunSummary
 } from "../services/workbench-read-model.js";
+import type { MachineCapabilitySession } from "../security/capability-executor.js";
+import { requireEnabledTool } from "../security/machine-tool-policy.js";
 
-const execFile = promisify(execFileCallback);
 const MAX_TOOL_STEPS = 6;
 const MAX_MODEL_PROMPT_CHARACTERS = 64_000;
 const MAX_CONVERSATION_HISTORY_CHARACTERS = 20_000;
@@ -80,6 +77,12 @@ type AiConnectorRow = {
   legacy_processor_id: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type AiConnectorExecutionServices = {
+  llm: TextPromptRunner;
+  secrets: SecretsManager;
+  machineCapabilities?: MachineCapabilitySession;
 };
 
 type AiConnectorRunRow = {
@@ -936,20 +939,6 @@ function insertRun(input: AiConnectorRun) {
   return input;
 }
 
-function resolveAllowedPath(inputPath: string) {
-  const candidate = path.resolve(process.cwd(), inputPath);
-  const workspaceRoot = process.cwd();
-  if (
-    candidate !== workspaceRoot &&
-    !candidate.startsWith(`${workspaceRoot}${path.sep}`)
-  ) {
-    throw new Error(
-      "Machine access is restricted to the Forge workspace root."
-    );
-  }
-  return candidate;
-}
-
 function tryParseStructuredAgentResponse(value: string) {
   try {
     const parsed = JSON.parse(value) as unknown;
@@ -1359,45 +1348,46 @@ function normalizeConnectorGraph(graph: AiConnector["graph"]) {
 
 async function executeMachineTool(
   tool: "machine_read_file" | "machine_write_file" | "machine_exec",
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  capabilities: MachineCapabilitySession | undefined
 ) {
+  if (!capabilities) {
+    throw new Error(
+      "Machine capabilities require a verified Forge capability session."
+    );
+  }
   if (tool === "machine_read_file") {
-    const targetPath =
-      typeof args.path === "string" ? resolveAllowedPath(args.path) : null;
+    const targetPath = typeof args.path === "string" ? args.path : null;
     if (!targetPath) {
       throw new Error("machine_read_file requires a string path.");
     }
-    const content = await readFile(targetPath, "utf8");
+    const content = await capabilities.readTextFile(targetPath);
     return { path: targetPath, content };
   }
   if (tool === "machine_write_file") {
-    const targetPath =
-      typeof args.path === "string" ? resolveAllowedPath(args.path) : null;
+    const targetPath = typeof args.path === "string" ? args.path : null;
     if (!targetPath || typeof args.content !== "string") {
       throw new Error("machine_write_file requires { path, content }.");
     }
-    await writeFile(targetPath, args.content, "utf8");
-    return {
-      path: targetPath,
-      bytesWritten: Buffer.byteLength(args.content, "utf8")
-    };
+    return capabilities.writeTextFile(targetPath, args.content);
   }
   if (typeof args.command !== "string" || args.command.trim().length === 0) {
     throw new Error("machine_exec requires a command string.");
   }
   const cwd =
-    typeof args.cwd === "string" && args.cwd.trim().length > 0
-      ? resolveAllowedPath(args.cwd)
-      : process.cwd();
-  const result = await execFile("zsh", ["-lc", args.command], {
+    typeof args.cwd === "string" && args.cwd.trim().length > 0 ? args.cwd : ".";
+  const result = await capabilities.executeCommand({
+    command: args.command,
     cwd,
-    timeout: 15_000,
-    maxBuffer: 256_000
+    maximumRuntimeMilliseconds: 15_000,
+    maximumOutputBytes: 256_000
   });
   return {
     cwd,
     stdout: result.stdout.trim(),
-    stderr: result.stderr.trim()
+    stderr: result.stderr.trim(),
+    exitCode: result.exitCode,
+    truncated: result.truncated
   };
 }
 
@@ -1612,10 +1602,7 @@ async function runModelNode(input: {
   node: AiConnectorNode;
   userInput: string;
   upstream: Array<ConnectorNodeValue & { targetHandle?: string | null }>;
-  services: {
-    llm: LlmManager;
-    secrets: SecretsManager;
-  };
+  services: AiConnectorExecutionServices;
   conversation: AiConnectorConversation | null;
 }) {
   const { profile, apiKey } = resolveConnectorModelProfile(
@@ -1708,16 +1695,18 @@ async function runModelNode(input: {
       };
     }
 
+    const selectedTool = requireEnabledTool(activeTools, structured.tool);
     const toolResult = structured.tool.startsWith("machine_")
       ? await executeMachineTool(
           structured.tool as
             | "machine_read_file"
             | "machine_write_file"
             | "machine_exec",
-          structured.args
+          structured.args,
+          input.services.machineCapabilities
         )
       : await executeForgeBoxTool(
-          activeTools.find((tool) => tool.key === structured.tool)?.boxId ?? "",
+          selectedTool.boxId,
           structured.tool,
           structured.args,
           {
@@ -1939,10 +1928,7 @@ function createConversationRecord(input: {
 async function executeConnector(
   connector: AiConnector,
   rawInput: RunAiConnectorInput,
-  services: {
-    llm: LlmManager;
-    secrets: SecretsManager;
-  }
+  services: AiConnectorExecutionServices
 ) {
   validateConnectorGraph(connector.graph);
   const parsedInput = runAiConnectorSchema.parse(rawInput);
@@ -2691,10 +2677,7 @@ export function deleteAiConnector(connectorId: string) {
 export async function runAiConnector(
   connectorId: string,
   input: RunAiConnectorInput,
-  services: {
-    llm: LlmManager;
-    secrets: SecretsManager;
-  },
+  services: AiConnectorExecutionServices,
   mode: "run" | "chat" = "run"
 ): Promise<ConnectorExecutionResult> {
   const connector = getAiConnectorById(connectorId);

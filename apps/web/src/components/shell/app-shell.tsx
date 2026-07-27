@@ -97,8 +97,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
+import { RemoteBrowserPairing } from "@/components/security/remote-browser-pairing";
 import { useLiveEvents } from "@/hooks/use-live-events";
-import { claimTaskRun, patchTask, touchEntityNavigation } from "@/lib/api";
+import {
+  claimTaskRun,
+  completePreparedLocalBrowserAuthorization,
+  getPreparedLocalBrowserAuthorizationUrl,
+  patchTask,
+  prepareLocalBrowserAuthorization,
+  retryLocalBrowserAuthorization,
+  touchEntityNavigation
+} from "@/lib/api";
 import { resolveEntityNavigationTargetFromLocation } from "@/lib/action-bar";
 import { ForgeApiError } from "@/lib/api-error";
 import { I18nProvider, useI18n } from "@/lib/i18n";
@@ -1604,12 +1613,65 @@ export function AppShell() {
   }
 
   if (operatorSessionQuery.isError) {
+    const localAuthorizationError =
+      operatorSessionQuery.error instanceof ForgeApiError &&
+      [
+        "browser_pairing_required",
+        "local_owner_verification_failed",
+        "local_browser_owner_handler_unavailable"
+      ].includes(operatorSessionQuery.error.code);
+    const localAuthorizationUrl = localAuthorizationError
+      ? getPreparedLocalBrowserAuthorizationUrl()
+      : null;
+    const remotePairingRequired =
+      operatorSessionQuery.error instanceof ForgeApiError &&
+      operatorSessionQuery.error.code === "browser_pairing_required" &&
+      typeof window !== "undefined" &&
+      window.location.protocol === "https:" &&
+      !["localhost", "127.0.0.1", "[::1]"].includes(
+        window.location.hostname
+      );
+    if (remotePairingRequired) {
+      return (
+        <div className="grid min-h-screen place-items-center p-6">
+          <RemoteBrowserPairing
+            onPaired={async () => {
+              await operatorSessionQuery.refetch();
+            }}
+          />
+        </div>
+      );
+    }
     return (
       <div className="grid min-h-screen place-items-center p-6">
         <ErrorState
           eyebrow="Forge operator session"
           error={operatorSessionQuery.error}
-          onRetry={() => void operatorSessionQuery.refetch()}
+          retryLabel={
+            localAuthorizationError ? "Authorize this browser" : undefined
+          }
+          retryHref={localAuthorizationUrl ?? undefined}
+          onRetry={() => {
+            if (localAuthorizationError && localAuthorizationUrl) {
+              window.setTimeout(() => {
+                void completePreparedLocalBrowserAuthorization()
+                  .then(() => operatorSessionQuery.refetch())
+                  .catch(async () => {
+                    try {
+                      await prepareLocalBrowserAuthorization();
+                    } catch {
+                      // The query error remains the reader-facing failure.
+                    }
+                    await operatorSessionQuery.refetch();
+                  });
+              }, 0);
+              return;
+            }
+            if (localAuthorizationError) {
+              retryLocalBrowserAuthorization();
+            }
+            void operatorSessionQuery.refetch();
+          }}
         />
       </div>
     );

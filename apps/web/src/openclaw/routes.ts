@@ -1788,14 +1788,23 @@ export async function runDoctor(config: ForgePluginConfig) {
       )
     : [];
   const canBootstrap = canBootstrapOperatorSession(config.baseUrl);
+  const pairedCredentialConfigured =
+    (config.remoteCredentialId?.trim().length ?? 0) > 0;
 
-  if (config.apiToken.trim().length === 0 && canBootstrap) {
+  if (
+    config.apiToken.trim().length === 0 &&
+    !pairedCredentialConfigured &&
+    canBootstrap
+  ) {
     warnings.push(
-      "Forge apiToken is blank, but this target can bootstrap a local or Tailscale operator session for protected reads and writes."
+      "Forge apiToken is blank, but this direct-localhost target can use automatic verified local-owner access for protected reads and writes."
     );
-  } else if (config.apiToken.trim().length === 0) {
+  } else if (
+    config.apiToken.trim().length === 0 &&
+    !pairedCredentialConfigured
+  ) {
     warnings.push(
-      "Forge apiToken is missing, and this target cannot use local or Tailscale operator-session bootstrap. Protected writes will fail."
+      "Forge apiToken is missing, and this target is not direct localhost. Complete remote pairing and configure the resulting scoped credential; Tailscale reachability alone does not authorize protected access."
     );
   }
   if (capabilities && capabilities.canReadPsyche === false) {
@@ -1823,7 +1832,9 @@ export async function runDoctor(config: ForgePluginConfig) {
     ...(doctorBody ?? {}),
     ok:
       doctorBody?.ok === true &&
-      (config.apiToken.trim().length > 0 || canBootstrap) &&
+      (config.apiToken.trim().length > 0 ||
+        pairedCredentialConfigured ||
+        canBootstrap) &&
       routeParity.missingFromPlugin.length === 0 &&
       routeParity.missingFromOpenApi.length === 0 &&
       routeParity.unexpectedMirrors.length === 0,
@@ -1833,6 +1844,7 @@ export async function runDoctor(config: ForgePluginConfig) {
     webAppUrl: uiUrl,
     actorLabel: config.actorLabel,
     apiTokenConfigured: config.apiToken.trim().length > 0,
+    pairedCredentialConfigured,
     operatorSessionBootstrapAvailable: canBootstrap,
     warnings,
     overview,

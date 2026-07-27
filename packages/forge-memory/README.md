@@ -8,6 +8,25 @@ npx forge-memory
 
 This is the preferred setup path for Forge. The command launches a guided CLI that installs the local Forge UI/runtime first, then discovers OpenClaw, Hermes, Codex, and Claude Code and offers to configure the detected adapters against the same Forge data folder.
 
+Forge Memory also prepares the current operating-system user's local owner helper.
+Selected local adapters authenticate through that helper automatically. No reusable API
+key is written into Codex, Hermes, OpenClaw, or Claude Code configuration.
+
+Use `npx forge-memory ui` to open the web app. On macOS, the installer registers an
+owner-only `forge://` handler backed by the verified native owner helper. The browser
+starts a short public transaction, retains its private proof key in memory, and receives
+an HttpOnly session cookie after the operating-system owner check. No session credential
+is placed in the URL, command arguments, or browser storage. Forge stores only the
+separate, non-authenticating CSRF value in same-origin browser storage so later tabs can
+write without another prompt. If the browser requires a user gesture before opening a
+local protocol, Forge shows one pre-staged **Authorize this browser** link; this is the
+only extra first-browser step.
+
+Tailscale reachability is never Forge authorization. Remote browsers and remote API
+clients need a Forge-issued scoped credential even when Tailscale Serve and access
+controls already restrict who can reach the machine. Remote authentication also requires
+HTTPS. Forge does not need Tailscale Funnel.
+
 Development install from a Forge checkout:
 
 ```bash

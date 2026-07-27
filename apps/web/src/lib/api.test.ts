@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  beginRemoteBrowserPairing,
+  cancelRemoteBrowserPairing,
   claimTaskRun,
+  completePreparedLocalBrowserAuthorization,
   createCalendarConnection,
   createGoal,
   createProject,
@@ -10,6 +13,7 @@ import {
   getDeletedPlanningRecord,
   getLifeEvent,
   getNote,
+  getPreparedLocalBrowserAuthorizationUrl,
   getPreferenceWorkspace,
   getPsycheMetricsView,
   getSleepSession,
@@ -20,7 +24,9 @@ import {
   listNotes,
   listWikiPages,
   patchTask,
+  pollRemoteBrowserPairing,
   refreshPreferenceWorkspace,
+  retryLocalBrowserAuthorization,
   restoreEntities,
   submitPairwisePreferenceJudgment
 } from "./api";
@@ -97,6 +103,134 @@ describe("notes API contract", () => {
     expect(url.searchParams.get("observedFrom")).toBe("2026-05-01");
     expect(url.searchParams.get("observedTo")).toBe("2026-05-31");
     expect(url.searchParams.get("cursor")).toBe("opaque-cursor");
+  });
+});
+
+describe("remote browser pairing client", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  it("keeps the private key in memory, honors pending status, and stores only CSRF state", async () => {
+    localStorage.clear();
+    vi.stubGlobal("window", {
+      location: { protocol: "https:" }
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          requestId: "pair_1234567890123456",
+          deviceCode: `fg_device_${"A".repeat(43)}`,
+          userCode: "BCDF-GHJK",
+          verificationUri: "/forge/pair",
+          expiresIn: 600,
+          interval: 5
+        })
+      )
+      .mockResolvedValueOnce(
+        mockJsonErrorResponse(428, {
+          status: "authorization_pending",
+          intervalSeconds: 5
+        })
+      )
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          session: {
+            id: "ses_remote_browser",
+            absoluteExpiresAt: "2026-08-01T00:00:00.000Z"
+          },
+          csrfToken: `fg_csrf_${"B".repeat(43)}`,
+          clientId: "client_remote_browser"
+        })
+      )
+      .mockResolvedValueOnce(mockJsonResponse({ cancelled: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const pairing = await beginRemoteBrowserPairing();
+    expect(pairing.userCode).toBe("BCDF-GHJK");
+    expect(localStorage.length).toBe(0);
+
+    const pending = await pollRemoteBrowserPairing(pairing);
+    expect(pending).toMatchObject({
+      status: "authorization_pending",
+      intervalSeconds: 5
+    });
+    expect(localStorage.length).toBe(0);
+
+    const approved = await pollRemoteBrowserPairing(pairing);
+    expect(approved).toEqual({ status: "approved" });
+    expect(localStorage.getItem("forge.browser.csrf")).toBe(
+      `fg_csrf_${"B".repeat(43)}`
+    );
+    expect(
+      Object.keys(localStorage).some((entry) =>
+        /device|private|refresh|access/i.test(entry)
+      )
+    ).toBe(false);
+
+    const beginBody = JSON.parse(
+      String((fetchMock.mock.calls[0]![1] as RequestInit).body)
+    ) as Record<string, unknown>;
+    expect(beginBody.clientType).toBe("browser");
+    expect(beginBody.requestedProfile).toBe("trusted_personal_assistant");
+    expect(beginBody).not.toHaveProperty("privateKey");
+
+    const pollBody = JSON.parse(
+      String((fetchMock.mock.calls[1]![1] as RequestInit).body)
+    ) as { clientProof: string };
+    const [header] = pollBody.clientProof.split(".");
+    const encodedHeader = header!.replaceAll("-", "+").replaceAll("_", "/");
+    const protectedHeader = JSON.parse(
+      atob(
+        encodedHeader.padEnd(Math.ceil(encodedHeader.length / 4) * 4, "=")
+      )
+    ) as { jwk: Record<string, unknown> };
+    expect(protectedHeader.jwk).not.toHaveProperty("d");
+
+    await cancelRemoteBrowserPairing(pairing);
+  });
+
+  it("silently renews a persisted paired browser before its next API request", async () => {
+    localStorage.setItem(
+      "forge.browser.renewed-at",
+      String(Date.now() - 24 * 60 * 60 * 1_000)
+    );
+    localStorage.setItem("forge.browser.csrf", "fg_csrf_previous");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          session: {
+            id: "ses_rotated_browser",
+            absoluteExpiresAt: "2026-08-08T00:00:00.000Z"
+          },
+          csrfToken: "fg_csrf_rotated"
+        })
+      )
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          decision: null
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getTodayPriorityDecision({});
+
+    expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
+      expect.stringContaining("/api/v1/auth/browser/refresh"),
+      expect.stringContaining("/api/v1/today/priority")
+    ]);
+    expect(
+      (fetchMock.mock.calls[0]![1] as RequestInit).credentials
+    ).toBe("same-origin");
+    expect(localStorage.getItem("forge.browser.csrf")).toBe(
+      "fg_csrf_rotated"
+    );
+    expect(
+      Number(localStorage.getItem("forge.browser.renewed-at"))
+    ).toBeGreaterThan(Date.now() - 5_000);
   });
 });
 
@@ -185,6 +319,8 @@ describe("Preferences API contract", () => {
 describe("create entity payload normalization", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    localStorage.clear();
   });
 
   it("sends nested creation notes for goals and trims author whitespace", async () => {
@@ -496,72 +632,175 @@ describe("create entity payload normalization", () => {
     expect(url.searchParams.get("timeZone")).toBe("Europe/Zurich");
   });
 
-  it("bootstraps an operator session and retries protected reads after auth expiry", async () => {
+  it("keeps the non-authenticating CSRF value across a fresh tab for mutations", async () => {
+    sessionStorage.clear();
+    localStorage.setItem("forge.browser.csrf", "fg_csrf_persistent_test");
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(
-        mockJsonErrorResponse(401, {
-          code: "auth_required",
-          error: "A token or operator session is required."
-        })
-      )
-      .mockResolvedValueOnce(
-        mockJsonResponse({
-          session: {
-            id: "ses_1",
-            actorLabel: "Albert",
-            expiresAt: "2026-05-03T13:37:35.000Z"
-          }
-        })
-      )
-      .mockResolvedValueOnce(
-        mockJsonResponse({
-          pages: [{ id: "note_1", title: "Albert", slug: "albert" }]
-        })
+      .mockResolvedValue(
+        mockJsonResponse({ goal: { id: "goal_persistent_csrf" } })
       );
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await listWikiPages({ kind: "wiki", limit: 25 });
+    await createGoal({
+      title: "Persistent browser session",
+      description: "",
+      horizon: "year",
+      status: "active",
+      userId: null,
+      targetPoints: 100,
+      themeColor: "#c8a46b",
+      tagIds: [],
+      notes: []
+    });
 
-    expect(result.pages).toHaveLength(1);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(fetchMock.mock.calls[0]?.[0]).toContain(
-      "/api/v1/wiki/pages?kind=wiki&limit=25"
-    );
-    expect(fetchMock.mock.calls[1]?.[0]).toContain(
-      "/api/v1/auth/operator-session"
-    );
-    expect(fetchMock.mock.calls[2]?.[0]).toContain(
-      "/api/v1/wiki/pages?kind=wiki&limit=25"
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(new Headers(init.headers).get("x-forge-csrf")).toBe(
+      "fg_csrf_persistent_test"
     );
   });
 
-  it("deduplicates concurrent operator-session bootstrap requests", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        mockJsonErrorResponse(401, {
-          code: "auth_required",
-          error: "A token or operator session is required."
-        })
-      )
-      .mockResolvedValueOnce(
-        mockJsonErrorResponse(401, {
-          code: "auth_required",
-          error: "A token or operator session is required."
-        })
-      )
-      .mockResolvedValueOnce(
-        mockJsonResponse({
+  it("uses a proof-bound public local-owner transaction and retries protected reads", async () => {
+    localStorage.clear();
+    window.history.replaceState(null, "", "/");
+    const handlerUrls: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement
+    ) {
+      handlerUrls.push(this.href);
+    });
+    let authorized = false;
+    const beginBodies: Record<string, unknown>[] = [];
+    const exchangeBodies: Record<string, unknown>[] = [];
+    const fetchMock = vi.fn(async (rawPath: unknown, init?: RequestInit) => {
+      const requestPath = String(rawPath);
+      if (requestPath.includes("/api/v1/auth/local/browser/begin")) {
+        const beginBody = JSON.parse(String(init?.body)) as Record<
+          string,
+          unknown
+        >;
+        beginBodies.push(beginBody);
+        const handlerUrl = new URL("forge://local-auth");
+        handlerUrl.searchParams.set("apiOrigin", "http://127.0.0.1:4317");
+        handlerUrl.searchParams.set(
+          "browserOrigin",
+          String(beginBody.browserOrigin)
+        );
+        handlerUrl.searchParams.set("transactionId", "local_browser_test_1");
+        handlerUrl.searchParams.set(
+          "browserNonce",
+          String(beginBody.browserNonce)
+        );
+        return mockJsonResponse({
+          transactionId: "local_browser_test_1",
+          expiresAt: "2026-05-03T13:37:35.000Z",
+          handlerUrl: handlerUrl.toString()
+        });
+      }
+      if (requestPath.includes("/api/v1/auth/local/browser/exchange")) {
+        exchangeBodies.push(
+          JSON.parse(String(init?.body)) as Record<string, unknown>
+        );
+        authorized = true;
+        return mockJsonResponse({
           session: {
             id: "ses_1",
             actorLabel: "Albert",
             expiresAt: "2026-05-03T13:37:35.000Z"
-          }
-        })
-      )
-      .mockResolvedValueOnce(mockJsonResponse({ pages: [] }))
-      .mockResolvedValueOnce(mockJsonResponse({ pages: [] }));
+          },
+          csrfToken: "fg_csrf_browser_test"
+        });
+      }
+      return authorized
+        ? mockJsonResponse({
+            pages: [{ id: "note_1", title: "Albert", slug: "albert" }]
+          })
+        : mockJsonErrorResponse(401, {
+            code: "auth_required",
+            error: "A token or operator session is required."
+          });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await listWikiPages({ kind: "wiki", limit: 25 });
+    const beginBody = beginBodies[0];
+    const exchangeBody = exchangeBodies[0];
+
+    expect(result.pages).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock.mock.calls[0]?.[0]).toContain(
+      "/api/v1/wiki/pages?kind=wiki&limit=25"
+    );
+    expect(beginBody).toMatchObject({
+      browserOrigin: window.location.origin
+    });
+    expect(beginBody.browserNonce).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(beginBody.browserPublicKey).toMatchObject({
+      kty: "EC",
+      crv: "P-256",
+      key_ops: ["verify"]
+    });
+    expect(exchangeBody).toMatchObject({
+      transactionId: "local_browser_test_1",
+      browserOrigin: window.location.origin,
+      browserNonce: beginBody.browserNonce
+    });
+    expect(exchangeBody.browserProof).toMatch(/^[A-Za-z0-9_-]{86}$/);
+    expect(fetchMock.mock.calls[3]?.[0]).toContain(
+      "/api/v1/wiki/pages?kind=wiki&limit=25"
+    );
+    expect(window.location.hash).toBe("");
+    expect(handlerUrls).toHaveLength(1);
+    expect(handlerUrls[0]).toMatch(/^forge:\/\/local-auth\?/);
+    expect(handlerUrls[0]).not.toContain("fg_browser_");
+    expect(localStorage.getItem("forge.browser.csrf")).toBe(
+      "fg_csrf_browser_test"
+    );
+  });
+
+  it("deduplicates concurrent proof-bound browser exchanges", async () => {
+    localStorage.clear();
+    window.history.replaceState(null, "", "/");
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(
+      () => undefined
+    );
+    let authorized = false;
+    const fetchMock = vi.fn(async (rawPath: unknown, init?: RequestInit) => {
+      const requestPath = String(rawPath);
+      if (requestPath.includes("/api/v1/auth/local/browser/begin")) {
+        const body = JSON.parse(String(init?.body)) as {
+          browserNonce: string;
+          browserOrigin: string;
+        };
+        const handlerUrl = new URL("forge://local-auth");
+        handlerUrl.searchParams.set("apiOrigin", "http://127.0.0.1:4317");
+        handlerUrl.searchParams.set("browserOrigin", body.browserOrigin);
+        handlerUrl.searchParams.set("transactionId", "local_browser_test_2");
+        handlerUrl.searchParams.set("browserNonce", body.browserNonce);
+        return mockJsonResponse({
+          transactionId: "local_browser_test_2",
+          handlerUrl: handlerUrl.toString()
+        });
+      }
+      if (requestPath.includes("/api/v1/auth/local/browser/exchange")) {
+        authorized = true;
+        return mockJsonResponse({
+          session: {
+            id: "ses_1",
+            actorLabel: "Albert",
+            expiresAt: "2026-05-03T13:37:35.000Z"
+          },
+          csrfToken: "fg_csrf_browser_test"
+        });
+      }
+      return authorized
+        ? mockJsonResponse({ pages: [] })
+        : mockJsonErrorResponse(401, {
+            code: "auth_required",
+            error: "A token or operator session is required."
+          });
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     await Promise.all([
@@ -572,10 +811,89 @@ describe("create entity payload normalization", () => {
     const requestedPaths = fetchMock.mock.calls.map((call) => String(call[0]));
     expect(
       requestedPaths.filter((path) =>
-        path.includes("/api/v1/auth/operator-session")
+        path.includes("/api/v1/auth/local/browser/exchange")
       )
     ).toHaveLength(1);
-    expect(requestedPaths).toHaveLength(5);
+    expect(
+      requestedPaths.filter((path) =>
+        path.includes("/api/v1/auth/local/browser/begin")
+      )
+    ).toHaveLength(1);
+    expect(requestedPaths).toHaveLength(6);
+  });
+
+  it("stages one direct user-gesture link after a blocked automatic launch", async () => {
+    localStorage.clear();
+    const handlerUrls: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement
+    ) {
+      handlerUrls.push(this.href);
+    });
+    let beginCount = 0;
+    let exchangeCount = 0;
+    const fetchMock = vi.fn(async (rawPath: unknown, init?: RequestInit) => {
+      const requestPath = String(rawPath);
+      if (requestPath.includes("/api/v1/auth/local/browser/begin")) {
+        beginCount += 1;
+        const body = JSON.parse(String(init?.body)) as {
+          browserNonce: string;
+          browserOrigin: string;
+        };
+        const handlerUrl = new URL("forge://local-auth");
+        handlerUrl.searchParams.set("apiOrigin", "http://127.0.0.1:4317");
+        handlerUrl.searchParams.set("browserOrigin", body.browserOrigin);
+        handlerUrl.searchParams.set(
+          "transactionId",
+          `local_browser_staged_${beginCount}`
+        );
+        handlerUrl.searchParams.set("browserNonce", body.browserNonce);
+        return mockJsonResponse({
+          transactionId: `local_browser_staged_${beginCount}`,
+          handlerUrl: handlerUrl.toString()
+        });
+      }
+      if (requestPath.includes("/api/v1/auth/local/browser/exchange")) {
+        exchangeCount += 1;
+        if (exchangeCount === 1) {
+          return mockJsonErrorResponse(503, {
+            code: "local_owner_verification_failed",
+            error: "The browser did not launch the owner handler."
+          });
+        }
+        return mockJsonResponse({
+          session: { id: "ses_staged" },
+          csrfToken: "fg_csrf_staged_test"
+        });
+      }
+      return mockJsonErrorResponse(401, {
+        code: "auth_required",
+        error: "Authentication required."
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      listWikiPages({ kind: "wiki", limit: 25 })
+    ).rejects.toMatchObject({
+      code: "local_owner_verification_failed"
+    });
+
+    expect(handlerUrls).toHaveLength(1);
+    expect(beginCount).toBe(2);
+    expect(exchangeCount).toBe(1);
+    expect(getPreparedLocalBrowserAuthorizationUrl()).toMatch(
+      /^forge:\/\/local-auth\?/
+    );
+
+    await completePreparedLocalBrowserAuthorization();
+
+    expect(exchangeCount).toBe(2);
+    expect(handlerUrls).toHaveLength(1);
+    expect(getPreparedLocalBrowserAuthorizationUrl()).toBeNull();
+    expect(localStorage.getItem("forge.browser.csrf")).toBe(
+      "fg_csrf_staged_test"
+    );
   });
 
   it("encodes exact-record IDs used by bounded-view focus links", async () => {
@@ -594,6 +912,60 @@ describe("create entity payload normalization", () => {
       "/api/v1/health/sleep/record%2Fwith%20spaces%3Fand%3Dreserved/raw",
       "/api/v1/life-events/record%2Fwith%20spaces%3Fand%3Dreserved"
     ]);
+  });
+
+  it("does not loop local-owner authorization after a denial", async () => {
+    localStorage.clear();
+    window.history.replaceState(null, "", "/");
+    const fetchMock = vi.fn(async (rawPath: unknown) => {
+      const requestPath = String(rawPath);
+      if (requestPath.includes("/api/v1/auth/local/browser/begin")) {
+        return mockJsonErrorResponse(503, {
+          code: "local_browser_owner_handler_unavailable",
+          error: "The local owner handler is unavailable."
+        });
+      }
+      return mockJsonErrorResponse(401, {
+        code: "auth_required",
+        error: "Authentication required."
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      listWikiPages({ kind: "wiki", limit: 25 })
+    ).rejects.toMatchObject({
+      code: "local_browser_owner_handler_unavailable"
+    });
+    await expect(
+      listWikiPages({ kind: "wiki", limit: 25 })
+    ).rejects.toMatchObject({
+      code: "browser_pairing_required"
+    });
+
+    const requestedPaths = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(
+      requestedPaths.filter((entry) =>
+        entry.includes("/api/v1/auth/local/browser/begin")
+      )
+    ).toHaveLength(1);
+    expect(
+      requestedPaths.filter((entry) =>
+        entry.includes("/api/v1/auth/local/browser/exchange")
+      )
+    ).toHaveLength(0);
+
+    retryLocalBrowserAuthorization();
+    await expect(
+      listWikiPages({ kind: "wiki", limit: 25 })
+    ).rejects.toMatchObject({
+      code: "local_browser_owner_handler_unavailable"
+    });
+    expect(
+      fetchMock.mock.calls
+        .map((call) => String(call[0]))
+        .filter((entry) => entry.includes("/api/v1/auth/local/browser/begin"))
+    ).toHaveLength(2);
   });
 });
 

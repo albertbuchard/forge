@@ -273,6 +273,14 @@ export function filterOwnedEntities<T extends { id: string }>(
     assignees: UserSummary[];
   }
 > {
+  const embeddedUserIds = new Map(
+    entities.map((entity) => [
+      entity.id,
+      "userId" in entity && typeof entity.userId === "string"
+        ? entity.userId
+        : null
+    ])
+  );
   const decorated = decorateOwnedEntities(entityType, entities);
   if (!userIds || userIds.length === 0) {
     return decorated;
@@ -289,10 +297,7 @@ export function filterOwnedEntities<T extends { id: string }>(
       ) {
         return true;
       }
-      const embeddedUserId =
-        "userId" in entity && typeof entity.userId === "string"
-          ? entity.userId
-          : null;
+      const embeddedUserId = embeddedUserIds.get(entity.id) ?? null;
       return embeddedUserId !== null && allowed.has(embeddedUserId);
     }
   );

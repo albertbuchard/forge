@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { AgentTokenFlowDialog } from "@/components/settings/agent-token-flow-dialog";
 import { LogWorkFlowDialog } from "@/components/settings/log-work-flow-dialog";
+import { RemotePairingApprovalCard } from "@/components/settings/remote-pairing-approval-card";
 import {
   TokenRevealDialog,
   type TokenRevealState
@@ -391,8 +392,8 @@ export function SettingsAgentsPage() {
       badge: "active",
       badgeTone: "emerald",
       detail: operatorSessionQuery.data?.session
-        ? `Session open as ${operatorSessionQuery.data.session.actorLabel}. Works for localhost and Tailscale without a token.`
-        : "Passwordless session is active for local and Tailscale access.",
+        ? `Session open as ${operatorSessionQuery.data.session.actorLabel}. Direct localhost access is verified through the local owner helper.`
+        : "Direct localhost access is verified through the local owner helper.",
       action: null
     },
     {
@@ -401,8 +402,8 @@ export function SettingsAgentsPage() {
       badge: hasAnyToken ? `${activeTokens.length} active` : "none issued",
       badgeTone: hasAnyToken ? "emerald" : "amber",
       detail: hasAnyToken
-        ? `${activeTokens.length} active token${activeTokens.length === 1 ? "" : "s"} allow external agents and scripts to authenticate.`
-        : "No token yet. Issue one to let external agents connect via the API.",
+        ? `${activeTokens.length} active compatibility token${activeTokens.length === 1 ? "" : "s"} allow scoped external API access.`
+        : "No compatibility token is active. Remote clients still require a Forge-issued scoped credential.",
       action: hasAnyToken
         ? null
         : {
@@ -583,6 +584,9 @@ export function SettingsAgentsPage() {
       />
 
       <div className="grid gap-5">
+        {operatorSessionQuery.data?.session.profile === "operator" ? (
+          <RemotePairingApprovalCard />
+        ) : null}
         {onboardingQuery.isError ? (
           <Card className="flex flex-wrap items-center justify-between gap-3 border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)]">
             <div className="text-sm leading-6 text-[var(--danger)]">

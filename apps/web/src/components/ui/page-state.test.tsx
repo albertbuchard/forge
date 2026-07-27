@@ -21,6 +21,28 @@ describe("shared page states", () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
+  it("renders a pre-staged owner authorization as a direct custom-protocol link", () => {
+    const onRetry = vi.fn();
+    const retryHref =
+      "forge://local-auth?apiOrigin=http%3A%2F%2F127.0.0.1%3A4317&browserNonce=nonce&browserOrigin=http%3A%2F%2F127.0.0.1%3A4317&transactionId=transaction_123456";
+    render(
+      <ErrorState
+        error={new Error("Authorization required")}
+        onRetry={onRetry}
+        retryHref={retryHref}
+        retryLabel="Authorize this browser"
+      />
+    );
+
+    const link = screen.getByRole("link", {
+      name: /authorize this browser/i
+    });
+    expect(link).toHaveAttribute("href", retryHref);
+    link.addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(link);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
   it("announces a truthful empty result as a status", () => {
     render(
       <EmptyState

@@ -32,6 +32,7 @@ import {
   ingestScreenTimeSync,
   screenTimeSyncPayloadSchema
 } from "./screen-time.js";
+import { isSecuredMobilePairingMarker } from "./security/mobile-pairing-credential-vault.js";
 import { recordActivityEvent } from "./repositories/activity-events.js";
 import { recordHabitGeneratedWorkoutReward } from "./repositories/rewards.js";
 import { resolveUserForMutation } from "./repositories/users.js";
@@ -591,6 +592,46 @@ type PairingSessionRow = {
   created_at: string;
   updated_at: string;
 };
+
+type CompanionPairingCredentialProtection = {
+  protectInCurrentTransaction(
+    sessionId: string,
+    plaintextToken: string
+  ): string;
+  reveal(sessionId: string, storedMarker: string): string | null;
+  matches(
+    sessionId: string,
+    storedMarker: string,
+    presentedToken: string
+  ): boolean;
+};
+
+let companionPairingCredentialProtection:
+  | CompanionPairingCredentialProtection
+  | null = null;
+
+export function configureCompanionPairingCredentialProtection(
+  protection: CompanionPairingCredentialProtection | null
+) {
+  companionPairingCredentialProtection = protection;
+}
+
+function revealCompanionPairingToken(pairing: PairingSessionRow) {
+  const token = companionPairingCredentialProtection
+    ? companionPairingCredentialProtection.reveal(
+        pairing.id,
+        pairing.pairing_token
+      )
+    : pairing.pairing_token;
+  if (!token) {
+    throw new HttpError(
+      500,
+      "companion_pairing_credential_unavailable",
+      "The companion pairing credential is unavailable."
+    );
+  }
+  return token;
+}
 
 type PairingSourceStateRow = {
   id: string;
@@ -2737,7 +2778,13 @@ export function createCompanionPairingSession(
       .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
       .get(id) as PairingSessionRow;
     ensurePairingSourceStates(insertedSession);
-    return insertedSession;
+    companionPairingCredentialProtection?.protectInCurrentTransaction(
+      id,
+      pairingToken
+    );
+    return getDatabase()
+      .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
+      .get(id) as PairingSessionRow;
   });
 
   const qrPayload = {
@@ -2889,7 +2936,17 @@ export function requireValidPairing(sessionId: string, pairingToken: string) {
   const row = getDatabase()
     .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
     .get(sessionId) as PairingSessionRow | undefined;
-  if (!row || row.pairing_token !== pairingToken) {
+  const tokenMatches = Boolean(
+    row &&
+      ((!isSecuredMobilePairingMarker(row.pairing_token) &&
+        row.pairing_token === pairingToken) ||
+        companionPairingCredentialProtection?.matches(
+          row.id,
+          row.pairing_token,
+          pairingToken
+        ))
+  );
+  if (!row || !tokenMatches) {
     throw new HttpError(
       401,
       "invalid_pairing_token",
@@ -5969,7 +6026,7 @@ function mergeMobileHealthSyncChunks(
   }>(session.source_metadata_json, {});
   const assembled = mobileHealthSyncSchema.parse({
     sessionId: metadata.sessionId ?? pairing.id,
-    pairingToken: pairing.pairing_token,
+    pairingToken: revealCompanionPairingToken(pairing),
     device:
       metadata.device ??
       ({

@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -6,19 +7,7 @@ import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase } from "./db.js";
 
-async function issueOperatorSessionCookie(
-  app: Awaited<ReturnType<typeof buildServer>>
-) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host: "127.0.0.1:4317" }
-  });
-  assert.equal(response.statusCode, 200);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const issueOperatorSessionCookie = issueTestOperatorSessionCookie;
 
 test("saved model credentials stay bound to their stored target and require an operator", async () => {
   const rootDir = await mkdtemp(
@@ -78,7 +67,7 @@ test("saved model credentials stay bound to their stored target and require an o
       headers: { authorization: `Bearer ${token}` },
       payload: { connectionId, model: "gpt-5.4-mini" }
     });
-    assert.equal(agentAttempt.statusCode, 401);
+    assert.equal(agentAttempt.statusCode, 403);
     assert.equal(fetchCalls.length, 0);
 
     const overriddenWithoutKey = await app.inject({

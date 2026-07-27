@@ -6,6 +6,8 @@ const e2ePort =
     ? configuredE2ePort
     : 4317;
 const e2eBaseUrl = `http://127.0.0.1:${e2ePort}/forge/`;
+const reuseManagedE2eServer =
+  process.env.FORGE_E2E_REUSE_EXISTING_SERVER === "1";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -16,7 +18,9 @@ export default defineConfig({
   fullyParallel: true,
   workers: 1,
   retries: process.env.CI ? 2 : 0,
-  reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : [["list"]],
+  reporter: process.env.CI
+    ? [["github"], ["html", { open: "never" }]]
+    : [["list"]],
   use: {
     baseURL: e2eBaseUrl,
     trace: "retain-on-failure",
@@ -37,6 +41,7 @@ export default defineConfig({
     command: `npm run build && PORT=${e2ePort} node --import tsx apps/api/src/e2e-server.ts`,
     port: e2ePort,
     timeout: 120_000,
-    reuseExistingServer: e2ePort === 4317 && !process.env.CI
+    reuseExistingServer:
+      reuseManagedE2eServer || (e2ePort === 4317 && !process.env.CI)
   }
 });

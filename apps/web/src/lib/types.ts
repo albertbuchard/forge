@@ -4589,6 +4589,12 @@ export interface OperatorContextPayload {
 export interface OperatorSession {
   id: string;
   actorLabel: string;
+  profile:
+    | "viewer"
+    | "trusted_personal_assistant"
+    | "executor"
+    | "operator"
+    | "custom";
   expiresAt: string;
 }
 
@@ -4730,9 +4736,15 @@ export interface SettingsPayload {
   calendarProviders: {
     google: {
       clientId: string;
-      clientSecret: string;
       storedClientId: string;
-      storedClientSecret: string;
+      hasStoredClientSecret: boolean;
+      hasEffectiveClientSecret: boolean;
+      clientSecretStorage:
+        | "encrypted"
+        | "legacy_quarantined"
+        | "environment"
+        | "packaged"
+        | "none";
       appBaseUrl: string;
       redirectUri: string;
       allowedOrigins: string[];

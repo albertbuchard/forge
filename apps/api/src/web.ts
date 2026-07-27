@@ -10,7 +10,7 @@ import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { Duplex } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { GAMIFICATION_ASSET_VERSION } from "@/lib/gamification-catalog.js";
 import { resolveGamificationSpriteAssetPath as resolveGamificationSpriteAssetPathFromStore } from "./services/gamification-assets.js";
 
@@ -247,6 +247,15 @@ type WebRouteOptions = {
   devWebRuntime?: DevWebRuntime;
   fetchImpl?: typeof fetch;
   devAssetProxy?: DevAssetProxy;
+  issueDevProxyAssertion?: (
+    request: FastifyRequest,
+    target: string
+  ) => string | null;
+  authorizeUpgrade?: (
+    request: IncomingMessage,
+    target: string
+  ) => Promise<string | null> | string | null;
+  allowedOrigins?: readonly string[];
 };
 
 function parseRequestTarget(requestPath: string) {
@@ -303,9 +312,23 @@ async function proxyDevAsset(input: {
   search: string;
   reply: FastifyReply;
   fetchImpl: typeof fetch;
+  assertion?: string | null;
 }) {
   const target = buildDevWebTarget(input.origin, input.pathname, input.search);
-  const response = await input.fetchImpl(target, { redirect: "manual" });
+  const response = await input.fetchImpl(target, {
+    headers: {
+      Accept: "*/*",
+      ...devAssetAssertionHeaders(
+        input.assertion,
+        `${target.pathname}${target.search}`
+      )
+    },
+    redirect: "manual"
+  });
+  if (response.status === 401 || response.status === 403) {
+    await response.body?.cancel();
+    throw new DevWebAuthorizationError();
+  }
   input.reply.code(response.status);
   copyProxyHeaders(response, input.reply);
   if (isHtmlResponse(response.headers.get("content-type") ?? undefined)) {
@@ -325,9 +348,30 @@ type DevAssetProxy = {
     pathname: string;
     search: string;
     reply: FastifyReply;
+    assertion?: string | null;
   }): Promise<Buffer | string>;
   close(): void;
 };
+
+class DevWebAuthorizationError extends Error {
+  constructor() {
+    super("The development web runtime rejected the browser credential.");
+    this.name = "DevWebAuthorizationError";
+  }
+}
+
+function devAssetAssertionHeaders(
+  assertion: string | null | undefined,
+  target: string
+): Record<string, string> {
+  if (!assertion) {
+    return {};
+  }
+  return {
+    "X-Forge-Dev-Proxy-Assertion": assertion,
+    "X-Forge-Dev-Proxy-Target": target
+  };
+}
 
 export function createKeepAliveDevAssetProxy(): DevAssetProxy {
   const httpAgent = new HttpAgent({
@@ -359,11 +403,23 @@ export function createKeepAliveDevAssetProxy(): DevAssetProxy {
             agent,
             headers: {
               Accept: "*/*",
-              Host: target.host
+              Host: target.host,
+              ...devAssetAssertionHeaders(
+                input.assertion,
+                `${target.pathname}${target.search}`
+              )
             },
             method: "GET"
           },
           (response) => {
+            if (response.statusCode === 401 || response.statusCode === 403) {
+              response.resume();
+              response.once("end", () =>
+                reject(new DevWebAuthorizationError())
+              );
+              response.once("error", reject);
+              return;
+            }
             input.reply.code(response.statusCode ?? 502);
             for (const [name, value] of Object.entries(response.headers)) {
               if (!value || hopByHopHeaders.has(name.toLowerCase())) {
@@ -374,10 +430,7 @@ export function createKeepAliveDevAssetProxy(): DevAssetProxy {
             if (isHtmlResponse(response.headers["content-type"])) {
               forceUncachedHtml(input.reply);
             } else if (!response.headers["cache-control"]) {
-              input.reply.header(
-                "Cache-Control",
-                noStoreCacheControl
-              );
+              input.reply.header("Cache-Control", noStoreCacheControl);
             }
 
             const chunks: Buffer[] = [];
@@ -434,13 +487,14 @@ async function proxyDevWebSocket(input: {
   request: IncomingMessage;
   socket: Duplex;
   head: Buffer;
+  assertion: string;
 }) {
   const requestTarget = parseRequestTarget(input.request.url ?? "/");
   const normalizedRequestPath = stripBasePath(
     requestTarget.pathname,
     getDefaultBasePath()
   );
-  if (!normalizedRequestPath.startsWith("/__vite_hmr")) {
+  if (normalizedRequestPath !== "/__vite_hmr") {
     return false;
   }
 
@@ -455,12 +509,26 @@ async function proxyDevWebSocket(input: {
     normalizedRequestPath,
     requestTarget.search
   );
+  const proxyHeaders = { ...input.request.headers };
+  for (const sensitiveHeader of [
+    "authorization",
+    "cookie",
+    "dpop",
+    "x-forge-dev-proxy-assertion",
+    "x-forge-dev-proxy-target"
+  ]) {
+    delete proxyHeaders[sensitiveHeader];
+  }
   const proxyRequest = (
     target.protocol === "https:" ? httpsRequest : httpRequest
   )(target, {
     headers: {
-      ...input.request.headers,
-      host: target.host
+      ...proxyHeaders,
+      host: target.host,
+      ...devAssetAssertionHeaders(
+        input.assertion,
+        `${target.pathname}${target.search}`
+      )
     }
   });
 
@@ -489,6 +557,20 @@ async function proxyDevWebSocket(input: {
   });
   proxyRequest.end();
   return true;
+}
+
+function rejectWebSocketUpgrade(
+  socket: Duplex,
+  statusCode: 401 | 404,
+  reason: "Unauthorized" | "Not Found"
+) {
+  if (!socket.writable) {
+    socket.destroy();
+    return;
+  }
+  socket.end(
+    `HTTP/1.1 ${statusCode} ${reason}\r\nConnection: close\r\nContent-Length: 0\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n\r\n`
+  );
 }
 
 async function waitForProcessExit(child: ChildProcess, timeoutMs = 5_000) {
@@ -622,6 +704,8 @@ async function serveAsset(
   options: {
     devWebRuntime: DevWebRuntime;
     devAssetProxy: DevAssetProxy;
+    request: FastifyRequest;
+    issueDevProxyAssertion?: WebRouteOptions["issueDevProxyAssertion"];
   }
 ) {
   const requestTarget = parseRequestTarget(requestPath);
@@ -643,11 +727,22 @@ async function serveAsset(
     : await options.devWebRuntime.ensureReady();
   if (devWebOrigin) {
     try {
+      const devTarget = buildDevWebTarget(
+        devWebOrigin,
+        normalizedRequestPath,
+        requestTarget.search
+      );
+      const assertion =
+        options.issueDevProxyAssertion?.(
+          options.request,
+          `${devTarget.pathname}${devTarget.search}`
+        ) ?? null;
       return await options.devAssetProxy.fetch({
         origin: devWebOrigin,
         pathname: normalizedRequestPath,
         search: requestTarget.search,
-        reply
+        reply,
+        assertion
       });
     } catch {
       reply.header("X-Forge-Web-Fallback", "built");
@@ -712,28 +807,84 @@ export async function registerWebRoutes(
   });
   app.server.on("upgrade", (request, socket, head) => {
     void (async () => {
-      await proxyDevWebSocket({
+      const requestTarget = parseRequestTarget(request.url ?? "/");
+      const normalizedRequestPath = stripBasePath(
+        requestTarget.pathname,
+        basePath
+      );
+      if (normalizedRequestPath !== "/__vite_hmr") {
+        rejectWebSocketUpgrade(socket, 404, "Not Found");
+        return;
+      }
+      let assertion: string | null = null;
+      try {
+        const origin = request.headers.origin;
+        const exactOriginAllowed =
+          typeof origin === "string" &&
+          (options.allowedOrigins ?? []).includes(origin);
+        const hmrSubprotocol =
+          request.headers["sec-websocket-protocol"] === "vite-hmr";
+        if (exactOriginAllowed && hmrSubprotocol && options.authorizeUpgrade) {
+          assertion = await options.authorizeUpgrade(
+            request,
+            `${requestTarget.pathname}${requestTarget.search}`
+          );
+        }
+      } catch {
+        assertion = null;
+      }
+      if (!assertion) {
+        rejectWebSocketUpgrade(socket, 401, "Unauthorized");
+        return;
+      }
+      const handled = await proxyDevWebSocket({
         devWebRuntime,
         request,
         socket,
-        head
+        head,
+        assertion
       });
+      if (!handled) {
+        rejectWebSocketUpgrade(socket, 404, "Not Found");
+      }
     })();
   });
-  app.get("/__forge-ui-root-redirect", async (_request, reply) => {
+  app.all("/api/*", async (_request, reply) => {
+    reply.code(404);
+    return {
+      code: "api_route_not_found",
+      error: "Forge API route not found.",
+      statusCode: 404
+    };
+  });
+  app.get("/__forge-ui-root-redirect", async (request, reply) => {
     if (basePath !== "/") {
-      reply.redirect(basePath, 302);
-      return;
+      return reply.redirect(basePath, 302);
     }
-    return serveAsset("/", reply, { devWebRuntime, devAssetProxy });
+    return serveAsset("/", reply, {
+      devWebRuntime,
+      devAssetProxy,
+      request,
+      issueDevProxyAssertion: options.issueDevProxyAssertion
+    });
   });
   app.get("/__forge-ui-base-redirect", async (_request, reply) => {
-    reply.redirect(basePath, 302);
+    return reply.redirect(basePath, 302);
   });
-  app.get("/", async (_request, reply) =>
-    serveAsset("/", reply, { devWebRuntime, devAssetProxy })
+  app.get("/", async (request, reply) =>
+    serveAsset("/", reply, {
+      devWebRuntime,
+      devAssetProxy,
+      request,
+      issueDevProxyAssertion: options.issueDevProxyAssertion
+    })
   );
   app.get("/*", async (request, reply) =>
-    serveAsset(request.url, reply, { devWebRuntime, devAssetProxy })
+    serveAsset(request.url, reply, {
+      devWebRuntime,
+      devAssetProxy,
+      request,
+      issueDevProxyAssertion: options.issueDevProxyAssertion
+    })
   );
 }

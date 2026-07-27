@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -189,7 +189,27 @@ test("managed dev web runtime infers a direct Vite launch when no explicit comma
 
 test("dev asset proxy reuses an upstream keep-alive socket", async () => {
   const upstreamSockets = new Set<string>();
+  const upstreamCredentials: Array<{
+    cookie: string | undefined;
+    authorization: string | undefined;
+    assertion: string | undefined;
+    target: string | undefined;
+  }> = [];
+  const issuedTargets: string[] = [];
   const upstream = createServer((request, response) => {
+    upstreamCredentials.push({
+      cookie: request.headers.cookie,
+      authorization: request.headers.authorization,
+      assertion: request.headers["x-forge-dev-proxy-assertion"] as
+        | string
+        | undefined,
+      target: request.headers["x-forge-dev-proxy-target"] as string | undefined
+    });
+    if (typeof request.headers["x-forge-dev-proxy-assertion"] !== "string") {
+      response.statusCode = 401;
+      response.end("unauthorized");
+      return;
+    }
     response.setHeader("Content-Type", "text/plain");
     response.end(`proxied:${request.url ?? ""}`);
   });
@@ -207,17 +227,28 @@ test("dev asset proxy reuses an upstream keep-alive socket", async () => {
       ensureReady: async () =>
         new URL(`http://127.0.0.1:${address.port}/forge/`),
       stop: async () => {}
+    },
+    issueDevProxyAssertion: (_request, target) => {
+      issuedTargets.push(target);
+      return `proxy-assertion-${issuedTargets.length}`;
     }
   });
 
   try {
     const first = await app.inject({
       method: "GET",
-      url: "/forge/src/main.tsx"
+      url: "/forge/src/main.tsx",
+      headers: {
+        cookie: "forge_session=verified-browser"
+      }
     });
     const second = await app.inject({
       method: "GET",
-      url: "/forge/@vite/client"
+      url: "/forge/@vite/client",
+      headers: {
+        cookie: "forge_session=verified-browser",
+        authorization: "Bearer browser-test-credential"
+      }
     });
 
     assert.equal(first.statusCode, 200);
@@ -225,6 +256,24 @@ test("dev asset proxy reuses an upstream keep-alive socket", async () => {
     assert.match(first.body, /proxied:\/forge\/src\/main\.tsx/);
     assert.match(second.body, /proxied:\/forge\/@vite\/client/);
     assert.equal(upstreamSockets.size, 1);
+    assert.deepEqual(upstreamCredentials, [
+      {
+        cookie: undefined,
+        authorization: undefined,
+        assertion: "proxy-assertion-1",
+        target: "/forge/src/main.tsx"
+      },
+      {
+        cookie: undefined,
+        authorization: undefined,
+        assertion: "proxy-assertion-2",
+        target: "/forge/@vite/client"
+      }
+    ]);
+    assert.deepEqual(issuedTargets, [
+      "/forge/src/main.tsx",
+      "/forge/@vite/client"
+    ]);
   } finally {
     await app.close();
     await new Promise<void>((resolve, reject) => {
@@ -236,6 +285,36 @@ test("dev asset proxy reuses an upstream keep-alive socket", async () => {
         resolve();
       });
     });
+  }
+});
+
+test("an anonymous Vite rejection falls back to the public built shell", async () => {
+  const app = fastify();
+  await registerWebRoutes(app, {
+    devWebRuntime: {
+      ensureReady: async () => new URL("http://127.0.0.1:3027/forge/"),
+      stop: async () => {}
+    },
+    fetchImpl: (async () =>
+      new Response("development authorization required", {
+        status: 401
+      })) as typeof fetch
+  });
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/forge/"
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.headers["x-forge-web-fallback"], "built");
+    assert.equal(
+      response.body.includes("development authorization required"),
+      false
+    );
+    assert.match(response.body, /<!doctype html>/i);
+  } finally {
+    await app.close();
   }
 });
 
@@ -271,6 +350,157 @@ test("dev asset proxy forces the HTML entrypoint to no-store", async () => {
       "no-store, max-age=0, must-revalidate"
     );
     assert.equal(response.headers.pragma, "no-cache");
+  } finally {
+    await app.close();
+    await new Promise<void>((resolve, reject) => {
+      upstream.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+  }
+});
+
+test("development-web upgrades require application authentication before contacting Vite", async () => {
+  let readinessChecks = 0;
+  let authorizationChecks = 0;
+  const app = fastify();
+  await registerWebRoutes(app, {
+    devWebRuntime: {
+      ensureReady: async () => {
+        readinessChecks += 1;
+        throw new Error("Vite must not be contacted for an anonymous upgrade.");
+      },
+      stop: async () => {}
+    },
+    authorizeUpgrade: async () => {
+      authorizationChecks += 1;
+      return null;
+    },
+    allowedOrigins: ["http://127.0.0.1:3027"]
+  });
+  await app.listen({ host: "127.0.0.1", port: 0 });
+
+  try {
+    const address = app.server.address() as AddressInfo;
+    const upgradeStatus = (requestPath: string) =>
+      new Promise<number>((resolve, reject) => {
+        const request = httpRequest(
+          {
+            host: "127.0.0.1",
+            port: address.port,
+            method: "GET",
+            path: requestPath,
+            headers: {
+              connection: "Upgrade",
+              upgrade: "websocket",
+              origin: "http://127.0.0.1:3027",
+              "sec-websocket-protocol": "vite-hmr"
+            }
+          },
+          (response) => {
+            response.resume();
+            response.once("end", () => resolve(response.statusCode ?? 0));
+          }
+        );
+        request.once("upgrade", () =>
+          reject(new Error("Upgrade was admitted."))
+        );
+        request.once("error", reject);
+        request.end();
+      });
+    assert.equal(await upgradeStatus("/forge/__vite_hmr"), 401);
+    assert.equal(await upgradeStatus("/forge/__vite_hmr_unreviewed"), 404);
+    assert.equal(authorizationChecks, 1);
+    assert.equal(readinessChecks, 0);
+  } finally {
+    await app.close();
+  }
+});
+
+test("authenticated API HMR proxy replaces browser secrets with a one-time assertion", async () => {
+  let upstreamHeaders:
+    | {
+        cookie: string | undefined;
+        authorization: string | undefined;
+        assertion: string | undefined;
+        target: string | undefined;
+        origin: string | undefined;
+      }
+    | undefined;
+  const upstream = createServer();
+  upstream.on("upgrade", (request, socket) => {
+    upstreamHeaders = {
+      cookie: request.headers.cookie,
+      authorization: request.headers.authorization,
+      assertion: request.headers["x-forge-dev-proxy-assertion"] as
+        | string
+        | undefined,
+      target: request.headers["x-forge-dev-proxy-target"] as string | undefined,
+      origin: request.headers.origin
+    };
+    socket.end(
+      "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n"
+    );
+  });
+  await new Promise<void>((resolve) => {
+    upstream.listen(0, "127.0.0.1", resolve);
+  });
+  const upstreamAddress = upstream.address() as AddressInfo;
+
+  const app = fastify();
+  await registerWebRoutes(app, {
+    devWebRuntime: {
+      ensureReady: async () =>
+        new URL(`http://127.0.0.1:${upstreamAddress.port}/forge/`),
+      stop: async () => {}
+    },
+    authorizeUpgrade: async (_request, target) =>
+      target === "/forge/__vite_hmr" ? "hmr-proxy-assertion" : null,
+    allowedOrigins: ["http://127.0.0.1:3027"]
+  });
+  await app.listen({ host: "127.0.0.1", port: 0 });
+
+  try {
+    const address = app.server.address() as AddressInfo;
+    const status = await new Promise<number>((resolve, reject) => {
+      const request = httpRequest({
+        host: "127.0.0.1",
+        port: address.port,
+        method: "GET",
+        path: "/forge/__vite_hmr",
+        headers: {
+          authorization: "Bearer must-not-reach-vite",
+          connection: "Upgrade",
+          cookie: "forge_session=must-not-reach-vite",
+          origin: "http://127.0.0.1:3027",
+          "sec-websocket-protocol": "vite-hmr",
+          upgrade: "websocket"
+        }
+      });
+      request.once("upgrade", (response, socket) => {
+        socket.destroy();
+        resolve(response.statusCode ?? 0);
+      });
+      request.once("response", (response) => {
+        response.resume();
+        response.once("end", () => resolve(response.statusCode ?? 0));
+      });
+      request.once("error", reject);
+      request.end();
+    });
+
+    assert.equal(status, 101);
+    assert.deepEqual(upstreamHeaders, {
+      cookie: undefined,
+      authorization: undefined,
+      assertion: "hmr-proxy-assertion",
+      target: "/forge/__vite_hmr",
+      origin: "http://127.0.0.1:3027"
+    });
   } finally {
     await app.close();
     await new Promise<void>((resolve, reject) => {

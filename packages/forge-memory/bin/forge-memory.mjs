@@ -12,8 +12,14 @@ import { TextDecoder, TextEncoder } from "node:util";
 import { createRequire } from "node:module";
 import {
   inspectForgePeerRuntime,
+  prepareForgeOwnerBrokerRuntime,
   prepareForgePeerRuntime
 } from "../lib/peer-runtime-install.mjs";
+import { ensureMacosBrowserHandler } from "../lib/macos-browser-handler.mjs";
+import {
+  pairRemoteForgeClient,
+  readMacosRemoteCredential
+} from "../lib/remote-pairing.mjs";
 import YAML from "yaml";
 import qrcode from "qrcode-terminal";
 import open from "open";
@@ -168,12 +174,20 @@ function runtimeStatePath() {
   return path.join(forgeHome(), "run", "forge-memory-runtime.json");
 }
 
+function runtimeStartLockPath() {
+  return path.join(forgeHome(), "run", "forge-memory-start.lock");
+}
+
 function logPath() {
   return path.join(forgeHome(), "logs", "forge-memory-runtime.log");
 }
 
 function runtimeInstallRoot() {
   return path.join(forgeHome(), "runtime");
+}
+
+function ownerBrokerDescriptorPath() {
+  return path.join(forgeHome(), "native", "owner-broker.json");
 }
 
 function managedSkillsManifestPath() {
@@ -311,6 +325,33 @@ function normalizeByteThreshold(value, fallback) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
+function normalizeCanonicalExternalOrigin(value) {
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return null;
+  }
+  const candidate = String(value).trim();
+  let parsed;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    throw new Error("Forge canonical external origin is not a valid URL.");
+  }
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== "/" ||
+    parsed.search ||
+    parsed.hash ||
+    parsed.origin !== candidate
+  ) {
+    throw new Error(
+      "Forge canonical external origin must be one exact credential-free HTTPS origin."
+    );
+  }
+  return parsed.origin;
+}
+
 function updateBackupConfirmThresholdBytes() {
   return normalizeByteThreshold(
     process.env.FORGE_MEMORY_UPDATE_BACKUP_PROMPT_BYTES,
@@ -407,7 +448,7 @@ async function readConfig() {
   const config = await readJson(configPath(), {});
   const peerAllowLoopbackDirect = config?.peer?.allowLoopbackDirect === true;
   const peerIrohConfigured = typeof config?.peer?.irohEnabled === "boolean";
-  return {
+  const resolved = {
     version: VERSION,
     mode: config?.mode === "dev" ? "dev" : "packaged",
     origin: typeof config?.origin === "string" ? config.origin : DEFAULT_ORIGIN,
@@ -417,6 +458,13 @@ async function readConfig() {
       typeof config?.dataRoot === "string"
         ? path.resolve(config.dataRoot)
         : defaultDataRoot(),
+    remoteCredentialId:
+      typeof config?.remoteCredentialId === "string"
+        ? config.remoteCredentialId
+        : "",
+    canonicalExternalOrigin: normalizeCanonicalExternalOrigin(
+      config?.canonicalExternalOrigin
+    ),
     adapters: Array.isArray(config?.adapters)
       ? config.adapters.filter((entry) => ADAPTERS.includes(entry))
       : [],
@@ -433,6 +481,10 @@ async function readConfig() {
     ),
     peerAllowLoopbackDirect
   };
+  return {
+    ...resolved,
+    remoteTarget: !isLoopbackPairingUrl(baseUrl(resolved))
+  };
 }
 
 async function writeConfig(next, options) {
@@ -443,6 +495,10 @@ async function writeConfig(next, options) {
     port: next.port,
     webPort: next.webPort,
     dataRoot: path.resolve(next.dataRoot),
+    remoteCredentialId: next.remoteCredentialId || "",
+    canonicalExternalOrigin: normalizeCanonicalExternalOrigin(
+      next.canonicalExternalOrigin
+    ),
     adapters: next.adapters,
     repo: next.repo ?? null,
     peer: {
@@ -680,7 +736,7 @@ function normalizeForgePublicUiUrl(value) {
 
 function forgePublicHealthUrl(publicUiUrl) {
   const url = new URL(publicUiUrl);
-  url.pathname = "/api/v1/health";
+  url.pathname = "/api/health";
   url.search = "";
   url.hash = "";
   return url;
@@ -948,10 +1004,8 @@ async function ensureIrohTransportPrepared(config, flags = {}) {
 }
 
 async function ensureForgePeerPrepared(config, flags = null) {
-  if (!config.peerEnabled) {
-    return { ok: true, enabled: false, built: false, binaryPath: null };
-  }
   if (
+    config.peerEnabled &&
     config.peerIrohEnabled !== true &&
     (!Array.isArray(config.peerDirectEndpoints) ||
       config.peerDirectEndpoints.length === 0)
@@ -979,7 +1033,10 @@ async function ensureForgePeerPrepared(config, flags = null) {
   };
 
   try {
-    const result = await prepareForgePeerRuntime({
+    const prepareNativeRuntime = config.peerEnabled
+      ? prepareForgePeerRuntime
+      : prepareForgeOwnerBrokerRuntime;
+    const result = await prepareNativeRuntime({
       mode: config.mode,
       pluginRoot,
       repoRoot: config.repo,
@@ -988,7 +1045,55 @@ async function ensureForgePeerPrepared(config, flags = null) {
       environment: process.env,
       runCargo
     });
-    return { ...result, enabled: true };
+    if (
+      flags?.dryRun !== true &&
+      result.ownerBrokerBinaryPath &&
+      result.ownerBrokerBinarySha256
+    ) {
+      const descriptorPath = ownerBrokerDescriptorPath();
+      await fsp.mkdir(path.dirname(descriptorPath), {
+        recursive: true,
+        mode: 0o700
+      });
+      await fsp.chmod(path.dirname(descriptorPath), 0o700);
+      await fsp.writeFile(
+        descriptorPath,
+        `${JSON.stringify({
+          schemaVersion: 1,
+          binaryPath: result.ownerBrokerBinaryPath,
+          binarySha256: result.ownerBrokerBinarySha256,
+          receiptPath: result.receiptPath,
+          updatedAt: new Date().toISOString()
+        })}\n`,
+        { encoding: "utf8", mode: 0o600 }
+      );
+      await fsp.chmod(descriptorPath, 0o600);
+    }
+    const browserHandlerDisabledForTests =
+      process.env.NODE_ENV === "test" &&
+      process.env.FORGE_MEMORY_TEST_DISABLE_MACOS_BROWSER_HANDLER === "1";
+    const browserHandler =
+      process.platform === "darwin" &&
+      flags?.dryRun !== true &&
+      !browserHandlerDisabledForTests &&
+      result.ownerBrokerBinaryPath &&
+      result.ownerBrokerBinarySha256
+        ? await ensureMacosBrowserHandler({
+            nativeRoot: path.join(forgeHome(), "native"),
+            ownerBrokerBinaryPath: result.ownerBrokerBinaryPath,
+            ownerBrokerBinarySha256: result.ownerBrokerBinarySha256
+          })
+        : {
+            ok: true,
+            enabled: false,
+            handlerScheme: null,
+            appPath: null
+          };
+    return {
+      ...result,
+      enabled: config.peerEnabled,
+      browserHandler
+    };
   } catch (error) {
     throw new Error(
       [
@@ -1071,6 +1176,13 @@ function forgeRuntimeEnvironment(config, peerPreparation) {
     "FORGE_PEER_ENABLED",
     "FORGE_PEER_REQUIRED",
     "FORGE_PEER_BIN",
+    "FORGE_OWNER_BROKER_BIN",
+    "FORGE_OWNER_BROKER_SHA256",
+    "FORGE_PLATFORM_OWNER_KEY_PATH",
+    "FORGE_PLATFORM_OWNER_KEY_SHA256",
+    "FORGE_LOCAL_BROWSER_HANDLER_SCHEME",
+    "FORGE_LOCAL_BROWSER_API_ORIGIN",
+    "FORGE_CANONICAL_EXTERNAL_ORIGIN",
     "FORGE_PEER_ENABLE_IROH",
     "FORGE_PEER_DIRECT_ENDPOINTS",
     "FORGE_PEER_ALLOW_LOOPBACK_DIRECT",
@@ -1083,8 +1195,31 @@ function forgeRuntimeEnvironment(config, peerPreparation) {
     environment.FORGE_RUNTIME_PACKAGE_NAME = RUNTIME_PACKAGE;
     environment.FORGE_RUNTIME_PACKAGE_VERSION = RUNTIME_PACKAGE_VERSION;
   }
+  if (config.canonicalExternalOrigin) {
+    environment.FORGE_CANONICAL_EXTERNAL_ORIGIN =
+      normalizeCanonicalExternalOrigin(config.canonicalExternalOrigin);
+  }
   environment.FORGE_PEER_ENABLED = config.peerEnabled ? "1" : "0";
   environment.FORGE_PEER_REQUIRED = "0";
+  if (!hasVerifiedLocalOwnerPreparation(peerPreparation)) {
+    throw new Error(
+      "The verified Forge local-owner runtime has no supported owner-authentication material."
+    );
+  }
+  if (peerPreparation.ownerBrokerBinaryPath) {
+    environment.FORGE_OWNER_BROKER_BIN = peerPreparation.ownerBrokerBinaryPath;
+    environment.FORGE_OWNER_BROKER_SHA256 =
+      peerPreparation.ownerBrokerBinarySha256;
+    if (peerPreparation.browserHandler?.handlerScheme === "forge") {
+      environment.FORGE_LOCAL_BROWSER_HANDLER_SCHEME = "forge";
+      environment.FORGE_LOCAL_BROWSER_API_ORIGIN = `http://127.0.0.1:${config.port}`;
+    }
+  } else {
+    environment.FORGE_PLATFORM_OWNER_KEY_PATH =
+      peerPreparation.platformOwnerKeyPath;
+    environment.FORGE_PLATFORM_OWNER_KEY_SHA256 =
+      peerPreparation.platformOwnerKeySha256;
+  }
   if (config.peerEnabled) {
     if (!peerPreparation?.binaryPath) {
       throw new Error("The enabled forge-peer runtime has no verified binary.");
@@ -1097,6 +1232,53 @@ function forgeRuntimeEnvironment(config, peerPreparation) {
       config.peerAllowLoopbackDirect ? "1" : "0";
   }
   return environment;
+}
+
+function hasVerifiedLocalOwnerPreparation(preparation) {
+  return Boolean(
+    (preparation?.ownerBrokerBinaryPath &&
+      /^[0-9a-f]{64}$/.test(preparation.ownerBrokerBinarySha256 ?? "")) ||
+    (preparation?.platformOwnerKeyPath &&
+      /^[0-9a-f]{64}$/.test(preparation.platformOwnerKeySha256 ?? ""))
+  );
+}
+
+function applyLocalOwnerProcessEnvironment(preparation) {
+  for (const name of [
+    "FORGE_OWNER_BROKER_BIN",
+    "FORGE_OWNER_BROKER_SHA256",
+    "FORGE_PLATFORM_OWNER_KEY_PATH",
+    "FORGE_PLATFORM_OWNER_KEY_SHA256"
+  ]) {
+    delete process.env[name];
+  }
+  if (preparation?.ownerBrokerBinaryPath) {
+    process.env.FORGE_OWNER_BROKER_BIN = preparation.ownerBrokerBinaryPath;
+    process.env.FORGE_OWNER_BROKER_SHA256 = preparation.ownerBrokerBinarySha256;
+  } else if (preparation?.platformOwnerKeyPath) {
+    process.env.FORGE_PLATFORM_OWNER_KEY_PATH =
+      preparation.platformOwnerKeyPath;
+    process.env.FORGE_PLATFORM_OWNER_KEY_SHA256 =
+      preparation.platformOwnerKeySha256;
+  }
+}
+
+function captureLocalOwnerProcessEnvironment() {
+  return Object.fromEntries(
+    [
+      "FORGE_OWNER_BROKER_BIN",
+      "FORGE_OWNER_BROKER_SHA256",
+      "FORGE_PLATFORM_OWNER_KEY_PATH",
+      "FORGE_PLATFORM_OWNER_KEY_SHA256"
+    ].map((name) => [name, process.env[name]])
+  );
+}
+
+function restoreLocalOwnerProcessEnvironment(previous) {
+  for (const [name, value] of Object.entries(previous)) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
 }
 
 function detectOpenClaw() {
@@ -1422,6 +1604,71 @@ function resolveDevServerEntry(repoRoot) {
   );
 }
 
+function localViteListenerMatchesRepo(port, repoRoot) {
+  if (process.platform === "win32" || typeof process.getuid !== "function") {
+    return false;
+  }
+  const listeners = spawnSync(
+    "lsof",
+    ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"],
+    { encoding: "utf8", timeout: 2_000 }
+  );
+  if (listeners.error || listeners.status !== 0) return false;
+  const listenerPids = [
+    ...new Set(
+      listeners.stdout
+        .split(/\s+/)
+        .map(Number)
+        .filter((pid) => Number.isInteger(pid) && pid > 0)
+    )
+  ];
+  const expectedRepo = fs.realpathSync(repoRoot);
+  const expectedViteBins = [
+    path.join(expectedRepo, "node_modules", ".bin", "vite"),
+    path.join(expectedRepo, "node_modules", "vite", "bin", "vite.js"),
+    path.join(expectedRepo, "node_modules", "vite", "dist", "node", "cli.js")
+  ];
+  return listenerPids.some((pid) => {
+    const uid = spawnSync("ps", ["-p", String(pid), "-o", "uid="], {
+      encoding: "utf8",
+      timeout: 2_000
+    });
+    if (
+      uid.error ||
+      uid.status !== 0 ||
+      Number(uid.stdout.trim()) !== process.getuid()
+    ) {
+      return false;
+    }
+    const cwd = spawnSync(
+      "lsof",
+      ["-a", "-p", String(pid), "-d", "cwd", "-Fn"],
+      { encoding: "utf8", timeout: 2_000 }
+    );
+    const cwdPath = cwd.stdout
+      .split(/\r?\n/)
+      .find((line) => line.startsWith("n"))
+      ?.slice(1);
+    if (
+      cwd.error ||
+      cwd.status !== 0 ||
+      !cwdPath ||
+      fs.realpathSync(cwdPath) !== expectedRepo
+    ) {
+      return false;
+    }
+    const command = spawnSync("ps", ["-p", String(pid), "-o", "command="], {
+      encoding: "utf8",
+      timeout: 2_000
+    });
+    return (
+      !command.error &&
+      command.status === 0 &&
+      expectedViteBins.some((viteBin) => command.stdout.includes(viteBin))
+    );
+  });
+}
+
 async function isForgeDevWebServer(port, repoRoot) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 1_500);
@@ -1430,7 +1677,16 @@ async function isForgeDevWebServer(port, repoRoot) {
       headers: { accept: "text/html" },
       signal: controller.signal
     });
-    if (!response.ok) return false;
+    if (response.status === 401) {
+      const body = await response.json().catch(() => null);
+      return (
+        body?.code === "gateway_authentication_required" &&
+        localViteListenerMatchesRepo(port, repoRoot)
+      );
+    }
+    if (!response.ok) {
+      return localViteListenerMatchesRepo(port, repoRoot);
+    }
     const html = await response.text();
     if (
       !html.includes("<title>Forge</title>") ||
@@ -1458,7 +1714,7 @@ async function isForgeDevWebServer(port, repoRoot) {
     const source = await sourceResponse.text();
     return source.includes("import.meta.hot") && source.includes(sourceEntry);
   } catch {
-    return false;
+    return localViteListenerMatchesRepo(port, repoRoot);
   } finally {
     clearTimeout(timeout);
   }
@@ -1511,9 +1767,15 @@ function findForgeRepo(start = process.cwd()) {
     if (fs.existsSync(packageJsonPath)) {
       try {
         const parsed = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+        const hasCurrentApiEntry = fs.existsSync(
+          path.join(current, "apps", "api", "src", "index.ts")
+        );
+        const hasLegacyApiEntry = fs.existsSync(
+          path.join(current, "server", "src", "index.ts")
+        );
         if (
           parsed?.name === "forge" &&
-          fs.existsSync(path.join(current, "server", "src", "index.ts"))
+          (hasCurrentApiEntry || hasLegacyApiEntry)
         ) {
           return current;
         }
@@ -1589,7 +1851,7 @@ async function buildInstallConfig(parsed, currentConfig, discovery, command) {
     .filter((adapter) => adapter.installed)
     .map((adapter) => adapter.id);
   const currentDefaults =
-    currentConfig.adapters.length > 0
+    currentConfig.updatedAt !== null
       ? currentConfig.adapters
       : detectedDefaults;
   const adapterOverride = parsed.flags.skipAdapters
@@ -1622,16 +1884,21 @@ async function buildInstallConfig(parsed, currentConfig, discovery, command) {
     dataRoot,
     dataRootWasExplicit: typeof parsed.values.dataRoot === "string"
   });
-  const peerEnabled = parsed.flags.enablePeer
-    ? true
-    : parsed.flags.disablePeer
-      ? false
-      : parsed.flags.yes
-        ? currentConfig.peerEnabled
-        : await promptYesNo(
-            "Enable secure Forge-to-Forge sharing on this host?",
-            currentConfig.updatedAt ? currentConfig.peerEnabled : false
-          );
+  const remoteTarget = !isLoopbackPairingUrl(
+    baseUrl({ origin, port: runtimeTarget.port })
+  );
+  const peerEnabled = remoteTarget
+    ? false
+    : parsed.flags.enablePeer
+      ? true
+      : parsed.flags.disablePeer
+        ? false
+        : parsed.flags.yes
+          ? currentConfig.peerEnabled
+          : await promptYesNo(
+              "Enable secure Forge-to-Forge sharing on this host?",
+              currentConfig.updatedAt ? currentConfig.peerEnabled : false
+            );
   const enablingPeerNow = peerEnabled && !currentConfig.peerEnabled;
   const peerIrohEnabled = parsed.flags.enablePeerIroh
     ? true
@@ -1680,6 +1947,9 @@ async function buildInstallConfig(parsed, currentConfig, discovery, command) {
     port: runtimeTarget.port,
     webPort: runtimeTarget.webPort,
     dataRoot: runtimeTarget.dataRoot,
+    remoteCredentialId: currentConfig.remoteCredentialId || "",
+    canonicalExternalOrigin: currentConfig.canonicalExternalOrigin ?? null,
+    remoteTarget,
     adapters,
     repo,
     command,
@@ -1714,10 +1984,27 @@ async function patchOpenClawConfig(config, options) {
     ...currentPluginConfig,
     origin: config.origin,
     port: config.port,
-    dataRoot: config.dataRoot
+    dataRoot: config.dataRoot,
+    remoteCredentialId: config.remoteCredentialId || ""
   };
   entries[FORGE_PLUGIN_ID] = currentEntry;
   plugins.entries = entries;
+  if (config.mode === "dev" && config.repo) {
+    const pluginRoot = path.resolve(config.repo, "plugins", "openclaw");
+    const load =
+      plugins.load && typeof plugins.load === "object"
+        ? { ...plugins.load }
+        : {};
+    const loadPaths = Array.isArray(load.paths) ? [...load.paths] : [];
+    if (!loadPaths.some((entry) => path.resolve(entry) === pluginRoot)) {
+      loadPaths.push(pluginRoot);
+    }
+    load.paths = loadPaths;
+    plugins.load = load;
+    const allow = Array.isArray(plugins.allow) ? [...plugins.allow] : [];
+    if (!allow.includes(FORGE_PLUGIN_ID)) allow.push(FORGE_PLUGIN_ID);
+    plugins.allow = allow;
+  }
   const next = { ...payload, plugins };
   return writeJson(filePath, next, options);
 }
@@ -1735,6 +2022,7 @@ async function patchHermesConfig(config, options) {
       origin: config.origin,
       port: config.port,
       dataRoot: config.dataRoot,
+      remoteCredentialId: config.remoteCredentialId || "",
       actorLabel: "",
       updatedAt: new Date().toISOString()
     },
@@ -1763,14 +2051,16 @@ async function patchCodexConfig(config, options) {
   let source = fs.existsSync(filePath)
     ? await fsp.readFile(filePath, "utf8")
     : "";
+  const launch = forgeMemoryMcpLaunch(config);
   const block = [
     "[mcp_servers.forge]",
-    'command = "npx"',
-    'args = ["forge-memory", "mcp"]',
+    `command = ${JSON.stringify(launch.command)}`,
+    `args = [${launch.args.map((entry) => JSON.stringify(entry)).join(", ")}]`,
     "",
     "[mcp_servers.forge.env]",
     `FORGE_ORIGIN = "${config.origin}"`,
     `FORGE_PORT = "${config.port}"`,
+    `FORGE_REMOTE_CREDENTIAL_ID = "${config.remoteCredentialId || ""}"`,
     'FORGE_ACTOR_LABEL = "codex"',
     'FORGE_AGENT_PROVIDER = "codex"',
     'FORGE_TIMEOUT_MS = "15000"',
@@ -1795,6 +2085,7 @@ function forgeMcpEnv(config, actorLabel) {
   return {
     FORGE_ORIGIN: config.origin,
     FORGE_PORT: String(config.port),
+    FORGE_REMOTE_CREDENTIAL_ID: config.remoteCredentialId || "",
     FORGE_ACTOR_LABEL: actorLabel,
     FORGE_AGENT_PROVIDER: actorLabel,
     FORGE_TIMEOUT_MS: "15000",
@@ -1802,25 +2093,55 @@ function forgeMcpEnv(config, actorLabel) {
   };
 }
 
+function forgeMemoryMcpLaunch(config) {
+  if (config.mode === "dev" && config.repo) {
+    const sourceCli = path.resolve(
+      config.repo,
+      "packages",
+      "forge-memory",
+      "bin",
+      "forge-memory.mjs"
+    );
+    if (fs.existsSync(sourceCli)) {
+      return {
+        command: process.execPath,
+        args: [sourceCli, "mcp"]
+      };
+    }
+  }
+  return {
+    command: "npx",
+    args: ["forge-memory", "mcp"]
+  };
+}
+
 function forgeMemoryMcpServerConfig(config, actorLabel) {
+  const launch = forgeMemoryMcpLaunch(config);
   return {
     type: "stdio",
-    command: "npx",
-    args: ["forge-memory", "mcp"],
+    command: launch.command,
+    args: launch.args,
     env: forgeMcpEnv(config, actorLabel)
   };
 }
 
 function isForgeMemoryMcpServer(entry) {
-  return (
+  const isNpxLaunch =
     entry &&
     typeof entry === "object" &&
     entry.command === "npx" &&
     Array.isArray(entry.args) &&
     entry.args.length >= 2 &&
     entry.args[0] === "forge-memory" &&
-    entry.args[1] === "mcp"
-  );
+    entry.args[1] === "mcp";
+  const isSourceLaunch =
+    entry &&
+    typeof entry === "object" &&
+    Array.isArray(entry.args) &&
+    entry.args.length >= 2 &&
+    path.basename(entry.args[0] ?? "") === "forge-memory.mjs" &&
+    entry.args[1] === "mcp";
+  return isNpxLaunch || isSourceLaunch;
 }
 
 const CLAUDE_FORGE_RULES_START = "<!-- forge-memory:rules:start -->";
@@ -1905,6 +2226,7 @@ function stripCodexForgeMcpConfig(source) {
     'args = ["forge-memory", "mcp"]',
     "FORGE_ORIGIN",
     "FORGE_PORT",
+    "FORGE_REMOTE_CREDENTIAL_ID",
     "FORGE_ACTOR_LABEL",
     "FORGE_AGENT_PROVIDER",
     "FORGE_TIMEOUT_MS",
@@ -1984,6 +2306,36 @@ async function runLoggedCommand(
   });
 }
 
+function parseTrailingJson(output) {
+  const match = String(output).match(/(?:^|\n)(\{[\s\S]*)$/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+function openClawPluginLoadedFrom(pluginRoot) {
+  const result = spawnSync(
+    "openclaw",
+    ["plugins", "info", FORGE_PLUGIN_ID, "--json"],
+    {
+      encoding: "utf8",
+      timeout: 15_000
+    }
+  );
+  if (result.error || result.status !== 0) return false;
+  const payload =
+    parseTrailingJson(result.stdout) ?? parseTrailingJson(result.stderr);
+  return (
+    payload?.plugin?.id === FORGE_PLUGIN_ID &&
+    payload.plugin.status === "loaded" &&
+    typeof payload.plugin.rootDir === "string" &&
+    path.resolve(payload.plugin.rootDir) === path.resolve(pluginRoot)
+  );
+}
+
 async function installOpenClawAdapter(config, options) {
   await patchOpenClawConfig(config, options);
   if (!commandExists("openclaw")) {
@@ -1998,30 +2350,52 @@ async function installOpenClawAdapter(config, options) {
     config.mode === "dev" && config.repo
       ? path.join(config.repo, "plugins/openclaw")
       : FORGE_PLUGIN_ID;
-  const installArgs =
-    config.mode === "dev"
-      ? [
-          "plugins",
-          "install",
-          "--link",
-          "--dangerously-force-unsafe-install",
-          installTarget
-        ]
-      : [
-          "plugins",
-          "install",
-          "--dangerously-force-unsafe-install",
-          installTarget
-        ];
-  const installResult = await runCommand("openclaw", installArgs, options);
-  if (!installResult.ok)
+  const isReadyDevLink =
+    config.mode === "dev" &&
+    !options.dryRun &&
+    openClawPluginLoadedFrom(installTarget);
+  if (!isReadyDevLink) {
+    const installArgs =
+      config.mode === "dev"
+        ? ["plugins", "install", "--link", installTarget]
+        : ["plugins", "install", "--force", installTarget];
+    const installResult = await runCommand("openclaw", installArgs, options);
+    const recoveredExistingDevLink =
+      !installResult.ok &&
+      config.mode === "dev" &&
+      !options.dryRun &&
+      openClawPluginLoadedFrom(installTarget);
+    if (!installResult.ok && !recoveredExistingDevLink)
+      return {
+        adapter: "openclaw",
+        ok: false,
+        message: "OpenClaw plugin install failed"
+      };
+  }
+  const enableResult = await runCommand(
+    "openclaw",
+    ["plugins", "enable", FORGE_PLUGIN_ID],
+    options
+  );
+  if (!enableResult.ok) {
     return {
       adapter: "openclaw",
       ok: false,
-      message: "OpenClaw plugin install failed"
+      message: "OpenClaw plugin enable failed"
     };
-  await runCommand("openclaw", ["plugins", "enable", FORGE_PLUGIN_ID], options);
-  await runCommand("openclaw", ["gateway", "restart"], options);
+  }
+  const restartResult = await runCommand(
+    "openclaw",
+    ["gateway", "restart"],
+    options
+  );
+  if (!restartResult.ok) {
+    return {
+      adapter: "openclaw",
+      ok: false,
+      message: "OpenClaw gateway restart failed"
+    };
+  }
   return { adapter: "openclaw", ok: true };
 }
 
@@ -2051,7 +2425,7 @@ async function installHermesAdapter(config, options) {
           "install",
           "--upgrade",
           "-e",
-          path.join(config.repo, "plugins", "forge-hermes")
+          path.join(config.repo, "plugins", "hermes")
         ]
       : ["-m", "pip", "install", "--upgrade", "forge-hermes-plugin"];
   const result = await runCommand(pythonPath, target, options);
@@ -2092,8 +2466,8 @@ async function health(config, timeoutMs = 1_500) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(forgeApiUrl(config, "/api/v1/health"), {
-      headers: { accept: "application/json", "x-forge-runtime-probe": "1" },
+    const response = await fetch(forgeApiUrl(config, "/api/health"), {
+      headers: { accept: "application/json" },
       signal: controller.signal
     });
     if (!response.ok) return { ok: false, status: response.status };
@@ -2126,7 +2500,11 @@ async function health(config, timeoutMs = 1_500) {
 
 function isForgeHealthPayload(payload) {
   if (!payload || typeof payload !== "object") return false;
-  return payload.app === "forge" && payload.backend === "forge-node-runtime";
+  return (
+    payload.ok === true &&
+    payload.app === "forge" &&
+    payload.security === "credential-required"
+  );
 }
 
 function describeNetworkError(error) {
@@ -2165,6 +2543,75 @@ function processExists(pid) {
   }
 }
 
+function captureProcessIdentity(pid) {
+  if (!Number.isInteger(pid) || pid <= 0 || !processExists(pid)) {
+    return null;
+  }
+  const result =
+    process.platform === "win32"
+      ? spawnSync(
+          "powershell.exe",
+          [
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$p=Get-Process -Id ([int]$args[0]) -ErrorAction Stop; $path=''; try {$path=$p.Path} catch {}; Write-Output ($p.StartTime.ToUniversalTime().ToString('o') + '|' + $path)",
+            String(pid)
+          ],
+          { encoding: "utf8", windowsHide: true }
+        )
+      : spawnSync("ps", ["-p", String(pid), "-o", "lstart=", "-o", "comm="], {
+          encoding: "utf8"
+        });
+  const identityText =
+    result.status === 0 && typeof result.stdout === "string"
+      ? result.stdout.trim()
+      : "";
+  if (!identityText) {
+    return null;
+  }
+  return createHash("sha256")
+    .update(`${process.platform}\0${pid}\0${identityText}`)
+    .digest("hex");
+}
+
+async function waitForProcessIdentity(pid, timeoutMs = 2_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const identity = captureProcessIdentity(pid);
+    if (identity) {
+      return identity;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return null;
+}
+
+async function recordManagedChild(role, child) {
+  if (!Number.isInteger(child.pid) || child.pid <= 0) {
+    throw new Error(`Forge could not obtain the ${role} runtime process ID.`);
+  }
+  const identity = await waitForProcessIdentity(child.pid);
+  if (!identity) {
+    signalDetachedProcessGroup(child.pid, "SIGTERM") || child.kill("SIGTERM");
+    throw new Error(
+      `Forge refused to manage the ${role} runtime without a verifiable process identity.`
+    );
+  }
+  return { role, pid: child.pid, identity };
+}
+
+function recordedProcessIdentityMatches(recorded) {
+  return (
+    Number.isInteger(recorded?.pid) &&
+    recorded.pid > 0 &&
+    typeof recorded.identity === "string" &&
+    /^[0-9a-f]{64}$/.test(recorded.identity) &&
+    captureProcessIdentity(recorded.pid) === recorded.identity
+  );
+}
+
 function signalProcess(pid, signal = "SIGTERM") {
   try {
     process.kill(pid, signal);
@@ -2193,12 +2640,16 @@ async function waitForProcessExit(pid, timeoutMs = 1_500) {
   return !processExists(pid);
 }
 
-async function stopRecordedRuntimeProcess(pid) {
-  if (!Number.isInteger(pid) || pid <= 0 || !processExists(pid)) return false;
+async function stopRecordedRuntimeProcess(recorded) {
+  if (!recordedProcessIdentityMatches(recorded)) return false;
+  const pid = recorded.pid;
   const signaled =
     signalDetachedProcessGroup(pid, "SIGTERM") || signalProcess(pid, "SIGTERM");
   if (!signaled) return false;
   if (await waitForProcessExit(pid)) return true;
+  if (!recordedProcessIdentityMatches(recorded)) {
+    return true;
+  }
   if (!signalDetachedProcessGroup(pid, "SIGKILL")) {
     signalProcess(pid, "SIGKILL");
   }
@@ -2214,6 +2665,56 @@ async function waitForHealth(config, timeoutMs = 30_000) {
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   return health(config);
+}
+
+async function acquireRuntimeStartLock(config, timeoutMs = 30_000) {
+  const lockPath = runtimeStartLockPath();
+  await fsp.mkdir(path.dirname(lockPath), { recursive: true, mode: 0o700 });
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      await fsp.mkdir(lockPath, { mode: 0o700 });
+      let released = false;
+      return async () => {
+        if (released) return;
+        released = true;
+        await fsp.rmdir(lockPath).catch(() => undefined);
+      };
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+    }
+    const current = await health(config, 1_000);
+    if (isHealthyForgeRuntime(current)) return null;
+    try {
+      const metadata = await fsp.stat(lockPath);
+      if (Date.now() - metadata.mtimeMs > 60_000) {
+        await fsp.rmdir(lockPath);
+        continue;
+      }
+    } catch {
+      continue;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(
+    `Forge timed out waiting for another local client to start ${baseUrl(config)}.`
+  );
+}
+
+async function ensureManagedRuntimeForLocalClient(config, peerPreparation) {
+  if (isHealthyForgeRuntime(await health(config, 1_500))) return;
+  const release = await acquireRuntimeStartLock(config);
+  if (!release) return;
+  try {
+    const result = await startRuntime(config, { peerPreparation });
+    if (!result.ok) {
+      throw new Error(
+        result.message ?? `Forge did not become healthy at ${baseUrl(config)}.`
+      );
+    }
+  } finally {
+    await release();
+  }
 }
 
 function resolveOpenClawPluginRoot(options = {}) {
@@ -2287,9 +2788,60 @@ function runtimeStateOwnsHealthProcess(state, healthResult) {
     runtimePid > 0 &&
     Array.isArray(state?.children) &&
     state.children.some(
-      (child) => child?.role === "server" && child.pid === runtimePid
+      (child) =>
+        child?.role === "server" &&
+        recordedProcessIdentityMatches(child) &&
+        (child.pid === runtimePid ||
+          (process.platform !== "win32" &&
+            processGroupId(child.pid) !== null &&
+            processGroupId(child.pid) === processGroupId(runtimePid)))
     )
   );
+}
+
+function processGroupId(pid) {
+  if (process.platform === "win32" || !Number.isInteger(pid) || pid <= 0) {
+    return null;
+  }
+  const result = spawnSync("ps", ["-p", String(pid), "-o", "pgid="], {
+    encoding: "utf8",
+    timeout: 2_000
+  });
+  if (result.error || result.status !== 0) return null;
+  const pgid = Number(result.stdout.trim());
+  return Number.isInteger(pgid) && pgid > 0 ? pgid : null;
+}
+
+function adoptedRuntimeState(config, healthResult) {
+  const observedPid = Number(healthResult?.payload?.runtime?.pid);
+  const runtimeIdentity = healthRuntimePackageIdentity(healthResult);
+  return {
+    mode: config.mode,
+    runtimePackageName: runtimeIdentity?.name ?? null,
+    runtimePackageVersion: runtimeIdentity?.version ?? null,
+    baseUrl: baseUrl(config),
+    webUrl: webUrl(config),
+    dataRoot: config.dataRoot,
+    logPath: null,
+    peer: {
+      enabled: config.peerEnabled,
+      irohEnabled: config.peerIrohEnabled,
+      binaryPath: null,
+      sourceIdentity: null,
+      directEndpoints: config.peerDirectEndpoints,
+      allowLoopbackDirect: config.peerAllowLoopbackDirect
+    },
+    localBrowserHandler: {
+      enabled: false,
+      scheme: null,
+      appPath: null
+    },
+    children: [],
+    adopted: true,
+    observedPid:
+      Number.isInteger(observedPid) && observedPid > 0 ? observedPid : null,
+    observedAt: new Date().toISOString()
+  };
 }
 
 function runtimeStateMatchesPackage(state, config) {
@@ -2415,6 +2967,12 @@ async function repairPackagedRuntimeCache(config) {
 }
 
 function runtimeStateMatchesPeerConfig(state, config) {
+  if (
+    (state?.canonicalExternalOrigin ?? null) !==
+    (config.canonicalExternalOrigin ?? null)
+  ) {
+    return false;
+  }
   if (!state?.peer) return !config.peerEnabled;
   return (
     state.peer.enabled === config.peerEnabled &&
@@ -2426,16 +2984,113 @@ function runtimeStateMatchesPeerConfig(state, config) {
   );
 }
 
+function runtimeStateHasLiveManagedServer(state) {
+  return (
+    state?.adopted !== true &&
+    Array.isArray(state?.children) &&
+    state.children.some(
+      (child) =>
+        child?.role === "server" && recordedProcessIdentityMatches(child)
+    )
+  );
+}
+
+async function authenticatedRuntimeHealth(config, peerPreparation = null) {
+  let preparation = peerPreparation;
+  if (!process.env.FORGE_API_TOKEN?.trim() && !preparation) {
+    preparation = await ensureForgePeerPrepared(config);
+  }
+  if (
+    !process.env.FORGE_API_TOKEN?.trim() &&
+    !hasVerifiedLocalOwnerPreparation(preparation)
+  ) {
+    throw new Error(
+      "Forge could not prepare a verified local-owner helper for runtime authentication."
+    );
+  }
+  const previousOwnerEnvironment = captureLocalOwnerProcessEnvironment();
+  if (preparation) applyLocalOwnerProcessEnvironment(preparation);
+  try {
+    const toolRuntime = await loadForgeToolRuntime(config);
+    if (!toolRuntime?.callConfiguredForgeApi) {
+      throw new Error("Forge could not load its authenticated client runtime.");
+    }
+    const response = await toolRuntime.callConfiguredForgeApi(
+      toolRuntime.forgeConfig,
+      {
+        method: "GET",
+        path: "/api/v1/health",
+        extraHeaders: { "x-forge-runtime-probe": "1" }
+      }
+    );
+    if (
+      response.status !== 200 ||
+      response.body?.app !== "forge" ||
+      response.body?.backend !== "forge-node-runtime"
+    ) {
+      throw new Error(
+        `The protected Forge identity check failed with HTTP ${response.status}.`
+      );
+    }
+    return {
+      ok: true,
+      status: response.status,
+      payload: response.body,
+      forge: true
+    };
+  } finally {
+    restoreLocalOwnerProcessEnvironment(previousOwnerEnvironment);
+  }
+}
+
 async function startRuntime(config, options = {}) {
   let current = await health(config);
   let existing = await readRuntimeState();
+  let peerPreparation = options.peerPreparation ?? null;
+  const preparationSourceDigest =
+    peerPreparation?.sourceIdentity?.sourceManifestSha256 ?? null;
+  const runningSourceDigest =
+    existing?.peer?.sourceIdentity?.sourceManifestSha256 ?? null;
+  const needsManagedOwnerRuntimeRefresh =
+    isHealthyForgeRuntime(current) &&
+    peerPreparation &&
+    runtimeStateHasLiveManagedServer(existing) &&
+    ((preparationSourceDigest &&
+      preparationSourceDigest !== runningSourceDigest) ||
+      (peerPreparation.browserHandler?.handlerScheme === "forge" &&
+        existing?.localBrowserHandler?.scheme !== "forge"));
+  if (needsManagedOwnerRuntimeRefresh) {
+    await stopRuntime(config);
+    current = await health(config);
+    existing = null;
+  }
   if (isHealthyForgeRuntime(current)) {
+    try {
+      current = await authenticatedRuntimeHealth(config, peerPreparation);
+    } catch (error) {
+      return {
+        ok: false,
+        started: false,
+        adopted: false,
+        authenticationFailed: true,
+        state: existing,
+        health: current,
+        message: [
+          "Forge is reachable, but Forge Memory could not authenticate it before adoption.",
+          error instanceof Error ? error.message : String(error),
+          "The existing service was left unchanged."
+        ].join(" ")
+      };
+    }
+    const runningIdentity = healthRuntimePackageIdentity(current);
+    const ownsHealthyRuntime = runtimeStateOwnsHealthProcess(existing, current);
     const packageMatches =
       config.mode !== "packaged" ||
-      (runtimePackageIdentityMatches(healthRuntimePackageIdentity(current)) &&
-        runtimeStateMatchesPackage(existing, config));
+      runningIdentity === null ||
+      (runtimePackageIdentityMatches(runningIdentity) &&
+        (!ownsHealthyRuntime || runtimeStateMatchesPackage(existing, config)));
     if (!packageMatches) {
-      if (runtimeStateOwnsHealthProcess(existing, current)) {
+      if (ownsHealthyRuntime) {
         await stopRuntime(config);
         current = await health(config);
         existing = null;
@@ -2470,6 +3125,16 @@ async function startRuntime(config, options = {}) {
         message:
           "The healthy Forge runtime was started with different peer-sharing settings. Run npx forge-memory restart."
       };
+    }
+    if (!runtimeStateOwnsHealthProcess(existing, current)) {
+      const latest = await readRuntimeState();
+      if (runtimeStateOwnsHealthProcess(latest, current)) {
+        existing = latest;
+      }
+    }
+    if (!runtimeStateOwnsHealthProcess(existing, current)) {
+      existing = adoptedRuntimeState(config, current);
+      await writeJson(runtimeStatePath(), existing, { backup: false });
     }
     return {
       ok: true,
@@ -2514,8 +3179,7 @@ async function startRuntime(config, options = {}) {
       };
   }
 
-  const peerPreparation =
-    options.peerPreparation ?? (await ensureForgePeerPrepared(config));
+  peerPreparation ??= await ensureForgePeerPrepared(config);
   const runtimeEnvironment = forgeRuntimeEnvironment(config, peerPreparation);
 
   await fsp.mkdir(path.dirname(logPath()), { recursive: true });
@@ -2564,7 +3228,7 @@ async function startRuntime(config, options = {}) {
         }
       });
       server.unref();
-      children.push({ role: "server", pid: server.pid });
+      children.push(await recordManagedChild("server", server));
       if (webPortAvailable) {
         const web = spawn(
           "npm",
@@ -2589,7 +3253,7 @@ async function startRuntime(config, options = {}) {
           }
         );
         web.unref();
-        children.push({ role: "web", pid: web.pid });
+        children.push(await recordManagedChild("web", web));
       }
     } else {
       const pluginRoot = await ensurePackagedRuntimeInstalled();
@@ -2607,13 +3271,12 @@ async function startRuntime(config, options = {}) {
         }
       });
       child.unref();
-      children.push({ role: "server", pid: child.pid });
+      children.push(await recordManagedChild("server", child));
     }
   } catch (error) {
     await Promise.all(
       children.map(async (child) => {
-        if (typeof child.pid !== "number") return;
-        await stopRecordedRuntimeProcess(child.pid).catch(() => false);
+        await stopRecordedRuntimeProcess(child).catch(() => false);
       })
     );
     throw error;
@@ -2631,6 +3294,7 @@ async function startRuntime(config, options = {}) {
     baseUrl: baseUrl(config),
     webUrl: webUrl(config),
     dataRoot: config.dataRoot,
+    canonicalExternalOrigin: config.canonicalExternalOrigin ?? null,
     logPath: logPath(),
     peer: {
       enabled: config.peerEnabled,
@@ -2639,6 +3303,11 @@ async function startRuntime(config, options = {}) {
       sourceIdentity: peerPreparation.sourceIdentity ?? null,
       directEndpoints: config.peerDirectEndpoints,
       allowLoopbackDirect: config.peerAllowLoopbackDirect
+    },
+    localBrowserHandler: {
+      enabled: peerPreparation.browserHandler?.handlerScheme === "forge",
+      scheme: peerPreparation.browserHandler?.handlerScheme ?? null,
+      appPath: peerPreparation.browserHandler?.appPath ?? null
     },
     children,
     startedAt: new Date().toISOString()
@@ -2672,33 +3341,24 @@ function assertRuntimeStartedForPairing(result, config) {
   );
 }
 
-async function stopRuntime(config = null) {
-  const effectiveConfig = config ?? (await readConfig());
+async function stopRuntime(_config = null) {
   const state = await readRuntimeState();
   const stopped = [];
   for (const child of state?.children ?? []) {
-    if (!child?.pid || !processExists(child.pid)) continue;
-    if (await stopRecordedRuntimeProcess(child.pid)) stopped.push(child.pid);
-  }
-  const current = await health(effectiveConfig);
-  const runtimePid = Number(current?.payload?.runtime?.pid);
-  if (
-    isHealthyForgeRuntime(current) &&
-    Number.isInteger(runtimePid) &&
-    runtimePid > 0 &&
-    !stopped.includes(runtimePid) &&
-    processExists(runtimePid)
-  ) {
-    if (await stopRecordedRuntimeProcess(runtimePid)) stopped.push(runtimePid);
+    if (!recordedProcessIdentityMatches(child)) continue;
+    if (await stopRecordedRuntimeProcess(child)) stopped.push(child.pid);
   }
   await fsp.rm(runtimeStatePath(), { force: true });
   if (stopped.length === 0) {
     return {
       ok: true,
       stopped: false,
-      message: state?.children?.length
-        ? "No recorded Forge Memory runtime processes were alive."
-        : "No Forge Memory runtime state or live Forge runtime was found."
+      message:
+        state?.adopted === true
+          ? "Detached from the adopted Forge runtime; no external process was stopped."
+          : state?.children?.length
+            ? "No recorded Forge Memory runtime processes were alive."
+            : "No Forge Memory runtime state or live Forge runtime was found."
     };
   }
   return { ok: true, stopped: true, pids: stopped };
@@ -3305,48 +3965,6 @@ class PairingTransportUnavailableError extends Error {
   }
 }
 
-async function bootstrapLocalOperatorSession(config) {
-  const sessionUrl = forgeApiUrl(config, "/api/v1/auth/operator-session");
-  let response;
-  try {
-    response = await fetch(sessionUrl, {
-      method: "GET",
-      headers: {
-        accept: "application/json",
-        host: localHostHeader(config)
-      }
-    });
-  } catch (error) {
-    throw new PairingAuthError(
-      [
-        `Could not create a local operator session at ${sessionUrl}.`,
-        `Network: ${describeNetworkError(error)}.`
-      ].join(" "),
-      { url: sessionUrl.toString() }
-    );
-  }
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new PairingAuthError(
-      [
-        `Could not create a local operator session at ${sessionUrl}: Forge returned HTTP ${response.status}.`,
-        body ? `Response: ${body.slice(0, 500)}` : ""
-      ]
-        .filter(Boolean)
-        .join(" "),
-      { url: sessionUrl.toString(), status: response.status }
-    );
-  }
-  const cookie = cookiePairFromSetCookie(readSetCookieHeader(response.headers));
-  if (!cookie) {
-    throw new PairingAuthError(
-      `Could not create a local operator session at ${sessionUrl}: Forge did not return a session cookie.`,
-      { url: sessionUrl.toString(), status: response.status }
-    );
-  }
-  return cookie;
-}
-
 async function createPairing(config, options = {}) {
   const transportMode = options.transportMode ?? "iroh";
   const publicUrl = validatePairingOptions({
@@ -3354,24 +3972,37 @@ async function createPairing(config, options = {}) {
     publicUrl: options.publicUrl
   });
   const pairingUrl = forgeApiUrl(config, "/api/v1/health/pairing-sessions");
-  const operatorCookie = await bootstrapLocalOperatorSession(config);
   let response;
   try {
-    response = await fetch(pairingUrl, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-        cookie: operatorCookie,
-        ...(publicUrl ? { referer: publicUrl } : {})
-      },
-      body: JSON.stringify({
-        userId: null,
-        transportMode,
-        fallbackMode: publicUrl ? publicUrlFallbackMode(publicUrl) : "none",
-        publicUrl: publicUrl ?? undefined
-      })
-    });
+    if (!process.env.FORGE_API_TOKEN?.trim()) {
+      const nativePreparation = await ensureForgePeerPrepared(config);
+      if (!hasVerifiedLocalOwnerPreparation(nativePreparation)) {
+        throw new PairingAuthError(
+          "Forge local-owner authentication has no verified owner channel."
+        );
+      }
+      applyLocalOwnerProcessEnvironment(nativePreparation);
+    }
+    const toolRuntime = await loadForgeToolRuntime(config);
+    if (!toolRuntime?.callConfiguredForgeApi) {
+      throw new PairingAuthError(
+        "Forge could not load its authenticated local client runtime."
+      );
+    }
+    response = await toolRuntime.callConfiguredForgeApi(
+      toolRuntime.forgeConfig,
+      {
+        method: "POST",
+        path: "/api/v1/health/pairing-sessions",
+        extraHeaders: publicUrl ? { referer: publicUrl } : undefined,
+        body: {
+          userId: null,
+          transportMode,
+          fallbackMode: publicUrl ? publicUrlFallbackMode(publicUrl) : "none",
+          publicUrl: publicUrl ?? undefined
+        }
+      }
+    );
   } catch (error) {
     const healthResult = await health(config, 1_500);
     const manualHttpHint =
@@ -3388,8 +4019,8 @@ async function createPairing(config, options = {}) {
       ].join(" ")
     );
   }
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
+  if (response.status >= 400) {
+    const body = safeStringify(response.body);
     throw new PairingRequestError(
       [
         `Could not create iOS pairing at ${pairingUrl}: Forge returned HTTP ${response.status}.`,
@@ -3403,7 +4034,7 @@ async function createPairing(config, options = {}) {
       { url: pairingUrl.toString(), status: response.status }
     );
   }
-  const pairing = await response.json();
+  const pairing = response.body;
   assertPairingTransportUsable(pairing, {
     requestedTransportMode: transportMode
   });
@@ -3888,11 +4519,22 @@ async function printPairing(pairing) {
 
 function peerRuntimeConfigChanged(left, right) {
   return (
+    (left.canonicalExternalOrigin ?? null) !==
+      (right.canonicalExternalOrigin ?? null) ||
     left.peerEnabled !== right.peerEnabled ||
     left.peerIrohEnabled !== right.peerIrohEnabled ||
     left.peerAllowLoopbackDirect !== right.peerAllowLoopbackDirect ||
     JSON.stringify(left.peerDirectEndpoints) !==
       JSON.stringify(right.peerDirectEndpoints)
+  );
+}
+
+function doctorPassedForCommand(result, flags) {
+  if (!result || flags.dryRun) return true;
+  if (result.ok) return true;
+  if (!flags.noStart || !Array.isArray(result.checks)) return false;
+  return result.checks.every(
+    (check) => check?.ok === true || check?.id === "runtime"
   );
 }
 
@@ -3912,12 +4554,63 @@ async function runInstall(parsed, command) {
     parsed.flags,
     async () => discover()
   );
-  const config = await buildInstallConfig(
+  let config = await buildInstallConfig(
     parsed,
     currentConfig,
     discovery,
     command
   );
+  if (config.remoteTarget && config.remoteCredentialId) {
+    const existing =
+      process.platform === "darwin"
+        ? readMacosRemoteCredential(config.remoteCredentialId)
+        : null;
+    if (!existing || existing.endpoint !== new URL(baseUrl(config)).origin) {
+      config = { ...config, remoteCredentialId: "" };
+    }
+  }
+  if (
+    config.remoteTarget &&
+    !config.remoteCredentialId &&
+    !parsed.flags.dryRun
+  ) {
+    const paired = await pairRemoteForgeClient({
+      baseUrl: baseUrl(config),
+      clientName: `Forge agents on ${os.hostname()}`,
+      scopes: ["profile:trusted_personal_assistant"],
+      profile: "trusted_personal_assistant",
+      onPairingCode: async ({ userCode, endpoint, expiresIn }) => {
+        if (!parsed.flags.json) {
+          console.log(
+            [
+              "",
+              color.bold("Authorize this Forge client once"),
+              `Code: ${color.cyan(userCode)}`,
+              `Forge: ${endpoint}`,
+              `Expires in: ${Math.ceil(expiresIn / 60)} minutes`,
+              "Review and approve the exact client and scopes in Forge Settings → Agents."
+            ].join("\n")
+          );
+        }
+        await open(
+          new URL("/forge/settings/agents", `${endpoint}/`).toString()
+        ).catch(() => undefined);
+      }
+    });
+    config = {
+      ...config,
+      remoteCredentialId: paired.credentialId
+    };
+  } else if (
+    config.remoteTarget &&
+    !config.remoteCredentialId &&
+    parsed.flags.dryRun
+  ) {
+    config = {
+      ...config,
+      remoteCredentialId: "forge-client-dry-run-placeholder"
+    };
+  }
   const writeResult = await withProgress(
     "Saving Forge settings",
     configPath(),
@@ -3939,17 +4632,19 @@ async function runInstall(parsed, command) {
       () => stopRuntime(currentConfig)
     );
   }
-  await withProgress(
-    "Preparing Forge data folder",
-    config.dataRoot,
-    parsed.flags,
-    async () => {
-      if (!parsed.flags.dryRun) {
-        await fsp.mkdir(config.dataRoot, { recursive: true });
+  if (!config.remoteTarget) {
+    await withProgress(
+      "Preparing Forge data folder",
+      config.dataRoot,
+      parsed.flags,
+      async () => {
+        if (!parsed.flags.dryRun) {
+          await fsp.mkdir(config.dataRoot, { recursive: true });
+        }
+        return { ok: true, dataRoot: config.dataRoot };
       }
-      return { ok: true, dataRoot: config.dataRoot };
-    }
-  );
+    );
+  }
   const adapterResults = await withProgress(
     config.adapters.length
       ? "Configuring selected host adapters"
@@ -3968,22 +4663,27 @@ async function runInstall(parsed, command) {
     binaryPath: null,
     dryRun: parsed.flags.dryRun
   };
-  if (config.peerEnabled && !parsed.flags.dryRun) {
+  const shouldPrepareNativeSecurity =
+    !parsed.flags.noStart && !config.remoteTarget;
+  if (!parsed.flags.dryRun && shouldPrepareNativeSecurity) {
     peerPreparation = await withProgress(
-      "Preparing secure Forge peer sharing",
-      "verifying signed source and the owner-only native runtime",
+      config.peerEnabled
+        ? "Preparing secure Forge peer sharing"
+        : "Preparing secure local-owner authentication",
+      "verifying signed source and owner-only native executables",
       parsed.flags,
       () => ensureForgePeerPrepared(config, parsed.flags)
     );
   }
   const shouldPair =
-    parsed.flags.pairIos ||
-    (!parsed.flags.skipPairIos &&
+    (!config.remoteTarget && parsed.flags.pairIos) ||
+    (!config.remoteTarget &&
+      !parsed.flags.skipPairIos &&
       (parsed.flags.yes
         ? true
         : await promptYesNo("Pair the iOS companion now?", true)));
   let runtimeResult = null;
-  if (!parsed.flags.noStart && !parsed.flags.dryRun) {
+  if (!config.remoteTarget && !parsed.flags.noStart && !parsed.flags.dryRun) {
     runtimeResult = await withProgress(
       config.mode === "dev"
         ? "Starting source-backed Forge runtime"
@@ -3992,7 +4692,7 @@ async function runInstall(parsed, command) {
       parsed.flags,
       () => startRuntime(config, { peerPreparation })
     );
-  } else if (parsed.flags.noStart) {
+  } else if (parsed.flags.noStart && !config.remoteTarget) {
     printStep(
       "Runtime start skipped",
       "run npx forge-memory ui or npx forge-memory restart later",
@@ -4007,8 +4707,8 @@ async function runInstall(parsed, command) {
       parsed.flags,
       () =>
         runDoctorChecks(parsed, config, {
-          repair: true,
-          noStart: parsed.flags.noStart,
+          repair: !config.remoteTarget,
+          noStart: parsed.flags.noStart || config.remoteTarget,
           dryRun: parsed.flags.dryRun
         })
     );
@@ -4022,6 +4722,41 @@ async function runInstall(parsed, command) {
   const pairingOptions = shouldPair
     ? await resolveIosPairingOptions(parsed, config)
     : null;
+  let canonicalOriginWriteResult = null;
+  if (
+    pairingOptions?.source === "tailscale" &&
+    pairingOptions.publicUrl &&
+    !parsed.flags.dryRun
+  ) {
+    const canonicalExternalOrigin = normalizeCanonicalExternalOrigin(
+      new URL(pairingOptions.publicUrl).origin
+    );
+    if (config.canonicalExternalOrigin !== canonicalExternalOrigin) {
+      const previousConfig = config;
+      config = { ...config, canonicalExternalOrigin };
+      canonicalOriginWriteResult = await withProgress(
+        "Binding Forge to its Tailscale HTTPS origin",
+        canonicalExternalOrigin,
+        parsed.flags,
+        () => writeConfig(config, { dryRun: false })
+      );
+      if (runtimeResult?.ok) {
+        await withProgress(
+          "Applying the secured Tailscale origin",
+          "restarting only the Forge-managed runtime; data is preserved",
+          parsed.flags,
+          () => stopRuntime(previousConfig)
+        );
+        runtimeResult = await withProgress(
+          "Restarting Forge with sender-bound HTTPS",
+          `logs: ${logPath()}`,
+          parsed.flags,
+          () => startRuntime(config, { peerPreparation })
+        );
+        assertRuntimeStartedForPairing(runtimeResult, config);
+      }
+    }
+  }
   let irohTransportResult = null;
   if (
     shouldPair &&
@@ -4069,9 +4804,15 @@ async function runInstall(parsed, command) {
     );
   }
   const summary = {
-    ok: true,
+    ok:
+      adapterResults.every((result) => result.ok) &&
+      runtimeResult?.ok !== false &&
+      doctorPassedForCommand(doctorResult, parsed.flags) &&
+      peerPreparation?.ok !== false &&
+      irohTransportResult?.ok !== false,
     config,
     writeResult,
+    canonicalOriginWriteResult,
     adapterResults,
     runtimeResult,
     doctorResult,
@@ -4081,7 +4822,13 @@ async function runInstall(parsed, command) {
   };
   if (parsed.flags.json) console.log(JSON.stringify(summary, null, 2));
   else {
-    console.log(color.green("Forge Memory configured and checked."));
+    console.log(
+      summary.ok
+        ? color.green("Forge Memory configured and checked.")
+        : color.yellow(
+            "Forge Memory configuration finished, but one or more required checks failed."
+          )
+    );
     console.log(`UI: ${webUrl(config)}`);
     console.log(`Data: ${config.dataRoot}`);
     console.log(
@@ -4107,6 +4854,7 @@ async function runInstall(parsed, command) {
         color.yellow("Dry run only; no files or adapter installs were changed.")
       );
   }
+  if (!summary.ok) process.exitCode = 1;
 }
 
 async function refreshPackagedRuntimeCache(parsed) {
@@ -4222,10 +4970,13 @@ async function runUpdate(parsed) {
     binaryPath: null,
     dryRun: parsed.flags.dryRun
   };
-  if (config.peerEnabled && !parsed.flags.dryRun) {
+  const shouldPrepareNativeSecurity = !parsed.flags.noStart;
+  if (!parsed.flags.dryRun && shouldPrepareNativeSecurity) {
     peerPreparation = await withProgress(
-      "Verifying secure Forge peer sharing",
-      "signed source, owner-only build cache, and executable receipt",
+      config.peerEnabled
+        ? "Verifying secure Forge peer sharing"
+        : "Verifying secure local-owner authentication",
+      "signed source, owner-only build cache, and executable receipts",
       parsed.flags,
       () => ensureForgePeerPrepared(config, parsed.flags)
     );
@@ -4285,7 +5036,11 @@ async function runUpdate(parsed) {
   }
 
   const summary = {
-    ok: true,
+    ok:
+      adapterResults.every((result) => result.ok) &&
+      runtimeResult?.ok !== false &&
+      doctorPassedForCommand(doctorResult, parsed.flags) &&
+      peerPreparation?.ok !== false,
     command: "update",
     backup,
     skillPlan,
@@ -4302,9 +5057,16 @@ async function runUpdate(parsed) {
 
   if (parsed.flags.json) {
     console.log(JSON.stringify(summary, null, 2));
+    if (!summary.ok) process.exitCode = 1;
     return;
   }
-  console.log(color.green("Forge Memory update complete."));
+  console.log(
+    summary.ok
+      ? color.green("Forge Memory update complete.")
+      : color.yellow(
+          "Forge Memory update finished, but one or more required checks failed."
+        )
+  );
   console.log(`Backup: ${backup.outputPath}`);
   console.log(`Data: ${currentConfig.dataRoot}`);
   console.log(`UI: ${webUrl(config)}`);
@@ -4322,6 +5084,7 @@ async function runUpdate(parsed) {
       )
     );
   }
+  if (!summary.ok) process.exitCode = 1;
 }
 
 async function runStatus(parsed) {
@@ -4349,7 +5112,7 @@ async function runStatus(parsed) {
     health: currentHealth,
     runtimeStatePath: runtimeStatePath(),
     runtimeStateExists: stateExists,
-    adoptedRuntime: running && !stateExists,
+    adoptedRuntime: running && (!stateExists || state?.adopted === true),
     state
   };
   if (parsed.flags.json) console.log(JSON.stringify(payload, null, 2));
@@ -4608,7 +5371,36 @@ async function runDoctor(parsed) {
 
 async function runUi(parsed) {
   const config = await readConfig();
-  if (!parsed.flags.noStart) await startRuntime(config);
+  const preparation = await ensureForgePeerPrepared(config);
+  if (!parsed.flags.noStart) {
+    let runtime = await startRuntime(config, {
+      peerPreparation: preparation
+    });
+    if (
+      preparation?.browserHandler?.handlerScheme === "forge" &&
+      runtime.ok &&
+      runtime.state?.localBrowserHandler?.scheme !== "forge"
+    ) {
+      if (
+        runtime.state?.adopted === true ||
+        !runtimeStateOwnsHealthProcess(runtime.state, runtime.health)
+      ) {
+        throw new Error(
+          "Forge is healthy but is not owned by Forge Memory, so it was left unchanged. Restart that API process with the Forge local browser-handler environment, then rerun `npx forge-memory ui`."
+        );
+      }
+      await stopRuntime(config);
+      runtime = await startRuntime(config, {
+        peerPreparation: preparation
+      });
+    }
+    if (!runtime.ok) {
+      throw new Error(
+        runtime.message ??
+          "Forge could not start its secured local browser runtime."
+      );
+    }
+  }
   if (parsed.flags.printUrl || parsed.flags.json) {
     console.log(
       parsed.flags.json
@@ -4621,7 +5413,7 @@ async function runUi(parsed) {
 }
 
 async function runPairIos(parsed) {
-  const config = await readConfig();
+  let config = await readConfig();
   const explicitPairingOptions =
     parsed.flags.manualHttp || parsed.values.publicUrl
       ? await resolveIosPairingOptions(parsed, config)
@@ -4638,8 +5430,9 @@ async function runPairIos(parsed) {
       () => ensureIrohTransportPrepared(config, parsed.flags)
     );
   }
+  let runtimeResult = null;
   if (!parsed.flags.noStart) {
-    const runtimeResult = await withProgress(
+    runtimeResult = await withProgress(
       "Starting Forge runtime for iOS pairing",
       `logs: ${logPath()}`,
       parsed.flags,
@@ -4657,6 +5450,40 @@ async function runPairIos(parsed) {
     explicitPairingOptions ??
     noStartPairingOptions ??
     (await resolveIosPairingOptions(parsed, config));
+  if (
+    pairingOptions.source === "tailscale" &&
+    pairingOptions.publicUrl &&
+    !parsed.flags.dryRun
+  ) {
+    const canonicalExternalOrigin = normalizeCanonicalExternalOrigin(
+      new URL(pairingOptions.publicUrl).origin
+    );
+    if (config.canonicalExternalOrigin !== canonicalExternalOrigin) {
+      const previousConfig = config;
+      config = { ...config, canonicalExternalOrigin };
+      await withProgress(
+        "Binding Forge to its Tailscale HTTPS origin",
+        canonicalExternalOrigin,
+        parsed.flags,
+        () => writeConfig(config, { dryRun: false })
+      );
+      if (!parsed.flags.noStart && runtimeResult?.ok) {
+        await withProgress(
+          "Applying the secured Tailscale origin",
+          "restarting only the Forge-managed runtime; data is preserved",
+          parsed.flags,
+          () => stopRuntime(previousConfig)
+        );
+        runtimeResult = await withProgress(
+          "Restarting Forge with sender-bound HTTPS",
+          `logs: ${logPath()}`,
+          parsed.flags,
+          () => startRuntime(config)
+        );
+        assertRuntimeStartedForPairing(runtimeResult, config);
+      }
+    }
+  }
   const transportMode = pairingOptions.transportMode;
   const publicUrl = pairingOptions.publicUrl;
   if (
@@ -4811,7 +5638,22 @@ function resolveMcpRuntimeRoot(config) {
       return devRoot;
     }
   }
-  return resolveOpenClawPluginRoot();
+  const installedRoot = resolveOpenClawPluginRoot();
+  if (installedRoot) return installedRoot;
+  const sourceCheckout = path.resolve(import.meta.dirname, "../../..");
+  const sourcePluginRoot = path.join(sourceCheckout, "plugins", "openclaw");
+  const sourcePackage = readJsonSync(
+    path.join(sourcePluginRoot, "package.json")
+  );
+  if (
+    fs.existsSync(path.join(sourceCheckout, ".git")) &&
+    sourcePackage?.name === RUNTIME_PACKAGE &&
+    sourcePackage?.version === RUNTIME_PACKAGE_VERSION &&
+    fs.existsSync(path.join(sourcePluginRoot, "dist", "openclaw", "tools.js"))
+  ) {
+    return sourcePluginRoot;
+  }
+  return null;
 }
 
 async function loadForgeToolRuntime(config) {
@@ -4822,12 +5664,14 @@ async function loadForgeToolRuntime(config) {
   const [
     { Value },
     { resolveForgePluginConfig },
+    { callConfiguredForgeApi },
     { registerForgePluginTools }
   ] = await Promise.all([
     importFile(pluginRequire.resolve("@sinclair/typebox/value")),
     importFile(
       path.join(pluginRoot, "dist", "openclaw", "plugin-entry-shared.js")
     ),
+    importFile(path.join(pluginRoot, "dist", "openclaw", "api-client.js")),
     importFile(path.join(pluginRoot, "dist", "openclaw", "tools.js"))
   ]);
 
@@ -4836,6 +5680,8 @@ async function loadForgeToolRuntime(config) {
     port: normalizePort(process.env.FORGE_PORT, config.port),
     dataRoot: process.env.FORGE_DATA_ROOT?.trim() || config.dataRoot,
     apiToken: process.env.FORGE_API_TOKEN ?? "",
+    remoteCredentialId:
+      process.env.FORGE_REMOTE_CREDENTIAL_ID ?? config.remoteCredentialId ?? "",
     actorLabel: process.env.FORGE_ACTOR_LABEL ?? "codex",
     timeoutMs: normalizePositiveNumber(process.env.FORGE_TIMEOUT_MS, 15_000)
   });
@@ -4844,7 +5690,13 @@ async function loadForgeToolRuntime(config) {
     { registerTool: (tool) => tools.push(tool) },
     forgeConfig
   );
-  return { pluginRoot, Value, tools, forgeConfig };
+  return {
+    pluginRoot,
+    Value,
+    tools,
+    forgeConfig,
+    callConfiguredForgeApi
+  };
 }
 
 function validationErrorMessage(Value, schema, value) {
@@ -4910,25 +5762,24 @@ function createMcpSessionKey(provider, config) {
   return `${provider}-${fingerprint}`;
 }
 
-async function postMcpRuntimeSessionEvent(config, pathname, body) {
-  const url = new URL(pathname, config.baseUrl);
-  const response = await fetch(url, {
+async function postMcpRuntimeSessionEvent(
+  config,
+  callConfiguredForgeApi,
+  pathname,
+  body
+) {
+  const response = await callConfiguredForgeApi(config, {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-forge-source": "agent",
-      ...(config.apiToken ? { authorization: `Bearer ${config.apiToken}` } : {})
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(config.timeoutMs || 15_000)
+    path: pathname,
+    body
   });
-  if (!response.ok) {
+  if (response.status >= 400) {
     throw new Error(`Forge session endpoint returned ${response.status}`);
   }
-  return response.json().catch(() => ({}));
+  return response.body ?? {};
 }
 
-async function registerMcpRuntimeSession(forgeConfig) {
+async function registerMcpRuntimeSession(forgeConfig, callConfiguredForgeApi) {
   const provider = resolveMcpAgentProvider();
   const machineKey = createMcpMachineKey(forgeConfig);
   const instanceId = `${provider}-${process.pid}-${Date.now().toString(36)}`;
@@ -4939,11 +5790,13 @@ async function registerMcpRuntimeSession(forgeConfig) {
     instanceId,
     connected: false,
     heartbeat: null,
-    config: forgeConfig
+    config: forgeConfig,
+    callConfiguredForgeApi
   };
   try {
     const payload = await postMcpRuntimeSessionEvent(
       forgeConfig,
+      callConfiguredForgeApi,
       "/api/v1/agents/sessions",
       {
         provider,
@@ -4990,6 +5843,7 @@ async function heartbeatMcpRuntimeSession(state, summary, metadata = {}) {
   try {
     await postMcpRuntimeSessionEvent(
       state.config,
+      state.callConfiguredForgeApi,
       "/api/v1/agents/sessions/heartbeat",
       {
         provider: state.provider,
@@ -5009,6 +5863,7 @@ async function disconnectMcpRuntimeSession(state, note, lastError = null) {
   try {
     await postMcpRuntimeSessionEvent(
       state.config,
+      state.callConfiguredForgeApi,
       `/api/v1/agents/sessions/${state.id}/disconnect`,
       {
         note,
@@ -5029,6 +5884,19 @@ async function runMcp() {
   let toolRuntime = null;
   let toolRuntimeError = null;
   try {
+    if (isLoopbackPairingUrl(baseUrl(config))) {
+      let nativePreparation = null;
+      if (!process.env.FORGE_API_TOKEN?.trim()) {
+        nativePreparation = await ensureForgePeerPrepared(config);
+        if (!hasVerifiedLocalOwnerPreparation(nativePreparation)) {
+          throw new Error(
+            "Forge local-owner authentication has no verified owner channel."
+          );
+        }
+        applyLocalOwnerProcessEnvironment(nativePreparation);
+      }
+      await ensureManagedRuntimeForLocalClient(config, nativePreparation);
+    }
     toolRuntime = await loadForgeToolRuntime(config);
   } catch (error) {
     toolRuntimeError = error instanceof Error ? error.message : String(error);
@@ -5036,7 +5904,10 @@ async function runMcp() {
   const forgeTools = toolRuntime?.tools ?? [];
   const forgeToolByName = new Map(forgeTools.map((tool) => [tool.name, tool]));
   const runtimeSession = toolRuntime
-    ? await registerMcpRuntimeSession(toolRuntime.forgeConfig).catch(() => null)
+    ? await registerMcpRuntimeSession(
+        toolRuntime.forgeConfig,
+        toolRuntime.callConfiguredForgeApi
+      ).catch(() => null)
     : null;
   if (runtimeSession?.connected) {
     runtimeSession.heartbeat = setInterval(() => {
@@ -5108,9 +5979,23 @@ async function runMcp() {
       };
     }
     if (request.params.name === "forge_memory_health") {
+      const authenticatedHealth = toolRuntime
+        ? await toolRuntime.callConfiguredForgeApi(toolRuntime.forgeConfig, {
+            method: "GET",
+            path: "/api/v1/health",
+            extraHeaders: { "x-forge-runtime-probe": "1" }
+          })
+        : null;
       return {
         content: [
-          { type: "text", text: JSON.stringify(await health(config), null, 2) }
+          {
+            type: "text",
+            text: JSON.stringify(
+              authenticatedHealth ?? (await health(config)),
+              null,
+              2
+            )
+          }
         ]
       };
     }

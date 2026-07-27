@@ -541,6 +541,15 @@ impl MlsSession {
                     "standalone MLS proposals are not accepted by forge-peer/1".into(),
                 ));
             }
+            ProcessedMessageContent::OwnPendingCommit
+            | ProcessedMessageContent::OwnPrivateMessage => {
+                return self.reject_processed_message(
+                    coordinator,
+                    PeerError::Mls(
+                        "reflected local MLS messages are not accepted by forge-peer/1".into(),
+                    ),
+                );
+            }
         };
         self.persist_after_mutation(coordinator)?;
         Ok(output)
@@ -1237,6 +1246,66 @@ mod tests {
             ProcessedMlsMessage::Application(b"encrypted hello".to_vec())
         );
         assert_eq!(alice.epoch(), bob.epoch());
+        Ok(())
+    }
+
+    #[test]
+    fn reflected_local_messages_are_rejected_without_breaking_the_session() -> Result<()> {
+        let now = 10_000;
+        let alice_coordinator = coordinator()?;
+        let bob_coordinator = coordinator()?;
+        let trust = MemoryDeviceTrustStore::default();
+        let alice_client = MlsClient::new(identity(now, &trust)?);
+        let bob_client = MlsClient::new(identity(now, &trust)?);
+        let bob_key_package = bob_client.generate_key_package()?;
+        let mut alice = alice_client.create_group(None, &trust, now, &alice_coordinator)?;
+        let add = alice.add_member(&bob_key_package, &trust, now, &alice_coordinator)?;
+        let mut bob = bob_client.join_group(&add.welcome, &trust, now, &bob_coordinator)?;
+
+        let private_message =
+            alice.encrypt_application(b"local reflection", &trust, now, &alice_coordinator)?;
+        assert!(matches!(
+            alice.process_message(&private_message, &trust, now, &alice_coordinator),
+            Err(PeerError::Mls(message)) if message.contains("reflected local MLS")
+        ));
+        assert_eq!(
+            bob.process_message(&private_message, &trust, now, &bob_coordinator)?,
+            ProcessedMlsMessage::Application(b"local reflection".to_vec())
+        );
+
+        let (pending_commit, _, _) = alice
+            .group
+            .self_update(
+                &alice.provider,
+                &alice.identity.signer,
+                LeafNodeParameters::default(),
+            )
+            .map_err(|error| PeerError::Mls(format!("creating reflected update: {error}")))?
+            .into_contents();
+        let pending_commit = pending_commit
+            .to_bytes()
+            .map_err(|error| PeerError::Mls(format!("serializing reflected update: {error}")))?;
+        let reflected_commit =
+            alice.process_message(&pending_commit, &trust, now + 1, &alice_coordinator);
+        assert!(matches!(
+            &reflected_commit,
+            Err(PeerError::Mls(message)) if message.contains("reflected local MLS")
+        ), "{reflected_commit:?}");
+        alice
+            .group
+            .merge_pending_commit(&alice.provider)
+            .map_err(|error| PeerError::Mls(format!("merging reflected update: {error}")))?;
+        alice.persist_after_mutation(&alice_coordinator)?;
+        assert!(matches!(
+            bob.process_message(&pending_commit, &trust, now + 1, &bob_coordinator)?,
+            ProcessedMlsMessage::Commit { .. }
+        ));
+        let follow_up =
+            alice.encrypt_application(b"still usable", &trust, now + 2, &alice_coordinator)?;
+        assert_eq!(
+            bob.process_message(&follow_up, &trust, now + 2, &bob_coordinator)?,
+            ProcessedMlsMessage::Application(b"still usable".to_vec())
+        );
         Ok(())
     }
 

@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -7,19 +8,7 @@ import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase } from "./db.js";
 import { buildOpenApiDocument } from "./openapi.js";
 
-async function issueOperatorSessionCookie(
-  app: Awaited<ReturnType<typeof buildServer>>
-) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host: "127.0.0.1:4317" }
-  });
-  assert.equal(response.statusCode, 200);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const issueOperatorSessionCookie = issueTestOperatorSessionCookie;
 
 test("movement repair routes document path and selected-user scope", () => {
   const document = buildOpenApiDocument() as {
@@ -195,7 +184,8 @@ test("movement detail and repair routes enforce the selected user scope", async 
       );
     const dayResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/movement/day?date=2026-07-01&userIds=user_operator"
+      url: "/api/v1/movement/day?date=2026-07-01&userIds=user_operator",
+      headers: { cookie: operatorCookie }
     });
     assert.equal(dayResponse.statusCode, 200);
     const day = dayResponse.json() as {
@@ -211,7 +201,8 @@ test("movement detail and repair routes enforce the selected user scope", async 
 
     const placesResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/movement/places?userIds=user_operator"
+      url: "/api/v1/movement/places?userIds=user_operator",
+      headers: { cookie: operatorCookie }
     });
     assert.equal(placesResponse.statusCode, 200);
     const placeId = (placesResponse.json() as { places: Array<{ id: string }> })
@@ -242,7 +233,8 @@ test("movement detail and repair routes enforce the selected user scope", async 
 
     const unrestrictedBotDetailResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/movement/trips/trip_scope_bot"
+      url: "/api/v1/movement/trips/trip_scope_bot",
+      headers: { cookie: operatorCookie }
     });
     assert.equal(unrestrictedBotDetailResponse.statusCode, 200);
     const tokenBotDetailResponse = await app.inject({
@@ -253,7 +245,8 @@ test("movement detail and repair routes enforce the selected user scope", async 
     assert.equal(tokenBotDetailResponse.statusCode, 200);
     const wrongSelectedBotDetailResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/movement/trips/trip_scope_bot?userIds=user_operator"
+      url: "/api/v1/movement/trips/trip_scope_bot?userIds=user_operator",
+      headers: { cookie: operatorCookie }
     });
     assert.equal(wrongSelectedBotDetailResponse.statusCode, 404);
 
@@ -296,13 +289,15 @@ test("movement detail and repair routes enforce the selected user scope", async 
 
     const hiddenTripResponse = await app.inject({
       method: "GET",
-      url: `/api/v1/movement/trips/${tripId}?userIds=user_forge_bot`
+      url: `/api/v1/movement/trips/${tripId}?userIds=user_forge_bot`,
+      headers: { cookie: operatorCookie }
     });
     assert.equal(hiddenTripResponse.statusCode, 404);
 
     const ownedTripResponse = await app.inject({
       method: "GET",
-      url: `/api/v1/movement/trips/${tripId}?userIds=user_operator`
+      url: `/api/v1/movement/trips/${tripId}?userIds=user_operator`,
+      headers: { cookie: operatorCookie }
     });
     assert.equal(ownedTripResponse.statusCode, 200);
     const ownedTrip = ownedTripResponse.json() as {
@@ -325,12 +320,14 @@ test("movement detail and repair routes enforce the selected user scope", async 
 
     const retainedTripResponse = await app.inject({
       method: "GET",
-      url: `/api/v1/movement/trips/${tripId}?userIds=user_operator`
+      url: `/api/v1/movement/trips/${tripId}?userIds=user_operator`,
+      headers: { cookie: operatorCookie }
     });
     assert.equal(retainedTripResponse.statusCode, 200);
     const retainedPlacesResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/movement/places?userIds=user_operator"
+      url: "/api/v1/movement/places?userIds=user_operator",
+      headers: { cookie: operatorCookie }
     });
     assert.ok(
       (

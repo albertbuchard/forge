@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import {
   access,
   chmod,
@@ -9,15 +9,24 @@ import {
   writeFile
 } from "node:fs/promises";
 import http from "node:http";
+import type { InjectOptions } from "light-my-request";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { deflateRawSync, deflateSync } from "node:zlib";
 import { formatLocalDateKey } from "@/lib/date-keys.js";
-import { buildServer } from "./app.js";
+import { buildServer as buildForgeServer } from "./app.js";
+import type { ApplicationSecurityRuntime } from "./security/application-security-runtime.js";
+import {
+  canonicalMobileRequest,
+  MOBILE_REQUEST_PROTOCOL
+} from "./security/mobile-companion-request.js";
 import { closeDatabase, configureDatabase, getDatabase } from "./db.js";
 import { getSleepViewData } from "./health.js";
-import { BackgroundJobManager } from "./managers/platform/background-job-manager.js";
+import {
+  BackgroundJobManager,
+  type BackgroundJobAuthorization
+} from "./managers/platform/background-job-manager.js";
 import { recordActivityEvent } from "./repositories/activity-events.js";
 import {
   claimTaskTimeboxProviderOperation,
@@ -46,20 +55,164 @@ import { getCrudEntityCapabilityMatrix } from "./services/entity-crud.js";
 import type { StartupTaskRunRecoverySummary } from "./services/run-recovery.js";
 import { resolveWebAssetLocation } from "./web.js";
 
+const testOperatorAuthority = new WeakMap<
+  Awaited<ReturnType<typeof buildForgeServer>>,
+  { cookie: string; csrf: string }
+>();
+
+async function buildServer(
+  options: Parameters<typeof buildForgeServer>[0] = {}
+) {
+  const captured: { security?: ApplicationSecurityRuntime } = {};
+  const app = await buildForgeServer({
+    ...options,
+    onSecurityRuntimeReady(runtime) {
+      captured.security = runtime;
+      options.onSecurityRuntimeReady?.(runtime);
+    }
+  });
+  const security = captured.security;
+  assert.ok(security);
+  const ownerEpoch = security.store.readOwnerSecurityEpoch("user_operator");
+  assert.ok(ownerEpoch);
+  const issued = security.browserSessions.create({
+    kind: "operator_session",
+    subjectId: "user_operator",
+    ownerId: "user_operator",
+    clientId: null,
+    installationId: null,
+    audience: security.audience,
+    scopes: ["*"],
+    profile: "operator",
+    ownerSecurityEpoch: ownerEpoch,
+    clientSecurityEpoch: null,
+    authenticatedAt: new Date().toISOString()
+  });
+  const authority = {
+    cookie: `forge_session=${encodeURIComponent(issued.sessionToken)}`,
+    csrf: issued.csrfToken
+  };
+  testOperatorAuthority.set(app, authority);
+  let latestMobilePairing:
+    | { sessionId: string; pairingToken: string }
+    | null = null;
+  const inject = app.inject.bind(app);
+  app.inject = (async (request: string | InjectOptions) => {
+    if (typeof request === "string") {
+      return inject(request);
+    }
+    const headers = Object.fromEntries(
+      Object.entries(request.headers ?? {}).map(([name, value]) => [
+        name,
+        String(value)
+      ])
+    );
+    const anonymous = headers["x-forge-test-anonymous"] === "1";
+    delete headers["x-forge-test-anonymous"];
+    const hasExplicitCredential = Boolean(
+      headers.authorization || headers.cookie
+    );
+    if (!anonymous && !hasExplicitCredential) {
+      headers.cookie = authority.cookie;
+    }
+    if (
+      !anonymous &&
+      headers.cookie === authority.cookie &&
+      !["GET", "HEAD", "OPTIONS"].includes(
+        String(request.method ?? "GET").toUpperCase()
+      )
+    ) {
+      headers["x-forge-csrf"] = authority.csrf;
+    }
+    const requestUrl =
+      typeof request.url === "string"
+        ? request.url
+        : request.url?.pathname ?? "";
+    const payloadPairing =
+      request.payload &&
+      typeof request.payload === "object" &&
+      "sessionId" in request.payload &&
+      typeof request.payload.sessionId === "string" &&
+      "pairingToken" in request.payload &&
+      typeof request.payload.pairingToken === "string"
+        ? {
+            sessionId: request.payload.sessionId,
+            pairingToken: request.payload.pairingToken
+          }
+        : null;
+    const mobilePairing = payloadPairing ?? latestMobilePairing;
+    if (
+      requestUrl.startsWith("/api/v1/mobile/") &&
+      requestUrl !== "/api/v1/mobile/pairing/verify" &&
+      !headers["x-forge-mobile-request-protocol"] &&
+      mobilePairing
+    ) {
+      const issuedAt = new Date().toISOString();
+      const nonce = randomUUID().replaceAll("-", "");
+      const serializedPayload =
+        request.payload === undefined
+          ? ""
+          : typeof request.payload === "string" ||
+              Buffer.isBuffer(request.payload)
+            ? request.payload
+            : JSON.stringify(request.payload);
+      const payloadBytes = Buffer.isBuffer(serializedPayload)
+        ? serializedPayload
+        : Buffer.from(serializedPayload, "utf8");
+      const bodySha256 = createHash("sha256")
+        .update(payloadBytes)
+        .digest("hex");
+      headers["x-forge-mobile-request-protocol"] = MOBILE_REQUEST_PROTOCOL;
+      headers["x-forge-mobile-session-id"] = mobilePairing.sessionId;
+      headers["x-forge-mobile-request-issued-at"] = issuedAt;
+      headers["x-forge-mobile-request-nonce"] = nonce;
+      headers["x-forge-mobile-body-sha256"] = bodySha256;
+      headers["x-forge-mobile-request-signature"] = createHmac(
+        "sha256",
+        mobilePairing.pairingToken
+      )
+        .update(
+          canonicalMobileRequest({
+            method: String(request.method ?? "GET"),
+            path: requestUrl,
+            sessionId: mobilePairing.sessionId,
+            issuedAt,
+            nonce,
+            bodySha256
+          }),
+          "utf8"
+        )
+        .digest("hex");
+    }
+    const response = await inject({ ...request, headers });
+    if (
+      requestUrl === "/api/v1/health/pairing-sessions" &&
+      response.statusCode === 201
+    ) {
+      const payload = response.json() as {
+        qrPayload?: { sessionId?: string; pairingToken?: string };
+      };
+      if (
+        typeof payload.qrPayload?.sessionId === "string" &&
+        typeof payload.qrPayload.pairingToken === "string"
+      ) {
+        latestMobilePairing = {
+          sessionId: payload.qrPayload.sessionId,
+          pairingToken: payload.qrPayload.pairingToken
+        };
+      }
+    }
+    return response;
+  }) as typeof app.inject;
+  return app;
+}
+
 async function issueOperatorSessionCookie(
   app: Awaited<ReturnType<typeof buildServer>>
 ) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: {
-      host: "127.0.0.1:4317"
-    }
-  });
-  assert.equal(response.statusCode, 200);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
+  const authority = testOperatorAuthority.get(app);
+  assert.ok(authority);
+  return authority.cookie;
 }
 
 type WikiIngestJobPollPayload = {
@@ -155,7 +308,8 @@ test("companion pairing requires an authenticated operator session", async () =>
       method: "POST",
       url: "/api/v1/health/pairing-sessions",
       headers: {
-        host: "127.0.0.1:4317"
+        host: "127.0.0.1:4317",
+        "x-forge-test-anonymous": "1"
       },
       payload: {
         userId: "user_operator"
@@ -163,8 +317,7 @@ test("companion pairing requires an authenticated operator session", async () =>
     });
     assert.equal(response.statusCode, 401);
     const payload = response.json() as { code: string; route: string };
-    assert.equal(payload.code, "auth_required");
-    assert.equal(payload.route, "/api/v1/health/pairing-sessions");
+    assert.equal(payload.code, "gateway_authentication_required");
   } finally {
     await app.close();
     closeDatabase();
@@ -3489,7 +3642,7 @@ test("mobile health sync deduplicates workout samples by HealthKit sample uid", 
   }
 });
 
-test("mobile health sync returns typed payload-too-large errors for oversized legacy uploads", async () => {
+test("mobile health sync rejects unauthenticated oversized legacy uploads before parsing", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-health-too-large-")
   );
@@ -3506,15 +3659,12 @@ test("mobile health sync returns typed payload-too-large errors for oversized le
         oversized: "x".repeat(8_100_000)
       })
     });
-    assert.equal(response.statusCode, 413);
+    assert.equal(response.statusCode, 401);
     const body = response.json() as {
       code: string;
-      recommendedMode?: string;
       error: string;
     };
-    assert.equal(body.code, "payload_too_large");
-    assert.equal(body.recommendedMode, "chunked");
-    assert.match(body.error, /chunked HealthKit sync/i);
+    assert.equal(body.code, "gateway_protocol_verification_required");
   } finally {
     await app.close();
     closeDatabase();
@@ -14855,7 +15005,7 @@ test("psyche notes persist and scoped tokens cannot read psyche without explicit
     });
     assert.equal(blocked.statusCode, 403);
     const blockedBody = blocked.json() as { code: string };
-    assert.equal(blockedBody.code, "insufficient_scope");
+    assert.equal(blockedBody.code, "gateway_scope_forbidden");
   } finally {
     await app.close();
     closeDatabase();
@@ -18144,7 +18294,7 @@ test("activity endpoints capture mutations with source attribution", async () =>
         (event) =>
           event.entityType === "task" &&
           event.entityId === taskId &&
-          event.source === "openclaw"
+          event.source === "ui"
       )
     );
     assert.ok(
@@ -18263,7 +18413,7 @@ test("task context bundles goal linkage, run state, and task-scoped evidence", a
         (event) =>
           event.entityType === "task" &&
           event.entityId === task.id &&
-          event.source === "openclaw"
+          event.source === "ui"
       )
     );
     assert.ok(
@@ -20367,6 +20517,7 @@ test("batch entity routes require auth and return validation failures with machi
     const unauthenticated = await app.inject({
       method: "POST",
       url: "/api/v1/entities/search",
+      headers: { "x-forge-test-anonymous": "1" },
       payload: {
         searches: [{ entityTypes: ["goal"], query: "plugin", limit: 5 }]
       }
@@ -20375,12 +20526,13 @@ test("batch entity routes require auth and return validation failures with machi
     assert.equal(unauthenticated.statusCode, 401);
     const unauthenticatedBody = unauthenticated.json() as {
       code: string;
-      route: string;
-      requiredScopes: string[];
+      error: string;
     };
-    assert.equal(unauthenticatedBody.code, "auth_required");
-    assert.equal(unauthenticatedBody.route, "/api/v1/entities/search");
-    assert.deepEqual(unauthenticatedBody.requiredScopes, ["read", "write"]);
+    assert.equal(
+      unauthenticatedBody.code,
+      "gateway_authentication_required"
+    );
+    assert.match(unauthenticatedBody.error, /valid paired Forge credential/i);
 
     const operatorCookie = await issueOperatorSessionCookie(app);
     const invalid = await app.inject({
@@ -20657,7 +20809,9 @@ test("settings and local agent token management persist through the versioned AP
         calendarProviders: {
           google: {
             clientId: string;
-            clientSecret: string;
+            hasEffectiveClientSecret: boolean;
+            hasStoredClientSecret: boolean;
+            clientSecretStorage: string;
             appBaseUrl: string;
             redirectUri: string;
             isConfigured: boolean;
@@ -20679,8 +20833,17 @@ test("settings and local agent token management persist through the versioned AP
       settingsBody.settings.calendarProviders.google.clientId,
       /\.apps\.googleusercontent\.com$/
     );
-    assert.ok(
-      settingsBody.settings.calendarProviders.google.clientSecret.length > 0
+    assert.equal(
+      settingsBody.settings.calendarProviders.google.hasEffectiveClientSecret,
+      true
+    );
+    assert.equal(
+      "clientSecret" in settingsBody.settings.calendarProviders.google,
+      false
+    );
+    assert.equal(
+      "storedClientSecret" in settingsBody.settings.calendarProviders.google,
+      false
     );
     assert.equal(
       settingsBody.settings.calendarProviders.google.appBaseUrl,
@@ -20752,7 +20915,8 @@ test("settings and local agent token management persist through the versioned AP
         calendarProviders: {
           google: {
             clientId: string;
-            clientSecret: string;
+            hasStoredClientSecret: boolean;
+            clientSecretStorage: string;
             isConfigured: boolean;
           };
           microsoft: { clientId: string; isReadyForSignIn: boolean };
@@ -20771,8 +20935,16 @@ test("settings and local agent token management persist through the versioned AP
       "google-client-id-from-settings"
     );
     assert.equal(
-      updatedBody.settings.calendarProviders.google.clientSecret,
-      "google-client-secret-from-settings"
+      updatedBody.settings.calendarProviders.google.hasStoredClientSecret,
+      true
+    );
+    assert.equal(
+      updatedBody.settings.calendarProviders.google.clientSecretStorage,
+      "encrypted"
+    );
+    assert.equal(
+      updated.body.includes("google-client-secret-from-settings"),
+      false
     );
     assert.equal(
       updatedBody.settings.calendarProviders.google.isConfigured,
@@ -20869,23 +21041,22 @@ test("settings and local agent token management persist through the versioned AP
         }
       }
     });
-    assert.equal(updatedViaToken.statusCode, 200);
-    const updatedViaTokenBody = updatedViaToken.json() as {
-      settings: {
-        execution: { maxActiveTasks: number; timeAccountingMode: string };
-      };
-    };
-    assert.equal(updatedViaTokenBody.settings.execution.maxActiveTasks, 4);
     assert.equal(
-      updatedViaTokenBody.settings.execution.timeAccountingMode,
-      "primary_only"
+      updatedViaToken.statusCode,
+      403,
+      updatedViaToken.body
+    );
+    assert.equal(
+      (updatedViaToken.json() as { code: string }).code,
+      "gateway_profile_forbidden"
     );
 
     const onboarding = await app.inject({
       method: "GET",
       url: "/api/v1/agents/onboarding",
       headers: {
-        host: "127.0.0.1:4317"
+        host: "127.0.0.1:4317",
+        authorization: `Bearer ${createdTokenBody.token.token}`
       }
     });
     assert.equal(onboarding.statusCode, 200);
@@ -21069,7 +21240,7 @@ test("settings and local agent token management persist through the versioned AP
       tagIds: []
     });
     assert.deepEqual(onboardingBody.onboarding.effectiveScopePolicy, {
-      userIds: [],
+      userIds: ["user_operator", "user_forge_bot"],
       projectIds: [],
       tagIds: []
     });
@@ -22637,8 +22808,7 @@ test("google oauth start generates a PKCE auth url for local localhost flow", as
       headers: {
         cookie: operatorCookie,
         origin: "http://127.0.0.1:3027",
-        "x-forwarded-proto": "http",
-        "x-forwarded-host": "127.0.0.1:4317"
+        host: "127.0.0.1:4317"
       },
       payload: {
         label: "Primary Google",
@@ -22741,8 +22911,7 @@ test("google oauth start prefers the saved Forge client ID over the runtime defa
       headers: {
         cookie: operatorCookie,
         origin: "http://127.0.0.1:3027",
-        "x-forwarded-proto": "http",
-        "x-forwarded-host": "127.0.0.1:4317"
+        host: "127.0.0.1:4317"
       },
       payload: {
         label: "Primary Google",
@@ -22829,8 +22998,11 @@ test("google oauth start rejects a remote browser origin when the callback is lo
     });
 
     assert.equal(response.statusCode, 500);
-    assert.match(response.body, /Forge is running as a localhost app/i);
-    assert.match(response.body, /browser must also be on localhost/i);
+    assert.equal(
+      response.json().error,
+      "Forge could not complete the request."
+    );
+    assert.doesNotMatch(response.body, /localhost app/i);
   } finally {
     if (previousEnv.APP_BASE_URL === undefined) {
       delete process.env.APP_BASE_URL;
@@ -22888,7 +23060,11 @@ test("google oauth callback rejects an invalid state", async () => {
     });
 
     assert.equal(response.statusCode, 500);
-    assert.match(response.body, /Google sign-in state is invalid or expired/i);
+    assert.equal(
+      response.json().error,
+      "Forge could not complete the request."
+    );
+    assert.doesNotMatch(response.body, /sign-in state/i);
   } finally {
     if (previousEnv.APP_BASE_URL === undefined) {
       delete process.env.APP_BASE_URL;
@@ -22969,8 +23145,7 @@ test("google oauth callback explains when the configured client still needs a se
       headers: {
         cookie: operatorCookie,
         origin: "http://127.0.0.1:3027",
-        "x-forwarded-proto": "http",
-        "x-forwarded-host": "127.0.0.1:4317"
+        host: "127.0.0.1:4317"
       },
       payload: {
         label: "Primary Google",
@@ -23084,8 +23259,7 @@ test("google oauth callback includes the server client secret in the token excha
       headers: {
         cookie: operatorCookie,
         origin: "http://127.0.0.1:3027",
-        "x-forwarded-proto": "http",
-        "x-forwarded-host": "127.0.0.1:4317"
+        host: "127.0.0.1:4317"
       },
       payload: {
         label: "Primary Google",
@@ -24034,6 +24208,7 @@ test("failed wiki ingests can be rerun into a fresh job", async () => {
 test("diagnostic logs capture UI-published entries plus backend request and error traces", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-diagnostics-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+  const diagnosticSecret = "forge synthetic diagnostic secret 123456";
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -24052,7 +24227,8 @@ test("diagnostic logs capture UI-published entries plus backend request and erro
       method: "GET",
       url: "/api/v1/rewards/ledger?limit=10",
       headers: {
-        "x-forge-source": "ui"
+        "x-forge-source": "ui",
+        "x-forge-test-anonymous": "1"
       }
     });
     assert.equal(unauthorizedRewards.statusCode, 401);
@@ -24067,12 +24243,17 @@ test("diagnostic logs capture UI-published entries plus backend request and erro
         level: "error",
         scope: "frontend_runtime",
         eventKey: "manual_ui_error",
-        message: "Widget exploded in the browser.",
+        message: `Widget exploded: ${JSON.stringify({
+          client_secret: diagnosticSecret
+        })}`,
         route: "/wiki",
         jobId: "wiki_ingest_demo",
         details: {
           component: "WikiComposer",
-          statusCode: 400
+          statusCode: 400,
+          providerPayload: JSON.stringify({
+            access_token: diagnosticSecret
+          })
         }
       }
     });
@@ -24095,6 +24276,7 @@ test("diagnostic logs capture UI-published entries plus backend request and erro
         route: string | null;
         level: string;
         jobId: string | null;
+        details: Record<string, unknown>;
       }>;
     };
 
@@ -24107,6 +24289,15 @@ test("diagnostic logs capture UI-published entries plus backend request and erro
           entry.jobId === "wiki_ingest_demo"
       )
     );
+    const publishedLog = logsBody.logs.find(
+      (entry) => entry.eventKey === "manual_ui_error"
+    );
+    assert.ok(publishedLog);
+    assert.doesNotMatch(
+      JSON.stringify(publishedLog),
+      new RegExp(diagnosticSecret)
+    );
+    assert.match(JSON.stringify(publishedLog), /\[redacted\]/);
     assert.ok(
       logsBody.logs.some(
         (entry) =>
@@ -24187,12 +24378,41 @@ test("diagnostic log retention prunes expired entries before the store grows ind
   }
 });
 
+const backgroundJobTestAuthorization: BackgroundJobAuthorization = {
+  principal: {
+    kind: "system",
+    subjectId: "background-job-test",
+    ownerId: "background-job-test-owner",
+    clientId: null,
+    installationId: "background-job-test-installation",
+    audience: "urn:forge:background-job-test",
+    scopes: ["*"],
+    profile: "executor",
+    ownerSecurityEpoch: 1,
+    clientSecurityEpoch: null,
+    authenticatedAt: "2026-07-25T20:00:00.000Z"
+  },
+  action: "test.background.execute",
+  resource: "background_job:test",
+  policyVersion: "background-job-test/1",
+  budget: {
+    maximumRuntimeMilliseconds: 60_000,
+    maximumEffectInvocations: 1,
+    capabilities: ["test.background.execute"]
+  }
+};
+
+const allowBackgroundJobTestAuthorization = () => true;
+
 test("background job diagnostics capture enqueue, success, and failure lifecycle events", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-background-logs-")
   );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
-  const manager = new BackgroundJobManager();
+  const manager = new BackgroundJobManager(
+    3,
+    allowBackgroundJobTestAuthorization
+  );
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -24201,6 +24421,7 @@ test("background job diagnostics capture enqueue, success, and failure lifecycle
       manager.enqueue({
         id: "bg_success_demo",
         label: "Successful job",
+        authorization: backgroundJobTestAuthorization,
         handler: async () => {
           resolve();
         }
@@ -24211,6 +24432,7 @@ test("background job diagnostics capture enqueue, success, and failure lifecycle
       manager.enqueue({
         id: "bg_failure_demo",
         label: "Failing job",
+        authorization: backgroundJobTestAuthorization,
         handler: async () => {
           resolve();
           throw new Error("Simulated background failure");
@@ -24270,7 +24492,10 @@ test("background job diagnostics capture enqueue, success, and failure lifecycle
 });
 
 test("background job manager can run multiple jobs at the same time", async () => {
-  const manager = new BackgroundJobManager(2);
+  const manager = new BackgroundJobManager(
+    2,
+    allowBackgroundJobTestAuthorization
+  );
   let activeCount = 0;
   let maxSeenActiveCount = 0;
   let releaseFirst: (() => void) | null = null;
@@ -24280,6 +24505,7 @@ test("background job manager can run multiple jobs at the same time", async () =
     manager.enqueue({
       id: "bg_parallel_one",
       label: "Parallel one",
+      authorization: backgroundJobTestAuthorization,
       handler: async () => {
         activeCount += 1;
         maxSeenActiveCount = Math.max(maxSeenActiveCount, activeCount);
@@ -24296,6 +24522,7 @@ test("background job manager can run multiple jobs at the same time", async () =
     manager.enqueue({
       id: "bg_parallel_two",
       label: "Parallel two",
+      authorization: backgroundJobTestAuthorization,
       handler: async () => {
         activeCount += 1;
         maxSeenActiveCount = Math.max(maxSeenActiveCount, activeCount);
@@ -24323,7 +24550,10 @@ test("background job manager can run multiple jobs at the same time", async () =
 });
 
 test("background job manager resumes draining when an already queued job is enqueued again", async () => {
-  const manager = new BackgroundJobManager(1);
+  const manager = new BackgroundJobManager(
+    1,
+    allowBackgroundJobTestAuthorization
+  );
   let ran = false;
   const ranPromise = new Promise<void>((resolve) => {
     // Simulate a persisted/resumed queue entry that survived without a pending
@@ -24333,12 +24563,14 @@ test("background job manager resumes draining when an already queued job is enqu
         queue: Array<{
           id: string;
           label: string;
+          authorization: BackgroundJobAuthorization;
           handler: () => Promise<void>;
         }>;
       }
     ).queue.push({
       id: "bg_resume_duplicate",
       label: "Resume duplicate",
+      authorization: backgroundJobTestAuthorization,
       handler: async () => {
         ran = true;
         resolve();
@@ -24349,6 +24581,7 @@ test("background job manager resumes draining when an already queued job is enqu
   manager.enqueue({
     id: "bg_resume_duplicate",
     label: "Resume duplicate",
+    authorization: backgroundJobTestAuthorization,
     handler: async () => {
       throw new Error("Duplicate handler should not run");
     }

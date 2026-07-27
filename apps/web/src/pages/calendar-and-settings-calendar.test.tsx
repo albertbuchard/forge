@@ -1544,9 +1544,10 @@ describe("calendar routing surfaces", () => {
         calendarProviders: {
           google: {
             clientId: "",
-            clientSecret: "",
             storedClientId: "",
-            storedClientSecret: "",
+            hasStoredClientSecret: false,
+            hasEffectiveClientSecret: false,
+            clientSecretStorage: "none",
             appBaseUrl: "http://127.0.0.1:4317",
             redirectUri:
               "http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback",
@@ -1559,7 +1560,8 @@ describe("calendar routing surfaces", () => {
             isReadyForPairing: false,
             isLocalOnly: true,
             runtimeOrigin: "http://127.0.0.1:4317",
-            setupMessage: "Google OAuth credentials are not set for this Forge install."
+            setupMessage:
+              "Google OAuth credentials are not set for this Forge install."
           },
           microsoft: {
             clientId: "",
@@ -1587,14 +1589,20 @@ describe("calendar routing surfaces", () => {
     );
 
     expect(
-      await screen.findByText(/Google sign-in has to start from a local browser on the host running Forge/i)
+      await screen.findByText(
+        /Google sign-in has to start from a local browser on the host running Forge/i
+      )
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Google OAuth credentials are not set for this Forge install/i)
+      screen.getByText(
+        /Google OAuth credentials are not set for this Forge install/i
+      )
     ).toBeInTheDocument();
     expect(screen.getByText(/Detected browser origin:/i)).toBeInTheDocument();
     expect(screen.getByText(window.location.origin)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Sign in with Google" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Sign in with Google" })
+    ).toBeDisabled();
   });
 
   it("reveals the Google OAuth editor only after clicking the edit control", async () => {
@@ -1604,9 +1612,7 @@ describe("calendar routing surfaces", () => {
       await screen.findByRole("button", { name: "Open Google guided flow" })
     );
 
-    expect(
-      screen.queryByLabelText("Client ID")
-    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Client ID")).not.toBeInTheDocument();
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Edit Google OAuth client" })
@@ -1719,13 +1725,18 @@ describe("calendar routing surfaces", () => {
         calendarProviders: {
           google: {
             clientId: "new-google-client-id.apps.googleusercontent.com",
-            clientSecret: "new-google-client-secret",
             storedClientId: "new-google-client-id.apps.googleusercontent.com",
-            storedClientSecret: "new-google-client-secret",
+            hasStoredClientSecret: true,
+            hasEffectiveClientSecret: true,
+            clientSecretStorage: "encrypted",
             appBaseUrl: "http://127.0.0.1:4317",
             redirectUri:
               "http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback",
-            allowedOrigins: [browserOrigin, "http://127.0.0.1:3027", "http://127.0.0.1:4317"],
+            allowedOrigins: [
+              browserOrigin,
+              "http://127.0.0.1:3027",
+              "http://127.0.0.1:4317"
+            ],
             usesPkce: true,
             requiresServerClientSecret: false,
             oauthClientType: "desktop_app",
@@ -1758,9 +1769,7 @@ describe("calendar routing surfaces", () => {
 
     patchSettingsMock.mockResolvedValue(readySettings);
     getSettingsMock.mockResolvedValueOnce(initialSettings);
-    getSettingsMock.mockImplementation(
-      () => new Promise<never>(() => {})
-    );
+    getSettingsMock.mockImplementation(() => new Promise<never>(() => {}));
     renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
 
     fireEvent.click(
@@ -1801,7 +1810,10 @@ describe("calendar routing surfaces", () => {
     expect(
       screen.getByText("new-google-client-id.apps.googleusercontent.com")
     ).toBeInTheDocument();
-    expect(screen.getByText("new-google-client-secret")).toBeInTheDocument();
+    expect(screen.getByText("Configured on server")).toBeInTheDocument();
+    expect(
+      screen.queryByText("new-google-client-secret")
+    ).not.toBeInTheDocument();
 
     fireEvent.click(signInButton);
 
@@ -1855,7 +1867,11 @@ describe("calendar routing surfaces", () => {
             appBaseUrl: "http://127.0.0.1:4317",
             redirectUri:
               "http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback",
-            allowedOrigins: [browserOrigin, "http://127.0.0.1:3027", "http://127.0.0.1:4317"],
+            allowedOrigins: [
+              browserOrigin,
+              "http://127.0.0.1:3027",
+              "http://127.0.0.1:4317"
+            ],
             usesPkce: true,
             requiresServerClientSecret: false,
             oauthClientType: "desktop_app",

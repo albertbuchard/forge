@@ -89,7 +89,17 @@ export const settingsMutationSchema = z.object({
           clientId: z.string().trim().optional(),
           clientSecret: z.string().trim().optional(),
           storedClientId: z.string().optional(),
-          storedClientSecret: z.string().optional(),
+          hasStoredClientSecret: z.boolean().optional(),
+          hasEffectiveClientSecret: z.boolean().optional(),
+          clientSecretStorage: z
+            .enum([
+              "encrypted",
+              "legacy_quarantined",
+              "environment",
+              "packaged",
+              "none"
+            ])
+            .optional(),
           appBaseUrl: z.string().optional(),
           redirectUri: z.string().optional(),
           allowedOrigins: z.array(z.string()).optional(),

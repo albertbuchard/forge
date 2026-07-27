@@ -2,6 +2,7 @@
 name = "forge-tauri"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
 description = "Forge desktop shell and local API"
 
 [lib]
@@ -23,4 +24,3 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 utoipa = { version = "5", features = ["uuid"] }
 uuid = { version = "1", features = ["serde", "v7"] }
-

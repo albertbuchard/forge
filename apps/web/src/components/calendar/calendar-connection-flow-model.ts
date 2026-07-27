@@ -49,6 +49,7 @@ export type MicrosoftSettingsDraft = {
 export type GoogleSettingsDraft = {
   clientId: string;
   clientSecret: string;
+  hasStoredClientSecret: boolean;
 };
 
 const MICROSOFT_CALLBACK_PATH = "/api/v1/calendar/oauth/microsoft/callback";
@@ -117,7 +118,8 @@ export function buildGoogleSettingsDraft(
 ): GoogleSettingsDraft {
   return {
     clientId: googleSetup.storedClientId ?? "",
-    clientSecret: googleSetup.storedClientSecret ?? ""
+    clientSecret: "",
+    hasStoredClientSecret: googleSetup.hasStoredClientSecret ?? false
   };
 }
 
@@ -155,7 +157,8 @@ export function normalizeGoogleSettingsDraft(
 ): GoogleSettingsDraft {
   return {
     clientId: (draft.clientId ?? "").trim(),
-    clientSecret: (draft.clientSecret ?? "").trim()
+    clientSecret: (draft.clientSecret ?? "").trim(),
+    hasStoredClientSecret: draft.hasStoredClientSecret === true
   };
 }
 
@@ -165,7 +168,8 @@ export function sameGoogleSettingsDraft(
 ) {
   return (
     left.clientId.trim() === right.clientId.trim() &&
-    left.clientSecret.trim() === right.clientSecret.trim()
+    left.clientSecret.trim() === right.clientSecret.trim() &&
+    left.hasStoredClientSecret === right.hasStoredClientSecret
   );
 }
 
@@ -173,7 +177,8 @@ export function validateGoogleSettingsDraft(draft: GoogleSettingsDraft) {
   const normalized = normalizeGoogleSettingsDraft(draft);
   const issues: Partial<Record<keyof GoogleSettingsDraft, string>> = {};
   const hasClientId = normalized.clientId.length > 0;
-  const hasClientSecret = normalized.clientSecret.length > 0;
+  const hasClientSecret =
+    normalized.clientSecret.length > 0 || normalized.hasStoredClientSecret;
 
   if (hasClientId !== hasClientSecret) {
     const message =

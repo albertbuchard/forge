@@ -1,5 +1,7 @@
 import { AbstractManager } from "../base.js";
 import type { AuthContext } from "../contracts.js";
+import type { ForgePrincipal } from "../../security/contracts.js";
+import type { LegacyTokenTransport } from "../../security/legacy-token-migration.js";
 import type { SessionManager } from "./session-manager.js";
 import type { TokenManager } from "./token-manager.js";
 
@@ -10,15 +12,16 @@ function readSingleHeaderValue(value: unknown) {
   return typeof value === "string" ? value : null;
 }
 
-function normalizeSource(value: string | null): AuthContext["source"] | null {
-  if (value === "ui" || value === "agent" || value === "openclaw" || value === "system") {
-    return value;
-  }
-  return null;
-}
-
 export class AuthenticationManager extends AbstractManager {
   readonly name = "AuthenticationManager";
+  private readonly verifiedPrincipals = new WeakMap<
+    Record<string, unknown>,
+    ForgePrincipal
+  >();
+  private readonly verifiedContexts = new WeakMap<
+    Record<string, unknown>,
+    AuthContext
+  >();
 
   constructor(
     private readonly sessionManager: SessionManager,
@@ -27,16 +30,97 @@ export class AuthenticationManager extends AbstractManager {
     super();
   }
 
-  authenticate(headers: Record<string, unknown>): AuthContext {
-    const sourceHeader = readSingleHeaderValue(headers["x-forge-source"]);
-    const actorHeader = readSingleHeaderValue(headers["x-forge-actor"]);
-    const bearer = this.parseBearerToken(headers);
-    const token = bearer ? this.tokenManager.verifyBearerToken(bearer) : null;
-    const session = this.sessionManager.readSessionFromHeaders(headers);
-    const sourceOverride = normalizeSource(sourceHeader);
+  bindVerifiedPrincipal(
+    headers: Record<string, unknown>,
+    principal: ForgePrincipal
+  ) {
+    this.verifiedPrincipals.set(headers, principal);
+  }
 
-    const actor = token?.agentLabel ?? session?.actorLabel ?? actorHeader ?? null;
-    const source = token ? sourceOverride ?? "agent" : sourceOverride ?? (session ? "ui" : "ui");
+  bindVerifiedContext(headers: Record<string, unknown>, context: AuthContext) {
+    this.verifiedContexts.set(headers, context);
+  }
+
+  authenticate(
+    headers: Record<string, unknown>,
+    legacyTransport: LegacyTokenTransport = "other_network"
+  ): AuthContext {
+    const verifiedContext = this.verifiedContexts.get(headers);
+    if (verifiedContext) {
+      return verifiedContext;
+    }
+    const verified = this.verifiedPrincipals.get(headers);
+    if (verified) {
+      const requestContext = {
+        now: new Date(),
+        correlationId: null,
+        requestId: null,
+        origin: readSingleHeaderValue(headers.origin),
+        host: readSingleHeaderValue(headers.host),
+        ip: null
+      };
+      if (verified.kind === "operator_session") {
+        return {
+          ...requestContext,
+          actor: verified.subjectId,
+          source: "ui",
+          token: null,
+          scope: { userIds: [], projectIds: [], tagIds: [] },
+          session: {
+            id: verified.subjectId,
+            actorLabel: verified.subjectId,
+            expiresAt: new Date(Date.now() + 60_000).toISOString()
+          }
+        };
+      }
+      const tokenId = verified.clientId ?? verified.subjectId;
+      const trusted =
+        verified.profile === "operator" ||
+        verified.profile === "trusted_personal_assistant" ||
+        verified.profile === "executor";
+      return {
+        ...requestContext,
+        actor: verified.subjectId,
+        source: verified.kind === "system" ? "system" : "agent",
+        token: {
+          id: tokenId,
+          agentId: verified.subjectId,
+          agentLabel: verified.subjectId,
+          scopes: [...verified.scopes],
+          trustLevel: trusted ? "trusted" : "viewer",
+          autonomyMode: trusted ? "supervised" : "read_only",
+          approvalMode: "explicit",
+          bootstrapPolicy: {
+            mode: "disabled",
+            goalsLimit: 0,
+            projectsLimit: 0,
+            tasksLimit: 0,
+            habitsLimit: 0,
+            strategiesLimit: 0,
+            peoplePageLimit: 0,
+            includePeoplePages: false
+          },
+          scopePolicy: {
+            userIds: [verified.ownerId],
+            projectIds: [],
+            tagIds: []
+          }
+        },
+        scope: {
+          userIds: [verified.ownerId],
+          projectIds: [],
+          tagIds: []
+        },
+        session: null
+      };
+    }
+    const bearer = this.parseBearerToken(headers);
+    const token = bearer
+      ? this.tokenManager.verifyBearerToken(bearer, legacyTransport)
+      : null;
+    const session = this.sessionManager.readSessionFromHeaders(headers);
+    const actor = token?.agentLabel ?? session?.actorLabel ?? null;
+    const source = token ? "agent" : "ui";
 
     return {
       now: new Date(),

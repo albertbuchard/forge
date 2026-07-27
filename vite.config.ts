@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
 import { buildForgeHmrConfig } from "./apps/web/src/lib/vite-hmr";
+import { forgeViteSecurityGateway } from "./apps/web/vite-security-gateway";
 
 const testWorkerExecArgv = process.allowedNodeEnvironmentFlags.has(
   "--no-experimental-webstorage"
@@ -30,7 +31,7 @@ export default defineConfig(({ command }) => {
   return {
     root: path.resolve(__dirname, "apps/web"),
     base,
-    plugins: [react(), tailwindcss()],
+    plugins: [forgeViteSecurityGateway({ apiTarget }), react(), tailwindcss()],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./apps/web/src")

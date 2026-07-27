@@ -32,11 +32,15 @@ ignore = false
 
 [bans]
 multiple-versions = "warn"
-wildcards = "deny"
+# cargo-deny classifies exact-revision Git dependencies as wildcards because
+# Git requirements do not have a registry version. Source policy below admits
+# only the reviewed OpenMLS repository; the supply-chain contract separately
+# requires every Git dependency to carry a full commit revision.
+wildcards = "allow"
 highlight = "all"
 
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-allow-git = []
+allow-git = ["https://github.com/openmls/openmls.git"]

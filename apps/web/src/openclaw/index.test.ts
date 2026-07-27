@@ -9,7 +9,7 @@ import {
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { homedir, tmpdir } from "node:os";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ensureForgeRuntimeReady,
   getForgeRuntimeStatus,
@@ -18,6 +18,7 @@ import {
   startForgeRuntime,
   stopForgeRuntime
 } from "./local-runtime";
+import { createLocalOwnerSession } from "./local-owner-client";
 
 vi.mock("./local-runtime", () => ({
   ensureForgeRuntimeReady: vi.fn().mockResolvedValue(undefined),
@@ -56,6 +57,13 @@ vi.mock("./local-runtime", () => ({
     message: "Forge is running and healthy on http://127.0.0.1:4317.",
     pid: 12345,
     baseUrl: "http://127.0.0.1:4317"
+  })
+}));
+vi.mock("./local-owner-client", () => ({
+  createLocalOwnerSession: vi.fn().mockResolvedValue({
+    cookie: "forge_session=fg_session_cookie",
+    csrfToken: "fg_csrf_test",
+    actorLabel: "Albert"
   })
 }));
 
@@ -108,6 +116,21 @@ type ServiceCall = {
     };
   }) => Promise<void> | void;
 };
+
+function securedForgeIdentityResponse() {
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      app: "forge",
+      backend: "forge-node-runtime",
+      runtime: { storageRoot: join(homedir(), ".forge") }
+    }),
+    {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    }
+  );
+}
 
 type MockCommand = {
   name: string;
@@ -193,6 +216,14 @@ function collectTypeScriptFiles(directory: string): string[] {
 }
 
 describe("forge openclaw plugin", () => {
+  beforeEach(() => {
+    vi.mocked(createLocalOwnerSession).mockResolvedValue({
+      cookie: "forge_session=fg_session_cookie",
+      csrfToken: "fg_csrf_test",
+      actorLabel: "Albert"
+    });
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -211,6 +242,7 @@ describe("forge openclaw plugin", () => {
         portSource: "default",
         dataRoot: join(homedir(), ".forge"),
         apiToken: "",
+        remoteCredentialId: "",
         actorLabel: "",
         injectBootstrapContext: true,
         timeoutMs: 15000
@@ -247,6 +279,7 @@ describe("forge openclaw plugin", () => {
       portSource: "preferred",
       dataRoot: join(homedir(), ".forge"),
       apiToken: "",
+      remoteCredentialId: "",
       actorLabel: "",
       injectBootstrapContext: true,
       timeoutMs: 15000
@@ -503,6 +536,7 @@ describe("forge openclaw plugin", () => {
       "forge_sync_calendar_connection",
       "forge_sync_wiki_vault",
       "forge_update_entities",
+      "forge_update_food_log",
       "forge_update_nutrition_experiment",
       "forge_update_preferences_score",
       "forge_update_questionnaire_run",
@@ -703,7 +737,7 @@ describe("forge openclaw plugin", () => {
       error: {
         code: "forge_plugin_token_required",
         message:
-          "Forge apiToken is required for remote plugin mutations when this target cannot use local or Tailscale operator-session bootstrap"
+          "Forge requires a paired credential for remote API access. Tailscale reachability alone does not authorize this client."
       }
     });
   });
@@ -711,16 +745,7 @@ describe("forge openclaw plugin", () => {
   it("bootstraps a local operator session for entity workflow requests", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ session: { id: "ses_local" } }), {
-          status: 200,
-          headers: {
-            "content-type": "application/json",
-            "set-cookie":
-              "forge_operator_session=fg_session_cookie; Path=/; HttpOnly"
-          }
-        })
-      )
+      .mockResolvedValueOnce(securedForgeIdentityResponse())
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ ok: true, results: [] }), {
           status: 200,
@@ -760,14 +785,17 @@ describe("forge openclaw plugin", () => {
     await entitiesRoute?.handler(request as never, response as never);
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    const [bootstrapUrl] = fetchMock.mock.calls[0] as [URL];
-    expect(bootstrapUrl.toString()).toBe(
-      "http://127.0.0.1:4317/api/v1/auth/operator-session"
+    expect((fetchMock.mock.calls[0]?.[0] as URL).pathname).toBe(
+      "/api/v1/health"
     );
-    const [writeUrl] = fetchMock.mock.calls[1] as [URL];
+    const [writeUrl, writeInit] = fetchMock.mock.calls[1] as [URL, RequestInit];
     expect(writeUrl.toString()).toBe(
       "http://127.0.0.1:4317/api/v1/entities/search"
     );
+    expect(writeInit.headers).toMatchObject({
+      cookie: "forge_session=fg_session_cookie",
+      "x-forge-csrf": "fg_csrf_test"
+    });
     expect(response.statusCode).toBe(200);
   });
 
@@ -821,21 +849,7 @@ describe("forge openclaw plugin", () => {
   it("normalizes local task-run starts to the task-run route instead of the UI path", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            session: { id: "ses_local", actorLabel: "Albert" }
-          }),
-          {
-            status: 200,
-            headers: {
-              "content-type": "application/json",
-              "set-cookie":
-                "forge_operator_session=fg_session_cookie; Path=/; HttpOnly"
-            }
-          }
-        )
-      )
+      .mockResolvedValueOnce(securedForgeIdentityResponse())
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ taskRun: { id: "run_123" } }), {
           status: 200,
@@ -868,14 +882,15 @@ describe("forge openclaw plugin", () => {
       (url as URL).toString()
     );
     expect(calledUrls).toEqual([
-      "http://127.0.0.1:4318/api/v1/auth/operator-session",
+      "http://127.0.0.1:4318/api/v1/health",
       "http://127.0.0.1:4318/api/v1/tasks/task_123/runs"
     ]);
     expect(calledUrls.every((url) => !url.includes("/forge/"))).toBe(true);
 
     const [, init] = fetchMock.mock.calls[1] as [URL, RequestInit];
     expect(init.headers).toMatchObject({
-      cookie: "forge_operator_session=fg_session_cookie",
+      cookie: "forge_session=fg_session_cookie",
+      "x-forge-csrf": "fg_csrf_test",
       "x-forge-actor": "Albert",
       "content-type": "application/json"
     });
@@ -888,17 +903,20 @@ describe("forge openclaw plugin", () => {
   });
 
   it("uses the compact comparison payload for sports overview tools", async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(
-      new Response(JSON.stringify({ fitness: { sportComparison: {} } }), {
-        status: 200,
-        headers: { "content-type": "application/json" }
-      })
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(securedForgeIdentityResponse())
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ fitness: { sportComparison: {} } }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        })
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     const tools = collectRegisteredTools({
       origin: "http://127.0.0.1",
-      port: 4318
+      port: 4319
     });
     const sportsOverview = tools.find(
       (tool) => tool.name === "forge_get_sports_overview"
@@ -913,23 +931,27 @@ describe("forge openclaw plugin", () => {
     const calledUrls = fetchMock.mock.calls.map(([url]) =>
       (url as URL).toString()
     );
-    expect(calledUrls[0]).toBe(
-      "http://127.0.0.1:4318/api/v1/health/fitness?compact=1&userIds=user_operator&userIds=user_coach"
+    expect(calledUrls[0]).toBe("http://127.0.0.1:4319/api/v1/health");
+    expect(calledUrls[1]).toBe(
+      "http://127.0.0.1:4319/api/v1/health/fitness?compact=1&userIds=user_operator&userIds=user_coach"
     );
   });
 
   it("preserves the full nutrition experiment contract in tool writes", async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(
-      new Response(JSON.stringify({ experiment: { id: "experiment_1" } }), {
-        status: 201,
-        headers: { "content-type": "application/json" }
-      })
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(securedForgeIdentityResponse())
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ experiment: { id: "experiment_1" } }), {
+          status: 201,
+          headers: { "content-type": "application/json" }
+        })
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     const tools = collectRegisteredTools({
       origin: "http://127.0.0.1",
-      port: 4318,
+      port: 4320,
       apiToken: "forge-test-token"
     });
     const startExperiment = tools.find(
@@ -953,9 +975,9 @@ describe("forge openclaw plugin", () => {
       })
     ).resolves.toBeDefined();
 
-    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    const [url, init] = fetchMock.mock.calls[1] as [URL, RequestInit];
     expect(url.toString()).toBe(
-      "http://127.0.0.1:4318/api/v1/health/weight-loss/experiments?userIds=user_operator"
+      "http://127.0.0.1:4320/api/v1/health/weight-loss/experiments?userIds=user_operator"
     );
     expect(JSON.parse(String(init.body))).toEqual({
       title: "Carbohydrates before kickboxing",

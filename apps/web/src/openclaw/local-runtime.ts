@@ -3,9 +3,10 @@ import { closeSync, existsSync, mkdirSync, openSync } from "node:fs";
 import net from "node:net";
 import { homedir } from "node:os";
 import path from "node:path";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import type { ForgePluginConfig } from "./api-client.js";
+import { resolveLocalOwnerBrokerDescriptor } from "./local-owner-client.js";
 
 const LOCAL_HOSTNAMES = new Set(["127.0.0.1", "localhost", "::1"]);
 const STARTUP_TIMEOUT_MS = 15_000;
@@ -150,28 +151,6 @@ function applyPortToConfig(config: ForgePluginConfig, port: number, portSource: 
   config.portSource = portSource;
 }
 
-function getExpectedDataRoot(config: ForgePluginConfig) {
-  return config.dataRoot.trim().length > 0 ? path.resolve(config.dataRoot) : null;
-}
-
-function isExpectedDataRoot(expectedDataRoot: string | null, actualDataRoot: string | null) {
-  if (!expectedDataRoot) {
-    return true;
-  }
-  if (!actualDataRoot) {
-    return false;
-  }
-  return path.resolve(actualDataRoot) === expectedDataRoot;
-}
-
-function formatRuntimeDataRootMismatch(config: ForgePluginConfig, expectedDataRoot: string, actualDataRoot: string | null) {
-  return [
-    `Forge is already responding on ${config.baseUrl}, but it is using storage root ${actualDataRoot ?? "(unknown)"}.`,
-    `The OpenClaw plugin is configured to use ${expectedDataRoot}.`,
-    "Restart the plugin-managed runtime or stop the conflicting Forge server so the configured dataRoot can take over."
-  ].join(" ");
-}
-
 async function writePreferredPortState(config: ForgePluginConfig, port: number) {
   const statePath = getPreferredPortStatePath(config.origin);
   await mkdir(path.dirname(statePath), { recursive: true });
@@ -238,11 +217,6 @@ async function clearRuntimeState(config: ForgePluginConfig) {
   await rm(getRuntimeStatePath(config), { force: true });
 }
 
-async function clearRuntimeStateForState(state: ForgeRuntimeState) {
-  const origin = new URL(state.origin).hostname.toLowerCase().replace(/[^a-z0-9._-]+/g, "-");
-  await rm(path.join(getRuntimeStateDir(), `${origin}-${state.port}.json`), { force: true });
-}
-
 async function readRuntimeState(config: ForgePluginConfig): Promise<ForgeRuntimeState | null> {
   try {
     const payload = await readFile(getRuntimeStatePath(config), "utf8");
@@ -261,55 +235,6 @@ async function readRuntimeState(config: ForgePluginConfig): Promise<ForgeRuntime
   } catch {
     return null;
   }
-}
-
-async function readRuntimeStateFile(filePath: string): Promise<ForgeRuntimeState | null> {
-  try {
-    const payload = await readFile(filePath, "utf8");
-    const parsed = JSON.parse(payload) as Partial<ForgeRuntimeState>;
-    if (
-      typeof parsed.pid !== "number" ||
-      !Number.isFinite(parsed.pid) ||
-      typeof parsed.origin !== "string" ||
-      typeof parsed.port !== "number" ||
-      !Number.isFinite(parsed.port)
-    ) {
-      return null;
-    }
-    return {
-      pid: Math.trunc(parsed.pid),
-      origin: parsed.origin,
-      port: Math.trunc(parsed.port),
-      baseUrl: typeof parsed.baseUrl === "string" ? parsed.baseUrl : buildForgeBaseUrl(parsed.origin, parsed.port),
-      startedAt: typeof parsed.startedAt === "string" ? parsed.startedAt : new Date(0).toISOString(),
-      logPath: typeof parsed.logPath === "string" ? parsed.logPath : null
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function readRuntimeStatesForOrigin(config: ForgePluginConfig) {
-  const stateDir = getRuntimeStateDir();
-  const origin = getRuntimeStateOrigin(config);
-  let entries: string[];
-  try {
-    entries = await readdir(stateDir);
-  } catch {
-    return [];
-  }
-
-  const states: ForgeRuntimeState[] = [];
-  for (const entry of entries) {
-    if (!entry.startsWith(`${origin}-`) || !entry.endsWith(".json") || entry.endsWith("-preferred-port.json")) {
-      continue;
-    }
-    const state = await readRuntimeStateFile(path.join(stateDir, entry));
-    if (state) {
-      states.push(state);
-    }
-  }
-  return states;
 }
 
 function processExists(pid: number) {
@@ -345,8 +270,7 @@ async function readRuntimeStartupLockOwner(
 }
 
 async function acquireRuntimeStartupLock(
-  config: ForgePluginConfig,
-  expectedDataRoot: string | null
+  config: ForgePluginConfig
 ): Promise<(() => Promise<void>) | null> {
   const lockPath = getRuntimeStartupLockPath(config);
   const deadline = Date.now() + STARTUP_TIMEOUT_MS;
@@ -374,7 +298,7 @@ async function acquireRuntimeStartupLock(
     }
 
     const probe = await probeForgeRuntime(config, HEALTHCHECK_TIMEOUT_MS);
-    if (probe.healthy && isExpectedDataRoot(expectedDataRoot, probe.storageRoot)) {
+    if (probe.healthy) {
       return null;
     }
 
@@ -394,37 +318,6 @@ async function acquireRuntimeStartupLock(
   throw new Error(
     `Forge runtime startup on ${config.baseUrl} is already owned by another process and did not become healthy within ${STARTUP_TIMEOUT_MS}ms.`
   );
-}
-
-async function cleanupSupersededManagedRuntimes(config: ForgePluginConfig, expectedDataRoot: string | null) {
-  const states = await readRuntimeStatesForOrigin(config);
-  for (const state of states) {
-    if (state.port === config.port) {
-      continue;
-    }
-    if (!processExists(state.pid)) {
-      await clearRuntimeStateForState(state);
-      continue;
-    }
-
-    const alternateConfig = {
-      ...config,
-      port: state.port,
-      baseUrl: buildForgeBaseUrl(state.origin, state.port),
-      webAppUrl: buildForgeWebAppUrl(state.origin, state.port)
-    };
-    const alternateProbe = await probeForgeRuntime(alternateConfig, HEALTHCHECK_TIMEOUT_MS);
-    if (!alternateProbe.healthy || !isExpectedDataRoot(expectedDataRoot, alternateProbe.storageRoot)) {
-      continue;
-    }
-
-    process.kill(state.pid, "SIGTERM");
-    if (!(await waitForProcessExit(state.pid, 5_000))) {
-      process.kill(state.pid, "SIGKILL");
-      await waitForProcessExit(state.pid, 2_000);
-    }
-    await clearRuntimeStateForState(state);
-  }
 }
 
 async function waitForProcessExit(pid: number, timeoutMs: number) {
@@ -678,14 +571,24 @@ async function isForgeHealthy(config: ForgePluginConfig, timeoutMs: number) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(new URL("/api/v1/health", config.baseUrl), {
+    const response = await fetch(new URL("/api/health", config.baseUrl), {
       method: "GET",
       headers: {
         accept: "application/json"
       },
       signal: controller.signal
     });
-    return response.ok;
+    if (!response.ok) return false;
+    const payload = (await response.json()) as {
+      ok?: unknown;
+      app?: unknown;
+      security?: unknown;
+    };
+    return (
+      payload.ok === true &&
+      payload.app === "forge" &&
+      payload.security === "credential-required"
+    );
   } catch {
     return false;
   } finally {
@@ -697,11 +600,10 @@ async function probeForgeRuntime(config: ForgePluginConfig, timeoutMs: number): 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(new URL("/api/v1/health", config.baseUrl), {
+    const response = await fetch(new URL("/api/health", config.baseUrl), {
       method: "GET",
       headers: {
-        accept: "application/json",
-        "x-forge-runtime-probe": "1"
+        accept: "application/json"
       },
       signal: controller.signal
     });
@@ -709,31 +611,25 @@ async function probeForgeRuntime(config: ForgePluginConfig, timeoutMs: number): 
       return { healthy: false, pid: null, storageRoot: null, basePath: null };
     }
     const payload = (await response.json()) as {
-      runtime?: {
-        pid?: unknown;
-        storageRoot?: unknown;
-        basePath?: unknown;
-      };
+      ok?: unknown;
+      app?: unknown;
+      security?: unknown;
     };
+    const healthy =
+      payload.ok === true &&
+      payload.app === "forge" &&
+      payload.security === "credential-required";
     return {
-      healthy: true,
-      pid: typeof payload.runtime?.pid === "number" && Number.isFinite(payload.runtime.pid) ? Math.trunc(payload.runtime.pid) : null,
-      storageRoot: typeof payload.runtime?.storageRoot === "string" ? path.resolve(payload.runtime.storageRoot) : null,
-      basePath: typeof payload.runtime?.basePath === "string" ? payload.runtime.basePath : null
+      healthy,
+      pid: null,
+      storageRoot: null,
+      basePath: null
     };
   } catch {
     return { healthy: false, pid: null, storageRoot: null, basePath: null };
   } finally {
     clearTimeout(timeout);
   }
-}
-
-async function adoptManagedRuntimeState(config: ForgePluginConfig, probe: ForgeRuntimeProbe) {
-  if (probe.pid === null || !processExists(probe.pid)) {
-    return false;
-  }
-  await writeRuntimeState(config, probe.pid);
-  return true;
 }
 
 async function spawnManagedRuntime(config: ForgePluginConfig, plan: ForgeRuntimeLaunchPlan) {
@@ -744,6 +640,7 @@ async function spawnManagedRuntime(config: ForgePluginConfig, plan: ForgeRuntime
   const logPath = getRuntimeLogPath(config);
   const logFd = openRuntimeLogFile(logPath);
   const enableManagedDevWeb = shouldEnableManagedDevWeb(plan);
+  const ownerBroker = resolveLocalOwnerBrokerDescriptor();
   const child = spawn(process.execPath, args, {
     cwd: plan.packageRoot,
     env: {
@@ -751,6 +648,12 @@ async function spawnManagedRuntime(config: ForgePluginConfig, plan: ForgeRuntime
       HOST: "127.0.0.1",
       PORT: String(config.port),
       FORGE_BASE_PATH: "/forge/",
+      ...(ownerBroker
+        ? {
+            FORGE_OWNER_BROKER_BIN: ownerBroker.binaryPath,
+            FORGE_OWNER_BROKER_SHA256: ownerBroker.binarySha256
+          }
+        : {}),
       ...(enableManagedDevWeb
         ? {
             FORGE_DEV_WEB_ORIGIN:
@@ -833,14 +736,8 @@ export async function ensureForgeRuntimeReady(config: ForgePluginConfig) {
     return;
   }
 
-  const expectedDataRoot = getExpectedDataRoot(config);
   const initialProbe = await probeForgeRuntime(config, HEALTHCHECK_TIMEOUT_MS);
-  if (initialProbe.healthy && isExpectedDataRoot(expectedDataRoot, initialProbe.storageRoot)) {
-    await cleanupSupersededManagedRuntimes(config, expectedDataRoot);
-    const existingState = await readRuntimeState(config);
-    if (!existingState) {
-      await adoptManagedRuntimeState(config, initialProbe);
-    }
+  if (initialProbe.healthy) {
     return;
   }
 
@@ -848,25 +745,13 @@ export async function ensureForgeRuntimeReady(config: ForgePluginConfig) {
   if (savedState && !processExists(savedState.pid)) {
     await clearRuntimeState(config);
   } else if (savedState && processExists(savedState.pid)) {
-    if (initialProbe.healthy && !isExpectedDataRoot(expectedDataRoot, initialProbe.storageRoot)) {
-      await stopForgeRuntime(config);
-    } else {
-      try {
-        await waitForRuntime(config, EXISTING_RUNTIME_GRACE_MS, null);
-        return;
-      } catch {
-        await stopForgeRuntime(config);
-      }
-    }
-  } else if (initialProbe.healthy) {
-    if (!isExpectedDataRoot(expectedDataRoot, initialProbe.storageRoot)) {
-      throw new Error(formatRuntimeDataRootMismatch(config, expectedDataRoot!, initialProbe.storageRoot));
-    }
     try {
       await waitForRuntime(config, EXISTING_RUNTIME_GRACE_MS, null);
       return;
     } catch {
-      // There is no plugin-managed pid to stop here; fall through into normal startup handling.
+      // A persisted PID is not sufficient proof of manager ownership. Never
+      // signal it from readiness detection; normal port handling below decides
+      // whether a new runtime may safely start.
     }
   }
 
@@ -881,10 +766,7 @@ export async function ensureForgeRuntimeReady(config: ForgePluginConfig) {
   }
 
   startupPromise = (async () => {
-    const releaseStartupLock = await acquireRuntimeStartupLock(
-      config,
-      expectedDataRoot
-    );
+    const releaseStartupLock = await acquireRuntimeStartupLock(config);
     if (!releaseStartupLock) {
       return;
     }
@@ -894,8 +776,7 @@ export async function ensureForgeRuntimeReady(config: ForgePluginConfig) {
         HEALTHCHECK_TIMEOUT_MS
       );
       if (
-        probeBeforeStart.healthy &&
-        isExpectedDataRoot(expectedDataRoot, probeBeforeStart.storageRoot)
+        probeBeforeStart.healthy
       ) {
         return;
       }
@@ -908,8 +789,7 @@ export async function ensureForgeRuntimeReady(config: ForgePluginConfig) {
           HEALTHCHECK_TIMEOUT_MS
         );
         if (
-          probeAfterRelocation.healthy &&
-          isExpectedDataRoot(expectedDataRoot, probeAfterRelocation.storageRoot)
+          probeAfterRelocation.healthy
         ) {
           return;
         }
@@ -932,16 +812,9 @@ export async function ensureForgeRuntimeReady(config: ForgePluginConfig) {
         HEALTHCHECK_TIMEOUT_MS
       );
       if (
-        !probeAfterStart.healthy ||
-        !isExpectedDataRoot(expectedDataRoot, probeAfterStart.storageRoot)
+        !probeAfterStart.healthy
       ) {
-        throw new Error(
-          formatRuntimeDataRootMismatch(
-            config,
-            expectedDataRoot!,
-            probeAfterStart.storageRoot
-          )
-        );
+        throw new Error(formatRuntimeFailure(lastRuntimeExitDetails, config));
       }
     } finally {
       await releaseStartupLock();
@@ -966,25 +839,8 @@ export async function startForgeRuntime(config: ForgePluginConfig): Promise<Forg
     };
   }
 
-  const expectedDataRoot = getExpectedDataRoot(config);
   const probe = await probeForgeRuntime(config, HEALTHCHECK_TIMEOUT_MS);
-  let existingState = await readRuntimeState(config);
-  if (!existingState && probe.healthy && isExpectedDataRoot(expectedDataRoot, probe.storageRoot)) {
-    const adopted = await adoptManagedRuntimeState(config, probe);
-    if (adopted) {
-      existingState = await readRuntimeState(config);
-    }
-  }
-  if (probe.healthy && !isExpectedDataRoot(expectedDataRoot, probe.storageRoot)) {
-    return {
-      ok: false,
-      started: false,
-      managed: Boolean(existingState),
-      message: formatRuntimeDataRootMismatch(config, expectedDataRoot!, probe.storageRoot),
-      pid: existingState?.pid ?? null,
-      baseUrl: config.baseUrl
-    };
-  }
+  const existingState = await readRuntimeState(config);
   if (!existingState && probe.healthy) {
     return {
       ok: true,
@@ -997,12 +853,17 @@ export async function startForgeRuntime(config: ForgePluginConfig): Promise<Forg
   }
 
   if (existingState && processExists(existingState.pid) && probe.healthy) {
+    const ownedByCurrentManager =
+      managedRuntimeChild?.pid === existingState.pid &&
+      managedRuntimeKey === runtimeKey(config);
     return {
       ok: true,
       started: false,
-      managed: true,
-      message: `Forge is already running on ${config.baseUrl}.`,
-      pid: existingState.pid,
+      managed: ownedByCurrentManager,
+      message: ownedByCurrentManager
+        ? `Forge is already running on ${config.baseUrl}.`
+        : `Forge is already running on ${config.baseUrl}; this plugin process is attached but does not own its lifecycle.`,
+      pid: ownedByCurrentManager ? existingState.pid : null,
       baseUrl: config.baseUrl
     };
   }
@@ -1079,6 +940,20 @@ export async function stopForgeRuntime(config: ForgePluginConfig): Promise<Forge
     };
   }
 
+  if (
+    managedRuntimeChild?.pid !== state.pid ||
+    managedRuntimeKey !== runtimeKey(config)
+  ) {
+    return {
+      ok: true,
+      stopped: false,
+      managed: false,
+      message:
+        "Forge is running, but this plugin process did not launch it. Stop it where it was started.",
+      pid: null
+    };
+  }
+
   process.kill(state.pid, "SIGTERM");
   if (!(await waitForProcessExit(state.pid, 5_000))) {
     process.kill(state.pid, "SIGKILL");
@@ -1109,18 +984,14 @@ export async function stopForgeRuntime(config: ForgePluginConfig): Promise<Forge
 }
 
 export async function getForgeRuntimeStatus(config: ForgePluginConfig): Promise<ForgeRuntimeStatusResult> {
-  const expectedDataRoot = getExpectedDataRoot(config);
   const probe = await probeForgeRuntime(config, HEALTHCHECK_TIMEOUT_MS);
   const healthy = probe.healthy;
-  let state = await readRuntimeState(config);
-  if (!state && healthy && isExpectedDataRoot(expectedDataRoot, probe.storageRoot)) {
-    const adopted = await adoptManagedRuntimeState(config, probe);
-    if (adopted) {
-      state = await readRuntimeState(config);
-    }
-  }
-  const pid = state?.pid ?? null;
-  const managed = Boolean(state);
+  const state = await readRuntimeState(config);
+  const managed =
+    Boolean(state) &&
+    managedRuntimeChild?.pid === state?.pid &&
+    managedRuntimeKey === runtimeKey(config);
+  const pid = managed ? (state?.pid ?? null) : null;
 
   if (!isLocalOrigin(config.origin)) {
     return {
@@ -1150,17 +1021,6 @@ export async function getForgeRuntimeStatus(config: ForgePluginConfig): Promise<
   }
 
   if (healthy && managed) {
-    if (!isExpectedDataRoot(expectedDataRoot, probe.storageRoot)) {
-      return {
-        ok: false,
-        running: true,
-        healthy: true,
-        managed: true,
-        message: formatRuntimeDataRootMismatch(config, expectedDataRoot!, probe.storageRoot),
-        pid,
-        baseUrl: config.baseUrl
-      };
-    }
     return {
       ok: true,
       running: true,
@@ -1173,17 +1033,6 @@ export async function getForgeRuntimeStatus(config: ForgePluginConfig): Promise<
   }
 
   if (healthy) {
-    if (!isExpectedDataRoot(expectedDataRoot, probe.storageRoot)) {
-      return {
-        ok: false,
-        running: true,
-        healthy: true,
-        managed: false,
-        message: formatRuntimeDataRootMismatch(config, expectedDataRoot!, probe.storageRoot),
-        pid: null,
-        baseUrl: config.baseUrl
-      };
-    }
     return {
       ok: true,
       running: true,

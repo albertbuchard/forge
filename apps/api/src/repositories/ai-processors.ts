@@ -1,8 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
-import { promisify } from "node:util";
-import { execFile as execFileCallback } from "node:child_process";
-import path from "node:path";
 import { getDatabase } from "../db.js";
 import type { SecretsManager } from "../managers/platform/secrets-manager.js";
 import {
@@ -21,7 +17,7 @@ import {
   type SurfaceProcessorGraphPayload,
   type UpdateAiProcessorInput
 } from "../types.js";
-import { LlmManager } from "../managers/platform/llm-manager.js";
+import type { TextPromptRunner } from "../managers/platform/llm-manager.js";
 import {
   FORGE_DEFAULT_AGENT_ID,
   getAiModelConnectionById,
@@ -29,10 +25,10 @@ import {
   readModelConnectionCredential
 } from "./model-settings.js";
 import { getSettings } from "./settings.js";
+import type { MachineCapabilitySession } from "../security/capability-executor.js";
 
 const MAX_RUN_HISTORY = 12;
 const MAX_TOOL_STEPS = 6;
-const execFile = promisify(execFileCallback);
 
 type AiProcessorRow = {
   id: string;
@@ -93,18 +89,6 @@ function processorIdFromNodeId(nodeId: string) {
   return nodeId.startsWith("aiproc:") ? nodeId.slice("aiproc:".length) : null;
 }
 
-function resolveAllowedPath(inputPath: string) {
-  const candidate = path.resolve(process.cwd(), inputPath);
-  const workspaceRoot = process.cwd();
-  if (
-    candidate !== workspaceRoot &&
-    !candidate.startsWith(`${workspaceRoot}${path.sep}`)
-  ) {
-    throw new Error("Machine access is restricted to the Forge workspace root.");
-  }
-  return candidate;
-}
-
 function tryParseStructuredAgentResponse(value: string) {
   try {
     return JSON.parse(value) as
@@ -125,18 +109,23 @@ function tryParseStructuredAgentResponse(value: string) {
 async function executeMachineTool(
   processor: AiProcessor,
   tool: "machine_read_file" | "machine_write_file" | "machine_exec",
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  capabilities: MachineCapabilitySession | undefined
 ) {
+  if (!capabilities) {
+    throw new Error(
+      "Machine capabilities require a verified Forge capability session."
+    );
+  }
   if (tool === "machine_read_file") {
     if (!processor.machineAccess.read) {
       throw new Error("Read access is disabled for this processor.");
     }
-    const targetPath =
-      typeof args.path === "string" ? resolveAllowedPath(args.path) : null;
+    const targetPath = typeof args.path === "string" ? args.path : null;
     if (!targetPath) {
       throw new Error("machine_read_file requires a string path.");
     }
-    const content = await readFile(targetPath, "utf8");
+    const content = await capabilities.readTextFile(targetPath);
     return {
       path: targetPath,
       content
@@ -147,19 +136,14 @@ async function executeMachineTool(
     if (!processor.machineAccess.write) {
       throw new Error("Write access is disabled for this processor.");
     }
-    const targetPath =
-      typeof args.path === "string" ? resolveAllowedPath(args.path) : null;
+    const targetPath = typeof args.path === "string" ? args.path : null;
     if (!targetPath) {
       throw new Error("machine_write_file requires a string path.");
     }
     if (typeof args.content !== "string") {
       throw new Error("machine_write_file requires string content.");
     }
-    await writeFile(targetPath, args.content, "utf8");
-    return {
-      path: targetPath,
-      bytesWritten: Buffer.byteLength(args.content, "utf8")
-    };
+    return capabilities.writeTextFile(targetPath, args.content);
   }
 
   if (!processor.machineAccess.exec) {
@@ -169,18 +153,19 @@ async function executeMachineTool(
     throw new Error("machine_exec requires a command string.");
   }
   const cwd =
-    typeof args.cwd === "string" && args.cwd.trim().length > 0
-      ? resolveAllowedPath(args.cwd)
-      : process.cwd();
-  const result = await execFile("zsh", ["-lc", args.command], {
+    typeof args.cwd === "string" && args.cwd.trim().length > 0 ? args.cwd : ".";
+  const result = await capabilities.executeCommand({
+    command: args.command,
     cwd,
-    timeout: 15_000,
-    maxBuffer: 256_000
+    maximumRuntimeMilliseconds: 15_000,
+    maximumOutputBytes: 256_000
   });
   return {
     cwd,
     stdout: result.stdout.trim(),
-    stderr: result.stderr.trim()
+    stderr: result.stderr.trim(),
+    exitCode: result.exitCode,
+    truncated: result.truncated
   };
 }
 
@@ -189,7 +174,8 @@ async function runProcessorAgent(
   agent: ReturnType<typeof resolveProcessorAgentProfiles>[number],
   fullPrompt: string,
   services: {
-    llm: LlmManager;
+    llm: TextPromptRunner;
+    machineCapabilities?: MachineCapabilitySession;
   }
 ) {
   if (!agent.profile) {
@@ -198,9 +184,7 @@ async function runProcessorAgent(
 
   const toolNames = [
     processor.machineAccess.read ? "machine_read_file(path)" : null,
-    processor.machineAccess.write
-      ? "machine_write_file(path, content)"
-      : null,
+    processor.machineAccess.write ? "machine_write_file(path, content)" : null,
     processor.machineAccess.exec ? "machine_exec(command, cwd?)" : null
   ].filter(Boolean);
 
@@ -235,14 +219,17 @@ async function runProcessorAgent(
         .filter(Boolean)
         .join("\n\n")
     });
-    const structured = tryParseStructuredAgentResponse(result.outputText.trim());
+    const structured = tryParseStructuredAgentResponse(
+      result.outputText.trim()
+    );
     if (!structured || structured.action === "final") {
       return structured?.text?.trim() || result.outputText.trim();
     }
     const toolResult = await executeMachineTool(
       processor,
       structured.tool,
-      structured.args
+      structured.args,
+      services.machineCapabilities
     );
     transcript.push(
       `Tool call ${structured.tool}: ${JSON.stringify(structured.args)}`,
@@ -335,7 +322,9 @@ export function listAiProcessorLinks(surfaceId?: string) {
   return rows.map(mapLink);
 }
 
-export function getSurfaceProcessorGraph(surfaceId: string): SurfaceProcessorGraphPayload {
+export function getSurfaceProcessorGraph(
+  surfaceId: string
+): SurfaceProcessorGraphPayload {
   return surfaceProcessorGraphPayloadSchema.parse({
     surfaceId,
     processors: listAiProcessors(surfaceId),
@@ -378,7 +367,10 @@ export function createAiProcessor(input: CreateAiProcessorInput) {
   return getAiProcessorById(id)!;
 }
 
-export function updateAiProcessor(processorId: string, patch: UpdateAiProcessorInput) {
+export function updateAiProcessor(
+  processorId: string,
+  patch: UpdateAiProcessorInput
+) {
   const current = getAiProcessorById(processorId);
   if (!current) {
     return null;
@@ -426,7 +418,9 @@ export function deleteAiProcessor(processorId: string) {
   if (!current) {
     return null;
   }
-  getDatabase().prepare(`DELETE FROM ai_processors WHERE id = ?`).run(processorId);
+  getDatabase()
+    .prepare(`DELETE FROM ai_processors WHERE id = ?`)
+    .run(processorId);
   return current;
 }
 
@@ -479,7 +473,8 @@ export function createAiProcessorLink(input: CreateAiProcessorLinkInput) {
       link.targetProcessorId === parsed.targetProcessorId
   );
   const now = new Date().toISOString();
-  const id = existing?.id ?? `ail_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+  const id =
+    existing?.id ?? `ail_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
   getDatabase()
     .prepare(
       `INSERT INTO ai_processor_links (
@@ -502,7 +497,9 @@ export function createAiProcessorLink(input: CreateAiProcessorLinkInput) {
       existing?.createdAt ?? now,
       now
     );
-  return listAiProcessorLinks(parsed.surfaceId).find((entry) => entry.id === id)!;
+  return listAiProcessorLinks(parsed.surfaceId).find(
+    (entry) => entry.id === id
+  )!;
 }
 
 export function deleteAiProcessorLink(linkId: string) {
@@ -510,14 +507,21 @@ export function deleteAiProcessorLink(linkId: string) {
   if (!existing) {
     return null;
   }
-  getDatabase().prepare(`DELETE FROM ai_processor_links WHERE id = ?`).run(linkId);
+  getDatabase()
+    .prepare(`DELETE FROM ai_processor_links WHERE id = ?`)
+    .run(linkId);
   return existing;
 }
 
-function resolveProcessorAgentProfiles(processor: AiProcessor, secrets: SecretsManager) {
+function resolveProcessorAgentProfiles(
+  processor: AiProcessor,
+  secrets: SecretsManager
+) {
   const allConnections = listAiModelConnections();
   const requestedAgentIds =
-    processor.agentIds.length > 0 ? processor.agentIds : [FORGE_DEFAULT_AGENT_ID];
+    processor.agentIds.length > 0
+      ? processor.agentIds
+      : [FORGE_DEFAULT_AGENT_ID];
   const configByAgentId = new Map(
     processor.agentConfigs.map((config) => [config.agentId, config])
   );
@@ -577,7 +581,10 @@ function writeProcessorRunState(
   input: {
     lastRunAt: string | null;
     lastRunStatus: "running" | "completed" | "failed";
-    lastRunOutput: { concatenated: string; byAgent: Record<string, string> } | null;
+    lastRunOutput: {
+      concatenated: string;
+      byAgent: Record<string, string>;
+    } | null;
     runEntry: AiProcessor["runHistory"][number];
   }
 ) {
@@ -605,8 +612,9 @@ async function executeAiProcessor(
   processorId: string,
   input: RunAiProcessorInput,
   services: {
-    llm: LlmManager;
+    llm: TextPromptRunner;
     secrets: SecretsManager;
+    machineCapabilities?: MachineCapabilitySession;
   },
   state: {
     cache: Map<
@@ -731,7 +739,8 @@ async function executeAiProcessor(
           agent,
           fullPrompt,
           {
-            llm: services.llm
+            llm: services.llm,
+            machineCapabilities: services.machineCapabilities
           }
         );
       })
@@ -793,8 +802,9 @@ export async function runAiProcessor(
   processorId: string,
   input: RunAiProcessorInput,
   services: {
-    llm: LlmManager;
+    llm: TextPromptRunner;
     secrets: SecretsManager;
+    machineCapabilities?: MachineCapabilitySession;
   },
   options: {
     trigger?: "manual" | "route" | "cron";

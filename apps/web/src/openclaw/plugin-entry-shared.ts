@@ -19,6 +19,7 @@ type RawPluginConfig = Partial<
     | "port"
     | "dataRoot"
     | "apiToken"
+    | "remoteCredentialId"
     | "actorLabel"
     | "timeoutMs"
     | "injectBootstrapContext",
@@ -130,6 +131,7 @@ export function resolveForgePluginConfig(pluginConfig: unknown): ForgePluginConf
     portSource: hasConfiguredPort ? "configured" : preferredPort !== null ? "preferred" : "default",
     dataRoot: normalizeDataRoot(raw.dataRoot),
     apiToken: typeof raw.apiToken === "string" ? raw.apiToken.trim() : "",
+    remoteCredentialId: normalizeOptionalString(raw.remoteCredentialId),
     actorLabel: normalizeOptionalString(raw.actorLabel),
     injectBootstrapContext: normalizeBoolean(raw.injectBootstrapContext, true),
     timeoutMs: normalizeTimeout(raw.timeoutMs, 15_000)
@@ -164,7 +166,13 @@ export const forgePluginConfigSchema: ForgePluginConfigSchema = {
       apiToken: {
         type: "string",
         default: "",
-        description: "Optional bearer token for remote or explicit scoped access. Localhost and Tailscale Forge instances can bootstrap an operator session automatically."
+        description: "Optional bearer token for paired remote or explicit scoped access. Direct localhost clients use the verified local-owner channel automatically; Tailscale reachability alone never authorizes access."
+      },
+      remoteCredentialId: {
+        type: "string",
+        default: "",
+        description:
+          "Non-secret identifier for a paired renewable credential stored in the operating-system keychain. Direct localhost clients use verified local-owner access instead."
       },
       actorLabel: {
         type: "string",
@@ -205,7 +213,7 @@ export const forgePluginConfigSchema: ForgePluginConfigSchema = {
     },
     apiToken: {
       label: "Forge API Token",
-      help: "Optional bearer token. Leave blank for one-step localhost or Tailscale operator-session bootstrap.",
+      help: "Optional bearer token. Leave blank for automatic direct-localhost owner verification; remote and Tailscale clients must use a paired scoped credential.",
       sensitive: true,
       placeholder: "fg_live_..."
     },

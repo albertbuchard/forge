@@ -21,6 +21,7 @@ import {
 import {
   inspectForgePeerRuntime,
   PeerRuntimeInstallError,
+  prepareForgeOwnerBrokerRuntime,
   prepareForgePeerRuntime
 } from "../lib/peer-runtime-install.mjs";
 
@@ -95,9 +96,20 @@ function fakeCargo(calls) {
   return async ({ args, cwd, env }) => {
     calls.push({ args, cwd, env });
     const binaryPath = path.join(env.CARGO_TARGET_DIR, "release", "forge-peer");
+    const ownerBrokerBinaryPath = path.join(
+      env.CARGO_TARGET_DIR,
+      "release",
+      "forge-owner-broker"
+    );
     await mkdir(path.dirname(binaryPath), { recursive: true, mode: 0o700 });
     await writeFile(binaryPath, "verified fake peer binary\n", { mode: 0o700 });
+    await writeFile(
+      ownerBrokerBinaryPath,
+      "verified fake owner broker binary\n",
+      { mode: 0o700 }
+    );
     await chmod(binaryPath, 0o700);
+    await chmod(ownerBrokerBinaryPath, 0o700);
     return { ok: true };
   };
 }
@@ -128,6 +140,20 @@ async function inspect(value) {
   });
 }
 
+async function prepareOwnerBroker(value, calls) {
+  return await prepareForgeOwnerBrokerRuntime({
+    mode: "packaged",
+    pluginRoot: value.pluginRoot,
+    repoRoot: null,
+    nativeRoot: value.nativeRoot,
+    runtimePackageVersion: "0.3.33",
+    trustedKeys: [value.key.trusted],
+    now: NOW,
+    environment: { PATH: process.env.PATH },
+    runCargo: fakeCargo(calls)
+  });
+}
+
 test("builds verified source outside the signed tree and records a receipt", async (t) => {
   const value = await fixture(t);
   const calls = [];
@@ -136,13 +162,14 @@ test("builds verified source outside the signed tree and records a receipt", asy
   assert.equal(result.built, true);
   assert.equal(calls.length, 1);
   assert.ok(!result.binaryPath.startsWith(value.sourceRoot));
+  assert.ok(!result.ownerBrokerBinaryPath.startsWith(value.sourceRoot));
   assert.deepEqual(
     await readFile(path.join(value.sourceRoot, "src", "lib.rs")),
     before
   );
   assert.equal(
     JSON.parse(await readFile(result.receiptPath, "utf8")).schemaVersion,
-    1
+    2
   );
 });
 
@@ -156,6 +183,46 @@ test("reuses only an exact verified binary receipt", async (t) => {
   assert.equal(calls.length, 1);
 });
 
+test("builds and reuses only the minimal verified owner broker when peer sharing is disabled", async (t) => {
+  const value = await fixture(t);
+  const calls = [];
+  const first = await prepareOwnerBroker(value, calls);
+  const second = await prepareOwnerBroker(value, calls);
+  assert.equal(first.built, true);
+  assert.equal(second.built, false);
+  assert.equal(first.binaryPath, null);
+  assert.ok(first.ownerBrokerBinaryPath.endsWith("forge-owner-broker"));
+  assert.deepEqual(calls[0].args, [
+    "build",
+    "--locked",
+    "--release",
+    "--no-default-features",
+    "--features",
+    "owner-broker",
+    "--manifest-path",
+    path.join(value.sourceRoot, "Cargo.toml"),
+    "--bin",
+    "forge-owner-broker"
+  ]);
+  assert.equal(
+    JSON.parse(await readFile(first.receiptPath, "utf8")).schemaVersion,
+    1
+  );
+  assert.equal(calls.length, 1);
+});
+
+test("rebuilds the minimal owner broker after checksum tampering", async (t) => {
+  const value = await fixture(t);
+  const calls = [];
+  const first = await prepareOwnerBroker(value, calls);
+  await writeFile(first.ownerBrokerBinaryPath, "tampered owner broker\n", {
+    mode: 0o700
+  });
+  const second = await prepareOwnerBroker(value, calls);
+  assert.equal(second.built, true);
+  assert.equal(calls.length, 2);
+});
+
 test("inspects a verified cached runtime without rebuilding it", async (t) => {
   const value = await fixture(t);
   const calls = [];
@@ -165,6 +232,7 @@ test("inspects a verified cached runtime without rebuilding it", async (t) => {
   assert.equal(inspected.sourceVerified, true);
   assert.equal(inspected.binaryVerified, true);
   assert.equal(inspected.binaryPath, prepared.binaryPath);
+  assert.equal(inspected.ownerBrokerBinaryPath, prepared.ownerBrokerBinaryPath);
   assert.equal(calls.length, 1);
 });
 
@@ -176,6 +244,36 @@ test("rebuilds a cached binary after checksum tampering", async (t) => {
   const second = await prepare(value, calls);
   assert.equal(second.built, true);
   assert.equal(calls.length, 2);
+});
+
+test("rebuilds after owner-broker checksum tampering", async (t) => {
+  const value = await fixture(t);
+  const calls = [];
+  const first = await prepare(value, calls);
+  await writeFile(first.ownerBrokerBinaryPath, "tampered broker\n", {
+    mode: 0o700
+  });
+  const second = await prepare(value, calls);
+  assert.equal(second.built, true);
+  assert.equal(calls.length, 2);
+});
+
+test("rejects an owner-broker hash copied from the peer binary", async (t) => {
+  const value = await fixture(t);
+  const calls = [];
+  const first = await prepare(value, calls);
+  const receipt = JSON.parse(await readFile(first.receiptPath, "utf8"));
+  await writeFile(
+    first.receiptPath,
+    `${JSON.stringify({
+      ...receipt,
+      ownerBrokerBinarySha256: receipt.binarySha256
+    })}\n`,
+    { mode: 0o600 }
+  );
+  const inspected = await inspect(value);
+  assert.equal(inspected.ok, false);
+  assert.equal(inspected.ownerBrokerBinaryPath, null);
 });
 
 test("treats a malformed receipt timestamp as a cache miss", async (t) => {
@@ -203,6 +301,7 @@ test("reports a tampered cached runtime without mutating it", async (t) => {
   assert.equal(inspected.sourceVerified, true);
   assert.equal(inspected.binaryVerified, false);
   assert.equal(inspected.binaryPath, null);
+  assert.equal(inspected.ownerBrokerBinaryPath, null);
   assert.equal(calls.length, 1);
 });
 

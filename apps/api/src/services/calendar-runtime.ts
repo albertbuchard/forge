@@ -30,7 +30,10 @@ import {
   type DAVCalendarObject
 } from "tsdav";
 import { SecretsManager } from "../managers/platform/secrets-manager.js";
-import { getSettings } from "../repositories/settings.js";
+import {
+  getGoogleCalendarOauthPrivateConfig,
+  getSettings
+} from "../repositories/settings.js";
 import {
   createCalendarConnectionRecord,
   claimTaskTimeboxProviderOperation,
@@ -618,11 +621,7 @@ function googleOauthStartRejectionMessage(
 }
 
 function resolveStoredGoogleOauthConfig() {
-  const settings = getSettings();
-  const config = resolveGoogleCalendarOauthPrivateConfig(process.env, {
-    clientId: settings.calendarProviders.google.storedClientId,
-    clientSecret: settings.calendarProviders.google.storedClientSecret
-  });
+  const config = getGoogleCalendarOauthPrivateConfig();
   logForgeDebug(
     `[forge-google-oauth] resolve_stored_config clientId=${JSON.stringify(config.clientId)} isConfigured=${JSON.stringify(config.isConfigured)} redirectUri=${JSON.stringify(config.redirectUri)} allowedOrigins=${JSON.stringify(config.allowedOrigins)} hasServerClientSecret=${JSON.stringify(Boolean(config.clientSecret))}`
   );

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { getDatabase } from "../db.js";
+import { redactSecretValues } from "../security/secret-redaction.js";
 import {
   createDiagnosticLogSchema,
   diagnosticLogEntrySchema,
@@ -134,12 +135,17 @@ function sanitizeDetails(
   if (!details) {
     return {};
   }
-  return Object.fromEntries(
+  const sanitized = Object.fromEntries(
     Object.entries(details).map(([key, value]) => [
       key,
       sanitizeDiagnosticValue(value)
     ])
   );
+  return redactSecretValues(sanitized, {
+    maximumDepth: MAX_DEPTH,
+    maximumArrayItems: MAX_ARRAY_ITEMS,
+    maximumObjectKeys: MAX_OBJECT_KEYS
+  }).value;
 }
 
 function compactDiagnosticValue(value: unknown, depth = 0): unknown {
@@ -290,7 +296,7 @@ export function recordDiagnosticLog(
     source: parsed.source ?? "server",
     scope: parsed.scope,
     eventKey: parsed.eventKey,
-    message: parsed.message,
+    message: redactSecretValues(parsed.message).value,
     route: parsed.route ?? null,
     functionName: parsed.functionName ?? null,
     requestId: parsed.requestId ?? null,

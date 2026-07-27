@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -6,6 +7,7 @@ import test from "node:test";
 
 import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase } from "./db.js";
+import { setEntityOwner } from "./repositories/entity-ownership.js";
 import {
   createPreferenceContext,
   createPreferenceItem,
@@ -23,19 +25,7 @@ const dimensions = {
   surprise: 0
 };
 
-async function issueOperatorSessionCookie(
-  app: Awaited<ReturnType<typeof buildServer>>
-) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host: "127.0.0.1:4317" }
-  });
-  assert.equal(response.statusCode, 200);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const issueOperatorSessionCookie = issueTestOperatorSessionCookie;
 
 async function issueScopedToken(
   app: Awaited<ReturnType<typeof buildServer>>,
@@ -155,7 +145,7 @@ test("preference routes enforce exact user scope and authenticated provenance", 
     ]) {
       const hidden = await app.inject({ method: "GET", url, headers });
       assert.equal(hidden.statusCode, 404);
-      assert.equal(hidden.json().code, "preferences_record_not_found");
+      assert.equal(hidden.json().code, "entity_not_found");
     }
 
     const forbiddenContext = await app.inject({
@@ -242,13 +232,15 @@ test("preference routes enforce exact user scope and authenticated provenance", 
        ) VALUES (?, ?, ?, '', 'blended', 1, 0, 90, ?, ?)`
     );
     for (let index = 0; index < 205; index += 1) {
+      const contextId = `context_bound_${index}`;
       insertContext.run(
-        `context_bound_${index}`,
+        contextId,
         botWorkspace.profile.id,
         `Bounded context ${index}`,
         timestamp,
         timestamp
       );
+      setEntityOwner("preference_context", contextId, "user_forge_bot");
     }
     const bounded = await app.inject({
       method: "GET",

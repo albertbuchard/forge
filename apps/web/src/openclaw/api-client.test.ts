@@ -2,14 +2,23 @@ import type { IncomingMessage } from "node:http";
 import { Readable } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ensureForgeRuntimeReady } from "./local-runtime";
+import { createLocalOwnerSession } from "./local-owner-client";
 
 vi.mock("./local-runtime", () => ({
   ensureForgeRuntimeReady: vi.fn().mockResolvedValue(undefined)
+}));
+vi.mock("./local-owner-client", () => ({
+  createLocalOwnerSession: vi.fn().mockResolvedValue({
+    cookie: "forge_session=fg_session_cookie",
+    csrfToken: "fg_csrf_test",
+    actorLabel: "Albert"
+  })
 }));
 
 import {
   buildForgeBaseUrl,
   buildForgeWebAppUrl,
+  canBootstrapOperatorSession,
   callConfiguredForgeApi,
   callForgeApi,
   expectForgeSuccess,
@@ -41,6 +50,55 @@ describe("openclaw api client", () => {
     expect(buildForgeBaseUrl("http://127.0.0.1", 4317)).toBe("http://127.0.0.1:4317");
     expect(buildForgeWebAppUrl("http://127.0.0.1", 4317)).toBe("http://127.0.0.1:4317/forge/");
   });
+
+  it("never treats Tailscale reachability as local-owner authority", () => {
+    expect(
+      canBootstrapOperatorSession("https://forge.example.ts.net")
+    ).toBe(false);
+    expect(
+      canBootstrapOperatorSession("http://100.64.10.20:4317")
+    ).toBe(false);
+    expect(
+      canBootstrapOperatorSession("http://127.0.0.1:4317")
+    ).toBe(true);
+  });
+
+  it("refuses to send remote bearer credentials over plain HTTP", async () => {
+    await expect(
+      callForgeApi({
+        baseUrl: "http://100.64.10.20:4317",
+        apiToken: "fg_remote_token",
+        timeoutMs: 4000,
+        method: "GET",
+        path: "/api/v1/health"
+      })
+    ).rejects.toMatchObject({
+      code: "forge_plugin_secure_transport_required",
+      status: 400
+    });
+  });
+
+  it.each(["authorization", "Authorization", "cookie", "dpop"])(
+    "rejects caller-controlled %s credential headers before fetch",
+    async (headerName) => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      await expect(
+        callForgeApi({
+          baseUrl: "https://forge.example.ts.net",
+          timeoutMs: 4000,
+          method: "GET",
+          path: "/api/v1/health",
+          extraHeaders: { [headerName]: "must-not-be-sent" }
+        })
+      ).rejects.toMatchObject({
+        code: "forge_plugin_security_header_override_rejected",
+        status: 400
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    }
+  );
 
   it("forwards Forge auth and provenance headers", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
@@ -77,10 +135,18 @@ describe("openclaw api client", () => {
 
   it("ensures the local Forge runtime before configured requests", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { "content-type": "application/json" }
-      })
+      new Response(
+        JSON.stringify({
+          ok: true,
+          app: "forge",
+          backend: "forge-node-runtime",
+          runtime: { storageRoot: "/tmp/forge-api-client-test" }
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }
+      )
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -90,7 +156,7 @@ describe("openclaw api client", () => {
       baseUrl: "http://127.0.0.1:4317",
       webAppUrl: "http://127.0.0.1:4317/forge/",
       portSource: "default",
-      dataRoot: "",
+      dataRoot: "/tmp/forge-api-client-test",
       apiToken: "fg_live_token",
       actorLabel: "aurel",
       injectBootstrapContext: true,
@@ -107,45 +173,148 @@ describe("openclaw api client", () => {
   });
 
   it("bootstraps a local operator session when no apiToken is configured", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ session: { id: "ses_local", actorLabel: "Albert" } }), {
-          status: 200,
-          headers: {
-            "content-type": "application/json",
-            "set-cookie": "forge_operator_session=fg_session_cookie; Path=/; HttpOnly"
-          }
-        })
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: { "content-type": "application/json" }
-        })
-      );
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     await callForgeApi({
       baseUrl: "http://127.0.0.1:4317",
+      dataRoot: "/tmp/forge-local-session-test",
       timeoutMs: 4000,
       method: "POST",
       path: "/api/v1/entities/search",
       body: { searches: [] }
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const [bootstrapUrl] = fetchMock.mock.calls[0] as [URL, RequestInit];
-    expect(bootstrapUrl.toString()).toBe("http://127.0.0.1:4317/api/v1/auth/operator-session");
-
-    const [url, init] = fetchMock.mock.calls[1] as [URL, RequestInit];
+    expect(createLocalOwnerSession).toHaveBeenCalledWith(
+      "http://127.0.0.1:4317",
+      4000,
+      "/tmp/forge-local-session-test"
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
     expect(url.toString()).toBe("http://127.0.0.1:4317/api/v1/entities/search");
     expect(init.headers).toMatchObject({
-      cookie: "forge_operator_session=fg_session_cookie",
+      cookie: "forge_session=fg_session_cookie",
+      "x-forge-csrf": "fg_csrf_test",
       "x-forge-source": "openclaw",
       "x-forge-actor": "Albert",
       "content-type": "application/json"
     });
+  });
+
+  it("authenticates before rejecting a configured data-root mismatch", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            app: "forge",
+            backend: "forge-node-runtime",
+            runtime: { storageRoot: "/tmp/another-forge-root" }
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          }
+        )
+      )
+    );
+    await expect(
+      callConfiguredForgeApi(
+        {
+          origin: "http://127.0.0.1",
+          port: 44317,
+          baseUrl: "http://127.0.0.1:44317",
+          webAppUrl: "http://127.0.0.1:44317/forge/",
+          portSource: "configured",
+          dataRoot: "/tmp/expected-forge-root",
+          apiToken: "fg_test",
+          actorLabel: "test",
+          injectBootstrapContext: true,
+          timeoutMs: 4000
+        },
+        { method: "GET", path: "/api/v1/context" }
+      )
+    ).rejects.toMatchObject({
+      code: "forge_plugin_data_root_mismatch",
+      status: 409
+    });
+  });
+
+  it("re-verifies Forge identity before retrying after local session renewal", async () => {
+    const identityBody = {
+      ok: true,
+      app: "forge",
+      backend: "forge-node-runtime",
+      runtime: { storageRoot: "/tmp/forge-renewal-test" }
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(identityBody), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: { code: "auth_required", message: "Session expired." }
+          }),
+          {
+            status: 401,
+            headers: { "content-type": "application/json" }
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(identityBody), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: true, entities: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await callConfiguredForgeApi(
+      {
+        origin: "http://127.0.0.1",
+        port: 45317,
+        baseUrl: "http://127.0.0.1:45317",
+        webAppUrl: "http://127.0.0.1:45317/forge/",
+        portSource: "configured",
+        dataRoot: "/tmp/forge-renewal-test",
+        apiToken: "",
+        actorLabel: "test",
+        injectBootstrapContext: true,
+        timeoutMs: 4000
+      },
+      { method: "GET", path: "/api/v1/entities" }
+    );
+
+    expect(result).toEqual({
+      status: 200,
+      body: { ok: true, entities: [] }
+    });
+    expect(
+      fetchMock.mock.calls.map(([url]) => (url as URL).pathname)
+    ).toEqual([
+      "/api/v1/health",
+      "/api/v1/entities",
+      "/api/v1/health",
+      "/api/v1/entities"
+    ]);
   });
 
   it("parses JSON request bodies and supports empty-object writes", async () => {

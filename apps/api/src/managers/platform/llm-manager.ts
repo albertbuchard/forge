@@ -70,8 +70,17 @@ export interface WikiLlmProvider {
     prompt: string;
     format?: Record<string, unknown>;
     logger?: WikiLlmDiagnosticLogger;
-  }): Promise<{ outputText: string }>;
+  }): Promise<{
+    outputText: string;
+    usage?: {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+    };
+  }>;
 }
+
+export type TextPromptRunner = Pick<LlmManager, "runTextPrompt">;
 
 type StoredSecretPayload = {
   kind?: "api_key" | "oauth";

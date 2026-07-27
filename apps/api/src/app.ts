@@ -1,4 +1,8 @@
-import Fastify from "fastify";
+import Fastify, {
+  type FastifyInstance,
+  type FastifyRequest
+} from "fastify";
+import { randomUUID } from "node:crypto";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import { CronExpressionParser } from "cron-parser";
@@ -6,6 +10,7 @@ import { z, ZodError } from "zod";
 import {
   configureDatabase,
   configureDatabaseSeeding,
+  getDatabase,
   getEffectiveDataRoot,
   resolveDataDir,
   resolveDatabasePathForDataRoot,
@@ -287,7 +292,10 @@ import {
 import { markGamificationCelebrationSeen } from "./repositories/gamification.js";
 import {
   getSettingsFileStatus,
+  configureSettingsSecretsManager,
+  getAgentTokenById,
   listAgentIdentities,
+  listAgentTokens,
   getSettings,
   isPsycheAuthRequired,
   mirrorSettingsFileFromCurrentState,
@@ -405,12 +413,16 @@ import {
   updateLifeForceTemplate
 } from "./services/life-force.js";
 import {
+  CRUD_OWNERSHIP_AUTHORIZATION_MATRIX,
+  crudEntityIsVisible,
   createEntities,
   deleteEntities,
   deleteEntity,
   getEntityById,
   getCrudEntityCapabilityMatrix,
   getSettingsBinPayload,
+  entityMatchesCrudScope,
+  resolveCrudRouteOwnership,
   restoreEntities,
   searchEntities,
   updateEntities
@@ -459,6 +471,7 @@ import {
   exportData,
   getDataManagementState,
   maybeRunAutomaticBackup,
+  recoverInterruptedDataRestore,
   restoreDataBackup,
   scanForDataRecoveryCandidates,
   switchDataRoot,
@@ -693,6 +706,48 @@ import {
 } from "./services/entity-navigation.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
+import {
+  forgeAccessGatewayPolicyVersion,
+  installAccessGateway,
+  requireGatewayPrincipal
+} from "./security/access-gateway.js";
+import {
+  applicationSecurityBrowserSessionCookie,
+  initializeApplicationSecurityRuntime,
+  isDirectLocalTransport,
+  readApplicationSecurityBrowserSessionToken,
+  type ApplicationSecurityRuntime
+} from "./security/application-security-runtime.js";
+import { authenticateMobileCompanionRequest } from "./security/mobile-companion-request.js";
+import { MobilePairingCredentialVault } from "./security/mobile-pairing-credential-vault.js";
+import {
+  createBackgroundJobAdmissionPolicy,
+  systemBackgroundPrincipal
+} from "./security/background-job-authorization.js";
+import {
+  CapabilityExecutor,
+  createMachineCapabilitySession
+} from "./security/capability-executor.js";
+import {
+  LocalCapabilityApprovalError,
+  LocalCapabilityApprovalService
+} from "./security/local-capability-approval.js";
+import { SqliteBackgroundJobAuthorizationStore } from "./security/background-job-authorization-store.js";
+import { registerRemotePairingRoutes } from "./security/remote-pairing-routes.js";
+import {
+  InMemorySecurityRateLimiter,
+  SqliteRateLimitStatePersistence
+} from "./security/security-rate-limiter.js";
+import {
+  isClosedSecurityAuditStorageError,
+  TamperEvidentGatewayAuditLedger
+} from "./security/security-audit-ledger.js";
+import { createBudgetedTextPromptRunner } from "./security/ai-cost-budget.js";
+import {
+  LegacyTokenMigrationService,
+  legacyTokenModeFromEnvironment
+} from "./security/legacy-token-migration.js";
+import type { BackgroundJobAuthorization } from "./managers/platform/background-job-manager.js";
 import { registerPeopleRoutes } from "./routes/people.js";
 import { registerCourseRoutes } from "./routes/courses.js";
 import { ensureBuiltInCourses } from "./repositories/courses.js";
@@ -757,6 +812,7 @@ import {
   healthZoneProfilePatchSchema,
   abortMobileHealthSyncSession,
   completeMobileHealthSyncSession,
+  configureCompanionPairingCredentialProtection,
   ingestMobileHealthSync,
   ingestMobileHealthSyncChunk,
   mobileHealthSyncChunkSchema,
@@ -9635,7 +9691,7 @@ function hasTokenScope(
   token: { scopes: string[] } | null,
   scope: string
 ): boolean {
-  return Boolean(token?.scopes.includes(scope));
+  return Boolean(token?.scopes.includes("*") || token?.scopes.includes(scope));
 }
 
 function isPsycheEntityType(
@@ -11628,6 +11684,19 @@ function buildOperatorOverview(request: {
   };
 }
 
+const applicationSecurityRuntimeByServer = new WeakMap<
+  FastifyInstance,
+  ApplicationSecurityRuntime
+>();
+
+export function applicationSecurityRuntimeForTest(app: FastifyInstance) {
+  const runtime = applicationSecurityRuntimeByServer.get(app);
+  if (!runtime) {
+    throw new Error("The Forge test server has no security runtime.");
+  }
+  return runtime;
+}
+
 export async function buildServer(
   options: {
     dataRoot?: string;
@@ -11636,6 +11705,14 @@ export async function buildServer(
     devrageMetricSync?: boolean;
     peerRuntime?: false | PeerRuntimeLaunchDependencies;
     eventStreamPollIntervalMs?: number;
+    ownerBrokerBinaryPath?: string | null;
+    ownerBrokerBinarySha256?: string | null;
+    platformOwnerKeyPath?: string | null;
+    platformOwnerKeySha256?: string | null;
+    localBrowserHandlerScheme?: string | null;
+    localBrowserApiOrigin?: string | null;
+    canonicalExternalOrigin?: string | null;
+    onSecurityRuntimeReady?: (runtime: ApplicationSecurityRuntime) => void;
   } = {}
 ) {
   const managers = createManagerRuntime({ dataRoot: options.dataRoot });
@@ -11656,9 +11733,313 @@ export async function buildServer(
   });
   configureDatabase({ dataRoot: runtimeConfig.dataRoot ?? undefined });
   managers.secrets.configure(resolveDataDir());
+  configureSettingsSecretsManager(managers.secrets);
   configureDatabaseSeeding(options.seedDemoData ?? false);
   await managers.migration.initialize();
+  await recoverInterruptedDataRestore({ secretsManager: managers.secrets });
   ensureSystemUsers();
+  const securityOwner = getDefaultUser();
+  const peerCompanionGatewayContexts = new WeakMap<
+    FastifyRequest,
+    NonNullable<Awaited<ReturnType<typeof authenticatePeerCompanionRequest>>>
+  >();
+  let mobilePairingCredentials: MobilePairingCredentialVault | null = null;
+  let legacyTokenMigrationAuthorization: LegacyTokenMigrationService | null =
+    null;
+  const applicationSecurity = await initializeApplicationSecurityRuntime({
+    database: getDatabase(),
+    dataDirectory: resolveDataDir(),
+    ownerId: securityOwner.id,
+    secrets: managers.secrets,
+    legacyAuthentication: managers.authentication,
+    ownerBrokerBinaryPath: options.ownerBrokerBinaryPath,
+    ownerBrokerBinarySha256: options.ownerBrokerBinarySha256,
+    platformOwnerKeyPath: options.platformOwnerKeyPath,
+    platformOwnerKeySha256: options.platformOwnerKeySha256,
+    canonicalExternalOrigin: options.canonicalExternalOrigin,
+    authorizeLegacyToken: (token, transport) => {
+      const persisted = getAgentTokenById(token.id);
+      return Boolean(
+        persisted &&
+        legacyTokenMigrationAuthorization?.authorize(persisted, transport)
+      );
+    },
+    protocolVerifiers: {
+      companion_pairing: (request) =>
+        mobilePairingCredentials
+          ? authenticateMobileCompanionRequest(request, {
+              database: getDatabase(),
+              credentials: mobilePairingCredentials
+            })
+          : null,
+      peer_signature: async (request) => {
+        const companion = await authenticatePeerCompanionRequest(request, {
+          secrets: managers.secrets
+        });
+        if (!companion) {
+          return null;
+        }
+        peerCompanionGatewayContexts.set(request, companion);
+        return {
+          kind: "peer_device",
+          subjectId: companion.principalId,
+          ownerId: companion.ownerUserId,
+          scopes: companion.scopes,
+          authenticatedAt: companion.authenticatedAt,
+          verifyBody: companion.verifyBody
+        };
+      }
+    }
+  });
+  const legacyTokenMode = legacyTokenModeFromEnvironment();
+  const legacyTokenMigrations = new LegacyTokenMigrationService(
+    getDatabase(),
+    securityOwner.id,
+    applicationSecurity.installationId,
+    applicationSecurity.audience,
+    legacyTokenMode,
+    undefined,
+    undefined,
+    legacyTokenMode === "local_migration" &&
+      process.env.FORGE_LEGACY_TOKEN_CREATION?.trim().toLowerCase() !==
+        "disabled"
+  );
+  legacyTokenMigrationAuthorization = legacyTokenMigrations;
+  legacyTokenMigrations.backfill(listAgentTokens());
+  managers.token.configureLegacyMigration(legacyTokenMigrations);
+  const localBrowserHandlerScheme =
+    options.localBrowserHandlerScheme?.trim() ||
+    process.env.FORGE_LOCAL_BROWSER_HANDLER_SCHEME?.trim() ||
+    null;
+  const configuredLocalBrowserApiOrigin =
+    options.localBrowserApiOrigin?.trim() ||
+    process.env.FORGE_LOCAL_BROWSER_API_ORIGIN?.trim() ||
+    null;
+  const localBrowserApiOrigin = (() => {
+    if (!configuredLocalBrowserApiOrigin) {
+      return null;
+    }
+    try {
+      const parsed = new URL(configuredLocalBrowserApiOrigin);
+      if (
+        parsed.protocol !== "http:" ||
+        !["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) ||
+        parsed.username ||
+        parsed.password ||
+        parsed.pathname !== "/" ||
+        parsed.search ||
+        parsed.hash
+      ) {
+        return null;
+      }
+      return parsed.origin;
+    } catch {
+      return null;
+    }
+  })();
+  mobilePairingCredentials = new MobilePairingCredentialVault(
+    getDatabase(),
+    managers.secrets
+  );
+  configureCompanionPairingCredentialProtection({
+    protectInCurrentTransaction: (sessionId, plaintextToken) =>
+      mobilePairingCredentials!.protectInCurrentTransaction(
+        sessionId,
+        plaintextToken
+      ),
+    reveal: (sessionId, storedMarker) =>
+      mobilePairingCredentials!.readPlaintext(sessionId, storedMarker),
+    matches: (sessionId, storedMarker, presentedToken) => {
+      const plaintext = mobilePairingCredentials!.readPlaintext(
+        sessionId,
+        storedMarker
+      );
+      return Boolean(
+        plaintext && managers.secrets.secureEquals(plaintext, presentedToken)
+      );
+    }
+  });
+  options.onSecurityRuntimeReady?.(applicationSecurity);
+  const backgroundAuthorizationStore =
+    new SqliteBackgroundJobAuthorizationStore(getDatabase());
+  managers.backgroundJobs.configureAuthorization(
+    createBackgroundJobAdmissionPolicy({
+      ownerId: securityOwner.id,
+      installationId: applicationSecurity.installationId,
+      audience: applicationSecurity.audience,
+      readOwnerSecurityEpoch: (ownerId) =>
+        applicationSecurity.store.readOwnerSecurityEpoch(ownerId),
+      readClient: (clientId) => applicationSecurity.store.readClient(clientId),
+      readLegacyToken: (tokenId) => {
+        const token = getAgentTokenById(tokenId);
+        return token &&
+          legacyTokenMigrations.authorize(token, "direct_loopback")
+          ? token
+          : null;
+      },
+      readBrowserSession: (sessionId) =>
+        applicationSecurity.store.readBrowserSessionById(sessionId)
+    }),
+    backgroundAuthorizationStore
+  );
+  const securityOwnerEpoch = applicationSecurity.store.readOwnerSecurityEpoch(
+    securityOwner.id
+  );
+  if (securityOwnerEpoch === null) {
+    throw new Error("Forge could not initialize background job authority.");
+  }
+  const backgroundSystemPrincipal = systemBackgroundPrincipal({
+    ownerId: securityOwner.id,
+    installationId: applicationSecurity.installationId,
+    audience: applicationSecurity.audience,
+    ownerSecurityEpoch: securityOwnerEpoch
+  });
+  const machineCapabilityExecutor = new CapabilityExecutor({
+    files: {
+      readableRoots: [process.cwd()],
+      writableRoots: [process.cwd()],
+      maximumReadBytes: 16 * 1024 * 1024,
+      maximumWriteBytes: 16 * 1024 * 1024
+    }
+  });
+  const localCapabilityApprovals = new LocalCapabilityApprovalService(
+    getDatabase(),
+    securityOwner.id,
+    applicationSecurity.installationId
+  );
+  const machineCapabilitySessionFor = (
+    principal: ReturnType<typeof requireGatewayPrincipal>,
+    directOwnerChannel: boolean,
+    correlation: {
+      requestId: string;
+      connectionId?: string | null;
+      jobId?: string | null;
+    }
+  ) => {
+    const localOwnerLegacyExecutionEnabled =
+      localCapabilityApprovals.read().enabled &&
+      directOwnerChannel &&
+      ((principal.kind === "operator_session" &&
+        principal.profile === "operator") ||
+        (principal.kind === "legacy_agent_token" &&
+          principal.profile === "executor"));
+    const session = createMachineCapabilitySession({
+      executor: machineCapabilityExecutor,
+      authority: {
+        principal,
+        directOwnerChannel,
+        localOwnerLegacyExecutionEnabled
+      },
+      executionBoundary: localOwnerLegacyExecutionEnabled
+        ? "local_owner_legacy"
+        : "remote_isolated",
+      workspaceRoot: process.cwd(),
+      remoteRoots: {
+        readableRoots: [process.cwd()],
+        writableRoots: [process.cwd()]
+      }
+    });
+    const invoke = async <T>(
+      action: "machine.read" | "machine.write" | "machine.exec",
+      operation: () => Promise<T>
+    ) => {
+      const admission = securityRateLimiter.admit({
+        bucket: "machine_execution",
+        principalId: principal.subjectId,
+        clientId: principal.clientId,
+        installationId: principal.installationId,
+        networkId: null,
+        action,
+        cost: 1,
+        now: new Date()
+      });
+      if (!admission.allowed) {
+        securityAuditLedger.record({
+          requestId: correlation.requestId,
+          connectionId: correlation.connectionId ?? null,
+          jobId: correlation.jobId ?? null,
+          method: "CAPABILITY",
+          routePath: "internal",
+          action,
+          resource: `forge://capability/${action}`,
+          outcome: "denied",
+          reason: admission.reason,
+          principalKind: principal.kind,
+          subjectId: principal.subjectId,
+          clientId: principal.clientId,
+          policyVersion: forgeAccessGatewayPolicyVersion
+        });
+        throw new HttpError(
+          429,
+          "security_rate_limit_exceeded",
+          "Forge temporarily limited this machine capability.",
+          { retryAfterSeconds: admission.retryAfterSeconds }
+        );
+      }
+      try {
+        const result = await operation();
+        securityAuditLedger.record({
+          requestId: correlation.requestId,
+          connectionId: correlation.connectionId ?? null,
+          jobId: correlation.jobId ?? null,
+          method: "CAPABILITY",
+          routePath: "internal",
+          action,
+          resource: `forge://capability/${action}`,
+          outcome: "admitted",
+          reason: "capability_completed",
+          principalKind: principal.kind,
+          subjectId: principal.subjectId,
+          clientId: principal.clientId,
+          policyVersion: forgeAccessGatewayPolicyVersion
+        });
+        return result;
+      } catch (error) {
+        securityAuditLedger.record({
+          requestId: correlation.requestId,
+          connectionId: correlation.connectionId ?? null,
+          jobId: correlation.jobId ?? null,
+          method: "CAPABILITY",
+          routePath: "internal",
+          action,
+          resource: `forge://capability/${action}`,
+          outcome: "denied",
+          reason:
+            error &&
+            typeof error === "object" &&
+            "code" in error &&
+            typeof error.code === "string"
+              ? error.code
+              : "capability_error",
+          principalKind: principal.kind,
+          subjectId: principal.subjectId,
+          clientId: principal.clientId,
+          policyVersion: forgeAccessGatewayPolicyVersion
+        });
+        throw error;
+      }
+    };
+    return {
+      readTextFile: (requestedPath: string) =>
+        invoke("machine.read", () => session.readTextFile(requestedPath)),
+      writeTextFile: (requestedPath: string, content: string) =>
+        invoke("machine.write", () =>
+          session.writeTextFile(requestedPath, content)
+        ),
+      executeCommand: (input: Parameters<typeof session.executeCommand>[0]) =>
+        invoke("machine.exec", () => session.executeCommand(input))
+    };
+  };
+  const budgetedLlmFor = (
+    principal: ReturnType<typeof requireGatewayPrincipal>,
+    correlationId: string
+  ) =>
+    createBudgetedTextPromptRunner({
+      llm: managers.llm,
+      limiter: securityRateLimiter,
+      principal,
+      correlationId
+    });
   getSettings();
   ensureDefaultRewardRules();
   ensureLegacyProcessorsMigrated();
@@ -11666,6 +12047,123 @@ export async function buildServer(
   const app = Fastify({
     logger: false,
     rewriteUrl: (request) => rewriteMountPath(request.url ?? "/")
+  });
+  applicationSecurityRuntimeByServer.set(app, applicationSecurity);
+  const securityRateLimiter = new InMemorySecurityRateLimiter({
+    persistence: new SqliteRateLimitStatePersistence(getDatabase())
+  });
+  const securityAuditLedger = new TamperEvidentGatewayAuditLedger(
+    getDatabase(),
+    managers.secrets.deriveKey("security-audit-ledger/v1"),
+    resolveDataDir()
+  );
+  managers.backgroundJobs.configureSecurityAudit(securityAuditLedger);
+  installAccessGateway(app, {
+    credentials: applicationSecurity.gatewayCredentials,
+    rateLimiter: securityRateLimiter,
+    audit: securityAuditLedger
+  });
+  app.addHook("onRequest", async (request) => {
+    const principal = request.forgeSecurity?.authentication?.principal;
+    if (
+      principal &&
+      principal.kind !== "companion_session" &&
+      principal.kind !== "peer_device"
+    ) {
+      if (principal.kind === "legacy_agent_token") {
+        const headers = request.headers as Record<string, unknown>;
+        managers.authentication.bindVerifiedContext(
+          headers,
+          managers.authentication.authenticate(
+            headers,
+            applicationSecurity.legacyTokenTransport(request)
+          )
+        );
+      } else {
+        managers.authentication.bindVerifiedPrincipal(
+          request.headers as Record<string, unknown>,
+          principal
+        );
+      }
+    }
+  });
+  app.addHook("preHandler", async (request) => {
+    const routePath = request.routeOptions.url ?? "";
+    const ownership = resolveCrudRouteOwnership(routePath);
+    if (!ownership || !routePath.startsWith(`${ownership.routeBase}/:`)) {
+      return;
+    }
+    const auth = managers.authentication.authenticate(
+      request.headers as Record<string, unknown>
+    );
+    if (!auth.token) {
+      return;
+    }
+    const params = request.params as Record<string, unknown>;
+    const id =
+      typeof params.id === "string"
+        ? params.id
+        : typeof params.personId === "string"
+          ? params.personId
+          : null;
+    if (
+      id &&
+      !crudEntityIsVisible(ownership.entityType, id, auth.token.scopePolicy)
+    ) {
+      throw new HttpError(
+        404,
+        "entity_not_found",
+        "The requested entity was not found."
+      );
+    }
+  });
+  app.addHook("onSend", async (request, reply, payload) => {
+    const ownership = CRUD_OWNERSHIP_AUTHORIZATION_MATRIX.find(
+      (entry) =>
+        entry.routeBase === request.routeOptions.url &&
+        entry.collectionKey !== null
+    );
+    if (
+      !ownership ||
+      request.method !== "GET" ||
+      typeof payload !== "string" ||
+      !String(reply.getHeader("content-type") ?? "").includes(
+        "application/json"
+      )
+    ) {
+      return payload;
+    }
+    const auth = managers.authentication.authenticate(
+      request.headers as Record<string, unknown>
+    );
+    if (!auth.token) {
+      return payload;
+    }
+    try {
+      const parsed = JSON.parse(payload) as Record<string, unknown>;
+      const collection = parsed[ownership.collectionKey!];
+      if (!Array.isArray(collection)) {
+        return payload;
+      }
+      parsed[ownership.collectionKey!] = collection.filter(
+        (entry): entry is Record<string, unknown> & { id: string } =>
+          Boolean(
+            entry &&
+              typeof entry === "object" &&
+              !Array.isArray(entry) &&
+              typeof (entry as Record<string, unknown>).id === "string" &&
+              entityMatchesCrudScope(
+                ownership.entityType,
+                entry as Record<string, unknown> & { id: string },
+                auth.token!.scopePolicy
+              )
+          )
+      );
+      reply.removeHeader("content-length");
+      return JSON.stringify(parsed);
+    } catch {
+      return payload;
+    }
   });
   const peerCore = new DelegatingPeerCoreGateway();
   let peerRuntime: PeerRuntimeHandle | null = null;
@@ -11702,14 +12200,57 @@ export async function buildServer(
         callback(null, true);
         return;
       }
-      callback(
-        null,
-        runtimeConfig.allowedOrigins.some((pattern) => pattern.test(origin))
-      );
+      callback(null, runtimeConfig.allowedOrigins.includes(origin));
     },
     credentials: true
   });
   await app.register(multipart);
+  const systemBackgroundAuthorization = (
+    action: string,
+    resource: string,
+    budget: {
+      maximumRuntimeMilliseconds: number;
+      maximumEffectInvocations: number;
+    }
+  ): BackgroundJobAuthorization => ({
+    principal: backgroundSystemPrincipal,
+    action,
+    resource,
+    policyVersion: forgeAccessGatewayPolicyVersion,
+    budget: {
+      ...budget,
+      capabilities: [action]
+    }
+  });
+  const enqueueSystemBackgroundAction = (input: {
+    action: string;
+    resource: string;
+    label: string;
+    maximumRuntimeMilliseconds: number;
+    maximumEffectInvocations: number;
+    handler: (signal: AbortSignal, jobId: string) => Promise<void>;
+  }) => {
+    const jobId = `system:${input.action}:${Date.now()}:${randomUUID()}`;
+    const authorization = systemBackgroundAuthorization(
+      input.action,
+      input.resource,
+      {
+        maximumRuntimeMilliseconds: input.maximumRuntimeMilliseconds,
+        maximumEffectInvocations: input.maximumEffectInvocations
+      }
+    );
+    try {
+      managers.backgroundJobs.enqueue({
+        id: jobId,
+        label: input.label,
+        authorization,
+        handler: ({ signal }) => input.handler(signal, jobId)
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
   enforceDiagnosticLogRetention({ force: true });
   const diagnosticRetentionTimer = setInterval(() => {
     try {
@@ -11744,18 +12285,39 @@ export async function buildServer(
           continue;
         }
         activeCronRuns.add(processor.id);
-        void runAiProcessor(
-          processor.id,
-          { input: "", context: {}, widgetSnapshots: {} },
-          {
-            llm: managers.llm,
-            secrets: managers.secrets
-          },
-          { trigger: "cron" }
-        ).finally(() => {
-          activeCronRuns.delete(processor.id);
+        const enqueued = enqueueSystemBackgroundAction({
+          action: "ai_processor.cron.execute",
+          resource: `ai_processor:${processor.id}`,
+          label: `Cron AI processor ${processor.id}`,
+          maximumRuntimeMilliseconds: 5 * 60 * 1000,
+          maximumEffectInvocations: 1,
+          handler: async (signal, jobId) => {
+            try {
+              if (signal.aborted) return;
+              await runAiProcessor(
+                processor.id,
+                { input: "", context: {}, widgetSnapshots: {} },
+                {
+                  llm: budgetedLlmFor(backgroundSystemPrincipal, jobId),
+                  secrets: managers.secrets,
+                  machineCapabilities: machineCapabilitySessionFor(
+                    backgroundSystemPrincipal,
+                    false,
+                    { requestId: jobId, jobId }
+                  )
+                },
+                { trigger: "cron" }
+              );
+            } finally {
+              activeCronRuns.delete(processor.id);
+            }
+          }
         });
+        if (!enqueued) {
+          activeCronRuns.delete(processor.id);
+        }
       } catch {
+        activeCronRuns.delete(processor.id);
         continue;
       }
     }
@@ -11763,23 +12325,47 @@ export async function buildServer(
   cronSchedulerTimer.unref?.();
   const dataBackupTimer = setInterval(
     () => {
-      void maybeRunAutomaticBackup().catch(() => {
-        // Automatic backup sweeps should never crash the runtime loop.
+      enqueueSystemBackgroundAction({
+        action: "data_backup.automatic.execute",
+        resource: "data_backup:automatic",
+        label: "Automatic data backup",
+        maximumRuntimeMilliseconds: 4 * 60 * 1000,
+        maximumEffectInvocations: 1,
+        handler: async (signal) => {
+          if (signal.aborted) return;
+          await maybeRunAutomaticBackup();
+        }
       });
     },
     5 * 60 * 1000
   );
   dataBackupTimer.unref?.();
-  void maybeRunAutomaticBackup().catch(() => {
-    // Ignore startup backup failures; the Data settings surface exposes recovery.
+  enqueueSystemBackgroundAction({
+    action: "data_backup.automatic.execute",
+    resource: "data_backup:automatic",
+    label: "Startup automatic data backup",
+    maximumRuntimeMilliseconds: 4 * 60 * 1000,
+    maximumEffectInvocations: 1,
+    handler: async (signal) => {
+      if (signal.aborted) return;
+      await maybeRunAutomaticBackup();
+    }
   });
   const devrageMetricSyncEnabled =
     options.devrageMetricSync ?? !options.dataRoot;
   const devrageMetricTimer = devrageMetricSyncEnabled
     ? setInterval(
         () => {
-          void syncDevrageMetricHistoryIfNeeded().catch(() => {
-            // Devrage is a local metric import; failures should not break Forge.
+          enqueueSystemBackgroundAction({
+            action: "devrage.sync.execute",
+            resource: "devrage:metric_history",
+            label: "Devrage metric history sync",
+            maximumRuntimeMilliseconds: 15 * 60 * 1000,
+            maximumEffectInvocations: 1,
+            handler: async (signal) => {
+              if (signal.aborted) return;
+              await syncDevrageMetricHistoryIfNeeded();
+            }
           });
         },
         60 * 60 * 1000
@@ -11787,11 +12373,21 @@ export async function buildServer(
     : null;
   devrageMetricTimer?.unref?.();
   if (devrageMetricSyncEnabled) {
-    void syncDevrageMetricHistoryIfNeeded().catch(() => {
-      // The Psyche metric payload exposes an empty state until sync succeeds.
+    enqueueSystemBackgroundAction({
+      action: "devrage.sync.execute",
+      resource: "devrage:metric_history",
+      label: "Startup Devrage metric history sync",
+      maximumRuntimeMilliseconds: 15 * 60 * 1000,
+      maximumEffectInvocations: 1,
+      handler: async (signal) => {
+        if (signal.aborted) return;
+        await syncDevrageMetricHistoryIfNeeded();
+      }
     });
   }
   app.addHook("onClose", async () => {
+    applicationSecurity.localOwnerSessions?.close();
+    configureCompanionPairingCredentialProtection(null);
     clearInterval(diagnosticRetentionTimer);
     clearInterval(cronSchedulerTimer);
     clearInterval(dataBackupTimer);
@@ -11804,19 +12400,55 @@ export async function buildServer(
     await managers.backgroundJobs.stop();
   });
 
-  const enqueueWikiIngestJob = (jobId: string) => {
+  const enqueueWikiIngestJobWithAuthorization = (
+    jobId: string,
+    authorization: BackgroundJobAuthorization,
+    resumePersistedAuthorization = false
+  ) => {
     managers.backgroundJobs.enqueue({
       id: jobId,
       label: `Wiki ingest ${jobId}`,
-      handler: async () => {
+      authorization,
+      resumePersistedAuthorization,
+      handler: async ({ signal }) => {
+        if (signal.aborted) return;
         await processWikiIngestJob(jobId, { llm: managers.llm });
       }
     });
   };
 
+  const enqueueWikiIngestJob = (
+    jobId: string,
+    principal: ReturnType<typeof requireGatewayPrincipal>,
+    originRequestId: string,
+    originConnectionId: string | null = null
+  ) =>
+    enqueueWikiIngestJobWithAuthorization(jobId, {
+      principal,
+      action: "wiki.ingest.execute",
+      resource: `wiki_ingest_job:${jobId}`,
+      policyVersion: forgeAccessGatewayPolicyVersion,
+      originRequestId,
+      originConnectionId,
+      budget: {
+        maximumRuntimeMilliseconds: 30 * 60 * 1000,
+        maximumEffectInvocations: 1,
+        capabilities: ["wiki.ingest.execute"]
+      }
+    });
+
   for (const pendingJob of listWikiIngestJobs({ limit: 100 })) {
     if (["queued", "processing"].includes(pendingJob.job.status)) {
-      enqueueWikiIngestJob(pendingJob.job.id);
+      const persistedAuthorization = backgroundAuthorizationStore.read(
+        pendingJob.job.id
+      );
+      if (persistedAuthorization) {
+        enqueueWikiIngestJobWithAuthorization(
+          pendingJob.job.id,
+          persistedAuthorization,
+          true
+        );
+      }
     }
   }
 
@@ -11830,6 +12462,20 @@ export async function buildServer(
       url === "/api/v1/health" ||
       url.startsWith("/api/v1/events/meta")
     );
+  };
+
+  const diagnosticSourceForRequest = (request: FastifyRequest) => {
+    const principal = request.forgeSecurity?.authentication?.principal;
+    if (!principal) {
+      return "server" as const;
+    }
+    if (principal.kind === "operator_session") {
+      return "ui" as const;
+    }
+    if (principal.kind === "system" || principal.kind === "local_service") {
+      return "system" as const;
+    }
+    return "agent" as const;
   };
 
   app.addHook("onRequest", async (request) => {
@@ -11851,7 +12497,7 @@ export async function buildServer(
       typeof startedAt === "bigint"
         ? Number(process.hrtime.bigint() - startedAt) / 1_000_000
         : null;
-    const source = normalizeDiagnosticSource(request.headers["x-forge-source"]);
+    const source = diagnosticSourceForRequest(request);
 
     try {
       recordDiagnosticLog({
@@ -11873,7 +12519,7 @@ export async function buildServer(
         requestId: request.id,
         details: {
           method: request.method,
-          rawUrl: request.url,
+          routeTemplate: routeUrl,
           statusCode: reply.statusCode,
           durationMs:
             typeof durationMs === "number"
@@ -11913,7 +12559,7 @@ export async function buildServer(
       try {
         recordDiagnosticLog({
           level: statusCode >= 500 ? "error" : "warning",
-          source: normalizeDiagnosticSource(request.headers["x-forge-source"]),
+          source: diagnosticSourceForRequest(request),
           scope: "api_error",
           eventKey: isBodyTooLarge
             ? "payload_too_large"
@@ -11924,7 +12570,10 @@ export async function buildServer(
                 : statusCode === 400
                   ? "invalid_request"
                   : "internal_error",
-          message: getErrorMessage(error),
+          message:
+            statusCode >= 500
+              ? "Forge rejected an internal request path."
+              : getErrorMessage(error),
           route: routeUrl,
           functionName: "setErrorHandler",
           requestId: request.id,
@@ -11935,7 +12584,16 @@ export async function buildServer(
                 path: issue.path,
                 message: issue.message
               })) ?? [],
-            error: serializeDiagnosticError(error)
+            error:
+              statusCode >= 500
+                ? {
+                    name: error instanceof Error ? error.name : "UnknownError",
+                    code:
+                      typeof (error as { code?: unknown })?.code === "string"
+                        ? (error as { code: string }).code
+                        : "internal_error"
+                  }
+                : serializeDiagnosticError(error)
           }
         });
       } catch {
@@ -11956,7 +12614,9 @@ export async function buildServer(
         ? `Request validation failed for ${request.method.toUpperCase()} ${routeUrl}. ${validationHelp?.validationSummary ?? ""}`.trim()
         : isBodyTooLarge
           ? "The request body is too large. Use chunked HealthKit sync."
-          : getErrorMessage(error),
+          : statusCode >= 500
+            ? "Forge could not complete the request."
+            : getErrorMessage(error),
       statusCode,
       ...(isBodyTooLarge
         ? {
@@ -11969,8 +12629,12 @@ export async function buildServer(
         : {}),
       ...(validationIssues ? { details: validationIssues } : {}),
       ...(validationHelp ?? {}),
-      ...(isHttpError(error) && error.details ? error.details : {}),
-      ...(isManagerError(error) && error.details ? error.details : {})
+      ...(statusCode < 500 && isHttpError(error) && error.details
+        ? error.details
+        : {}),
+      ...(statusCode < 500 && isManagerError(error) && error.details
+        ? error.details
+        : {})
     });
   });
 
@@ -12215,6 +12879,50 @@ export async function buildServer(
     tasks: T[],
     context: ReturnType<typeof authenticateRequest>
   ) => tasks.filter((task) => taskMatchesAuthScope(task, context));
+  const projectMatchesAuthScope = (
+    project: ProjectSummary | undefined,
+    context: ReturnType<typeof authenticateRequest>
+  ) => {
+    if (!project || !context.token) {
+      return Boolean(project);
+    }
+    const scope = context.token.scopePolicy;
+    if (
+      scope.userIds.length > 0 &&
+      filterOwnedEntities("project", [project], scope.userIds).length === 0
+    ) {
+      return false;
+    }
+    return applyProjectScope([project], scope).length === 1;
+  };
+  const getProjectForAuth = (
+    id: string,
+    context: ReturnType<typeof authenticateRequest>
+  ) => {
+    const project = getProjectSummary(id);
+    return projectMatchesAuthScope(project, context) ? project : undefined;
+  };
+  const goalMatchesAuthScope = (
+    goal: Goal | undefined,
+    context: ReturnType<typeof authenticateRequest>
+  ) => {
+    if (!goal || !context.token) {
+      return Boolean(goal);
+    }
+    const scope = context.token.scopePolicy;
+    if (
+      scope.userIds.length > 0 &&
+      filterOwnedEntities("goal", [goal], scope.userIds).length === 0
+    ) {
+      return false;
+    }
+    const allowedGoalIds = new Set(
+      applyProjectScope(listProjectSummaries(), scope).map(
+        (project) => project.goalId
+      )
+    );
+    return applyGoalScope([goal], scope, allowedGoalIds).length === 1;
+  };
   const assertTaskResultScope = (
     task: NonNullable<ReturnType<typeof getTaskById>>,
     context: ReturnType<typeof authenticateRequest>
@@ -12241,7 +12949,12 @@ export async function buildServer(
   const hasTokenScope = (
     context: ReturnType<typeof authenticateRequest>,
     scope: string
-  ) => Boolean(context.session || context.token?.scopes.includes(scope));
+  ) =>
+    Boolean(
+      context.session ||
+      context.token?.scopes.includes("*") ||
+      context.token?.scopes.includes(scope)
+    );
   const toWikiUserScope = (
     context: ReturnType<typeof authenticateRequest>
   ) => ({
@@ -12868,10 +13581,15 @@ export async function buildServer(
   });
   await registerPeerSharingRoutes(app, {
     authenticate: authenticateRequest,
-    authenticateCompanion: (request) =>
-      authenticatePeerCompanionRequest(request, {
-        secrets: managers.secrets
-      }),
+    authenticateCompanion: (request) => {
+      const gatewayContext = peerCompanionGatewayContexts.get(request);
+      return (
+        gatewayContext ??
+        authenticatePeerCompanionRequest(request, {
+          secrets: managers.secrets
+        })
+      );
+    },
     authorization: managers.authorization,
     secrets: managers.secrets,
     peerCore,
@@ -13178,7 +13896,11 @@ export async function buildServer(
     return serializeArtifactPublicPayload(page);
   });
 
-  app.get("/api/health", async () => buildHealthPayload(taskRunWatchdog));
+  app.get("/api/health", async () => ({
+    ok: true,
+    app: "forge",
+    security: "credential-required"
+  }));
 
   app.get("/api/v1/health", async (request) =>
     buildHealthPayload(taskRunWatchdog, {
@@ -13293,22 +14015,378 @@ export async function buildServer(
     };
   });
 
-  app.get("/api/v1/auth/operator-session", async (request, reply) => ({
-    session: managers.session.ensureLocalOperatorSession(
-      request.headers as Record<string, unknown>,
-      reply
-    )
-  }));
-  app.delete("/api/v1/auth/operator-session", async (request, reply) => ({
-    revoked: managers.session.revokeCurrentSession(
-      request.headers as Record<string, unknown>,
-      reply
-    )
-  }));
+  app.get("/api/v1/auth/operator-session", async (request) => {
+    const authentication = request.forgeSecurity?.authentication;
+    if (
+      authentication?.mode !== "browser_session" ||
+      !["operator_session", "paired_client"].includes(
+        authentication.principal.kind
+      ) ||
+      !authentication.browserSession
+    ) {
+      throw new HttpError(
+        401,
+        "operator_browser_session_required",
+        "A paired Forge browser session is required."
+      );
+    }
+    return {
+      session: {
+        id: authentication.browserSession.id,
+        actorLabel:
+          authentication.principal.kind === "operator_session"
+            ? "Local Operator"
+            : "Paired Browser",
+        profile: authentication.principal.profile,
+        expiresAt: authentication.browserSession.absoluteExpiresAt
+      }
+    };
+  });
+  app.delete("/api/v1/auth/operator-session", async (request, reply) => {
+    const sessionToken = readApplicationSecurityBrowserSessionToken(
+      request.headers.cookie
+    );
+    const revoked = sessionToken
+      ? applicationSecurity.browserSessions.revoke(sessionToken)
+      : false;
+    reply.header(
+      "set-cookie",
+      [
+        `${applicationSecurityBrowserSessionCookie}=`,
+        "Path=/",
+        "HttpOnly",
+        "SameSite=Strict",
+        "Max-Age=0",
+        "Priority=High"
+      ].join("; ")
+    );
+    return { revoked };
+  });
+  const requireDirectLocalOperator = (request: FastifyRequest) => {
+    if (!isDirectLocalTransport(request)) {
+      throw new HttpError(
+        401,
+        "local_owner_direct_loopback_required",
+        "Unrestricted local execution settings can be managed only through a direct same-machine owner connection."
+      );
+    }
+    const principal = requireGatewayPrincipal(request);
+    if (
+      principal.kind !== "operator_session" ||
+      principal.profile !== "operator"
+    ) {
+      throw new HttpError(
+        403,
+        "local_owner_operator_required",
+        "Unrestricted local execution settings require an authenticated owner session."
+      );
+    }
+    return principal;
+  };
+  app.get(
+    "/api/v1/auth/local/legacy-host-execution",
+    async (request) => {
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["read"],
+        { route: "/api/v1/auth/local/legacy-host-execution" }
+      );
+      requireDirectLocalOperator(request);
+      return localCapabilityApprovals.read();
+    }
+  );
+  app.post(
+    "/api/v1/auth/local/legacy-host-execution",
+    async (request) => {
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        { route: "/api/v1/auth/local/legacy-host-execution" }
+      );
+      const principal = requireDirectLocalOperator(request);
+      const input = z
+        .object({
+          warningVersion: z.number().int().positive(),
+          acknowledged: z.literal(true)
+        })
+        .strict()
+        .parse(request.body ?? {});
+      try {
+        return localCapabilityApprovals.approve({
+          principal,
+          directOwnerChannel: true,
+          ...input
+        });
+      } catch (error) {
+        if (error instanceof LocalCapabilityApprovalError) {
+          throw new HttpError(403, error.code, error.message);
+        }
+        throw error;
+      }
+    }
+  );
+  app.delete(
+    "/api/v1/auth/local/legacy-host-execution",
+    async (request) => {
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        { route: "/api/v1/auth/local/legacy-host-execution" }
+      );
+      const principal = requireDirectLocalOperator(request);
+      try {
+        return localCapabilityApprovals.revoke({
+          principal,
+          directOwnerChannel: true
+        });
+      } catch (error) {
+        if (error instanceof LocalCapabilityApprovalError) {
+          throw new HttpError(403, error.code, error.message);
+        }
+        throw error;
+      }
+    }
+  );
+  app.post("/api/v1/auth/local/begin", async (request) => {
+    if (!isDirectLocalTransport(request)) {
+      throw new HttpError(
+        401,
+        "local_owner_direct_loopback_required",
+        "Remote Forge clients must complete device pairing; local-owner authentication requires a direct loopback connection."
+      );
+    }
+    if (!applicationSecurity.localOwnerSessions) {
+      throw new HttpError(
+        503,
+        "local_owner_broker_unavailable",
+        "Forge local-owner authentication is unavailable because the verified native broker is not installed."
+      );
+    }
+    const input = z
+      .object({
+        browserOrigin: z.string().min(1).max(256),
+        browserNonce: z.string().regex(/^[A-Za-z0-9_-]{43,128}$/)
+      })
+      .strict()
+      .parse(request.body ?? {});
+    return applicationSecurity.localOwnerSessions.begin(input);
+  });
+  app.post("/api/v1/auth/local/exchange", async (request, reply) => {
+    if (!isDirectLocalTransport(request)) {
+      throw new HttpError(
+        401,
+        "local_owner_direct_loopback_required",
+        "Remote Forge clients must complete device pairing; local-owner authentication requires a direct loopback connection."
+      );
+    }
+    if (!applicationSecurity.localOwnerSessions) {
+      throw new HttpError(
+        503,
+        "local_owner_broker_unavailable",
+        "Forge local-owner authentication is unavailable because the verified native broker is not installed."
+      );
+    }
+    const input = z
+      .object({
+        transactionId: z.string().min(16).max(160),
+        browserOrigin: z.string().min(1).max(256),
+        browserNonce: z.string().regex(/^[A-Za-z0-9_-]{43,128}$/),
+        ownerProof: z
+          .string()
+          .regex(/^[0-9a-f]{64}$/)
+          .optional()
+      })
+      .strict()
+      .parse(request.body ?? {});
+    const issued = await applicationSecurity.localOwnerSessions.exchange(input);
+    reply.header(
+      "set-cookie",
+      [
+        `forge_session=${encodeURIComponent(issued.sessionToken)}`,
+        "Path=/",
+        "HttpOnly",
+        "SameSite=Strict",
+        "Priority=High"
+      ].join("; ")
+    );
+    return {
+      session: {
+        id: issued.sessionId,
+        actorLabel: "Local Operator",
+        absoluteExpiresAt: issued.absoluteExpiresAt
+      },
+      csrfToken: issued.csrfToken
+    };
+  });
+  const localBrowserPublicKeySchema = z
+    .object({
+      kty: z.literal("EC"),
+      crv: z.literal("P-256"),
+      x: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+      y: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+      ext: z.literal(true),
+      key_ops: z.tuple([z.literal("verify")])
+    })
+    .strict();
+  const localBrowserTransactionSchema = z
+    .object({
+      transactionId: z.string().regex(/^[A-Za-z0-9._-]{16,160}$/),
+      browserOrigin: z.string().min(1).max(256),
+      browserNonce: z.string().regex(/^[A-Za-z0-9_-]{43,128}$/)
+    })
+    .strict();
+  app.post("/api/v1/auth/local/browser/begin", async (request) => {
+    if (!isDirectLocalTransport(request)) {
+      throw new HttpError(
+        401,
+        "local_owner_direct_loopback_required",
+        "Remote browsers must complete device pairing; local-owner authentication requires a direct loopback connection."
+      );
+    }
+    if (
+      localBrowserHandlerScheme !== "forge" ||
+      !localBrowserApiOrigin ||
+      !applicationSecurity.localOwnerSessions ||
+      !applicationSecurity.ownerBrokerBinaryPath
+    ) {
+      throw new HttpError(
+        503,
+        "local_browser_owner_handler_unavailable",
+        "Forge has no verified local browser owner-authentication handler."
+      );
+    }
+    const input = z
+      .object({
+        browserOrigin: z.string().min(1).max(256),
+        browserNonce: z.string().regex(/^[A-Za-z0-9_-]{43,128}$/),
+        browserPublicKey: localBrowserPublicKeySchema
+      })
+      .strict()
+      .parse(request.body ?? {});
+    let browserOrigin: string;
+    try {
+      const parsed = new URL(input.browserOrigin);
+      if (
+        parsed.protocol !== "http:" ||
+        !["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) ||
+        parsed.username ||
+        parsed.password ||
+        parsed.pathname !== "/" ||
+        parsed.search ||
+        parsed.hash
+      ) {
+        throw new Error("not loopback");
+      }
+      browserOrigin = parsed.origin;
+    } catch {
+      throw new HttpError(
+        400,
+        "local_browser_origin_invalid",
+        "Local browser authentication requires an exact loopback HTTP origin."
+      );
+    }
+    const transaction = await applicationSecurity.localOwnerSessions.begin({
+      browserOrigin,
+      browserNonce: input.browserNonce,
+      browserPublicKey: input.browserPublicKey
+    });
+    if (!transaction.broker || transaction.platform) {
+      throw new HttpError(
+        503,
+        "local_browser_owner_handler_unavailable",
+        "Forge has no verified local browser owner-authentication handler."
+      );
+    }
+    const handlerUrl = new URL("forge://local-auth");
+    handlerUrl.searchParams.set("apiOrigin", localBrowserApiOrigin);
+    handlerUrl.searchParams.set("browserOrigin", browserOrigin);
+    handlerUrl.searchParams.set("transactionId", transaction.transactionId);
+    handlerUrl.searchParams.set("browserNonce", input.browserNonce);
+    return {
+      transactionId: transaction.transactionId,
+      expiresAt: transaction.expiresAt,
+      handlerUrl: handlerUrl.toString()
+    };
+  });
+  app.post("/api/v1/auth/local/browser/challenge", async (request) => {
+    if (!isDirectLocalTransport(request)) {
+      throw new HttpError(
+        401,
+        "local_owner_direct_loopback_required",
+        "Remote browsers must complete device pairing; local-owner authentication requires a direct loopback connection."
+      );
+    }
+    if (!applicationSecurity.localOwnerSessions) {
+      throw new HttpError(
+        503,
+        "local_owner_broker_unavailable",
+        "Forge local-owner authentication is unavailable because the verified native broker is not installed."
+      );
+    }
+    const challenge = applicationSecurity.localOwnerSessions.challenge(
+      localBrowserTransactionSchema.parse(request.body ?? {})
+    );
+    return { broker: challenge.broker };
+  });
+  app.post("/api/v1/auth/local/browser/exchange", async (request, reply) => {
+    if (!isDirectLocalTransport(request)) {
+      throw new HttpError(
+        401,
+        "local_owner_direct_loopback_required",
+        "Remote browsers must complete device pairing; local-owner authentication requires a direct loopback connection."
+      );
+    }
+    if (!applicationSecurity.localOwnerSessions) {
+      throw new HttpError(
+        503,
+        "local_owner_broker_unavailable",
+        "Forge local-owner authentication is unavailable because the verified native broker is not installed."
+      );
+    }
+    const input = localBrowserTransactionSchema
+      .extend({
+        browserProof: z.string().regex(/^[A-Za-z0-9_-]{86}$/)
+      })
+      .strict()
+      .parse(request.body ?? {});
+    const issued = await applicationSecurity.localOwnerSessions.exchange(
+      input,
+      { principalKind: "operator_session" }
+    );
+    const maximumAgeSeconds = Math.max(
+      1,
+      Math.floor((Date.parse(issued.absoluteExpiresAt) - Date.now()) / 1000)
+    );
+    reply.header(
+      "set-cookie",
+      [
+        `forge_session=${encodeURIComponent(issued.sessionToken)}`,
+        "Path=/",
+        "HttpOnly",
+        "SameSite=Strict",
+        `Max-Age=${maximumAgeSeconds}`,
+        "Priority=High"
+      ].join("; ")
+    );
+    return {
+      session: {
+        id: issued.sessionId,
+        actorLabel: "Local Operator",
+        absoluteExpiresAt: issued.absoluteExpiresAt
+      },
+      csrfToken: issued.csrfToken
+    };
+  });
+  registerRemotePairingRoutes(app, {
+    runtime: applicationSecurity,
+    ownerId: securityOwner.id
+  });
   app.get("/api/v1/openapi.json", async () => buildOpenApiDocument());
   app.get("/api/v1/context", async (request) => {
-    const auth = authenticateRequest(
-      request.headers as Record<string, unknown>
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/context" }
     );
     const query = request.query as Record<string, unknown>;
     const context = buildV1Context(resolveEffectiveReadScope(query, auth), {
@@ -13440,9 +14518,7 @@ export async function buildServer(
       { route: "/api/v1/knowledge-graph" }
     );
     const userIds = resolveEffectiveUserIdsForReads(query, auth);
-    const includePeople = Boolean(
-      auth.session || auth.token?.scopes.includes("people:read:basic")
-    );
+    const includePeople = hasTokenScope(auth, "people:read:basic");
     const readString = (value: unknown) =>
       typeof value === "string" ? value.trim() : "";
     const readList = (key: string) => {
@@ -13492,9 +14568,7 @@ export async function buildServer(
       { route: "/api/v1/knowledge-graph/focus" }
     );
     const userIds = resolveEffectiveUserIdsForReads(query, auth);
-    const includePeople = Boolean(
-      auth.session || auth.token?.scopes.includes("people:read:basic")
-    );
+    const includePeople = hasTokenScope(auth, "people:read:basic");
     const entityType =
       typeof query.entityType === "string" ? query.entityType.trim() : "";
     const entityId =
@@ -17431,7 +18505,11 @@ export async function buildServer(
 
     const jobId = result.job?.job.id;
     if (jobId) {
-      enqueueWikiIngestJob(jobId);
+      enqueueWikiIngestJob(
+        jobId,
+        requireGatewayPrincipal(request),
+        request.id
+      );
     }
     reply.code(201);
     return result;
@@ -17463,7 +18541,11 @@ export async function buildServer(
     );
     const jobId = result.job?.job.id;
     if (jobId) {
-      enqueueWikiIngestJob(jobId);
+      enqueueWikiIngestJob(
+        jobId,
+        requireGatewayPrincipal(request),
+        request.id
+      );
     }
     reply.code(201);
     return result;
@@ -17505,7 +18587,11 @@ export async function buildServer(
       }
       const nextJobId = result.job?.job.id;
       if (nextJobId) {
-        enqueueWikiIngestJob(nextJobId);
+        enqueueWikiIngestJob(
+          nextJobId,
+          requireGatewayPrincipal(request),
+          request.id
+        );
       }
       reply.code(201);
       return result;
@@ -17554,7 +18640,7 @@ export async function buildServer(
     }
     const alreadyActive = managers.backgroundJobs.has(id);
     if (!alreadyActive) {
-      enqueueWikiIngestJob(id);
+      enqueueWikiIngestJob(id, requireGatewayPrincipal(request), request.id);
     }
     return {
       job: getWikiIngestJob(id),
@@ -17616,16 +18702,49 @@ export async function buildServer(
   });
   app.get("/api/v1/projects", async (request) => {
     const query = projectListQuerySchema.parse(request.query ?? {});
-    return { projects: listProjectSummaries(query) };
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
+    const userIds = resolveEffectiveUserIdsForReads(query, auth);
+    const scope = resolveEffectiveReadScope(query, auth);
+    return {
+      projects: applyProjectScope(
+        listProjectSummaries({ ...query, userIds }),
+        scope
+      )
+    };
   });
   app.get("/api/v1/campaigns", async (request, reply) => {
     markDeprecatedAliasRoute(reply, "/api/v1/projects");
     const query = projectListQuerySchema.parse(request.query ?? {});
-    return { projects: listProjectSummaries(query) };
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
+    const userIds = resolveEffectiveUserIdsForReads(query, auth);
+    return {
+      projects: applyProjectScope(
+        listProjectSummaries({ ...query, userIds }),
+        resolveEffectiveReadScope(query, auth)
+      )
+    };
   });
   app.get("/api/v1/goals", async (request) => {
     const query = goalListQuerySchema.parse(request.query ?? {});
-    const goals = filterOwnedEntities("goal", listGoals(), query.userIds)
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
+    const userIds = resolveEffectiveUserIdsForReads(query, auth);
+    const scope = resolveEffectiveReadScope(query, auth);
+    const allowedGoalIds = new Set(
+      applyProjectScope(listProjectSummaries({ userIds }), scope).map(
+        (project) => project.goalId
+      )
+    );
+    const goals = applyGoalScope(
+      filterOwnedEntities("goal", listGoals(), userIds),
+      scope,
+      allowedGoalIds
+    )
       .filter((goal) => (query.status ? goal.status === query.status : true))
       .filter((goal) => (query.horizon ? goal.horizon === query.horizon : true))
       .filter((goal) =>
@@ -17635,9 +18754,12 @@ export async function buildServer(
     return { goals };
   });
   app.get("/api/v1/goals/:id", async (request, reply) => {
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
     const { id } = request.params as { id: string };
     const goal = getGoalById(id);
-    if (!goal) {
+    if (!goalMatchesAuthScope(goal, auth)) {
       reply.code(404);
       return { error: "Goal not found" };
     }
@@ -18058,8 +19180,11 @@ export async function buildServer(
     return { habit };
   });
   app.get("/api/v1/projects/:id", async (request, reply) => {
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
     const { id } = request.params as { id: string };
-    const project = listProjectSummaries().find((entry) => entry.id === id);
+    const project = getProjectForAuth(id, auth);
     if (!project) {
       reply.code(404);
       return { error: "Project not found" };
@@ -19729,9 +20854,16 @@ export async function buildServer(
     }
     return { session };
   });
-  app.get("/api/v1/agents/onboarding", async (request) => ({
-    onboarding: buildAgentOnboardingPayload(request)
-  }));
+  app.get("/api/v1/agents/onboarding", async (request) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write", "psyche.read", "psyche.write"],
+      { route: "/api/v1/agents/onboarding" }
+    );
+    return {
+      onboarding: buildAgentOnboardingPayload(request)
+    };
+  });
   app.get("/api/v1/agents/:id/actions", async (request) => {
     const { id } = request.params as { id: string };
     return { actions: listAgentActions(id) };
@@ -19950,9 +21082,7 @@ export async function buildServer(
     const payload = createDiagnosticLogSchema.parse(request.body ?? {});
     const entry = recordDiagnosticLog({
       ...payload,
-      source:
-        payload.source ??
-        normalizeDiagnosticSource(request.headers["x-forge-source"])
+      source: diagnosticSourceForRequest(request)
     });
     reply.code(201);
     return { log: entry };
@@ -20009,17 +21139,56 @@ export async function buildServer(
       ["read", "write"],
       { route: "/api/v1/settings" }
     );
-    return { settings: getSettings() };
+    const settings = getSettings();
+    const principal = request.forgeSecurity?.authentication?.principal;
+    if (
+      principal?.kind === "paired_client" &&
+      principal.profile !== "operator"
+    ) {
+      return {
+        settings: {
+          ...settings,
+          profile: {
+            ...settings.profile,
+            operatorEmail: ""
+          },
+          security: {
+            ...settings.security,
+            activeSessions: 0,
+            tokenCount: 0
+          },
+          calendarProviders: {
+            google: {
+              ...settings.calendarProviders.google,
+              clientId: "",
+              storedClientId: "",
+              allowedOrigins: []
+            },
+            microsoft: {
+              ...settings.calendarProviders.microsoft,
+              clientId: "",
+              tenantId: ""
+            }
+          },
+          modelSettings: {
+            ...settings.modelSettings,
+            connections: []
+          },
+          agents: [],
+          agentTokens: []
+        }
+      };
+    }
+    return { settings };
   });
   app.get("/api/v1/settings/bin", async (request) => {
-    const auth = requireScopedAccess(
+    requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["read", "write"],
       { route: "/api/v1/settings/bin" }
     );
-    const userIds = resolveEffectiveUserIdsForReads(undefined, auth);
     return {
-      bin: getSettingsBinPayload(noteReadScopeForAuth(auth, userIds))
+      bin: getSettingsBinPayload()
     };
   });
   app.get("/api/v1/settings/data", async (request) => {
@@ -20049,12 +21218,98 @@ export async function buildServer(
     );
     return { candidates: await scanForDataRecoveryCandidates() };
   });
+  const requireRecentDataAdministration = (
+    request: FastifyRequest,
+    route: string
+  ) => {
+    const authentication = request.forgeSecurity?.authentication;
+    const principal = authentication?.principal;
+    const authenticatedAt = Date.parse(principal?.authenticatedAt ?? "");
+    const ageMilliseconds = Date.now() - authenticatedAt;
+    if (
+      !principal ||
+      principal.profile !== "operator" ||
+      principal.kind !== "operator_session" ||
+      principal.clientId !== null ||
+      principal.installationId !== null ||
+      !authentication?.browserSession?.verified ||
+      !Number.isFinite(authenticatedAt) ||
+      ageMilliseconds < -30_000 ||
+      ageMilliseconds > 5 * 60_000
+    ) {
+      throw new HttpError(
+        403,
+        "recent_owner_step_up_required",
+        `Forge requires recent owner authentication before ${route}.`
+      );
+    }
+    try {
+      return applicationSecurity.browserSessions.consumeAuthenticatedOwnerSession(
+        authentication.browserSession.verified
+      );
+    } catch {
+      throw new HttpError(
+        403,
+        "recent_owner_step_up_required",
+        `Forge requires a fresh, request-bound owner authorization before ${route}.`
+      );
+    }
+  };
+  const runAuditedDataAdministration = async <T>(
+    request: FastifyRequest,
+    operation: string,
+    run: () => Promise<T>
+  ) => {
+    const principal = requireGatewayPrincipal(request);
+    const contract = request.forgeSecurity?.contract;
+    const recordOutcome = (
+      outcome: "admitted" | "denied",
+      reason: string
+    ) =>
+      securityAuditLedger.record({
+        requestId: request.id,
+        method: "DATA_ADMINISTRATION",
+        routePath:
+          contract?.routePath ??
+          request.routeOptions.url ??
+          request.url.split("?", 1)[0] ??
+          "unknown",
+        action: contract?.action ?? "data.admin",
+        resource: contract?.resource ?? "forge://settings/data",
+        outcome,
+        reason,
+        principalKind: principal.kind,
+        subjectId: principal.subjectId,
+        clientId: principal.clientId,
+        policyVersion: forgeAccessGatewayPolicyVersion
+      });
+    try {
+      const result = await run();
+      recordOutcome("admitted", `${operation}_completed`);
+      return result;
+    } catch (error) {
+      recordOutcome(
+        "denied",
+        error &&
+          typeof error === "object" &&
+          "code" in error &&
+          typeof error.code === "string"
+          ? `${operation}_failed_${error.code}`
+          : `${operation}_failed_rolled_back`
+      );
+      throw error;
+    }
+  };
   app.post("/api/v1/settings/data/backups", async (request, reply) => {
     requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
       route: "/api/v1/settings/data/backups"
     });
-    const backup = await createDataBackup(
-      createDataBackupSchema.parse(request.body ?? {})
+    requireRecentDataAdministration(request, "creating a credential-bearing backup");
+    const backup = await runAuditedDataAdministration(
+      request,
+      "data_backup",
+      () =>
+        createDataBackup(createDataBackupSchema.parse(request.body ?? {}))
     );
     reply.code(201);
     return {
@@ -20066,12 +21321,18 @@ export async function buildServer(
     requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
       route: "/api/v1/settings/data/backups/:id/restore"
     });
+    requireRecentDataAdministration(request, "restoring a Forge backup");
     const { id } = request.params as { id: string };
     return {
-      data: await restoreDataBackup(
-        id,
-        restoreDataBackupSchema.parse(request.body ?? {}),
-        { secretsManager: managers.secrets }
+      data: await runAuditedDataAdministration(
+        request,
+        "data_restore",
+        () =>
+          restoreDataBackup(
+            id,
+            restoreDataBackupSchema.parse(request.body ?? {}),
+            { secretsManager: managers.secrets }
+          )
       )
     };
   });
@@ -20079,10 +21340,16 @@ export async function buildServer(
     requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
       route: "/api/v1/settings/data/switch-root"
     });
+    requireRecentDataAdministration(request, "switching the Forge data root");
     return {
-      data: await switchDataRoot(
-        switchDataRootSchema.parse(request.body ?? {}),
-        { secretsManager: managers.secrets }
+      data: await runAuditedDataAdministration(
+        request,
+        "data_root_switch",
+        () =>
+          switchDataRoot(
+            switchDataRootSchema.parse(request.body ?? {}),
+            { secretsManager: managers.secrets }
+          )
       )
     };
   });
@@ -20092,8 +21359,13 @@ export async function buildServer(
       ["read", "write"],
       { route: "/api/v1/settings/data/export" }
     );
+    requireRecentDataAdministration(request, "exporting Forge data");
     const query = dataExportQuerySchema.parse(request.query ?? {});
-    const exported = await exportData(query.format);
+    const exported = await runAuditedDataAdministration(
+      request,
+      "data_export",
+      () => exportData(query.format)
+    );
     reply.header(
       "Content-Disposition",
       `attachment; filename="${exported.fileName}"`
@@ -20108,8 +21380,28 @@ export async function buildServer(
       { route: "/api/v1/projects" }
     );
     const input = createProjectSchema.parse(request.body ?? {});
+    const selectedUserIds = resolveEffectiveUserIdsForReads(
+      input.userId ? { userId: input.userId } : undefined,
+      auth
+    );
+    if (
+      auth.token?.scopePolicy.projectIds.length ||
+      auth.token?.scopePolicy.tagIds.length ||
+      !goalMatchesAuthScope(getGoalById(input.goalId), auth)
+    ) {
+      throw new HttpError(
+        403,
+        "project_scope_forbidden",
+        "The project would be created outside this credential's allowed owner scope."
+      );
+    }
     requireNestedPsycheNoteMutationAccess(auth, input, "project");
-    const project = createProject(input, toActivityContext(auth));
+    const project = createProject(
+      input.userId || !selectedUserIds?.[0]
+        ? input
+        : { ...input, userId: selectedUserIds[0] },
+      toActivityContext(auth)
+    );
     reply.code(201);
     return { project };
   });
@@ -20686,7 +21978,21 @@ export async function buildServer(
       { route: "/api/v1/projects/:id" }
     );
     const { id } = request.params as { id: string };
+    if (!getProjectForAuth(id, auth)) {
+      reply.code(404);
+      return { error: "Project not found" };
+    }
     const input = updateProjectSchema.parse(request.body ?? {});
+    if (
+      input.goalId &&
+      !goalMatchesAuthScope(getGoalById(input.goalId), auth)
+    ) {
+      throw new HttpError(
+        403,
+        "project_scope_forbidden",
+        "The project cannot move outside this credential's allowed owner scope."
+      );
+    }
     requireNestedPsycheNoteMutationAccess(auth, input, "project");
     const project = updateProject(id, input, toActivityContext(auth));
     if (!project) {
@@ -20702,6 +22008,10 @@ export async function buildServer(
       { route: "/api/v1/projects/:id" }
     );
     const { id } = request.params as { id: string };
+    if (!getProjectForAuth(id, auth)) {
+      reply.code(404);
+      return { error: "Project not found" };
+    }
     const project = deleteEntity(
       "project",
       id,
@@ -21188,8 +22498,13 @@ export async function buildServer(
       processor.id,
       runAiProcessorSchema.parse(request.body ?? {}),
       {
-        llm: managers.llm,
-        secrets: managers.secrets
+        llm: budgetedLlmFor(requireGatewayPrincipal(request), request.id),
+        secrets: managers.secrets,
+        machineCapabilities: machineCapabilitySessionFor(
+          requireGatewayPrincipal(request),
+          isDirectLocalTransport(request),
+          { requestId: request.id }
+        )
       },
       { trigger: "manual" }
     );
@@ -21222,8 +22537,13 @@ export async function buildServer(
       processor.id,
       runAiProcessorSchema.parse(request.body ?? {}),
       {
-        llm: managers.llm,
-        secrets: managers.secrets
+        llm: budgetedLlmFor(requireGatewayPrincipal(request), request.id),
+        secrets: managers.secrets,
+        machineCapabilities: machineCapabilitySessionFor(
+          requireGatewayPrincipal(request),
+          isDirectLocalTransport(request),
+          { requestId: request.id }
+        )
       },
       { trigger: "route" }
     );
@@ -21454,8 +22774,13 @@ export async function buildServer(
         connector.id,
         runAiConnectorSchema.parse(request.body ?? {}),
         {
-          llm: managers.llm,
-          secrets: managers.secrets
+          llm: budgetedLlmFor(requireGatewayPrincipal(request), request.id),
+          secrets: managers.secrets,
+          machineCapabilities: machineCapabilitySessionFor(
+            requireGatewayPrincipal(request),
+            isDirectLocalTransport(request),
+            { requestId: request.id }
+          )
         },
         "run"
       );
@@ -21491,8 +22816,13 @@ export async function buildServer(
         connector.id,
         runAiConnectorSchema.parse(request.body ?? {}),
         {
-          llm: managers.llm,
-          secrets: managers.secrets
+          llm: budgetedLlmFor(requireGatewayPrincipal(request), request.id),
+          secrets: managers.secrets,
+          machineCapabilities: machineCapabilitySessionFor(
+            requireGatewayPrincipal(request),
+            isDirectLocalTransport(request),
+            { requestId: request.id }
+          )
         },
         "chat"
       );
@@ -21692,8 +23022,13 @@ export async function buildServer(
       flow.id,
       runInput,
       {
-        llm: managers.llm,
-        secrets: managers.secrets
+        llm: budgetedLlmFor(requireGatewayPrincipal(request), request.id),
+        secrets: managers.secrets,
+        machineCapabilities: machineCapabilitySessionFor(
+          requireGatewayPrincipal(request),
+          isDirectLocalTransport(request),
+          { requestId: request.id }
+        )
       },
       "run"
     );
@@ -21728,7 +23063,8 @@ export async function buildServer(
     );
     const token = managers.token.issueLocalAgentToken(
       createAgentTokenSchema.parse(request.body ?? {}),
-      auth
+      auth,
+      applicationSecurity.legacyTokenTransport(request)
     );
     reply.code(201);
     return { token };
@@ -21739,7 +23075,11 @@ export async function buildServer(
       { route: "/api/v1/settings/tokens/:id/rotate" }
     );
     const { id } = request.params as { id: string };
-    const token = managers.token.rotateLocalAgentToken(id, auth);
+    const token = managers.token.rotateLocalAgentToken(
+      id,
+      auth,
+      applicationSecurity.legacyTokenTransport(request)
+    );
     if (!token) {
       reply.code(404);
       return { error: "Agent token not found" };
@@ -21776,11 +23116,15 @@ export async function buildServer(
       { route: "/api/v1/events/stream" }
     );
     reply.hijack();
+    const streamConnectionId =
+      request.forgeSecurity?.connectionId ?? `forge-connection:${request.id}`;
+    const streamPrincipal = requireGatewayPrincipal(request);
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
-      "X-Accel-Buffering": "no"
+      "X-Accel-Buffering": "no",
+      "X-Forge-Connection-Id": streamConnectionId
     });
     reply.raw.write(`retry: 3000\n`);
 
@@ -21808,16 +23152,40 @@ export async function buildServer(
       emit("activity", latest);
     }, eventStreamPollIntervalMs);
 
-    request.raw.on("close", () => {
+    reply.raw.once("close", () => {
       clearInterval(heartbeat);
       clearInterval(poll);
-      reply.raw.end();
+      try {
+        securityAuditLedger.record({
+          requestId: request.id,
+          connectionId: streamConnectionId,
+          jobId: null,
+          method: "CONNECTION",
+          routePath: "/api/v1/events/stream",
+          action: request.forgeSecurity?.contract.action ?? "events.stream",
+          resource:
+            request.forgeSecurity?.contract.resource ??
+            "forge://route/api/v1/events/stream",
+          outcome: "admitted",
+          reason: "connection_closed",
+          principalKind: streamPrincipal.kind,
+          subjectId: streamPrincipal.subjectId,
+          clientId: streamPrincipal.clientId,
+          policyVersion: forgeAccessGatewayPolicyVersion
+        });
+      } catch (error) {
+        if (!isClosedSecurityAuditStorageError(error)) {
+          throw error;
+        }
+      }
     });
   });
 
   app.get("/api/dashboard", async (request) => {
-    const auth = authenticateRequest(
-      request.headers as Record<string, unknown>
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/dashboard" }
     );
     const scope = resolveEffectiveReadScope(
       request.query as Record<string, unknown>,
@@ -21830,8 +23198,10 @@ export async function buildServer(
   });
   app.get("/api/context/overview", async (request, reply) => {
     markCompatibilityRoute(reply);
-    const auth = authenticateRequest(
-      request.headers as Record<string, unknown>
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/openclaw/context" }
     );
     const userIds = resolveEffectiveUserIdsForReads(undefined, auth);
     return getOverviewContext(new Date(), {
@@ -23157,7 +24527,26 @@ export async function buildServer(
     };
   });
 
-  await registerWebRoutes(app);
+  app.get("/api/v1/security/dev-session-check", async () => ({ ok: true }));
+
+  await registerWebRoutes(app, {
+    issueDevProxyAssertion: (request, target) => {
+      const principal = request.forgeSecurity?.authentication?.principal;
+      return applicationSecurity.devAssetProxyAssertions.issue(
+        principal?.kind === "operator_session"
+          ? principal
+          : backgroundSystemPrincipal,
+        target
+      );
+    },
+    authorizeUpgrade: (request, target) => {
+      const principal = applicationSecurity.authenticateUpgrade(request);
+      return principal?.kind === "operator_session"
+        ? applicationSecurity.devAssetProxyAssertions.issue(principal, target)
+        : null;
+    },
+    allowedOrigins: runtimeConfig.allowedOrigins
+  });
   await taskRunWatchdog?.start();
   return app;
 }

@@ -55,6 +55,10 @@ export type PeerCompanionRequestProof = {
   sessionId: string;
 };
 
+export type AuthenticatedPeerCompanionRequest = PeerCompanionRouteContext & {
+  verifyBody(request: FastifyRequest): void;
+};
+
 type ActiveEnrollmentRow = PeerCompanionEnrollmentRow & {
   pairing_status: string;
   pairing_paired_at: string | null;
@@ -215,12 +219,9 @@ function activeEnrollment(input: {
            AND enrollment.device_id = ?
          LIMIT 1`
       )
-      .get(
-        input.sessionId,
-        input.enrollmentId,
-        input.keyId,
-        input.deviceId
-      ) as ActiveEnrollmentRow | undefined) ?? null
+      .get(input.sessionId, input.enrollmentId, input.keyId, input.deviceId) as
+      | ActiveEnrollmentRow
+      | undefined) ?? null
   );
 }
 
@@ -405,7 +406,7 @@ function consentCapabilityContext(input: {
 export function authenticatePeerCompanionRequest(
   request: FastifyRequest,
   dependencies: { secrets: SecretsManager; now?: () => Date }
-): PeerCompanionRouteContext | null {
+): AuthenticatedPeerCompanionRequest | null {
   const sessionId = requestHeader(
     request,
     "x-forge-companion-session-id",
@@ -458,14 +459,18 @@ export function authenticatePeerCompanionRequest(
   const nonce = peerCompanionNonceSchema.parse(
     requestHeader(request, "x-forge-companion-request-nonce", true)
   );
-  const issuedAt = z.string().datetime({ offset: true }).parse(
-    requestHeader(request, "x-forge-companion-request-issued-at", true)
-  );
+  const issuedAt = z
+    .string()
+    .datetime({ offset: true })
+    .parse(requestHeader(request, "x-forge-companion-request-issued-at", true));
   const signature = requestHeader(
     request,
     "x-forge-companion-request-signature",
     true
   )!;
+  const declaredBodySha256 = sha256Schema.parse(
+    requestHeader(request, "x-forge-companion-body-sha256", true)
+  );
   const issuedAtMs = Date.parse(issuedAt);
   if (
     !Number.isFinite(now.getTime()) ||
@@ -489,7 +494,7 @@ export function authenticatePeerCompanionRequest(
   const receipt = peerCompanionEnrollmentReceipt(current);
   const path = request.raw.url ?? request.url;
   const proof: PeerCompanionRequestProof = {
-    bodySha256: hashPeerCompanionRequestBody(request.body),
+    bodySha256: declaredBodySha256,
     deviceId,
     enrollmentId,
     issuedAt,
@@ -533,6 +538,18 @@ export function authenticatePeerCompanionRequest(
     authorizedOperations: receipt.authorizedOperations,
     authenticatedAt,
     userPresenceAt: consent.userPresenceAt,
-    presenceCapability: consent.presenceCapability
+    presenceCapability: consent.presenceCapability,
+    verifyBody(verifiedRequest) {
+      if (
+        hashPeerCompanionRequestBody(verifiedRequest.body) !==
+        declaredBodySha256
+      ) {
+        throw new HttpError(
+          401,
+          "peer_companion_request_body_mismatch",
+          "The secure companion request body does not match its signed digest."
+        );
+      }
+    }
   };
 }

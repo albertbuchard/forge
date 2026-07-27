@@ -48,7 +48,10 @@ export class AuthorizationManager extends AbstractManager {
         ...(detail ?? {})
       });
     }
-    if (!context.token.scopes.includes(scope)) {
+    if (
+      !context.token.scopes.includes("*") &&
+      !context.token.scopes.includes(scope)
+    ) {
       throw new InsufficientScopeError(
         `This operation requires the ${scope} scope.`,
         {
@@ -74,7 +77,10 @@ export class AuthorizationManager extends AbstractManager {
         ...(detail ?? {})
       });
     }
-    if (!scopes.some((scope) => context.token?.scopes.includes(scope))) {
+    if (
+      !context.token.scopes.includes("*") &&
+      !scopes.some((scope) => context.token?.scopes.includes(scope))
+    ) {
       throw new InsufficientScopeError(
         `This operation requires one of: ${scopes.join(", ")}.`,
         {
@@ -100,9 +106,9 @@ export class AuthorizationManager extends AbstractManager {
         ...(detail ?? {})
       });
     }
-    const missingScopes = scopes.filter(
-      (scope) => !context.token?.scopes.includes(scope)
-    );
+    const missingScopes = context.token.scopes.includes("*")
+      ? []
+      : scopes.filter((scope) => !context.token?.scopes.includes(scope));
     if (missingScopes.length > 0) {
       throw new InsufficientScopeError(
         `This operation requires all of: ${scopes.join(", ")}.`,

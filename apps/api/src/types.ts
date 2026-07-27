@@ -2479,9 +2479,16 @@ export const microsoftCalendarAuthSettingsSchema = z.object({
 
 export const googleCalendarAuthSettingsSchema = z.object({
   clientId: z.string(),
-  clientSecret: z.string(),
   storedClientId: z.string(),
-  storedClientSecret: z.string(),
+  hasStoredClientSecret: z.boolean(),
+  hasEffectiveClientSecret: z.boolean(),
+  clientSecretStorage: z.enum([
+    "encrypted",
+    "legacy_quarantined",
+    "environment",
+    "packaged",
+    "none"
+  ]),
   appBaseUrl: z.string(),
   redirectUri: z.string(),
   allowedOrigins: z.array(z.string()),

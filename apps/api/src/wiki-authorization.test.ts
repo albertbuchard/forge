@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -6,17 +7,7 @@ import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase } from "./db.js";
 
-async function operatorCookie(app: Awaited<ReturnType<typeof buildServer>>) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host: "127.0.0.1:4317" }
-  });
-  assert.equal(response.statusCode, 200);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const operatorCookie = issueTestOperatorSessionCookie;
 
 test("wiki writes, maintenance, and ingest jobs enforce personal-space authorization", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-wiki-auth-"));
@@ -530,7 +521,8 @@ test("wiki writes, maintenance, and ingest jobs enforce personal-space authoriza
       url: "/api/v1/settings/bin",
       headers: authorization
     });
-    assert.equal(scopedBin.statusCode, 200);
+    assert.equal(scopedBin.statusCode, 403);
+    assert.equal(scopedBin.json().code, "gateway_profile_forbidden");
     assert.doesNotMatch(scopedBin.body, /FOREIGN_PAGE_TITLE_SENTINEL/);
 
     const blockedRestore = await app.inject({

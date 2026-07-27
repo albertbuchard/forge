@@ -188,6 +188,25 @@ function hashBoundSecret(value: string, key: Uint8Array): string {
   return createHmac("sha256", key).update(value, "utf8").digest("hex");
 }
 
+function requireBoundActionDigest(input: {
+  action?: PeerPresenceAction;
+  actionDigest?: string;
+}) {
+  if (input.action !== undefined && input.actionDigest === undefined) {
+    return digestPeerPresenceAction(input.action);
+  }
+  if (
+    input.action === undefined &&
+    typeof input.actionDigest === "string" &&
+    /^[a-f0-9]{64}$/.test(input.actionDigest)
+  ) {
+    return input.actionDigest;
+  }
+  throw new Error(
+    "WebAuthn requires exactly one canonical action or action digest."
+  );
+}
+
 export function peerWebAuthnChallengeMatches(
   candidate: string,
   expectedHash: string,
@@ -236,9 +255,18 @@ function toWebAuthnCredential(
   };
 }
 
+type PeerWebAuthnActionBinding =
+  | {
+      action: PeerPresenceAction;
+      actionDigest?: never;
+    }
+  | {
+      action?: never;
+      actionDigest: string;
+    };
+
 export async function createPeerWebAuthnOptions(input: {
   ceremony: "register" | "authenticate";
-  action: PeerPresenceAction;
   principal: PeerPresencePrincipal;
   origin: string;
   credentialLabel?: string;
@@ -246,7 +274,7 @@ export async function createPeerWebAuthnOptions(input: {
   hashingKey: Uint8Array;
   store: PeerWebAuthnStore;
   now?: Date;
-}) {
+} & PeerWebAuthnActionBinding) {
   if (input.principal.principalClass !== "operator_session") {
     throw new Error("Browser WebAuthn ceremonies require an operator session.");
   }
@@ -287,7 +315,7 @@ export async function createPeerWebAuthnOptions(input: {
   }
 
   const challenge = randomBytes(32);
-  const actionDigest = digestPeerPresenceAction(input.action);
+  const actionDigest = requireBoundActionDigest(input);
   const options =
     input.ceremony === "register"
       ? await generateRegistrationOptions({
@@ -357,19 +385,52 @@ export async function createPeerWebAuthnOptions(input: {
   };
 }
 
-export async function verifyPeerWebAuthnCeremony(input: {
+type PeerWebAuthnVerificationBase = {
   challengeId: string;
-  action: PeerPresenceAction;
   principal: PeerPresencePrincipal;
   origin: string;
   response: unknown;
-  capabilityId: string;
-  capabilityHashingKey: Uint8Array;
   challengeHashingKey: Uint8Array;
   store: PeerWebAuthnStore;
   now?: Date;
-}): Promise<{
+};
+
+type PeerWebAuthnCapabilityVerificationInput =
+  PeerWebAuthnVerificationBase & {
+    action: PeerPresenceAction;
+    actionDigest?: never;
+    capabilityId: string;
+    capabilityHashingKey: Uint8Array;
+  };
+
+export type BoundOwnerWebAuthnVerificationInput =
+  PeerWebAuthnVerificationBase & {
+    action?: never;
+    actionDigest: string;
+    capabilityId?: never;
+    capabilityHashingKey?: never;
+  };
+
+export type PeerWebAuthnVerificationInput =
+  | PeerWebAuthnCapabilityVerificationInput
+  | BoundOwnerWebAuthnVerificationInput;
+
+export function verifyPeerWebAuthnCeremony(
+  input: PeerWebAuthnCapabilityVerificationInput
+): Promise<{
   capability: { secret: string; record: PeerPresenceCapabilityRecord };
+  credential: PeerWebAuthnCredentialRecord;
+}>;
+export function verifyPeerWebAuthnCeremony(
+  input: BoundOwnerWebAuthnVerificationInput
+): Promise<{
+  capability: null;
+  credential: PeerWebAuthnCredentialRecord;
+}>;
+export async function verifyPeerWebAuthnCeremony(
+  input: PeerWebAuthnVerificationInput
+): Promise<{
+  capability: { secret: string; record: PeerPresenceCapabilityRecord } | null;
   credential: PeerWebAuthnCredentialRecord;
 }> {
   const relyingParty = resolvePeerWebAuthnRelyingParty(input.origin);
@@ -382,7 +443,7 @@ export async function verifyPeerWebAuthnCeremony(input: {
     );
   }
   const now = input.now ?? new Date();
-  const actionDigest = digestPeerPresenceAction(input.action);
+  const actionDigest = requireBoundActionDigest(input);
   const challenge = input.store.claimChallenge({
     id: input.challengeId,
     principal: input.principal,
@@ -502,13 +563,16 @@ export async function verifyPeerWebAuthnCeremony(input: {
   }
 
   return {
-    capability: issuePeerPresenceCapability({
-      id: input.capabilityId,
-      action: input.action,
-      principal: input.principal,
-      hashingKey: input.capabilityHashingKey,
-      now
-    }),
+    capability:
+      input.action === undefined
+        ? null
+        : issuePeerPresenceCapability({
+            id: input.capabilityId,
+            action: input.action,
+            principal: input.principal,
+            hashingKey: input.capabilityHashingKey,
+            now
+          }),
     credential: credentialRecord
   };
 }

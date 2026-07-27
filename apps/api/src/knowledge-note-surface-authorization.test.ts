@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -12,17 +13,7 @@ import type { Note } from "./types.js";
 
 type TestApp = Awaited<ReturnType<typeof buildServer>>;
 
-async function issueOperatorCookie(app: TestApp) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host: "127.0.0.1:4317" }
-  });
-  assert.equal(response.statusCode, 200, response.body);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const issueOperatorCookie = issueTestOperatorSessionCookie;
 
 async function issueToken(
   app: TestApp,
@@ -465,7 +456,8 @@ test("all nested knowledge surfaces enforce the centralized Note read scope", as
       url: "/api/v1/settings/bin",
       headers: ordinaryHeaders
     });
-    assert.equal(bin.statusCode, 200, bin.body);
+    assert.equal(bin.statusCode, 403, bin.body);
+    assert.equal(bin.json().code, "gateway_profile_forbidden");
     assert.doesNotMatch(bin.body, new RegExp(psycheNoteId));
     assert.doesNotMatch(bin.body, new RegExp(foreignWikiNoteId));
     assert.doesNotMatch(bin.body, /_SENTINEL/);
@@ -516,7 +508,8 @@ test("all nested knowledge surfaces enforce the centralized Note read scope", as
 
     const openApiResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/openapi.json"
+      url: "/api/v1/openapi.json",
+      headers: { cookie }
     });
     assert.equal(openApiResponse.statusCode, 200, openApiResponse.body);
     const paths = (
