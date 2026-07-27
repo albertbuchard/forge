@@ -252,7 +252,7 @@ test("remote API client pairs once, renews with DPoP, and is denied after revoca
   }
 });
 
-test("remote pairing cannot expand scopes or approve elevated profiles without owner step-up", async () => {
+test("remote pairing rejects unavailable machine scopes and requires owner step-up for elevated profiles", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "forge-pairing-denial-"));
   let runtime!: ApplicationSecurityRuntime;
   const app = await buildServer({
@@ -268,7 +268,7 @@ test("remote pairing cannot expand scopes or approve elevated profiles without o
   try {
     assert.ok(runtime);
     const key = await clientKey();
-    const begun = await app.inject({
+    const unavailable = await app.inject({
       method: "POST",
       url: "/api/v1/auth/device",
       headers: { host: "127.0.0.1" },
@@ -276,6 +276,23 @@ test("remote pairing cannot expand scopes or approve elevated profiles without o
         clientName: "Remote executor",
         clientKeyThumbprint: key.thumbprint,
         requestedScopes: ["read", "machine.exec"],
+        requestedProfile: "executor"
+      }
+    });
+    assert.equal(unavailable.statusCode, 409, unavailable.body);
+    assert.equal(
+      unavailable.json<{ code: string }>().code,
+      "pairing_machine_scope_unavailable"
+    );
+
+    const begun = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/device",
+      headers: { host: "127.0.0.1" },
+      payload: {
+        clientName: "Remote executor",
+        clientKeyThumbprint: key.thumbprint,
+        requestedScopes: ["read"],
         requestedProfile: "executor"
       }
     });
@@ -296,7 +313,7 @@ test("remote pairing cannot expand scopes or approve elevated profiles without o
       clientSecurityEpoch: null,
       authenticatedAt: new Date().toISOString()
     });
-    const elevated = await app.inject({
+    const unavailableApproval = await app.inject({
       method: "POST",
       url: "/api/v1/auth/device/approve",
       headers: {
@@ -307,6 +324,29 @@ test("remote pairing cannot expand scopes or approve elevated profiles without o
       payload: {
         userCode: pairing.userCode,
         scopes: ["read", "machine.exec"],
+        profile: "executor"
+      }
+    });
+    assert.equal(unavailableApproval.statusCode, 409, unavailableApproval.body);
+    assert.equal(
+      unavailableApproval.json<{ code: string }>().code,
+      "pairing_machine_scope_unavailable"
+    );
+    assert.equal(
+      runtime.store.readPairingRequest(pairing.requestId)?.status,
+      "pending"
+    );
+    const elevated = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/device/approve",
+      headers: {
+        host: "127.0.0.1",
+        cookie: `forge_session=${encodeURIComponent(ownerSession.sessionToken)}`,
+        "x-forge-csrf": ownerSession.csrfToken
+      },
+      payload: {
+        userCode: pairing.userCode,
+        scopes: ["read"],
         profile: "executor"
       }
     });
@@ -350,7 +390,7 @@ test("remote pairing cannot expand scopes or approve elevated profiles without o
       payload: {
         userCode: pairing.userCode,
         requestId: pairing.requestId,
-        scopes: ["machine.exec", "read"],
+        scopes: ["read"],
         profile: "executor",
         challengeId: ceremony.challengeId,
         response: {

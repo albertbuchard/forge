@@ -14441,7 +14441,8 @@ export async function buildServer(
   });
   registerRemotePairingRoutes(app, {
     runtime: applicationSecurity,
-    ownerId: securityOwner.id
+    ownerId: securityOwner.id,
+    remoteMachineScopesAvailable: false
   });
   app.get("/api/v1/openapi.json", async () => buildOpenApiDocument());
   app.get("/api/v1/context", async (request) => {

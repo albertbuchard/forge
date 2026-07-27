@@ -136,6 +136,23 @@ function pairingProtocolFailure(
   throw new HttpError(input.statusCode, input.code, input.message);
 }
 
+function requireAvailableRemoteMachineScopes(
+  scopes: readonly string[],
+  available: boolean
+) {
+  if (
+    available ||
+    !scopes.some((scope) => scope === "*" || scope.startsWith("machine."))
+  ) {
+    return;
+  }
+  throw new HttpError(
+    409,
+    "pairing_machine_scope_unavailable",
+    "This Forge installation cannot grant remote machine access until an operating-system-isolated worker is installed and validated."
+  );
+}
+
 function pairedPrincipal(
   client: NonNullable<ReturnType<SqliteSecurityStore["readClient"]>>
 ): ForgePrincipal {
@@ -205,9 +222,12 @@ export function registerRemotePairingRoutes(
   input: {
     runtime: ApplicationSecurityRuntime;
     ownerId: string;
+    remoteMachineScopesAvailable?: boolean;
   }
 ) {
   const { runtime } = input;
+  const remoteMachineScopesAvailable =
+    input.remoteMachineScopesAvailable === true;
 
   app.post("/api/v1/auth/browser/refresh", async (request, reply) => {
     requireSameTargetBrowserOrigin(request, runtime);
@@ -300,6 +320,10 @@ export function registerRemotePairingRoutes(
       })
       .strict()
       .parse(request.body ?? {});
+    requireAvailableRemoteMachineScopes(
+      body.requestedScopes,
+      remoteMachineScopesAvailable
+    );
     try {
       return runtime.pairing.begin({
         ownerId: input.ownerId,
@@ -352,6 +376,10 @@ export function registerRemotePairingRoutes(
       })
       .strict()
       .parse(request.body ?? {});
+    requireAvailableRemoteMachineScopes(
+      body.scopes,
+      remoteMachineScopesAvailable
+    );
     try {
       return runtime.pairing.approve({
         authorization: runtime.pairingOwnerAuthorizations.authorizeApproval({
@@ -408,6 +436,10 @@ export function registerRemotePairingRoutes(
         userCode: body.userCode,
         networkPartition: runtime.pairingNetworkPartitions.observe(request)
       });
+      requireAvailableRemoteMachineScopes(
+        review.requestedScopes,
+        remoteMachineScopesAvailable
+      );
       if (
         !["executor", "operator", "custom"].includes(
           review.requestedProfile
@@ -453,6 +485,10 @@ export function registerRemotePairingRoutes(
       })
       .strict()
       .parse(request.body ?? {});
+    requireAvailableRemoteMachineScopes(
+      body.scopes,
+      remoteMachineScopesAvailable
+    );
     try {
       const session = ownerBrowserSession(request);
       const pending = runtime.store.readPairingRequest(body.requestId);

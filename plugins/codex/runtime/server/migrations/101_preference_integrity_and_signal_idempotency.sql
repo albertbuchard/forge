@@ -77,29 +77,21 @@ CREATE TEMP TABLE preference_default_context_repair (
 INSERT INTO preference_default_context_repair (profile_id, context_id)
 SELECT
   profile.id,
-  COALESCE(
-    (
-      SELECT declared.id
-      FROM preference_contexts AS declared
-      WHERE declared.profile_id = profile.id
-        AND declared.id = profile.default_context_id
-      LIMIT 1
-    ),
-    (
+  (
     SELECT candidate.id
     FROM preference_contexts AS candidate
     WHERE candidate.profile_id = profile.id
     ORDER BY
       CASE
-        WHEN candidate.is_default = 1 AND candidate.active = 1 THEN 0
-        WHEN candidate.active = 1 THEN 1
-        WHEN candidate.is_default = 1 THEN 2
-        ELSE 3
+        WHEN candidate.id = profile.default_context_id THEN 0
+        WHEN candidate.is_default = 1 AND candidate.active = 1 THEN 1
+        WHEN candidate.active = 1 THEN 2
+        WHEN candidate.is_default = 1 THEN 3
+        ELSE 4
       END,
       candidate.created_at ASC,
       candidate.id ASC
     LIMIT 1
-    )
   )
 FROM preference_profiles AS profile;
 

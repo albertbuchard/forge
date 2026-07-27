@@ -156,6 +156,11 @@ Tailscale Serve can provide private HTTPS transport, but it is an additional net
 filter rather than a substitute for Forge authentication. Tailscale Funnel is not
 required.
 
+Remote pairing grants normal user-interface and API scopes without repeated prompts.
+Forge rejects `machine.*` scopes unless that installation has an operating-system-isolated
+worker available and validated; it never falls back to running remote machine work as the
+Forge server process.
+
 Development installs use the same flow, but link adapters to this source checkout and
 default to the real shared Forge data folder:
 
