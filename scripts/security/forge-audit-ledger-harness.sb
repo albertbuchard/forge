@@ -1,0 +1,11 @@
+(version 1)
+
+(deny default)
+(allow process*)
+(allow file-read*)
+(allow sysctl-read)
+(allow mach-lookup)
+(allow ipc-posix*)
+(allow file-write*
+  (subpath (param "FIXTURE_ONE"))
+  (subpath (param "FIXTURE_TWO")))

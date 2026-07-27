@@ -6,7 +6,17 @@ import {
   randomBytes,
   timingSafeEqual
 } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  constants as fileConstants,
+  existsSync,
+  fstatSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  writeFileSync
+} from "node:fs";
 import path from "node:path";
 import { AbstractManager } from "../base.js";
 
@@ -38,6 +48,18 @@ export class SecretsManager extends AbstractManager {
   }
 
   deriveKey(purpose: string, length = 32) {
+    return this.derivePurposeKey(this.getEncryptionKey(), purpose, length);
+  }
+
+  deriveExistingCanonicalKey(purpose: string, length = 32) {
+    return this.derivePurposeKey(
+      this.readExistingCanonicalEncryptionKey(),
+      purpose,
+      length
+    );
+  }
+
+  private derivePurposeKey(key: Uint8Array, purpose: string, length: number) {
     const normalizedPurpose = purpose.trim();
     if (!normalizedPurpose || normalizedPurpose.length > 240) {
       throw new Error("Secret-key purpose must contain 1 to 240 characters");
@@ -46,7 +68,7 @@ export class SecretsManager extends AbstractManager {
       throw new Error("Derived secret keys must contain 16 to 64 bytes");
     }
     return new Uint8Array(
-      createHmac("sha512", this.getEncryptionKey())
+      createHmac("sha512", key)
         .update("forge-purpose-key/v1\0", "utf8")
         .update(normalizedPurpose, "utf8")
         .digest()
@@ -124,5 +146,59 @@ export class SecretsManager extends AbstractManager {
         ? rawKey
         : createHash("sha256").update(rawKey).digest();
     return this.cachedKey;
+  }
+
+  private readExistingCanonicalEncryptionKey() {
+    const keyPath = this.getCanonicalKeyPath();
+    if (!existsSync(keyPath)) {
+      throw new Error("Forge's existing secret key was not found.");
+    }
+    const metadata = lstatSync(keyPath);
+    if (metadata.isSymbolicLink() || !metadata.isFile()) {
+      throw new Error(
+        "Forge's existing secret key must be a regular file, not a link."
+      );
+    }
+    if (process.platform === "win32") {
+      throw new Error(
+        "Read-only Forge key verification is not yet available on Windows."
+      );
+    }
+    let handle: number;
+    try {
+      handle = openSync(
+        keyPath,
+        fileConstants.O_RDONLY | fileConstants.O_NOFOLLOW
+      );
+    } catch {
+      throw new Error(
+        "Forge's existing secret key must be a regular file, not a link."
+      );
+    }
+    let encoded: string;
+    try {
+      const openedMetadata = fstatSync(handle);
+      if (
+        !process.getuid ||
+        !openedMetadata.isFile() ||
+        openedMetadata.uid !== process.getuid() ||
+        (openedMetadata.mode & 0o077) !== 0
+      ) {
+        throw new Error(
+          "Forge's existing secret key must be owned by the current user and inaccessible to other users."
+        );
+      }
+      encoded = readFileSync(handle, "utf8").trim();
+    } finally {
+      closeSync(handle);
+    }
+    if (!/^[A-Za-z0-9+/]{43}=$/u.test(encoded)) {
+      throw new Error("Forge's existing secret key is malformed.");
+    }
+    const rawKey = Buffer.from(encoded, "base64");
+    if (rawKey.length !== 32 || rawKey.toString("base64") !== encoded) {
+      throw new Error("Forge's existing secret key is malformed.");
+    }
+    return rawKey;
   }
 }
