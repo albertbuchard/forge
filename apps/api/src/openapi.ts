@@ -1362,7 +1362,7 @@ export function buildOpenApiDocument() {
   const calendarConnectionMutationInput = {
     type: "object",
     additionalProperties: true,
-    required: ["provider", "label"],
+    required: ["provider", "label", "selectedCalendarUrls"],
     properties: {
       provider: { type: "string", enum: CALENDAR_PROVIDER_VALUES },
       label: { type: "string" },
@@ -8289,28 +8289,48 @@ export function buildOpenApiDocument() {
   const nutritionMealItemInput = {
     type: "object",
     additionalProperties: false,
-    required: ["name", "quantity"],
+    required: ["name"],
     description:
       "Meal item input. Pass foodId from /foods/search or /foods/barcode when reusing a catalog food. If foodId is omitted, Forge treats the item as a custom food and requires calories, proteinGrams, carbohydrateGrams, and fatGrams.",
     properties: {
+      id: { type: "string" },
       foodId: nullable({ type: "string" }),
       name: { type: "string" },
       brand: nullable({ type: "string" }),
-      quantity: { type: "number" },
+      quantity: { type: "number", exclusiveMinimum: 0 },
       unit: nullable({ type: "string" }),
       grams: nullable({ type: "number" }),
       calories: nullable({ type: "number" }),
+      caloriesKcal: nullable({ type: "number" }),
       proteinGrams: nullable({ type: "number" }),
+      proteinG: nullable({ type: "number" }),
       carbohydrateGrams: nullable({ type: "number" }),
+      carbsG: nullable({ type: "number" }),
       fatGrams: nullable({ type: "number" }),
+      fatG: nullable({ type: "number" }),
       fiberGrams: nullable({ type: "number" }),
+      fiberG: nullable({ type: "number" }),
       sugarGrams: nullable({ type: "number" }),
+      sugarG: nullable({ type: "number" }),
       sodiumMg: nullable({ type: "number" }),
       potassiumMg: nullable({ type: "number" }),
       caffeineMg: nullable({ type: "number" }),
       alcoholGrams: nullable({ type: "number" }),
+      alcoholG: nullable({ type: "number" }),
       tags: arrayOf({ type: "string" }),
-      confidence: nullable({ type: "number" })
+      nutrients: { type: "object", additionalProperties: true },
+      confidence: nullable({ type: "number", minimum: 0, maximum: 1 })
+    }
+  };
+
+  const nutritionLinkInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["entityType", "entityId"],
+    properties: {
+      entityType: { type: "string" },
+      entityId: { type: "string" },
+      relationshipType: { type: "string" }
     }
   };
 
@@ -8339,18 +8359,156 @@ export function buildOpenApiDocument() {
       stayId: nullable({ type: "string" }),
       workoutId: nullable({ type: "string" }),
       sleepId: nullable({ type: "string" }),
-      dayKey: nullable({ type: "string" }),
+      dayKey: nullable({
+        type: "string",
+        pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+      }),
       imageRefs: arrayOf({ type: "string" }),
       parserProvenance: { type: "object", additionalProperties: true },
-      satietyScore: nullable({ type: "number" }),
-      hungerBefore: nullable({ type: "number" }),
-      hungerAfter: nullable({ type: "number" }),
-      cravingScore: nullable({ type: "number" }),
-      enjoymentScore: nullable({ type: "number" }),
-      socialContext: nullable({ type: "string" }),
-      locationContext: nullable({ type: "string" }),
+      links: arrayOf(nutritionLinkInput),
       notes: nullable({ type: "string" }),
       items: arrayOf(nutritionMealItemInput)
+    }
+  };
+
+  const {
+    userId: _nutritionFoodLogUserId,
+    ...nutritionFoodLogPatchProperties
+  } = nutritionFoodLogInput.properties;
+  const nutritionFoodLogPatchInput = {
+    ...nutritionFoodLogInput,
+    required: [],
+    properties: nutritionFoodLogPatchProperties
+  };
+
+  const nutritionBodyCheckinInput = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      userId: { type: "string" },
+      checkedAt: { type: "string", format: "date-time" },
+      weightKg: nullable({ type: "number" }),
+      waistCm: nullable({ type: "number" }),
+      hipCm: nullable({ type: "number" }),
+      neckCm: nullable({ type: "number" }),
+      chestCm: nullable({ type: "number" }),
+      armCm: nullable({ type: "number" }),
+      thighCm: nullable({ type: "number" }),
+      bodyFatPercent: nullable({ type: "number" }),
+      clothingFitScore: nullable({
+        type: "number",
+        minimum: 0,
+        maximum: 10
+      }),
+      notes: { type: "string" }
+    }
+  };
+
+  const nutritionAppearanceCheckinInput = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      userId: { type: "string" },
+      checkedAt: { type: "string", format: "date-time" },
+      photoRefs: arrayOf({ type: "string" }),
+      facePuffiness: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      leanness: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      muscularity: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      posture: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      bloatingLook: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      confidenceScore: nullable({
+        type: "number",
+        minimum: 0,
+        maximum: 10
+      }),
+      notes: { type: "string" }
+    }
+  };
+
+  const nutritionSubjectiveCheckinInput = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      userId: { type: "string" },
+      checkedAt: { type: "string", format: "date-time" },
+      mealLogId: nullable({ type: "string" }),
+      timeRelation: {
+        type: "string",
+        enum: [
+          "before_meal",
+          "with_meal",
+          "after_2h",
+          "end_of_day",
+          "unspecified"
+        ]
+      },
+      hunger: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      fullness: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      cravings: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      mood: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      energy: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      focus: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      stress: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      sleepiness: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      crashScore: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      notes: { type: "string" }
+    }
+  };
+
+  const nutritionGutCheckinInput = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      userId: { type: "string" },
+      checkedAt: { type: "string", format: "date-time" },
+      mealLogId: nullable({ type: "string" }),
+      bristolStoolType: nullable({
+        type: "integer",
+        minimum: 1,
+        maximum: 7
+      }),
+      stoolFrequency: nullable({ type: "number" }),
+      bloating: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      gas: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      reflux: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      abdominalPain: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      urgency: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      nausea: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      constipation: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      diarrhea: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      triggerTags: arrayOf({ type: "string" }),
+      notes: { type: "string" }
+    }
+  };
+
+  const questionnaireAnswerInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["itemId"],
+    properties: {
+      itemId: { type: "string" },
+      optionKey: nullable({ type: "string" }),
+      valueText: { type: "string" },
+      numericValue: nullable({ type: "number" }),
+      answer: { type: "object", additionalProperties: true }
+    }
+  };
+
+  const questionnaireRunStartInput = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      versionId: nullable({ type: "string" }),
+      userId: nullable({ type: "string" })
+    }
+  };
+
+  const questionnaireRunUpdateInput = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      answers: arrayOf(questionnaireAnswerInput),
+      progressIndex: nullable({ type: "integer", minimum: 0 })
     }
   };
 
@@ -11129,12 +11287,20 @@ export function buildOpenApiDocument() {
         TrainingLoadViewData: trainingLoadViewData,
         NutritionMealItemInput: nutritionMealItemInput,
         NutritionFoodLogInput: nutritionFoodLogInput,
+        NutritionFoodLogPatchInput: nutritionFoodLogPatchInput,
         NutritionFoodLog: nutritionFoodLog,
+        NutritionBodyCheckinInput: nutritionBodyCheckinInput,
+        NutritionAppearanceCheckinInput: nutritionAppearanceCheckinInput,
+        NutritionSubjectiveCheckinInput: nutritionSubjectiveCheckinInput,
+        NutritionGutCheckinInput: nutritionGutCheckinInput,
         NutritionFoodSearchResult: nutritionFoodSearchResult,
         NutritionExperimentInput: nutritionExperimentInput,
         NutritionExperimentPatchInput: nutritionExperimentPatchInput,
         NutritionExperiment: nutritionExperiment,
         WeightLossViewData: weightLossViewData,
+        QuestionnaireAnswerInput: questionnaireAnswerInput,
+        QuestionnaireRunStartInput: questionnaireRunStartInput,
+        QuestionnaireRunUpdateInput: questionnaireRunUpdateInput,
         PsycheMetricsViewData: psycheMetricsViewData,
         PsycheOverviewPayload: psycheOverviewPayload,
         Insight: insight,
@@ -12516,6 +12682,15 @@ export function buildOpenApiDocument() {
             },
             nutritionMutationUserIdsParameter
           ],
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/NutritionFoodLogPatchInput"
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
@@ -12632,6 +12807,15 @@ export function buildOpenApiDocument() {
             nutritionMutationUserIdsParameter,
             nutritionIdempotencyKeyParameter
           ],
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/NutritionBodyCheckinInput"
+                }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
@@ -12654,6 +12838,15 @@ export function buildOpenApiDocument() {
             nutritionMutationUserIdsParameter,
             nutritionIdempotencyKeyParameter
           ],
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/NutritionAppearanceCheckinInput"
+                }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
@@ -12676,6 +12869,15 @@ export function buildOpenApiDocument() {
             nutritionMutationUserIdsParameter,
             nutritionIdempotencyKeyParameter
           ],
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/NutritionSubjectiveCheckinInput"
+                }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
@@ -12698,6 +12900,15 @@ export function buildOpenApiDocument() {
             nutritionMutationUserIdsParameter,
             nutritionIdempotencyKeyParameter
           ],
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/NutritionGutCheckinInput"
+                }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
@@ -15814,8 +16025,26 @@ export function buildOpenApiDocument() {
       },
       "/api/v1/psyche/questionnaires/{id}/runs": {
         post: {
+          tags: ["Psyche"],
           summary:
             "Start a questionnaire run for one user and instrument version",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/QuestionnaireRunStartInput"
+                }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
@@ -15863,8 +16092,17 @@ export function buildOpenApiDocument() {
       },
       "/api/v1/psyche/questionnaire-runs/{id}": {
         get: {
+          tags: ["Psyche"],
           summary:
             "Get one questionnaire run with answers, scores, and version detail",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -15910,7 +16148,25 @@ export function buildOpenApiDocument() {
           }
         },
         patch: {
+          tags: ["Psyche"],
           summary: "Update an in-progress questionnaire run",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/QuestionnaireRunUpdateInput"
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {

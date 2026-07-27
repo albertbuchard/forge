@@ -1,4 +1,5 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -164,6 +165,70 @@ function collectRegisteredTools(apiToken: string = TEST_CONFIG.apiToken) {
     { ...TEST_CONFIG, apiToken }
   );
   return tools;
+}
+
+function collectSchemaPropertyPaths(
+  schema: Record<string, unknown> | undefined,
+  prefix = ""
+): string[] {
+  if (!schema) {
+    return [];
+  }
+  const required = new Set(
+    Array.isArray(schema.required)
+      ? schema.required.filter(
+          (value): value is string => typeof value === "string"
+        )
+      : []
+  );
+  const properties =
+    schema.properties &&
+    typeof schema.properties === "object" &&
+    !Array.isArray(schema.properties)
+      ? (schema.properties as Record<string, Record<string, unknown>>)
+      : {};
+  const paths = Object.entries(properties).flatMap(([name, property]) => {
+    const pathName = prefix ? `${prefix}.${name}` : name;
+    const nested = collectSchemaPropertyPaths(property, pathName);
+    const itemSchema =
+      property.items &&
+      typeof property.items === "object" &&
+      !Array.isArray(property.items)
+        ? collectSchemaPropertyPaths(
+            property.items as Record<string, unknown>,
+            `${pathName}[]`
+          )
+        : [];
+    return [
+      `${pathName}${required.has(name) ? "!" : "?"}`,
+      ...nested,
+      ...itemSchema
+    ];
+  });
+  for (const branchKey of ["anyOf", "oneOf", "allOf"] as const) {
+    const branches = schema[branchKey];
+    if (Array.isArray(branches)) {
+      for (const branch of branches) {
+        if (branch && typeof branch === "object" && !Array.isArray(branch)) {
+          paths.push(
+            ...collectSchemaPropertyPaths(
+              branch as Record<string, unknown>,
+              prefix
+            )
+          );
+        }
+      }
+    }
+  }
+  return [...new Set(paths)].sort();
+}
+
+function withoutRootSchemaFields(paths: string[], excluded: string[]) {
+  const excludedSet = new Set(excluded);
+  return paths.filter((entry) => {
+    const root = entry.split(/[.[]/, 1)[0]?.replace(/[!?]$/, "");
+    return root ? !excludedSet.has(root) : true;
+  });
 }
 
 function requireTool(tools: RegisteredTool[], name: string) {
@@ -899,6 +964,152 @@ describe("openclaw tool contracts", () => {
 
     expect(providerValues).toEqual(backendProviderValues);
     expect(required).toEqual(["label", "provider", "selectedCalendarUrls"]);
+  });
+
+  it("keeps every shared OpenClaw and Hermes input schema coherent and maps published request bodies to OpenAPI", () => {
+    const tools = collectRegisteredTools();
+    const openClawByName = new Map(
+      tools.map((tool) => [tool.name, tool.parameters ?? {}])
+    );
+    const pythonOutput = execFileSync(
+      process.env.PYTHON ?? "python3",
+      [
+        "-c",
+        [
+          "import json",
+          "from forge_hermes.catalog import TOOL_CATALOG",
+          'print(json.dumps({tool["name"]: tool["parameters"] for tool in TOOL_CATALOG}))'
+        ].join("; ")
+      ],
+      {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PYTHONPATH: path.join(repoRoot, "plugins/hermes")
+        }
+      }
+    );
+    const hermesByName = JSON.parse(pythonOutput) as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const sharedNames = [...openClawByName.keys()]
+      .filter((name) => hermesByName[name])
+      .sort();
+
+    expect(
+      [...openClawByName.keys()].filter((name) => !hermesByName[name]).sort()
+    ).toEqual(["forge_apply_doctor_fix"]);
+    expect(
+      Object.keys(hermesByName)
+        .filter((name) => !openClawByName.has(name))
+        .sort()
+    ).toEqual([]);
+    expect(sharedNames.length).toBeGreaterThanOrEqual(85);
+    for (const name of sharedNames) {
+      expect(
+        collectSchemaPropertyPaths(openClawByName.get(name)),
+        `${name} must expose the same required and optional property paths`
+      ).toEqual(collectSchemaPropertyPaths(hermesByName[name]));
+    }
+
+    const openApi = buildOpenApiDocument() as {
+      components: {
+        schemas: Record<string, Record<string, unknown>>;
+      };
+      paths: Record<
+        string,
+        Record<
+          string,
+          {
+            requestBody?: {
+              content?: Record<string, { schema?: Record<string, unknown> }>;
+            };
+          }
+        >
+      >;
+    };
+    const resolveOpenApiSchema = (schema?: Record<string, unknown>) => {
+      const reference =
+        typeof schema?.$ref === "string"
+          ? schema.$ref.replace("#/components/schemas/", "")
+          : "";
+      return reference ? openApi.components.schemas[reference] : schema;
+    };
+    const requestContracts = [
+      {
+        toolName: "forge_connect_calendar_provider",
+        method: "post",
+        path: "/api/v1/calendar/connections",
+        excludedToolFields: [],
+        excludedApiFields: []
+      },
+      {
+        toolName: "forge_log_food",
+        method: "post",
+        path: "/api/v1/health/weight-loss/food-logs",
+        excludedToolFields: ["userIds"],
+        excludedApiFields: ["userId"]
+      },
+      {
+        toolName: "forge_update_food_log",
+        method: "patch",
+        path: "/api/v1/health/weight-loss/food-logs/{id}",
+        excludedToolFields: ["foodLogId", "userIds"],
+        excludedApiFields: []
+      },
+      ...[
+        ["forge_log_body_checkin", "body-checkins"],
+        ["forge_log_appearance_checkin", "appearance-checkins"],
+        ["forge_log_subjective_food_effect", "subjective-checkins"],
+        ["forge_log_gut_checkin", "gut-checkins"]
+      ].map(([toolName, suffix]) => ({
+        toolName,
+        method: "post",
+        path: `/api/v1/health/weight-loss/${suffix}`,
+        excludedToolFields: ["userIds"],
+        excludedApiFields: ["userId"]
+      })),
+      {
+        toolName: "forge_start_questionnaire_run",
+        method: "post",
+        path: "/api/v1/psyche/questionnaires/{id}/runs",
+        excludedToolFields: ["questionnaireId", "userId"],
+        excludedApiFields: ["userId"]
+      },
+      {
+        toolName: "forge_update_questionnaire_run",
+        method: "patch",
+        path: "/api/v1/psyche/questionnaire-runs/{id}",
+        excludedToolFields: ["runId"],
+        excludedApiFields: []
+      }
+    ];
+
+    for (const contract of requestContracts) {
+      const requestSchema = resolveOpenApiSchema(
+        openApi.paths[contract.path]?.[contract.method]?.requestBody?.content?.[
+          "application/json"
+        ]?.schema
+      );
+      expect(
+        requestSchema,
+        `${contract.method.toUpperCase()} ${contract.path} must publish a request schema`
+      ).toBeDefined();
+      const toolPaths = withoutRootSchemaFields(
+        collectSchemaPropertyPaths(openClawByName.get(contract.toolName)),
+        contract.excludedToolFields
+      ).map((entry) => entry.replace(/[!?]$/, ""));
+      const apiPaths = withoutRootSchemaFields(
+        collectSchemaPropertyPaths(requestSchema),
+        contract.excludedApiFields
+      ).map((entry) => entry.replace(/[!?]$/, ""));
+      expect(
+        toolPaths,
+        `${contract.toolName} must expose the same accepted property paths as OpenAPI`
+      ).toEqual(apiPaths);
+    }
   });
 
   it("keeps the preference-context merge body aligned across server, OpenAPI, and plugins", () => {

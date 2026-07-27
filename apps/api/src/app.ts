@@ -7355,11 +7355,11 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
   {
     toolName: "forge_log_food",
     summary:
-      "Create a food log with explicit food items, calories, macros, quality tags, hunger, satiety, cravings, and context.",
+      "Create a food log with explicit food items, nutrition facts, provenance, and accepted contextual links.",
     whenToUse:
       "Use for confirmed manual entries, search/barcode-selected foods, or corrected ChatGPT candidates.",
     inputShape:
-      "{ mealLabel?: string, loggedAt?: string, source?: string, confirmationState?: string, notes?: string, items: Array<{ foodId?, name, quantity, unit?, grams?, caloriesKcal?, proteinG?, carbsG?, fatG?, fiberG?, tags? }>, userIds?: string[] }",
+      "{ loggedAt?: string, dayKey?: string|null, timeZone?: string, mealLabel?: string, source?: string, confirmationState?: string, notes?: string, placeId?: string|null, stayId?: string|null, workoutId?: string|null, sleepId?: string|null, imageRefs?: string[], parserProvenance?: object, links?: Array<object>, items: Array<{ id?, foodId?, name, quantity?, unit?, grams?, calories?, proteinGrams?, carbohydrateGrams?, fatGrams?, fiberGrams?, sugarGrams?, sodiumMg?, potassiumMg?, caffeineMg?, alcoholGrams?, tags?, nutrients?, confidence? }>, userIds?: string[] }",
     requiredFields: ["items"],
     notes: [
       "Always call forge_search_foods/forge_search_nutrition_foods or barcode lookup first and pass item.foodId when there is a good match.",
@@ -7378,7 +7378,7 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     whenToUse:
       "Use after reading the weight-loss overview when the user wants to correct the time, meal label, confirmation state, notes, links, contextual associations, or complete item list on one identified food log.",
     inputShape:
-      "{ foodLogId: string, loggedAt?: string, dayKey?: string|null, timeZone?: string, mealLabel?: string, source?: string, confirmationState?: string, notes?: string, placeId?: string|null, stayId?: string|null, workoutId?: string|null, sleepId?: string|null, imageRefs?: string[], parserProvenance?: object, links?: Array<object>, items?: Array<{ foodId?, name, quantity, unit?, grams?, caloriesKcal?, proteinG?, carbsG?, fatG?, fiberG?, tags? }>, userIds?: string[] }",
+      "{ foodLogId: string, loggedAt?: string, dayKey?: string|null, timeZone?: string, mealLabel?: string, source?: string, confirmationState?: string, notes?: string, placeId?: string|null, stayId?: string|null, workoutId?: string|null, sleepId?: string|null, imageRefs?: string[], parserProvenance?: object, links?: Array<object>, items?: Array<{ id?, foodId?, name, quantity?, unit?, grams?, calories?, proteinGrams?, carbohydrateGrams?, fatGrams?, fiberGrams?, sugarGrams?, sodiumMg?, potassiumMg?, caffeineMg?, alcoholGrams?, tags?, nutrients?, confidence? }>, userIds?: string[] }",
     requiredFields: ["foodLogId"],
     notes: [
       "Read forge_get_weight_loss_overview first and identify the exact existing log; do not ask the user for an internal id when current results can resolve it.",
@@ -7393,12 +7393,12 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     toolName: "forge_log_body_checkin",
     summary: "Record a body-composition check-in for trend calculations.",
     whenToUse:
-      "Use when the operator wants to preserve weight, circumference, body-fat, photo-asset, or body-composition notes.",
+      "Use when the operator wants to preserve weight, circumference, body-fat, clothing-fit, or body-composition notes.",
     inputShape:
-      "{ checkedAt?: string, weightKg?: number|null, waistCm?: number|null, hipCm?: number|null, neckCm?: number|null, bodyFatPercent?: number|null, photoAssetId?: string|null, notes?: string|null, userIds?: string[] }",
+      "{ checkedAt?: string, weightKg?: number|null, waistCm?: number|null, hipCm?: number|null, neckCm?: number|null, chestCm?: number|null, armCm?: number|null, thighCm?: number|null, bodyFatPercent?: number|null, clothingFitScore?: number|null, notes?: string|null, userIds?: string[] }",
     requiredFields: [],
     notes: [
-      "Supply at least one meaningful measurement, photo asset, or note even though the transport schema has no single universally required metric.",
+      "Supply at least one meaningful measurement, clothing-fit score, or note even though the transport schema has no single universally required metric.",
       "Use kilograms, centimeters, and percent only in the fields that name those units."
     ],
     example:
@@ -7408,48 +7408,48 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     toolName: "forge_log_appearance_checkin",
     summary: "Record an appearance check-in with bounded visual-look scores.",
     whenToUse:
-      "Use when the operator wants to preserve muscle fullness, leanness, vascularity, puffiness, visual bloat, posture confidence, outfit fit, or overall aesthetic score.",
+      "Use when the operator wants to preserve photo references, puffiness, leanness, muscularity, posture, visual bloating, confidence, or an explanatory note.",
     inputShape:
-      "{ checkedAt?: string, muscleFullness?: number|null, leanness?: number|null, vascularity?: number|null, facePuffiness?: number|null, abdomenBloatLook?: number|null, postureConfidence?: number|null, outfitFit?: number|null, aestheticScore?: number|null, notes?: string|null, userIds?: string[] }",
+      "{ checkedAt?: string, photoRefs?: string[], facePuffiness?: number|null, leanness?: number|null, muscularity?: number|null, posture?: number|null, bloatingLook?: number|null, confidenceScore?: number|null, notes?: string|null, userIds?: string[] }",
     requiredFields: [],
     notes: [
       "Supply at least one meaningful score or note even though the transport schema has no single universally required metric.",
       "Score fields use the surface's 0-10 interpretation."
     ],
     example:
-      '{"checkedAt":"2026-07-16T07:30:00+02:00","muscleFullness":7,"facePuffiness":3,"aestheticScore":7.5}'
+      '{"checkedAt":"2026-07-16T07:30:00+02:00","facePuffiness":3,"muscularity":7,"confidenceScore":7.5}'
   },
   {
     toolName: "forge_log_subjective_food_effect",
     summary:
-      "Record a subjective food-effect check-in for energy, mood, focus, cravings, stress, recovery, or performance.",
+      "Record a subjective food-effect check-in for hunger, fullness, cravings, mood, energy, focus, stress, sleepiness, or a crash.",
     whenToUse:
       "Use when the operator wants to preserve how food or meal timing seemed to affect them, optionally linked to one known food log.",
     inputShape:
-      "{ checkedAt?: string, energy?: number|null, mood?: number|null, focus?: number|null, libido?: number|null, sleepiness?: number|null, soreness?: number|null, stress?: number|null, hunger?: number|null, cravings?: number|null, workoutPerformance?: number|null, timeRelation?: string|null, linkedFoodLogId?: string|null, notes?: string|null, userIds?: string[] }",
+      '{ checkedAt?: string, mealLogId?: string|null, timeRelation?: "before_meal"|"with_meal"|"after_2h"|"end_of_day"|"unspecified", hunger?: number|null, fullness?: number|null, cravings?: number|null, mood?: number|null, energy?: number|null, focus?: number|null, stress?: number|null, sleepiness?: number|null, crashScore?: number|null, notes?: string|null, userIds?: string[] }',
     requiredFields: [],
     notes: [
       "Supply at least one meaningful score or note even though the transport schema has no single universally required metric.",
-      "Use linkedFoodLogId only when the relevant food log is known; do not guess it."
+      "Use mealLogId only when the relevant food log is known; do not guess it."
     ],
     example:
-      '{"energy":8,"focus":7,"cravings":2,"timeRelation":"2h after lunch","linkedFoodLogId":"nfl_123"}'
+      '{"energy":8,"focus":7,"cravings":2,"timeRelation":"after_2h","mealLogId":"nfl_123"}'
   },
   {
     toolName: "forge_log_gut_checkin",
     summary:
-      "Record a gut-health check-in for symptoms, stool observations, and suspected food triggers.",
+      "Record a gut-health check-in for symptoms, stool observations, and trigger tags.",
     whenToUse:
-      "Use when the operator wants to preserve bloating, pain, gas, reflux, nausea, stool type or frequency, or a suspected trigger, optionally linked to one known food log.",
+      "Use when the operator wants to preserve bloating, pain, gas, reflux, nausea, urgency, constipation, diarrhea, stool type or frequency, or trigger tags, optionally linked to one known food log.",
     inputShape:
-      "{ checkedAt?: string, bloating?: number|null, abdominalPain?: number|null, gas?: number|null, reflux?: number|null, nausea?: number|null, stoolType?: number|null, stoolFrequency?: number|null, suspectedTrigger?: string|null, linkedFoodLogId?: string|null, notes?: string|null, userIds?: string[] }",
+      "{ checkedAt?: string, mealLogId?: string|null, bristolStoolType?: integer|null, stoolFrequency?: number|null, bloating?: number|null, gas?: number|null, reflux?: number|null, abdominalPain?: number|null, urgency?: number|null, nausea?: number|null, constipation?: number|null, diarrhea?: number|null, triggerTags?: string[], notes?: string|null, userIds?: string[] }",
     requiredFields: [],
     notes: [
-      "Supply at least one meaningful symptom, stool observation, suspected trigger, or note even though the transport schema has no single universally required metric.",
-      "Use linkedFoodLogId only when the relevant food log is known; do not guess it."
+      "Supply at least one meaningful symptom, stool observation, trigger tag, or note even though the transport schema has no single universally required metric.",
+      "Use mealLogId only when the relevant food log is known; do not guess it."
     ],
     example:
-      '{"bloating":2,"abdominalPain":1,"suspectedTrigger":"large onion serving","linkedFoodLogId":"nfl_123"}'
+      '{"bloating":2,"abdominalPain":1,"triggerTags":["large onion serving"],"mealLogId":"nfl_123"}'
   },
   {
     toolName: "forge_get_nutrition_patterns",
@@ -7551,7 +7551,7 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       "Use only when the operator explicitly wants Forge connected to an external calendar provider.",
     inputShape:
       '{ provider: "google"|"apple"|"caldav"|"microsoft"|"macos_local", label: string, username?: string, password?: string, serverUrl?: string, authSessionId?: string, sourceId?: string, selectedCalendarUrls: string[], forgeCalendarUrl?: string, createForgeCalendar?: boolean, replaceConnectionIds?: string[] }',
-    requiredFields: ["provider", "label", "provider-specific credentials"],
+    requiredFields: ["provider", "label", "selectedCalendarUrls"],
     notes: [
       "Google now uses an interactive localhost Authorization Code + PKCE flow. The user signs in interactively on the same machine running Forge, Forge exchanges the authorization code on the backend, and forge_connect_calendar_provider should only be used after a completed Google authSessionId exists.",
       "Apple starts from https://caldav.icloud.com and autodiscovers the principal plus calendars after authentication.",

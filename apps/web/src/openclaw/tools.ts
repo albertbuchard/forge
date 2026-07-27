@@ -1103,36 +1103,35 @@ const healthLinkInputSchema = () =>
   });
 const nutritionMealItemInputSchema = () =>
   Type.Object({
+    id: optionalString(),
     foodId: Type.Optional(optionalNullableString()),
     name: Type.String({ minLength: 1 }),
     brand: optionalNullableString(),
-    quantity: Type.Number({ minimum: 0 }),
+    quantity: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
     unit: optionalNullableString(),
     grams: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    calories: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
     caloriesKcal: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    proteinGrams: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
     proteinG: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    carbohydrateGrams: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
     carbsG: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    fatGrams: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
     fatG: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    fiberGrams: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
     fiberG: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    sugarGrams: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
     sugarG: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
     sodiumMg: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
     potassiumMg: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
     caffeineMg: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    alcoholGrams: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
     alcoholG: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-    glycemicIndex: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-    novaGroup: Type.Optional(Type.Union([Type.Integer(), Type.Null()])),
-    fermented: Type.Optional(Type.Union([Type.Boolean(), Type.Null()])),
-    probiotic: Type.Optional(Type.Union([Type.Boolean(), Type.Null()])),
-    fodmapLevel: Type.Optional(
-      Type.Union([
-        Type.Literal("low"),
-        Type.Literal("medium"),
-        Type.Literal("high"),
-        Type.Null()
-      ])
-    ),
     tags: Type.Optional(Type.Array(Type.String())),
-    confidence: Type.Optional(Type.Union([Type.Number(), Type.Null()]))
+    nutrients: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+    confidence: Type.Optional(
+      Type.Union([Type.Number({ minimum: 0, maximum: 1 }), Type.Null()])
+    )
   });
 const nutritionUserScopeSchema = () =>
   Type.Optional(Type.Array(Type.String({ minLength: 1 })));
@@ -1140,6 +1139,13 @@ const nutritionFoodLogSchema = () =>
   Type.Object({
     userIds: nutritionUserScopeSchema(),
     loggedAt: optionalString(),
+    dayKey: Type.Optional(
+      Type.Union([
+        Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" }),
+        Type.Null()
+      ])
+    ),
+    timeZone: optionalString(),
     mealLabel: optionalNullableString(),
     source: Type.Optional(
       Type.Union([
@@ -1159,13 +1165,13 @@ const nutritionFoodLogSchema = () =>
         Type.Literal("discarded")
       ])
     ),
-    satietyScore: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-    hungerBefore: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-    hungerAfter: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-    cravingScore: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-    enjoymentScore: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-    socialContext: optionalNullableString(),
-    locationContext: optionalNullableString(),
+    placeId: optionalNullableString(),
+    stayId: optionalNullableString(),
+    workoutId: optionalNullableString(),
+    sleepId: optionalNullableString(),
+    imageRefs: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+    parserProvenance: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+    links: Type.Optional(Type.Array(healthLinkInputSchema())),
     notes: optionalNullableString(),
     items: Type.Array(nutritionMealItemInputSchema(), { minItems: 1 })
   });
@@ -2398,8 +2404,13 @@ export function registerForgePluginTools(
       waistCm: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
       hipCm: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
       neckCm: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      chestCm: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      armCm: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      thighCm: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
       bodyFatPercent: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      photoAssetId: optionalNullableString(),
+      clothingFitScore: Type.Optional(
+        Type.Union([Type.Number({ minimum: 0, maximum: 10 }), Type.Null()])
+      ),
       notes: optionalNullableString()
     }),
     async execute(_toolCallId, params) {
@@ -2426,16 +2437,13 @@ export function registerForgePluginTools(
     parameters: Type.Object({
       userIds: nutritionUserScopeSchema(),
       checkedAt: optionalString(),
-      muscleFullness: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      leanness: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      vascularity: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      photoRefs: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
       facePuffiness: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      abdomenBloatLook: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      postureConfidence: Type.Optional(
-        Type.Union([Type.Number(), Type.Null()])
-      ),
-      outfitFit: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      aestheticScore: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      leanness: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      muscularity: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      posture: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      bloatingLook: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      confidenceScore: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
       notes: optionalNullableString()
     }),
     async execute(_toolCallId, params) {
@@ -2462,20 +2470,25 @@ export function registerForgePluginTools(
     parameters: Type.Object({
       userIds: nutritionUserScopeSchema(),
       checkedAt: optionalString(),
-      energy: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      mood: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      focus: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      libido: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      sleepiness: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      soreness: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      stress: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      hunger: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      cravings: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      workoutPerformance: Type.Optional(
-        Type.Union([Type.Number(), Type.Null()])
+      mealLogId: optionalNullableString(),
+      timeRelation: Type.Optional(
+        Type.Union([
+          Type.Literal("before_meal"),
+          Type.Literal("with_meal"),
+          Type.Literal("after_2h"),
+          Type.Literal("end_of_day"),
+          Type.Literal("unspecified")
+        ])
       ),
-      timeRelation: optionalNullableString(),
-      linkedFoodLogId: optionalNullableString(),
+      hunger: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      fullness: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      cravings: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      mood: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      energy: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      focus: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      stress: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      sleepiness: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      crashScore: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
       notes: optionalNullableString()
     }),
     async execute(_toolCallId, params) {
@@ -2507,10 +2520,15 @@ export function registerForgePluginTools(
       gas: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
       reflux: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
       nausea: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      stoolType: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      mealLogId: optionalNullableString(),
+      bristolStoolType: Type.Optional(
+        Type.Union([Type.Integer({ minimum: 1, maximum: 7 }), Type.Null()])
+      ),
       stoolFrequency: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      suspectedTrigger: optionalNullableString(),
-      linkedFoodLogId: optionalNullableString(),
+      urgency: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      constipation: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      diarrhea: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      triggerTags: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
       notes: optionalNullableString()
     }),
     async execute(_toolCallId, params) {
@@ -2966,7 +2984,7 @@ export function registerForgePluginTools(
     parameters: Type.Object({
       questionnaireId: Type.String({ minLength: 1 }),
       userId: Type.String({ minLength: 1 }),
-      author: optionalString()
+      versionId: optionalNullableString()
     }),
     async execute(_toolCallId, params) {
       const typed = params as Record<string, unknown>;
@@ -2976,7 +2994,7 @@ export function registerForgePluginTools(
           path: `/api/v1/psyche/questionnaires/${typed.questionnaireId as string}/runs`,
           body: {
             userId: typed.userId,
-            author: typed.author
+            versionId: typed.versionId
           }
         })
       );
@@ -3014,9 +3032,22 @@ export function registerForgePluginTools(
       "Patch one questionnaire run while the answers are still being filled.",
     parameters: Type.Object({
       runId: Type.String({ minLength: 1 }),
-      answers: Type.Optional(Type.Record(Type.String(), Type.Any())),
-      status: optionalString(),
-      notes: optionalString()
+      answers: Type.Optional(
+        Type.Array(
+          Type.Object({
+            itemId: Type.String({ minLength: 1 }),
+            optionKey: optionalNullableString(),
+            valueText: optionalString(),
+            numericValue: Type.Optional(
+              Type.Union([Type.Number(), Type.Null()])
+            ),
+            answer: Type.Optional(Type.Record(Type.String(), Type.Unknown()))
+          })
+        )
+      ),
+      progressIndex: Type.Optional(
+        Type.Union([Type.Integer({ minimum: 0 }), Type.Null()])
+      )
     }),
     async execute(_toolCallId, params) {
       const typed = params as Record<string, unknown>;
@@ -3026,8 +3057,7 @@ export function registerForgePluginTools(
           path: `/api/v1/psyche/questionnaire-runs/${typed.runId as string}`,
           body: {
             answers: typed.answers,
-            status: typed.status,
-            notes: typed.notes
+            progressIndex: typed.progressIndex
           }
         })
       );

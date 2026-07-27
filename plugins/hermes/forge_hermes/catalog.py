@@ -1303,27 +1303,53 @@ WORK_ITEM_GIT_REF_INPUT = object_schema(
 
 NUTRITION_MEAL_ITEM = object_schema(
     {
+        "id": optional_string("Optional existing meal-item id."),
         "foodId": optional_nullable_string("Existing nutrition_food_catalog id from forge_search_foods/forge_search_nutrition_foods."),
         "name": {"type": "string", "minLength": 1},
         "brand": optional_nullable_string("Optional brand."),
-        "quantity": {"type": "number", "minimum": 0},
+        "quantity": {"type": "number", "exclusiveMinimum": 0},
         "unit": optional_nullable_string("Serving unit."),
         "grams": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "calories": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "caloriesKcal": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "proteinGrams": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "proteinG": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "carbohydrateGrams": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "carbsG": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "fatGrams": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "fatG": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "fiberGrams": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "fiberG": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "sugarGrams": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "sugarG": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "sodiumMg": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "potassiumMg": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "caffeineMg": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "alcoholGrams": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "alcoholG": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "tags": array_schema({"type": "string"}, "Optional food tags."),
-        "confidence": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "nutrients": {"type": "object", "additionalProperties": True},
+        "confidence": {
+            "anyOf": [
+                {"type": "number", "minimum": 0, "maximum": 1},
+                {"type": "null"},
+            ]
+        },
     },
-    required=["name", "quantity"],
+    required=["name"],
 )
 
 NUTRITION_FOOD_LOG = object_schema(
     {
         "userIds": array_schema({"type": "string"}, "Optional user ownership scope."),
         "loggedAt": optional_string("Optional ISO logged-at timestamp."),
+        "dayKey": {
+            "anyOf": [
+                {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+                {"type": "null"},
+            ]
+        },
+        "timeZone": optional_string("Optional IANA timezone."),
         "mealLabel": optional_nullable_string("Optional meal label."),
         "source": {
             "enum": ["manual", "search", "barcode", "chatgpt", "photo", "saved_meal"]
@@ -1331,11 +1357,25 @@ NUTRITION_FOOD_LOG = object_schema(
         "confirmationState": {
             "enum": ["candidate", "confirmed", "needs_review", "discarded"]
         },
-        "satietyScore": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-        "hungerBefore": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-        "hungerAfter": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-        "cravingScore": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-        "enjoymentScore": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "placeId": optional_nullable_string("Optional linked place id."),
+        "stayId": optional_nullable_string("Optional linked stay id."),
+        "workoutId": optional_nullable_string("Optional linked workout id."),
+        "sleepId": optional_nullable_string("Optional linked sleep id."),
+        "imageRefs": array_schema(
+            {"type": "string", "minLength": 1}, "Optional image references."
+        ),
+        "parserProvenance": {"type": "object", "additionalProperties": True},
+        "links": array_schema(
+            object_schema(
+                {
+                    "entityType": {"type": "string", "minLength": 1},
+                    "entityId": {"type": "string", "minLength": 1},
+                    "relationshipType": {"type": "string", "minLength": 1},
+                },
+                required=["entityType", "entityId"],
+            ),
+            "Optional entity links.",
+        ),
         "notes": optional_nullable_string("Optional notes."),
         "items": array_schema(NUTRITION_MEAL_ITEM, "Food items in the meal."),
     },
@@ -2032,7 +2072,16 @@ TOOL_CATALOG: List[ToolSpec] = [
                 "waistCm": {"anyOf": [{"type": "number"}, {"type": "null"}]},
                 "hipCm": {"anyOf": [{"type": "number"}, {"type": "null"}]},
                 "neckCm": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "chestCm": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "armCm": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "thighCm": {"anyOf": [{"type": "number"}, {"type": "null"}]},
                 "bodyFatPercent": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "clothingFitScore": {
+                    "anyOf": [
+                        {"type": "number", "minimum": 0, "maximum": 10},
+                        {"type": "null"},
+                    ]
+                },
             }
         ),
         "method": "POST",
@@ -2046,14 +2095,15 @@ TOOL_CATALOG: List[ToolSpec] = [
         "parameters": object_schema(
             {
                 **NUTRITION_SCORE_CHECKIN["properties"],
-                "muscleFullness": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "leanness": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "vascularity": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "photoRefs": array_schema(
+                    {"type": "string", "minLength": 1}, "Optional photo references."
+                ),
                 "facePuffiness": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "abdomenBloatLook": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "postureConfidence": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "outfitFit": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "aestheticScore": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "leanness": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "muscularity": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "posture": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "bloatingLook": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "confidenceScore": {"anyOf": [{"type": "number"}, {"type": "null"}]},
             }
         ),
         "method": "POST",
@@ -2063,7 +2113,7 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_log_subjective_food_effect",
-        "description": "Record subjective food-effect metrics such as energy, mood, focus, hunger, cravings, stress, sleepiness, soreness, libido, and workout performance.",
+        "description": "Record subjective food-effect metrics such as energy, mood, focus, hunger, fullness, cravings, stress, sleepiness, and a crash score.",
         "parameters": object_schema(
             {
                 **NUTRITION_SCORE_CHECKIN["properties"],
@@ -2071,10 +2121,21 @@ TOOL_CATALOG: List[ToolSpec] = [
                 "mood": {"anyOf": [{"type": "number"}, {"type": "null"}]},
                 "focus": {"anyOf": [{"type": "number"}, {"type": "null"}]},
                 "hunger": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "fullness": {"anyOf": [{"type": "number"}, {"type": "null"}]},
                 "cravings": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "workoutPerformance": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "timeRelation": optional_nullable_string("Optional relation to food timing."),
-                "linkedFoodLogId": optional_nullable_string("Optional linked food log id."),
+                "stress": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "sleepiness": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "crashScore": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "timeRelation": {
+                    "enum": [
+                        "before_meal",
+                        "with_meal",
+                        "after_2h",
+                        "end_of_day",
+                        "unspecified",
+                    ]
+                },
+                "mealLogId": optional_nullable_string("Optional linked food log id."),
             }
         ),
         "method": "POST",
@@ -2093,10 +2154,20 @@ TOOL_CATALOG: List[ToolSpec] = [
                 "gas": {"anyOf": [{"type": "number"}, {"type": "null"}]},
                 "reflux": {"anyOf": [{"type": "number"}, {"type": "null"}]},
                 "nausea": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "stoolType": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "mealLogId": optional_nullable_string("Optional linked food log id."),
+                "bristolStoolType": {
+                    "anyOf": [
+                        {"type": "integer", "minimum": 1, "maximum": 7},
+                        {"type": "null"},
+                    ]
+                },
                 "stoolFrequency": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "suspectedTrigger": optional_nullable_string("Optional suspected trigger."),
-                "linkedFoodLogId": optional_nullable_string("Optional linked food log id."),
+                "urgency": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "constipation": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "diarrhea": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "triggerTags": array_schema(
+                    {"type": "string", "minLength": 1}, "Optional trigger tags."
+                ),
             }
         ),
         "method": "POST",
@@ -2483,7 +2554,24 @@ TOOL_CATALOG: List[ToolSpec] = [
         "parameters": object_schema(
             {
                 "runId": {"type": "string", "minLength": 1},
-                "answers": array_schema({"type": "object"}, "Optional questionnaire answers."),
+                "answers": array_schema(
+                    object_schema(
+                        {
+                            "itemId": {"type": "string", "minLength": 1},
+                            "optionKey": optional_nullable_string("Optional selected option."),
+                            "valueText": optional_string("Optional text answer."),
+                            "numericValue": {
+                                "anyOf": [{"type": "number"}, {"type": "null"}]
+                            },
+                            "answer": {
+                                "type": "object",
+                                "additionalProperties": True,
+                            },
+                        },
+                        required=["itemId"],
+                    ),
+                    "Optional questionnaire answers.",
+                ),
                 "progressIndex": {
                     "anyOf": [
                         {"type": "integer", "minimum": 0},
