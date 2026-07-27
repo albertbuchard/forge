@@ -9,6 +9,7 @@ import { PEER_OUTBOX_CANDIDATE_STATEMENTS } from "./repositories/peer-delivery.j
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const migrationsDir = path.resolve(moduleDir, "..", "migrations");
+const migration100 = "100_people_read_model_revision.sql";
 const migration101 = "101_preference_integrity_and_signal_idempotency.sql";
 const migration102 = "102_people_outbox_claim_order_indexes.sql";
 const timestamp = "2026-07-16T12:00:00.000Z";
@@ -215,6 +216,121 @@ function queueSnapshot(database: DatabaseSync): unknown[] {
     )
     .all();
 }
+
+test("migration 101 preserves a valid default pointer and deterministically repairs an invalid one", async () => {
+  await withDatabase(async (database) => {
+    await applyMigrationsThrough(database, migration100);
+    const insertProfile = database.prepare(
+      `INSERT INTO preference_profiles (
+         id, user_id, domain, default_context_id, model_version,
+         created_at, updated_at
+       ) VALUES (?, 'user_operator', ?, ?, 'v1', ?, ?)`
+    );
+    insertProfile.run(
+      "profile_declared",
+      "migration-101-declared",
+      "context_declared",
+      timestamp,
+      timestamp
+    );
+    insertProfile.run(
+      "profile_fallback",
+      "migration-101-fallback",
+      "context_missing",
+      timestamp,
+      timestamp
+    );
+    const insertContext = database.prepare(
+      `INSERT INTO preference_contexts (
+         id, profile_id, name, description, share_mode, active, is_default,
+         decay_days, created_at, updated_at
+       ) VALUES (?, ?, ?, '', 'blended', ?, ?, 90, ?, ?)`
+    );
+    insertContext.run(
+      "context_declared",
+      "profile_declared",
+      "Declared context",
+      0,
+      0,
+      "2026-07-16T10:00:00.000Z",
+      timestamp
+    );
+    insertContext.run(
+      "context_other",
+      "profile_declared",
+      "Other active context",
+      1,
+      1,
+      "2026-07-16T09:00:00.000Z",
+      timestamp
+    );
+    insertContext.run(
+      "context_fallback_active",
+      "profile_fallback",
+      "Active fallback",
+      1,
+      0,
+      "2026-07-16T11:00:00.000Z",
+      timestamp
+    );
+    insertContext.run(
+      "context_fallback_default",
+      "profile_fallback",
+      "Declared active default",
+      1,
+      1,
+      "2026-07-16T12:00:00.000Z",
+      timestamp
+    );
+
+    await applyMigrationsThrough(database, migration101);
+
+    const profiles = database
+      .prepare(
+        `SELECT id, default_context_id
+         FROM preference_profiles
+         WHERE id IN ('profile_declared', 'profile_fallback')
+         ORDER BY id`
+      )
+      .all()
+      .map((row) => ({ ...row }));
+    assert.deepEqual(profiles, [
+      {
+        id: "profile_declared",
+        default_context_id: "context_declared"
+      },
+      {
+        id: "profile_fallback",
+        default_context_id: "context_fallback_default"
+      }
+    ]);
+    const defaults = database
+      .prepare(
+        `SELECT profile_id, id, active, is_default
+         FROM preference_contexts
+         WHERE profile_id IN ('profile_declared', 'profile_fallback')
+           AND is_default = 1
+         ORDER BY profile_id`
+      )
+      .all()
+      .map((row) => ({ ...row }));
+    assert.deepEqual(defaults, [
+      {
+        profile_id: "profile_declared",
+        id: "context_declared",
+        active: 1,
+        is_default: 1
+      },
+      {
+        profile_id: "profile_fallback",
+        id: "context_fallback_default",
+        active: 1,
+        is_default: 1
+      }
+    ]);
+    assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
+  });
+});
 
 test("migration 102 preserves populated delivery rows and installs exact partial indexes", async () => {
   await withDatabase(async (database) => {
