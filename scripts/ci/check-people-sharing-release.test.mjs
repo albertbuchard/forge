@@ -392,7 +392,11 @@ test("reusable CI has no Apple credentials while iOS publication remains fail-cl
   );
   const runtimeSmoke = stepBlock(reusable, "Smoke built Forge runtime");
   assert.match(runtimeSmoke, /if: \$\{\{ !inputs\.full_test \}\}/);
+  assert.match(runtimeSmoke, /api\/health/);
   assert.match(runtimeSmoke, /api\/v1\/health/);
+  assert.match(runtimeSmoke, /credential-required/);
+  assert.match(runtimeSmoke, /protected_status/);
+  assert.match(runtimeSmoke, /test "\$\{protected_status\}" = "401"/);
   assert.match(runtimeSmoke, /forge\/vitals/);
   assert.match(runtimeSmoke, /FORGE_DATA_ROOT="\$\{data_root\}"/);
 

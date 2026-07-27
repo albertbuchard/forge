@@ -356,7 +356,7 @@ jobs:
           trap 'kill -TERM "${runtime_pid}" 2>/dev/null || true' EXIT
           for _ in $(seq 1 60); do
             if curl --fail --silent --show-error \
-              "http://127.0.0.1:${port}/api/v1/health" >"${data_root}/health.json"; then
+              "http://127.0.0.1:${port}/api/health" >"${data_root}/health.json"; then
               break
             fi
             if ! kill -0 "${runtime_pid}" 2>/dev/null; then
@@ -365,7 +365,10 @@ jobs:
             fi
             sleep 1
           done
-          node -e 'const fs=require("node:fs");const health=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(health.ok!==true)process.exit(1)' "${data_root}/health.json"
+          node -e 'const fs=require("node:fs");const health=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(health.ok!==true||health.app!=="forge"||health.security!=="credential-required")process.exit(1)' "${data_root}/health.json"
+          protected_status="$(curl --silent --output "${data_root}/protected-health.json" --write-out '%{http_code}' \
+            "http://127.0.0.1:${port}/api/v1/health")"
+          test "${protected_status}" = "401"
           curl --fail --silent --show-error "http://127.0.0.1:${port}/forge/" >/dev/null
           curl --fail --silent --show-error "http://127.0.0.1:${port}/forge/vitals" >/dev/null
           kill -INT "${runtime_pid}"
