@@ -3392,7 +3392,7 @@ function buildPreferredMutationPath(entityType: string) {
     case "workbench":
       return "Use the dedicated Workbench route family for flow CRUD, execution, saved-flow chat follow-ups, run history, published outputs, node results, and latest-node-output reads.";
     case "course":
-      return "Use the dedicated Course route family for catalog reads, exact course detail, learner-safe lesson sessions, activity attempts, validated package import, and canonical package export. Do not use shared batch CRUD for courses.";
+      return "Use the dedicated Course route family for catalog reads, exact course detail, learner-safe visual or voice lesson sessions, activity attempts, explicit versioned enrollment upgrades, validated package import, and canonical package export. Do not use shared batch CRUD for courses.";
     case "concept":
       return "Use the dedicated Course route family for concept search, due-review filtering, and exact cross-course mastery detail. Concept definitions are installed from validated course packages and are not ordinary batch CRUD records.";
     case "self_observation":
@@ -3550,7 +3550,7 @@ function buildPreferredReadPath(entityType: string) {
     case "workbench":
       return "/api/v1/workbench/flows | /api/v1/workbench/flows/:id | /api/v1/workbench/flows/by-slug/:slug | /api/v1/workbench/flows/:id/output | /api/v1/workbench/flows/:id/runs | /api/v1/workbench/flows/:id/runs/:runId | /api/v1/workbench/flows/:id/runs/:runId/nodes | /api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId | /api/v1/workbench/flows/:id/nodes/:nodeId/output | /api/v1/workbench/catalog/boxes";
     case "course":
-      return "/api/v1/courses | /api/v1/courses/:courseId | /api/v1/courses/:courseId/learn | /api/v1/courses/:courseId/export";
+      return "/api/v1/courses | /api/v1/courses/:courseId | /api/v1/courses/:courseId/learn | /api/v1/courses/:courseId/voice-session | /api/v1/courses/:courseId/export";
     case "concept":
       return "/api/v1/concepts | /api/v1/concepts/:conceptId";
     case "self_observation":
@@ -3578,7 +3578,7 @@ const QUESTION_FLOW_SPECIALIZED_ROUTE_HINTS = {
   workbench:
     "Specialized route surface: workbench. Route tool: forge_call_workbench_route. Route keys: listFlows, flowDetail, flowById, flowBySlug, publishedOutput, runHistory, runs, runDetail, runNodes, nodeResult, latestNodeOutput, boxCatalog, createFlow, updateFlow, deleteFlow, runFlow, runByPayload, chatFlow. Catalog reads are paged; follow hasMore with the returned offset plus item count.",
   course:
-    "Specialized route surface: courses. Route tool: forge_call_course_route. Route keys: listCourses, courseDetail, learningSession, submitAttempt, importCourse, exportCourse, listConcepts, conceptDetail. Use learningSession as the learner-safe guidance view so hidden assessment references stay out of the response.",
+    "Specialized route surface: courses. Route tool: forge_call_course_route. Route keys: listCourses, courseDetail, learningSession, voiceLearningSession, submitAttempt, upgradeEnrollment, importCourse, exportCourse, listConcepts, conceptDetail. Use learningSession for visual coaching. For voice, start voiceLearningSession with the exact week and day, teach one returned learner-safe block at a time in source order, and submit only Albert's confirmed, lightly formatted answer text through submitAttempt with the returned token and exact identifiers. Never store or submit audio or a separate voice transcript.",
   concept:
     "Specialized route surface: courses. Route tool: forge_call_course_route. Route keys: listConcepts and conceptDetail for mastery reads; concept definitions change only through validated package import, never batch CRUD."
 } as const satisfies Record<string, string>;
@@ -4636,7 +4636,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     minimumCreateFields: [],
     relationshipRules: [
       "Course is a specialized learning surface, not a normal batch CRUD entity.",
-      "Use the dedicated Course routes for catalog, detail, learner session, attempt, package import, and package export work.",
+      "Use the dedicated Course routes for catalog, detail, learner session, attempt, explicit enrollment upgrade, package import, and package export work.",
       "Use the learner-safe session when guiding a learner; do not expose instructor references, correct option ids, answer explanations, or extension assessment data.",
       "Import changes course definitions only through a validated canonical package. Existing learner evidence can block a conflicting replacement."
     ],
@@ -5506,16 +5506,19 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "course",
     openingQuestion:
-      "Are you trying to choose a course, continue a lesson, submit work, review progress, or import or export a course?",
+      "Are you trying to choose or continue a course, learn by voice, submit work, review progress, update your enrollment, or import or export a course?",
     coachingGoal:
       "Clarify the learning job, read the current course or learner-safe lesson state first when it exists, and use the exact dedicated Course operation without exposing hidden assessment material.",
     askSequence: [
-      "Start from the user's learning intent: choose, continue, understand, answer, review progress, install, or export.",
+      "Start from the user's learning intent: choose, continue visually or by voice, understand, answer, review progress, install, or export.",
       "If the course is not exact, list installed courses before asking for an id; if it is exact, read course detail or the learner-safe session before asking the user to repeat syllabus or activity context.",
       "For learning support, use the learner-safe session and ask what part of the current explanation, example, or activity is unclear. Support does not depend on submitting an attempt.",
+      "For voice learning, start the exact week and day through voiceLearningSession, teach one returned block at a time in source order, and ask its embedded activity only after the preceding teaching and example.",
+      "Before a voice answer is submitted, add punctuation and paragraph breaks without changing Albert's words. Show him every proposed deletion, replacement, uncertain mathematical symbol, or uncertain recognition and obtain explicit confirmation. Preserve meaning and uncertainty, read the whole formatted answer back, and obtain final explicit confirmation. Send no audio or separate transcript.",
       "For an attempt, identify the exact course, lesson, and activity from the current session, preserve answerMarkdown as the learner expressed it, and ask only for a missing answer or an explicit submission choice when the user has not already asked to submit.",
       "Never reveal or infer hidden reference answers, correct option ids, answer explanations, extension assessment data, or instructor-only material while coaching the learner.",
       "After submission, distinguish saved answer, assessment status, feedback, score, grade, points, and next lesson. If structured assessment is unavailable, say that grading was withheld rather than inventing a result.",
+      "For an enrollment upgrade, read the exact installed and available release state first, explain what will change and which passed activities are eligible to carry forward, and call upgradeEnrollment only after the learner explicitly chooses the published update.",
       "For import, ask which trusted Forge course package should be installed and whether the intent is a new install or an accepted replacement; let Forge validate references and canonical hash and report conflicts truthfully.",
       "For export, confirm the exact course and that the user wants the canonical portable package. Do not use export as the learner view.",
       "Skip the broad lane question when the user has already named the exact course and action; ask only for the missing lesson, activity, learner scope, package, answer, or confirmation that changes the call."
@@ -6177,7 +6180,7 @@ function buildQuestionFlowReadinessCheck(
     return "Ready when the Workbench lane and the saved flow, input contract, run, node, latest output, published result, edit, execution, or preservation choice are clear enough to call the published route key without guessing.";
   }
   if (guide.entityType === "course") {
-    return "Ready on the selected Course lane after selecting the published route key without guessing. Catalog, detail, progress, and learner guidance are ready when the learner scope and any exact course or lesson that changes the read are clear; list first when the course is not exact. An attempt is ready only after the learner-safe session identifies the exact courseId, lessonId, and activityId and accepted answerMarkdown is present; ask for submission confirmation only when the user has not already asked to submit. Import is ready when the trusted validated canonical package and new-install or accepted-replacement intent are clear; export is ready when the exact course and portable-package intent are clear. Never use batch CRUD or expose hidden assessment references.";
+    return "Ready on the selected Course lane after selecting the published route key without guessing. Catalog, detail, progress, and visual learner guidance are ready when the learner scope and any exact course or lesson that changes the read are clear; list first when the course is not exact. Starting voiceLearningSession requires only the exact course, week, and day; that call returns the lesson-scoped token and learner-safe source order. An attempt is ready only after the learner-safe session identifies the exact courseId, lessonId, and activityId and accepted answerMarkdown is present. A later voice attempt additionally requires Albert's explicit confirmation, the current voice token, and a stable idempotency key; it never includes audio or a separate transcript. Enrollment upgrade is ready only after reading the exact installed and available releases, explaining the version change and evidence carry-forward rule, and receiving the learner's explicit choice. Import is ready when the trusted validated canonical package and new-install or accepted-replacement intent are clear; export is ready when the exact course and portable-package intent are clear. Never use batch CRUD or expose hidden assessment references.";
   }
   if (guide.entityType === "concept") {
     return "Ready on the selected Concept lane after selecting the published route key without guessing. Ready to list when the practical concept question and only the learner, course, search, or due-review filters that change the answer are clear. Ready for exact detail when the concept is identified from a current result or accepted id or slug. Explain definition, evidence, and mastery separately; there is no direct concept mutation, and definition changes require a validated course-package import.";
@@ -6916,22 +6919,25 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
   {
     toolName: "forge_call_course_route",
     summary:
-      "Call one allowed dedicated Course or Concept operation after the learning job has narrowed to catalog, detail, learner session, attempt, package import/export, or concept mastery.",
+      "Call one allowed dedicated Course or Concept operation after the learning job has narrowed to catalog, detail, learner session, attempt, enrollment upgrade, package import/export, or concept mastery.",
     whenToUse:
-      "Use for installed-course discovery, progress and syllabus reads, learner-safe lesson guidance, activity attempts, validated package import/export, concept search, due review, and cross-course concept evidence. Do not use batch CRUD for Course or Concept.",
+      "Use for installed-course discovery, progress and syllabus reads, learner-safe visual or voice lesson guidance, activity attempts, explicit enrollment upgrades, validated package import/export, concept search, due review, and cross-course concept evidence. Do not use batch CRUD for Course or Concept.",
     inputShape:
-      '{ routeKey: "listCourses"|"courseDetail"|"learningSession"|"submitAttempt"|"importCourse"|"exportCourse"|"listConcepts"|"conceptDetail", pathParams?: { courseId?: string, lessonId?: string, activityId?: string, conceptId?: string }, query?: { userId?: string, lessonId?: string, courseId?: string, query?: string, dueOnly?: "true"|"false" }, body?: object }',
+      '{ routeKey: "listCourses"|"courseDetail"|"learningSession"|"voiceLearningSession"|"submitAttempt"|"upgradeEnrollment"|"importCourse"|"exportCourse"|"listConcepts"|"conceptDetail", pathParams?: { courseId?: string, lessonId?: string, activityId?: string, conceptId?: string }, query?: { userId?: string, lessonId?: string, courseId?: string, query?: string, dueOnly?: "true"|"false" }, body?: object }',
     requiredFields: ["routeKey"],
     notes: [
       "Choose routeKey from live onboarding specializedDomainSurfaces.courses routeKeys and methodRoutes.",
       "Fill courseId, lessonId, activityId, and conceptId through pathParams when the selected methodRoutes path publishes those placeholders; do not hide them in query or body.",
       "Use learningSession as the learner-safe view for guidance because it removes instructor references, correct option ids, answer explanations, and extension assessment data.",
-      "submitAttempt requires body.answerMarkdown and may include body.userId. Preserve the learner's wording and report a withheld grade truthfully when structured assessment is unavailable.",
+      "For voice guidance, call voiceLearningSession with body.week and body.day. Teach one returned learner-safe block at a time in source order.",
+      "Before a voice attempt, you may add punctuation and paragraph breaks without changing words. Show Albert every proposed deletion, replacement, uncertain mathematical symbol, or uncertain recognition and obtain explicit confirmation. Preserve his meaning and uncertainty, read the complete formatted answer back, and obtain final explicit confirmation. Submit only answerMarkdown, deliveryMode voice, voiceSessionToken, voiceConfirmation true, and one stable idempotencyKey. Never submit audio or a separate transcript.",
+      "submitAttempt requires body.answerMarkdown and may include body.userId. Preserve the learner's wording and report the returned attempt ordinals, progress, next unlocked lesson, and any withheld grade truthfully.",
+      "upgradeEnrollment requires an exact courseId and may include body.userId. Use it only after the learner chooses the published update; Forge carries passed evidence only when the activity definition is byte-for-byte equivalent.",
       "importCourse accepts one validated Forge course package as the request body. Use exportCourse only when the user explicitly wants the canonical portable package, not as a learner read.",
       "Concept list supports query.userId, courseId, query, and dueOnly; concept detail supports query.userId. Concept definitions are package-managed and have no direct mutation route."
     ],
     example:
-      '{"routeKey":"submitAttempt","pathParams":{"courseId":"course.polynomials-etale-triple-covers","lessonId":"lesson.week-01.day-01","activityId":"activity.check-01"},"body":{"answerMarkdown":"My accepted answer"}}'
+      '{"routeKey":"voiceLearningSession","pathParams":{"courseId":"course.polynomials-etale-triple-covers"},"body":{"week":1,"day":1}}'
   },
   {
     toolName: "forge_get_preferences_workspace",
@@ -8953,20 +8959,23 @@ function buildAgentOnboardingPayload(request: {
           ],
           routeTool: "forge_call_course_route",
           summary:
-            "Dedicated package-backed learning API for installed courses, learner-safe lesson sessions, attempts, validated package transfer, and cross-course concept mastery.",
+            "Dedicated package-backed learning API for installed courses, learner-safe visual and voice lesson sessions, attempts, explicit enrollment upgrades, validated package transfer, and cross-course concept mastery.",
           routeKeys: [
             "listCourses",
             "courseDetail",
             "learningSession",
+            "voiceLearningSession",
             "submitAttempt",
+            "upgradeEnrollment",
             "importCourse",
             "exportCourse",
             "listConcepts",
             "conceptDetail"
           ],
           routeSelectionQuestions: [
-            "Is the user choosing a course, reviewing progress, continuing a lesson, submitting one activity, importing or exporting a package, finding due concepts, or inspecting one concept's mastery evidence?",
+            "Is the user choosing a course, reviewing progress, continuing visually or by voice, submitting one activity, upgrading an enrolled release, importing or exporting a package, finding due concepts, or inspecting one concept's mastery evidence?",
             "If this is learner guidance or an attempt, which exact course, lesson, and activity does the learner-safe session identify?",
+            "If this is an enrollment upgrade, has the exact current course detail been read, and has the learner explicitly chosen the available published release after seeing the carry-forward rule?",
             "If this is concept work, does the answer need one course, a search phrase, due-only review, one exact concept, or cross-course evidence?",
             "If this is package transfer, is the intent a trusted validated import or an explicit canonical export?"
           ],
@@ -8974,8 +8983,11 @@ function buildAgentOnboardingPayload(request: {
             listCourses: "GET /api/v1/courses",
             courseDetail: "GET /api/v1/courses/:courseId",
             learningSession: "GET /api/v1/courses/:courseId/learn",
+            voiceLearningSession:
+              "POST /api/v1/courses/:courseId/voice-session",
             submitAttempt:
               "POST /api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
+            upgradeEnrollment: "POST /api/v1/courses/:courseId/upgrade",
             importCourse: "POST /api/v1/courses/import",
             exportCourse: "GET /api/v1/courses/:courseId/export",
             listConcepts: "GET /api/v1/concepts",
@@ -8992,14 +9004,19 @@ function buildAgentOnboardingPayload(request: {
           writeRoutes: {
             submitAttempt:
               "/api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
+            voiceLearningSession: "/api/v1/courses/:courseId/voice-session",
+            upgradeEnrollment: "/api/v1/courses/:courseId/upgrade",
             importCourse: "/api/v1/courses/import"
           },
           notes: [
             "Course and Concept are dedicated learning surfaces, not shared batch CRUD entities.",
             "List installed courses before asking for an internal course id. Read exact course detail for syllabus and progress, and use learningSession for learner guidance or activity selection.",
             "The learner-safe session removes instructor references, correct option ids, answer explanations, and extension assessment data. Never reconstruct or expose those hidden fields while helping with an activity.",
-            "submitAttempt requires exact courseId, lessonId, and activityId path parameters plus answerMarkdown in the body. Preserve the learner's wording. Deterministic multiple-choice grading is local; written grading can be withheld when structured model assessment is unavailable.",
-            "Import validates package references and the canonical SHA-256 hash. Conflicting concept definitions and mutation of a course with learner evidence are rejected; report those conflicts rather than bypassing them.",
+            "voiceLearningSession requires one exact course plus week and day. It returns the full course outline, the learner-safe lesson session, an expiring lesson-scoped token, and the source-order delivery policy. Teach one manageable block or activity at a time.",
+            "For voice answers, add punctuation and paragraph breaks without changing Albert's words. Show him every proposed deletion, replacement, uncertain mathematical symbol, or uncertain recognition and obtain explicit confirmation. Preserve his meaning, uncertainty, reasoning, and claims. Read the complete formatted answer back and obtain final explicit confirmation before submitAttempt. Send only answerMarkdown, deliveryMode voice, the current voiceSessionToken, voiceConfirmation true, and a stable idempotencyKey. Never send audio, recording metadata, or a separate transcript.",
+            "submitAttempt requires exact courseId, lessonId, and activityId path parameters plus answerMarkdown in the body. Preserve the learner's wording. The response identifies the lesson and activity attempt ordinals and returns assessment, progress, and the next unlocked lesson. Deterministic multiple-choice grading is local; written grading can be withheld when structured model assessment is unavailable.",
+            "upgradeEnrollment is explicit and versioned. It preserves the enrolled immutable release until chosen, then carries only passed activities with unchanged content hashes and returns an audit receipt.",
+            "Import validates package references and the canonical SHA-256 hash. Release versions are immutable; a new version preserves existing versioned enrollments and exact activity snapshots.",
             "Export returns the canonical portable package and may contain instructor material. Use it only for explicit package transfer, never as the learner view.",
             "Concept list accepts userId, courseId, query, and dueOnly. Concept detail combines definition, prerequisites, related concepts, course coverage, lesson references, learner evidence, and multidimensional mastery.",
             "Concept definitions come from validated packages and have no direct create, patch, or delete route. Keep definition truth separate from learner evidence and mastery estimates."
@@ -9174,6 +9191,7 @@ function buildAgentOnboardingPayload(request: {
       courses: "/api/v1/courses",
       courseDetail: "/api/v1/courses/:courseId",
       courseLearningSession: "/api/v1/courses/:courseId/learn",
+      courseVoiceLearningSession: "/api/v1/courses/:courseId/voice-session",
       courseAttempt:
         "/api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
       courseImport: "/api/v1/courses/import",

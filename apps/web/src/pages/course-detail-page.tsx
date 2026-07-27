@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ArrowRight,
@@ -9,6 +9,7 @@ import {
   Clock3,
   ExternalLink,
   Library,
+  Lock,
   Trophy
 } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
@@ -17,17 +18,29 @@ import { PageHero } from "@/components/shell/page-hero";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { Card } from "@/components/ui/card";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
-import { getForgeCourse } from "@/lib/api";
+import { getForgeCourse, upgradeForgeCourseEnrollment } from "@/lib/api";
 
 export function CourseDetailPage() {
   const { courseId = "" } = useParams();
   const shell = useForgeShell();
   const userId = shell.selectedUserIds[0];
+  const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["forge-course", courseId, userId],
     queryFn: () => getForgeCourse(courseId, userId)
   });
   const lessons = query.data?.lessons;
+  const upgrade = useMutation({
+    mutationFn: () => upgradeForgeCourseEnrollment(courseId, userId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["forge-course", courseId]
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["forge-course-learn", courseId]
+      });
+    }
+  });
   const lessonsByModule = useMemo(() => {
     const map = new Map<string, NonNullable<typeof lessons>>();
     for (const lesson of lessons ?? []) {
@@ -55,9 +68,18 @@ export function CourseDetailPage() {
       </div>
     );
 
-  const { course, progress, modules, concepts, resources } = query.data;
+  const { course, release, progress, modules, concepts, resources } =
+    query.data;
   const startLesson =
-    progress.currentLessonId ?? course.featuredLessonId ?? course.entryLessonId;
+    (progress.currentLessonId &&
+    query.data.lessons.some(
+      (lesson) => lesson.id === progress.currentLessonId && lesson.unlocked
+    )
+      ? progress.currentLessonId
+      : query.data.lessons.find((lesson) => lesson.unlocked && !lesson.completed)
+          ?.id) ??
+    query.data.lessons.find((lesson) => lesson.unlocked)?.id ??
+    course.entryLessonId;
   return (
     <div>
       <PageHero
@@ -86,6 +108,35 @@ export function CourseDetailPage() {
           >
             <ArrowLeft className="size-4" /> Course library
           </Link>
+          {release.updateAvailable ? (
+            <Card className="mt-4 border-[var(--primary)] p-5">
+              <div className="type-label text-[var(--primary)]">
+                Course update available
+              </div>
+              <h2 className="mt-2 font-editorial text-2xl text-[var(--ui-ink-strong)]">
+                Review and move to version {release.latestVersion}
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                You are learning from version {release.enrolledVersion}. Forge
+                keeps that release unchanged until you choose to update. Passed
+                work carries forward only when the activity itself is unchanged.
+              </p>
+              <button
+                type="button"
+                className="course-library-start mt-4 min-h-11 px-5"
+                disabled={upgrade.isPending}
+                onClick={() => upgrade.mutate()}
+              >
+                {upgrade.isPending ? "Checking saved work…" : "Update course"}
+              </button>
+              {upgrade.isError ? (
+                <p className="mt-3 text-sm text-[var(--danger)]">
+                  The update could not be completed. Your current course and
+                  saved work have not changed.
+                </p>
+              ) : null}
+            </Card>
+          ) : null}
           <Card className="mt-4 grid gap-5 p-5 sm:grid-cols-4 sm:p-6">
             <div className="course-detail-stat">
               <strong>{progress.progressPercent}%</strong>
@@ -172,12 +223,8 @@ export function CourseDetailPage() {
                         const completed = weekLessons.filter(
                           (lesson) => lesson.completed
                         ).length;
-                        return (
-                          <Link
-                            key={week}
-                            to={`/courses/${course.slug}/learn?lesson=${first.id}`}
-                            className="course-week-link"
-                          >
+                        const weekContent = (
+                          <>
                             <div className="flex items-center justify-between">
                               <span className="type-label text-[var(--tertiary)]">
                                 Week {week}
@@ -192,10 +239,36 @@ export function CourseDetailPage() {
                               {first.title.split(" · ").at(-1)}
                             </div>
                             <div className="mt-2 text-xs text-[var(--ui-ink-soft)]">
-                              Open daily work{" "}
-                              <ArrowRight className="ml-1 inline size-3" />
+                              {first.unlocked ? (
+                                <>
+                                  Open daily work{" "}
+                                  <ArrowRight className="ml-1 inline size-3" />
+                                </>
+                              ) : (
+                                <>
+                                  <Lock className="mr-1 inline size-3" />
+                                  Complete the preceding week first
+                                </>
+                              )}
                             </div>
+                          </>
+                        );
+                        return first.unlocked ? (
+                          <Link
+                            key={week}
+                            to={`/courses/${course.slug}/learn?lesson=${first.id}`}
+                            className="course-week-link"
+                          >
+                            {weekContent}
                           </Link>
+                        ) : (
+                          <div
+                            key={week}
+                            className="course-week-link opacity-65"
+                            aria-label={`Week ${week} is locked until the preceding week is complete`}
+                          >
+                            {weekContent}
+                          </div>
                         );
                       })}
                     </div>

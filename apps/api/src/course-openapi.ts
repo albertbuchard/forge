@@ -33,7 +33,7 @@ const packageSchema = {
   required: ["schemaVersion", "course", "modules", "lessons", "provenance"],
   additionalProperties: true,
   properties: {
-    schemaVersion: { type: "string", enum: ["1.0"] },
+    schemaVersion: { type: "string", enum: ["1.0", "1.1"] },
     course: { type: "object", additionalProperties: true },
     presentation: { type: "object", additionalProperties: true },
     grading: { type: "object", additionalProperties: true },
@@ -71,7 +71,7 @@ export function buildCourseOpenApiPaths(): Record<string, unknown> {
       post: {
         summary: "Validate and import a Forge course package",
         description:
-          "Verifies package references and the canonical SHA-256 hash. Conflicting concept definitions and mutation of a course with learner evidence are rejected.",
+          "Verifies package references and the canonical SHA-256 hash. Course releases are immutable; importing a new version preserves versioned enrollments and exact activity snapshots.",
         tags: ["Courses"],
         requestBody: {
           required: true,
@@ -102,6 +102,33 @@ export function buildCourseOpenApiPaths(): Record<string, unknown> {
           },
           "404": errorResponse,
           "500": errorResponse
+        }
+      }
+    },
+    "/api/v1/courses/{courseId}/upgrade": {
+      post: {
+        summary: "Move one enrollment to the latest immutable course release",
+        description:
+          "Carries only passed activities whose exact assessment definition is unchanged. Returns the carried and remaining activity identifiers as an audit receipt.",
+        tags: ["Courses"],
+        parameters: [courseIdParameter],
+        requestBody: {
+          required: false,
+          content: jsonContent({
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              userId: { type: "string", maxLength: 160 }
+            }
+          })
+        },
+        responses: {
+          "200": {
+            description: "Versioned enrollment upgrade receipt",
+            content: jsonContent({ type: "object" })
+          },
+          "404": errorResponse,
+          "409": errorResponse
         }
       }
     },
@@ -140,7 +167,63 @@ export function buildCourseOpenApiPaths(): Record<string, unknown> {
             description: "Learner-safe lesson session",
             content: jsonContent({ type: "object" })
           },
-          "404": errorResponse
+          "404": errorResponse,
+          "409": errorResponse
+        }
+      }
+    },
+    "/api/v1/courses/{courseId}/voice-session": {
+      post: {
+        summary: "Start a privacy-safe voice-guided lesson session",
+        description:
+          "Returns the full course outline, one learner-safe week/day lesson, an expiring lesson-scoped token, and a source-order delivery policy. The session stores no audio or transcript.",
+        tags: ["Courses"],
+        parameters: [courseIdParameter],
+        requestBody: {
+          required: true,
+          content: jsonContent({
+            type: "object",
+            additionalProperties: false,
+            required: ["week", "day"],
+            properties: {
+              userId: { type: "string", maxLength: 160 },
+              week: { type: "integer", minimum: 1, maximum: 500 },
+              day: { type: "integer", minimum: 1, maximum: 31 }
+            }
+          })
+        },
+        responses: {
+          "200": {
+            description:
+              "Course outline, learner-safe lesson session, and expiring voice scope",
+            content: jsonContent({
+              type: "object",
+              additionalProperties: false,
+              required: ["outline", "session", "voice"],
+              properties: {
+                outline: { type: "object" },
+                session: { type: "object" },
+                voice: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: [
+                    "token",
+                    "expiresAt",
+                    "lessonId",
+                    "deliveryPolicy"
+                  ],
+                  properties: {
+                    token: { type: "string", format: "uuid" },
+                    expiresAt: { type: "string", format: "date-time" },
+                    lessonId: { type: "string" },
+                    deliveryPolicy: { type: "object" }
+                  }
+                }
+              }
+            })
+          },
+          "404": errorResponse,
+          "409": errorResponse
         }
       }
     },
@@ -149,7 +232,7 @@ export function buildCourseOpenApiPaths(): Record<string, unknown> {
         post: {
           summary: "Submit and assess one course activity attempt",
           description:
-            "Deterministic activities are graded locally. Written mathematics uses the configured Forge model and withholds the grade when structured assessment is unavailable.",
+            "Deterministic activities are graded locally. Written mathematics uses the configured Forge model and withholds the grade when structured assessment is unavailable. Voice delivery submits only Albert's confirmed text answer; audio and separate transcripts are not accepted.",
           tags: ["Courses"],
           parameters: [
             courseIdParameter,
@@ -170,6 +253,7 @@ export function buildCourseOpenApiPaths(): Record<string, unknown> {
             required: true,
             content: jsonContent({
               type: "object",
+              additionalProperties: false,
               required: ["answerMarkdown"],
               properties: {
                 userId: { type: "string", maxLength: 160 },
@@ -177,13 +261,35 @@ export function buildCourseOpenApiPaths(): Record<string, unknown> {
                   type: "string",
                   minLength: 1,
                   maxLength: 60000
+                },
+                deliveryMode: {
+                  type: "string",
+                  enum: ["visual", "voice"],
+                  default: "visual"
+                },
+                voiceSessionToken: { type: "string", format: "uuid" },
+                voiceConfirmation: { type: "boolean", enum: [true] },
+                idempotencyKey: {
+                  type: "string",
+                  minLength: 8,
+                  maxLength: 160
                 }
               }
             })
           },
           responses: {
+            "200": {
+              description: "Original result for an exact idempotent retry",
+              content: jsonContent({ type: "object" })
+            },
             "201": {
-              description: "Saved attempt and structured assessment",
+              description:
+                "Saved attempt, attempt ordinals, assessment, progress, and next unlocked lesson",
+              content: jsonContent({ type: "object" })
+            },
+            "202": {
+              description:
+                "Original attempt for an exact retry is still being assessed",
               content: jsonContent({ type: "object" })
             },
             "404": errorResponse,

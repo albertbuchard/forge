@@ -12,10 +12,52 @@ import {
 } from "./db.js";
 import {
   ensureBuiltInCourses,
-  getActivityForAssessment
+  exportCoursePackage
 } from "./repositories/courses.js";
 import { ensureSystemUsers } from "./repositories/users.js";
 import { assessCourseResponse } from "./services/course-assessment.js";
+
+function proofAssessmentContext() {
+  const course = exportCoursePackage(
+    "course.polynomials-etale-triple-covers"
+  );
+  const lesson = course.lessons.find(
+    (entry) => entry.id === "term-1-week-17-day-3"
+  );
+  assert.ok(lesson);
+  const activity = lesson.activities.find(
+    (entry) => entry.id === "term-1-week-17-day-3-exit-v2"
+  );
+  assert.ok(activity);
+  const conceptById = new Map(
+    course.concepts.map((concept) => [concept.id, concept])
+  );
+  return {
+    course: { title: course.course.title },
+    lesson: { title: lesson.title },
+    activity,
+    concepts: activity.conceptIds.flatMap((conceptId) => {
+      const concept = conceptById.get(conceptId);
+      return concept
+        ? [
+            {
+              id: concept.id,
+              title: concept.title,
+              summary: concept.summary,
+              definitionMarkdown: concept.definitionMarkdown
+            }
+          ]
+        : [];
+    }),
+    gradeScale:
+      course.grading.assessmentProfiles.find(
+        (profile) => profile.id === activity.assessmentProfileId
+      )?.gradeScale ?? course.grading.gradeScale,
+    allowedMisconceptionIds: course.grading.misconceptions.map(
+      (entry) => entry.id
+    )
+  };
+}
 
 test("assesses proof JSON, filters unknown concepts, and protects learner text", async () => {
   const dataRoot = await mkdtemp(
@@ -60,11 +102,7 @@ test("assesses proof JSON, filters unknown concepts, and protects learner text",
         now,
         now
       );
-    const context = getActivityForAssessment(
-      "course.polynomials-etale-triple-covers",
-      "term-1-week-17-day-3",
-      "week-17-day-3-local-not-global"
-    );
+    const context = proofAssessmentContext();
     const modelAssessment = (scores: number[], conceptScore = 0.95) => ({
       summary: "The argument separates local and global claims.",
       strengths: ["Correct theorem use."],
@@ -199,11 +237,7 @@ test("withholds a grade when structured model output is unusable", async () => {
         ) VALUES (?, ?, 'mock', ?, 'proof-test', NULL, '', 1, '{}', ?, ?)`
       )
       .run("course_test_profile", "Course test", "http://mock.local", now, now);
-    const context = getActivityForAssessment(
-      "course.polynomials-etale-triple-covers",
-      "term-1-week-17-day-3",
-      "week-17-day-3-local-not-global"
-    );
+    const context = proofAssessmentContext();
     const assessmentInput = {
       courseTitle: context.course.title,
       lessonTitle: context.lesson.title,
@@ -254,6 +288,88 @@ test("withholds a grade when structured model output is unusable", async () => {
       /No enabled Forge model connection/u
     );
     assert.match(disconnected.feedback.nextStep, /Connect an enabled model/u);
+  } finally {
+    closeDatabase();
+    await rm(dataRoot, { recursive: true, force: true });
+  }
+});
+
+test("requires an overall score in the model schema for non-proof written work", async () => {
+  const dataRoot = await mkdtemp(
+    path.join(os.tmpdir(), "forge-assessment-score-schema-")
+  );
+  configureDatabase({ dataRoot });
+  configureLegacyWikiAutoImport(false);
+  try {
+    await initializeDatabase();
+    ensureSystemUsers();
+    ensureBuiltInCourses();
+    const now = new Date().toISOString();
+    getDatabase().prepare("UPDATE wiki_llm_profiles SET enabled = 0").run();
+    getDatabase()
+      .prepare(
+        `INSERT INTO wiki_llm_profiles (
+          id, label, provider, base_url, model, secret_id, system_prompt,
+          enabled, metadata_json, created_at, updated_at
+        ) VALUES (?, ?, 'mock', ?, 'short-answer-test', NULL, '', 1, '{}', ?, ?)`
+      )
+      .run(
+        "course_short_answer_profile",
+        "Course short answer",
+        "http://mock.local",
+        now,
+        now
+      );
+    const course = exportCoursePackage(
+      "course.polynomials-etale-triple-covers"
+    );
+    const lesson = course.lessons.find(
+      (entry) => entry.id === "term-0-week-1-day-1"
+    );
+    assert.ok(lesson);
+    const activity = lesson.activities.find(
+      (entry) => entry.id === "term-0-week-1-day-1-formative-v3"
+    );
+    assert.ok(activity);
+    assert.equal(activity.type, "short_answer");
+    let capturedFormat: Record<string, unknown> | undefined;
+    const result = await assessCourseResponse(
+      {
+        runTextPrompt: async (_profile, input) => {
+          capturedFormat = input.format;
+          return {
+            outputText: JSON.stringify({
+              overallScore: 84,
+              summary: "The answer applies the definitions correctly.",
+              strengths: ["The excluded domain point is handled explicitly."],
+              issues: [],
+              lineFeedback: [],
+              nextStep: "Continue to the next checkpoint.",
+              criterionScores: [],
+              conceptScores: [],
+              misconceptionIds: []
+            })
+          };
+        }
+      },
+      {
+        courseTitle: course.course.title,
+        lessonTitle: lesson.title,
+        activity,
+        concepts: [],
+        answerMarkdown: "A complete short answer."
+      }
+    );
+    const formatSchema = capturedFormat?.schema as
+      | {
+          properties?: {
+            overallScore?: { type?: unknown };
+          };
+        }
+      | undefined;
+    assert.equal(formatSchema?.properties?.overallScore?.type, "number");
+    assert.equal(result.feedback.score, 84);
+    assert.equal(result.feedback.verdict, "pass");
   } finally {
     closeDatabase();
     await rm(dataRoot, { recursive: true, force: true });

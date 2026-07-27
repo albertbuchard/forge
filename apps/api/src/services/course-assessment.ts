@@ -95,7 +95,10 @@ function buildAssessmentFormat(context: AssessmentContext) {
     name: "forge_course_assessment",
     strict: true,
     schema: closedObject({
-      overallScore: { type: ["number", "null"], minimum: 0, maximum: 100 },
+      overallScore:
+        context.activity.type === "proof"
+          ? { type: ["number", "null"], minimum: 0, maximum: 100 }
+          : { type: "number", minimum: 0, maximum: 100 },
       summary: { type: "string" },
       strengths: { type: "array", items: { type: "string" } },
       issues: { type: "array", items: { type: "string" } },

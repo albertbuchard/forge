@@ -87,6 +87,19 @@ export const courseContentBlockSchema = z.discriminatedUnion("type", [
     presentation: z.enum(["link", "card", "embed"]).default("link")
   }),
   z.object({
+    type: z.literal("checkpoint"),
+    activityId: stableIdSchema,
+    title: nonEmptyTextSchema.max(180),
+    introMarkdown: z.string().trim().default(""),
+    continuation: z.enum([
+      "after_pass",
+      "after_remediation",
+      "after_review",
+      "always"
+    ]),
+    remediationActivityId: stableIdSchema.optional()
+  }),
+  z.object({
     type: z.literal("extension"),
     namespace: stableIdSchema,
     renderer: stableIdSchema,
@@ -121,7 +134,8 @@ const activityBaseSchema = z.object({
   templateId: stableIdSchema.optional(),
   reviewAfterDays: z
     .array(z.number().int().positive().max(365))
-    .default([1, 3, 8, 16])
+    .default([1, 3, 8, 16]),
+  revision: z.string().trim().min(1).max(40).default("1")
 });
 
 export const courseActivitySchema = z.discriminatedUnion("type", [
@@ -242,7 +256,7 @@ export const gradeScaleSchema = z
   .min(2);
 
 export const forgeCoursePackageSchema = z.object({
-  schemaVersion: z.literal("1.0"),
+  schemaVersion: z.enum(["1.0", "1.1"]),
   course: z.object({
     id: stableIdSchema,
     slug: stableIdSchema,
@@ -359,6 +373,15 @@ export const forgeCoursePackageSchema = z.object({
     })
     .default({}),
   conceptRefs: z.array(courseConceptRefSchema).default([]),
+  conceptUpgrades: z
+    .array(
+      z.object({
+        conceptId: stableIdSchema,
+        fromContentHash: z.string().regex(/^[a-f0-9]{64}$/u),
+        reason: nonEmptyTextSchema.max(1_200)
+      })
+    )
+    .optional(),
   concepts: z.array(courseConceptSchema).default([]),
   modules: z.array(courseModuleSchema).min(1),
   lessons: z.array(courseLessonSchema).min(1),
@@ -475,6 +498,9 @@ function assertReferences(coursePackage: ForgeCoursePackage) {
     ...coursePackage.concepts.map((entry) => entry.id),
     ...coursePackage.conceptRefs.map((entry) => entry.id)
   ]);
+  const duplicateConceptUpgradeIds = duplicateIds(
+    (coursePackage.conceptUpgrades ?? []).map((entry) => entry.conceptId)
+  );
   const duplicateLessonIds = duplicateIds(
     coursePackage.lessons.map((entry) => entry.id)
   );
@@ -491,6 +517,17 @@ function assertReferences(coursePackage: ForgeCoursePackage) {
   );
   if (duplicateConceptIds.length)
     errors.push(`Duplicate concept ids: ${duplicateConceptIds.join(", ")}`);
+  if (duplicateConceptUpgradeIds.length)
+    errors.push(
+      `Duplicate concept upgrade ids: ${duplicateConceptUpgradeIds.join(", ")}`
+    );
+  for (const upgrade of coursePackage.conceptUpgrades ?? []) {
+    if (!definedConceptIds.has(upgrade.conceptId)) {
+      errors.push(
+        `Concept upgrade ${upgrade.conceptId} must target a concept defined by this package.`
+      );
+    }
+  }
   if (duplicateLessonIds.length)
     errors.push(`Duplicate lesson ids: ${duplicateLessonIds.join(", ")}`);
   if (duplicateModuleIds.length)
@@ -595,6 +632,81 @@ function assertReferences(coursePackage: ForgeCoursePackage) {
     for (const conceptId of lesson.conceptIds) {
       if (!conceptIds.has(conceptId))
         errors.push(`Lesson ${lesson.id} links missing concept ${conceptId}.`);
+    }
+    const activityIds = new Set(
+      lesson.activities.map((activity) => activity.id)
+    );
+    const checkpointBlocks = lesson.content.filter(
+      (
+        block
+      ): block is Extract<
+        (typeof lesson.content)[number],
+        { type: "checkpoint" }
+      > => block.type === "checkpoint"
+    );
+    const duplicateCheckpointActivityIds = duplicateIds(
+      checkpointBlocks.map((block) => block.activityId)
+    );
+    if (duplicateCheckpointActivityIds.length) {
+      errors.push(
+        `Lesson ${lesson.id} places checkpoint activities more than once: ${duplicateCheckpointActivityIds.join(", ")}.`
+      );
+    }
+    for (const checkpoint of checkpointBlocks) {
+      const activity = lesson.activities.find(
+        (candidate) => candidate.id === checkpoint.activityId
+      );
+      if (!activity) {
+        errors.push(
+          `Lesson ${lesson.id} checkpoint links missing activity ${checkpoint.activityId}.`
+        );
+        continue;
+      }
+      if (
+        checkpoint.continuation === "after_remediation" &&
+        !checkpoint.remediationActivityId
+      ) {
+        errors.push(
+          `Lesson ${lesson.id} checkpoint ${checkpoint.activityId} requires a remediation activity.`
+        );
+      }
+      if (
+        checkpoint.remediationActivityId &&
+        (!activityIds.has(checkpoint.remediationActivityId) ||
+          checkpoint.remediationActivityId === checkpoint.activityId)
+      ) {
+        errors.push(
+          `Lesson ${lesson.id} checkpoint ${checkpoint.activityId} has invalid remediation activity ${checkpoint.remediationActivityId}.`
+        );
+      }
+      if (
+        activity.required &&
+        (checkpoint.continuation === "after_review" ||
+          checkpoint.continuation === "always")
+      ) {
+        errors.push(
+          `Required activity ${activity.id} must use pass-based or remediation-based continuation.`
+        );
+      }
+    }
+    if (coursePackage.schemaVersion === "1.1") {
+      for (const activity of lesson.activities.filter(
+        (candidate) => candidate.required
+      )) {
+        if (
+          !checkpointBlocks.some(
+            (checkpoint) => checkpoint.activityId === activity.id
+          )
+        ) {
+          errors.push(
+            `Schema 1.1 lesson ${lesson.id} does not place required activity ${activity.id} in its teaching sequence.`
+          );
+        }
+      }
+    } else if (checkpointBlocks.length > 0) {
+      errors.push(
+        `Schema 1.0 lesson ${lesson.id} cannot contain checkpoint blocks.`
+      );
     }
     for (const activity of lesson.activities) {
       for (const conceptId of activity.conceptIds) {

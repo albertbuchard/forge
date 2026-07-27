@@ -325,6 +325,31 @@
   line-height: 1.55;
 }
 
+.course-release-notice {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 1.5rem;
+  border: 1px solid color-mix(in srgb, var(--course-gold) 60%, transparent);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--course-gold) 10%, var(--course-paper));
+  padding: 0.9rem 1rem;
+  color: var(--course-ink-soft);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.course-release-notice strong {
+  color: var(--course-navy);
+}
+
+.course-release-notice a {
+  width: fit-content;
+  color: var(--course-red);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
 .course-objectives {
   margin-top: 1.8rem;
   border-block: 1px solid var(--course-line);
@@ -369,7 +394,44 @@
 .course-content-stack {
   display: grid;
   gap: 1rem;
-  margin-top: 1.8rem;
+  margin-top: 1rem;
+}
+
+.course-flow-stage {
+  margin-top: 2rem;
+  border: 1px solid var(--course-line);
+  border-radius: 0.45rem;
+  background: var(--course-paper-high);
+  padding: clamp(1.1rem, 3vw, 1.8rem);
+  box-shadow: 0 14px 40px
+    color-mix(in srgb, var(--course-navy) 5%, transparent);
+}
+
+.course-flow-stage__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--course-line);
+  padding-bottom: 0.75rem;
+  color: var(--course-muted);
+  font-family: var(--font-label);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.course-flow-stage__next {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1.25rem;
+}
+
+.course-flow-stage .course-markdown {
+  max-width: 68ch;
 }
 
 .course-markdown {
@@ -485,6 +547,91 @@
 }
 .course-callout.is-definition {
   border-left-color: var(--course-green);
+}
+
+.course-inline-checkpoint {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.9rem;
+  border: 1px solid var(--course-line);
+  border-left: 3px solid var(--course-package-accent, var(--course-red));
+  border-radius: 0.3rem;
+  background: var(--course-paper-high);
+  padding: 1rem 1.1rem;
+  color: var(--course-ink);
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.course-inline-checkpoint:hover,
+.course-inline-checkpoint:focus-visible,
+.course-inline-checkpoint.is-active {
+  border-color: var(--course-package-accent, var(--course-red));
+  background: color-mix(
+    in srgb,
+    var(--course-package-accent, var(--course-red)) 6%,
+    var(--course-paper-high)
+  );
+}
+
+.course-inline-checkpoint:hover {
+  transform: translateY(-1px);
+}
+
+.course-inline-checkpoint:focus-visible {
+  outline: 2px solid var(--ui-focus-ring);
+  outline-offset: 2px;
+}
+
+.course-inline-checkpoint.is-complete {
+  border-left-color: var(--course-green);
+}
+
+.course-inline-checkpoint__marker {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  color: var(--course-package-accent, var(--course-red));
+}
+
+.course-inline-checkpoint.is-complete .course-inline-checkpoint__marker {
+  color: var(--course-green);
+}
+
+.course-inline-checkpoint__copy {
+  min-width: 0;
+}
+
+.course-inline-checkpoint__copy > strong {
+  display: block;
+  font-family: var(--font-editorial);
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+.course-inline-checkpoint__copy .course-markdown {
+  margin-top: 0.25rem;
+  color: var(--course-ink-soft);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.course-inline-checkpoint__status {
+  color: var(--course-muted);
+  font-family: var(--font-label);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .course-proof-studio,
@@ -986,6 +1133,13 @@
   .course-proof-studio,
   .course-feedback {
     margin-inline: -0.2rem;
+  }
+  .course-inline-checkpoint {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 0.9rem;
+  }
+  .course-inline-checkpoint__status {
+    grid-column: 2;
   }
   .course-answer-wrap textarea {
     min-height: 14rem;

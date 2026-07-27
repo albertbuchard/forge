@@ -6831,6 +6831,23 @@ export function getForgeCourse(courseId: string, userId?: string) {
   );
 }
 
+export function upgradeForgeCourseEnrollment(
+  courseId: string,
+  userId?: string
+) {
+  return request<{
+    upgraded: boolean;
+    receiptId?: string;
+    fromVersion: string;
+    toVersion: string;
+    carriedActivityIds: string[];
+    remainingActivityIds: string[];
+  }>(`/api/v1/courses/${encodeURIComponent(courseId)}/upgrade`, {
+    method: "POST",
+    body: JSON.stringify(userId ? { userId } : {})
+  });
+}
+
 export function importForgeCourse(coursePackage: unknown) {
   return request<{
     course: ForgeCourse;
@@ -6879,6 +6896,11 @@ export function submitForgeCourseAttempt(input: {
     grade: string | null;
     pointsAwarded: number;
     feedback: AssessmentFeedback;
+    deliveryMode: "visual" | "voice";
+    lessonAttemptOrdinal: number;
+    activityAttemptOrdinal: number;
+    progress: CourseProgress;
+    nextLessonId: string | null;
   }>(
     `/api/v1/courses/${encodeURIComponent(input.courseId)}/lessons/${encodeURIComponent(input.lessonId)}/activities/${encodeURIComponent(input.activityId)}/attempts`,
     {

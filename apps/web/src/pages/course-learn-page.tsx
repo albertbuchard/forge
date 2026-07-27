@@ -18,6 +18,7 @@ import {
   CircleAlert,
   Clock3,
   Library,
+  Lock,
   Menu,
   MessageSquareText,
   Sparkles,
@@ -43,6 +44,7 @@ import { getForgeLearningSession, submitForgeCourseAttempt } from "@/lib/api";
 import type {
   AssessmentFeedback,
   CourseActivity,
+  CourseContentBlock,
   LearningSession
 } from "@/lib/course-types";
 import { cn } from "@/lib/utils";
@@ -151,6 +153,112 @@ function attemptStatusLabel(
   if (attempt.status === "assessing") return "Reviewing";
   if (attempt.status === "needs_review") return "Needs review";
   return attempt.feedback?.verdict === "pass" ? "Passed" : "Revise";
+}
+
+export function courseLessonFlowState(
+  session: Pick<LearningSession, "lesson" | "latestAttempts">
+) {
+  const hasCheckpointFlow = session.lesson.content.some(
+    (block) => block.type === "checkpoint"
+  );
+  const attemptFor = (activityId: string) =>
+    session.latestAttempts.find(
+      (attempt) => attempt?.activityId === activityId
+    );
+  const requiredPassed = session.lesson.activities
+    .filter((activity) => activity.required)
+    .every(
+      (activity) =>
+        attemptFor(activity.id)?.status === "assessed" &&
+        attemptFor(activity.id)?.feedback?.verdict === "pass"
+    );
+  if (!hasCheckpointFlow) {
+    return {
+      blocks: session.lesson.content,
+      availableActivityIds: session.lesson.activities.map(
+        (activity) => activity.id
+      ),
+      blockedBy: null as Extract<
+        CourseContentBlock,
+        { type: "checkpoint" }
+      > | null,
+      complete: requiredPassed
+    };
+  }
+
+  const blocks: CourseContentBlock[] = [];
+  const availableActivityIds: string[] = [];
+  let blockedBy: Extract<
+    CourseContentBlock,
+    { type: "checkpoint" }
+  > | null = null;
+  for (const block of session.lesson.content) {
+    blocks.push(block);
+    if (block.type !== "checkpoint") continue;
+    availableActivityIds.push(block.activityId);
+    const attempt = attemptFor(block.activityId);
+    const remediationAttempt = block.remediationActivityId
+      ? attemptFor(block.remediationActivityId)
+      : null;
+    const passed =
+      attempt?.status === "assessed" &&
+      attempt.feedback?.verdict === "pass";
+    const remediationPassed =
+      remediationAttempt?.status === "assessed" &&
+      remediationAttempt.feedback?.verdict === "pass";
+    const reviewed =
+      attempt?.status === "assessed" && attempt.feedback !== null;
+    const mayContinue =
+      block.continuation === "always" ||
+      (block.continuation === "after_review" && reviewed) ||
+      (block.continuation === "after_pass" && passed) ||
+      (block.continuation === "after_remediation" &&
+        (passed || remediationPassed));
+    if (!mayContinue) {
+      blockedBy = block;
+      break;
+    }
+  }
+  return {
+    blocks,
+    availableActivityIds,
+    blockedBy,
+    complete: requiredPassed
+  };
+}
+
+export function CourseSectionNavigation({
+  currentIndex,
+  totalSteps,
+  canContinue,
+  continueLabel = "Continue",
+  onPrevious,
+  onContinue
+}: {
+  currentIndex: number;
+  totalSteps: number;
+  canContinue: boolean;
+  continueLabel?: string;
+  onPrevious: () => void;
+  onContinue: () => void;
+}) {
+  const hasPrevious = currentIndex > 0;
+  const hasNext = currentIndex < totalSteps - 1;
+  if (!hasPrevious && !(canContinue && hasNext)) return null;
+  return (
+    <div className="course-flow-stage__next">
+      {hasPrevious ? (
+        <Button size="lg" variant="secondary" onClick={onPrevious}>
+          <ArrowLeft className="size-4" /> Previous section
+        </Button>
+      ) : null}
+      {canContinue && hasNext ? (
+        <Button size="lg" className="ml-auto" onClick={onContinue}>
+          {continueLabel} <ArrowRight className="size-4" />
+        </Button>
+      ) : null}
+    </div>
+  );
 }
 
 export function CourseDrawer({
@@ -386,8 +494,15 @@ function CourseOutline({
                       }
                       className={cn(
                         "course-outline__lesson",
-                        lesson.id === session.lesson.id && "is-current"
+                        lesson.id === session.lesson.id && "is-current",
+                        !lesson.unlocked && "is-locked"
                       )}
+                      disabled={!lesson.unlocked}
+                      aria-label={
+                        lesson.unlocked
+                          ? undefined
+                          : `Week ${lesson.week}, day ${lesson.day}: locked until the preceding day is complete`
+                      }
                       onClick={() => {
                         onNavigate(lesson.id);
                         onClose?.();
@@ -396,6 +511,8 @@ function CourseOutline({
                       <span className="course-outline__lesson-marker">
                         {lesson.completed ? (
                           <Check className="size-3" />
+                        ) : !lesson.unlocked ? (
+                          <Lock className="size-3" aria-hidden="true" />
                         ) : (
                           lesson.day
                         )}
@@ -404,6 +521,7 @@ function CourseOutline({
                         <span className="block text-[10px] text-[var(--course-outline-ink-subtle)]">
                           Week {lesson.week} · Day {lesson.day}
                           {lesson.id === session.lesson.id ? " · Current" : ""}
+                          {!lesson.unlocked ? " · Locked" : ""}
                         </span>
                         <span className="block truncate text-[11px] text-[var(--course-outline-ink-body)]">
                           {lesson.title.split(" · ")[0]}
@@ -682,8 +800,7 @@ export function CourseLearnPage() {
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [hydratedDraftKey, setHydratedDraftKey] = useState<string | null>(null);
   const [activeActivityId, setActiveActivityId] = useState<string | null>(null);
-  const activitySwitcherRef = useRef<HTMLDivElement>(null);
-  const activeActivityTabRef = useRef<HTMLButtonElement>(null);
+  const [activeBlockIndex, setActiveBlockIndex] = useState(0);
   const [localFeedback, setLocalFeedback] = useState<AssessmentFeedback | null>(
     null
   );
@@ -693,13 +810,33 @@ export function CourseLearnPage() {
     queryFn: () => getForgeLearningSession({ courseId, lessonId, userId })
   });
   const session = query.data;
+  const lessonFlow = useMemo(
+    () => (session ? courseLessonFlowState(session) : null),
+    [session]
+  );
+  const activeBlock =
+    lessonFlow?.blocks[
+      Math.min(activeBlockIndex, Math.max(lessonFlow.blocks.length - 1, 0))
+    ];
+  const availableActivities =
+    session?.lesson.activities.filter((entry) =>
+      lessonFlow?.availableActivityIds.includes(entry.id)
+    ) ?? [];
   const activity =
-    session?.lesson.activities.find((entry) => entry.id === activeActivityId) ??
-    session?.lesson.activities[0];
+    (activeBlock?.type === "checkpoint"
+      ? availableActivities.find(
+          (entry) => entry.id === activeBlock.activityId
+        )
+      : availableActivities.find((entry) => entry.id === activeActivityId)) ??
+    availableActivities[0];
 
   useEffect(() => {
     if (!session) {
       setActiveActivityId(null);
+      return;
+    }
+    if (activeBlock?.type === "checkpoint") {
+      setActiveActivityId(activeBlock.activityId);
       return;
     }
     const needsWork = (candidate: CourseActivity) => {
@@ -710,37 +847,21 @@ export function CourseLearnPage() {
         latest?.status !== "assessed" || latest.feedback?.verdict !== "pass"
       );
     };
-    const firstPending =
-      session.lesson.activities.find(
-        (candidate) => candidate.required && needsWork(candidate)
-      ) ?? session.lesson.activities.find(needsWork);
-    setActiveActivityId(
-      firstPending?.id ?? session?.lesson.activities[0]?.id ?? null
+    const available = session.lesson.activities.filter((candidate) =>
+      lessonFlow?.availableActivityIds.includes(candidate.id)
     );
-  }, [session]);
+    const firstPending =
+      available.find(
+        (candidate) => candidate.required && needsWork(candidate)
+      ) ?? available.find(needsWork);
+    setActiveActivityId(
+      firstPending?.id ?? available[0]?.id ?? null
+    );
+  }, [activeBlock, lessonFlow?.availableActivityIds, session]);
 
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      const switcher = activitySwitcherRef.current;
-      const activeTab = activeActivityTabRef.current;
-      if (!switcher || !activeTab) return;
-      const switcherBox = switcher.getBoundingClientRect();
-      const activeBox = activeTab.getBoundingClientRect();
-      const nextLeft =
-        activeBox.left < switcherBox.left
-          ? switcher.scrollLeft - (switcherBox.left - activeBox.left)
-          : activeBox.right > switcherBox.right
-            ? switcher.scrollLeft + (activeBox.right - switcherBox.right)
-            : switcher.scrollLeft;
-      switcher.scrollTo({
-        left: nextLeft,
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "auto"
-          : "smooth"
-      });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [activeActivityId]);
+    setActiveBlockIndex(0);
+  }, [session?.lesson.id]);
 
   const draftKey = useMemo(() => {
     if (!session || !activity) return null;
@@ -788,13 +909,17 @@ export function CourseLearnPage() {
       if (event.key === "ArrowLeft" && session.previousLessonId) {
         setSearchParams({ lesson: session.previousLessonId });
       }
-      if (event.key === "ArrowRight" && session.nextLessonId) {
+      if (
+        event.key === "ArrowRight" &&
+        session.nextLessonId &&
+        lessonFlow?.complete
+      ) {
         setSearchParams({ lesson: session.nextLessonId });
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [session, setSearchParams]);
+  }, [lessonFlow?.complete, session, setSearchParams]);
 
   const submission = useMutation({
     mutationFn: async () => {
@@ -995,6 +1120,22 @@ export function CourseLearnPage() {
               </h1>
               <p className="course-lesson__summary">{session.lesson.summary}</p>
 
+              {session.release.updateAvailable ? (
+                <div className="course-release-notice" role="status">
+                  <strong>
+                    Version {session.release.latestVersion} is available.
+                  </strong>
+                  <span>
+                    You are still learning from version{" "}
+                    {session.release.enrolledVersion}; Forge will not move or
+                    reinterpret your saved work without your choice.
+                  </span>
+                  <Link to={`/courses/${session.course.slug}`}>
+                    Review the update
+                  </Link>
+                </div>
+              ) : null}
+
               <div className="course-objectives">
                 <div className="course-kicker">
                   <Target className="size-3.5" /> Today’s target
@@ -1008,69 +1149,90 @@ export function CourseLearnPage() {
                 </ul>
               </div>
 
-              <div className="course-content-stack">
-                {session.lesson.content.map((block, index) => (
-                  <CourseContentBlockView
-                    key={`${block.type}-${index}`}
-                    block={block}
-                    index={index}
-                    resources={session.resources}
+              <section
+                className="course-flow-stage"
+                aria-label="Current lesson section"
+              >
+                <div className="course-flow-stage__header">
+                  <span>
+                    Today · Step {activeBlockIndex + 1} of{" "}
+                    {lessonFlow?.blocks.length ?? 1}
+                  </span>
+                  <span>One section at a time</span>
+                </div>
+                <div className="course-content-stack">
+                  {activeBlock?.type === "checkpoint" ? (
+                    <div
+                      className={cn(
+                        "course-inline-checkpoint is-active",
+                        attemptStatusLabel(
+                          session.latestAttempts.find(
+                            (attempt) =>
+                              attempt?.activityId === activeBlock.activityId
+                          )
+                        ) === "Passed" && "is-complete"
+                      )}
+                      aria-current="step"
+                    >
+                      <span className="course-inline-checkpoint__marker">
+                        {attemptStatusLabel(
+                          session.latestAttempts.find(
+                            (attempt) =>
+                              attempt?.activityId === activeBlock.activityId
+                          )
+                        ) === "Passed" ? (
+                          <Check className="size-4" aria-hidden="true" />
+                        ) : (
+                          <MessageSquareText
+                            className="size-4"
+                            aria-hidden="true"
+                          />
+                        )}
+                      </span>
+                      <span className="course-inline-checkpoint__copy">
+                        <strong>{activeBlock.title}</strong>
+                        {activeBlock.introMarkdown ? (
+                          <CourseMarkdown
+                            markdown={activeBlock.introMarkdown}
+                          />
+                        ) : null}
+                      </span>
+                      <span className="course-inline-checkpoint__status">
+                        {attemptStatusLabel(
+                          session.latestAttempts.find(
+                            (attempt) =>
+                              attempt?.activityId === activeBlock.activityId
+                          )
+                        )}
+                      </span>
+                    </div>
+                  ) : activeBlock ? (
+                    <CourseContentBlockView
+                      block={activeBlock}
+                      index={activeBlockIndex}
+                      resources={session.resources}
+                    />
+                  ) : null}
+                </div>
+                {activeBlock?.type !== "checkpoint" ? (
+                  <CourseSectionNavigation
+                    currentIndex={activeBlockIndex}
+                    totalSteps={lessonFlow?.blocks.length ?? 0}
+                    canContinue
+                    onPrevious={() =>
+                      setActiveBlockIndex((current) =>
+                        Math.max(0, current - 1)
+                      )
+                    }
+                    onContinue={() =>
+                      setActiveBlockIndex((current) => current + 1)
+                    }
                   />
-                ))}
-              </div>
-
-              <section className="course-proof-studio">
-                {session.lesson.activities.length > 1 ? (
-                  <div
-                    ref={activitySwitcherRef}
-                    className="course-activity-switcher"
-                    role="tablist"
-                    aria-label="Lesson activities"
-                  >
-                    {session.lesson.activities.map((candidate, index) => {
-                      const latestAttempt = session.latestAttempts.find(
-                        (attempt) => attempt?.activityId === candidate.id
-                      );
-                      const statusLabel = attemptStatusLabel(latestAttempt);
-                      const completed = statusLabel === "Passed";
-                      return (
-                        <button
-                          key={candidate.id}
-                          ref={
-                            candidate.id === activity.id
-                              ? activeActivityTabRef
-                              : undefined
-                          }
-                          type="button"
-                          role="tab"
-                          aria-selected={candidate.id === activity.id}
-                          aria-label={`${candidate.title}: ${statusLabel}`}
-                          data-activity-status={statusLabel
-                            .toLowerCase()
-                            .replaceAll(" ", "-")}
-                          className={cn(
-                            "course-activity-switcher__item",
-                            candidate.id === activity.id && "is-active",
-                            completed && "is-complete"
-                          )}
-                          onClick={() => setActiveActivityId(candidate.id)}
-                        >
-                          <span aria-hidden="true">
-                            {completed ? (
-                              <Check className="size-3" />
-                            ) : (
-                              index + 1
-                            )}
-                          </span>
-                          <span className="course-activity-switcher__copy">
-                            <strong>{candidate.title}</strong>
-                            <small>{statusLabel}</small>
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
                 ) : null}
+              </section>
+
+              {activeBlock?.type === "checkpoint" ? (
+                <section className="course-proof-studio">
                 <div className="course-proof-studio__header">
                   <div>
                     <div className="course-kicker">
@@ -1218,10 +1380,27 @@ export function CourseLearnPage() {
                     {activitySubmissionLabel(activity.type)}
                   </Button>
                 </div>
-              </section>
+                </section>
+              ) : null}
 
-              {latestFeedback ? (
+              {activeBlock?.type === "checkpoint" && latestFeedback ? (
                 <FeedbackPanel feedback={latestFeedback} />
+              ) : null}
+              {activeBlock?.type === "checkpoint" ? (
+                <CourseSectionNavigation
+                  currentIndex={activeBlockIndex}
+                  totalSteps={lessonFlow?.blocks.length ?? 0}
+                  canContinue={Boolean(latestFeedback)}
+                  continueLabel="Continue to the next section"
+                  onPrevious={() =>
+                    setActiveBlockIndex((current) =>
+                      Math.max(0, current - 1)
+                    )
+                  }
+                  onContinue={() =>
+                    setActiveBlockIndex((current) => current + 1)
+                  }
+                />
               ) : null}
 
               <div className="course-lesson-nav">
@@ -1237,7 +1416,7 @@ export function CourseLearnPage() {
                 </Button>
                 <Button
                   variant="secondary"
-                  disabled={!session.nextLessonId}
+                  disabled={!session.nextLessonId || !lessonFlow?.complete}
                   onClick={() =>
                     session.nextLessonId && navigateLesson(session.nextLessonId)
                   }
@@ -1245,6 +1424,15 @@ export function CourseLearnPage() {
                   Next day <ArrowRight className="size-4" />
                 </Button>
               </div>
+              {session.nextLessonId && !lessonFlow?.complete ? (
+                <p
+                  className="mt-3 text-center text-xs text-[var(--course-muted)]"
+                  role="status"
+                >
+                  Pass every required checkpoint to continue to the next day.
+                  Your saved work remains available for revision.
+                </p>
+              ) : null}
             </div>
           </main>
           <div className="hidden xl:block" data-course-slot="concepts">

@@ -114,6 +114,7 @@ type ActivityBase = {
   required: boolean;
   templateId?: string;
   reviewAfterDays: number[];
+  revision: string;
 };
 
 export type CourseActivity =
@@ -149,6 +150,18 @@ export type CourseContentBlock =
       markdown: string;
     }
   | { type: "divider"; label: string }
+  | {
+      type: "checkpoint";
+      activityId: string;
+      title: string;
+      introMarkdown: string;
+      continuation:
+        | "after_pass"
+        | "after_remediation"
+        | "after_review"
+        | "always";
+      remediationActivityId?: string;
+    }
   | {
       type: "resource";
       resourceId: string;
@@ -226,13 +239,29 @@ export type CourseAttempt = {
   pointsAwarded: number;
   answerMarkdown: string;
   submittedAt: string;
+  deliveryMode?: "visual" | "voice";
+  lessonAttemptOrdinal?: number;
+  activityAttemptOrdinal?: number;
   feedback: AssessmentFeedback | null;
+};
+
+export type CourseReleaseStatus = {
+  enrolledVersion: string;
+  latestVersion: string;
+  updateAvailable: boolean;
 };
 
 export type LearningSession = {
   course: ForgeCourse;
+  release: CourseReleaseStatus;
   progress: CourseProgress;
   lesson: CourseLesson;
+  flow: {
+    availableActivityIds: string[];
+    submittableActivityIds: string[];
+    blockedByActivityId: string | null;
+    disclosure: "checkpoint_frontier";
+  };
   resources: CourseResource[];
   modules: CourseModule[];
   navigation: Array<{
@@ -243,6 +272,7 @@ export type LearningSession = {
     order: number;
     title: string;
     completed: boolean;
+    unlocked: boolean;
   }>;
   previousLessonId: string | null;
   nextLessonId: string | null;
@@ -252,6 +282,7 @@ export type LearningSession = {
 
 export type CourseDetail = {
   course: ForgeCourse;
+  release: CourseReleaseStatus;
   progress: CourseProgress;
   modules: CourseModule[];
   lessons: Array<{
@@ -265,6 +296,7 @@ export type CourseDetail = {
     estimatedMinutes: number;
     conceptIds: string[];
     completed: boolean;
+    unlocked: boolean;
   }>;
   concepts: ForgeConcept[];
   resources: CourseResource[];

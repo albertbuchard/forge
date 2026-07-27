@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { getDatabase, runInTransaction } from "../db.js";
 import { HttpError } from "../errors.js";
 import {
+  courseActivitySchema,
   defineCoursePackage,
   forgeCoursePackageSchema,
   nextReviewIntervalDays,
@@ -133,26 +134,79 @@ function parseCoursePackage(row: CourseRow) {
   );
 }
 
+function coursePackageForUser(
+  courseRow: CourseRow,
+  userId: string
+): ForgeCoursePackage {
+  const enrollment = getDatabase()
+    .prepare(
+      `SELECT course_version
+       FROM course_enrollments
+       WHERE course_id = ? AND user_id = ?`
+    )
+    .get(courseRow.id, userId) as { course_version: string } | undefined;
+  return coursePackageByVersion(
+    courseRow,
+    enrollment?.course_version || courseRow.version
+  );
+}
+
+function coursePackageByVersion(
+  courseRow: CourseRow,
+  courseVersion: string
+): ForgeCoursePackage {
+  if (courseVersion === courseRow.version) return parseCoursePackage(courseRow);
+  const release = getDatabase()
+    .prepare(
+      `SELECT definition_json
+       FROM course_releases
+       WHERE course_id = ? AND version = ?`
+    )
+    .get(courseRow.id, courseVersion) as
+    | { definition_json: string }
+    | undefined;
+  if (!release) {
+    throw new HttpError(
+      409,
+      "course_enrollment_release_missing",
+      `The enrolled course release ${courseVersion} is unavailable.`
+    );
+  }
+  return defineCoursePackage(
+    forgeCoursePackageSchema.parse(
+      parseJson<unknown>(release.definition_json, {})
+    )
+  );
+}
+
 function toCourse(row: CourseRow) {
   const coursePackage = parseCoursePackage(row);
+  return toCourseFromPackage(row, coursePackage);
+}
+
+function toCourseFromPackage(
+  row: CourseRow,
+  coursePackage: ForgeCoursePackage
+) {
+  const course = coursePackage.course;
   return {
-    id: row.id,
-    slug: row.slug,
-    version: row.version,
-    schemaVersion: row.schema_version,
-    title: row.title,
-    subtitle: row.subtitle,
-    description: row.description,
-    language: row.language,
-    authors: parseJson<string[]>(row.authors_json, []),
-    license: row.license,
-    estimatedWeeks: row.estimated_weeks,
-    minutesPerWeek: row.minutes_per_week,
-    tags: parseJson<string[]>(row.tags_json, []),
-    entryLessonId: row.entry_lesson_id,
-    featuredLessonId: row.featured_lesson_id,
+    id: course.id,
+    slug: course.slug,
+    version: course.version,
+    schemaVersion: coursePackage.schemaVersion,
+    title: course.title,
+    subtitle: course.subtitle,
+    description: course.description,
+    language: course.language,
+    authors: course.authors,
+    license: course.license,
+    estimatedWeeks: course.estimatedWeeks,
+    minutesPerWeek: course.minutesPerWeek,
+    tags: course.tags,
+    entryLessonId: course.entryLessonId,
+    featuredLessonId: course.featuredLessonId,
     sourceUrl: row.source_url,
-    contentHash: row.content_hash,
+    contentHash: coursePackage.provenance.contentHash,
     presentation: coursePackage.presentation,
     grading: coursePackage.grading,
     createdAt: row.created_at,
@@ -267,16 +321,30 @@ function selectedAttempts(
   courseId: string,
   userId: string
 ) {
+  const carriedActivityIds = carriedActivityIdsForRelease(
+    courseId,
+    userId,
+    coursePackage.course.version
+  );
+  const carriedClause = carriedActivityIds.length
+    ? ` OR a.activity_id IN (${carriedActivityIds.map(() => "?").join(",")})`
+    : "";
   const attempts = getDatabase()
     .prepare(
       `SELECT a.activity_id, a.lesson_id, a.score, a.submitted_at,
               s.verdict
        FROM course_attempts a
        JOIN course_assessments s ON s.attempt_id = a.id
-       WHERE a.course_id = ? AND a.user_id = ? AND a.status = 'assessed'
+       WHERE a.course_id = ? AND (a.course_version = ?${carriedClause})
+         AND a.user_id = ? AND a.status = 'assessed'
        ORDER BY a.submitted_at ASC, a.rowid ASC`
     )
-    .all(courseId, userId) as Array<{
+    .all(
+      courseId,
+      coursePackage.course.version,
+      ...carriedActivityIds,
+      userId
+    ) as Array<{
     activity_id: string;
     lesson_id: string;
     score: number;
@@ -295,6 +363,26 @@ function selectedAttempts(
     }
   }
   return selected;
+}
+
+function carriedActivityIdsForRelease(
+  courseId: string,
+  userId: string,
+  courseVersion: string
+) {
+  const receipt = getDatabase()
+    .prepare(
+      `SELECT carried_activity_ids_json
+       FROM course_enrollment_upgrade_receipts
+       WHERE course_id = ? AND user_id = ? AND to_version = ?
+       ORDER BY created_at DESC LIMIT 1`
+    )
+    .get(courseId, userId, courseVersion) as
+    | { carried_activity_ids_json: string }
+    | undefined;
+  return receipt
+    ? parseJson<string[]>(receipt.carried_activity_ids_json, [])
+    : [];
 }
 
 function completedLessonIdSet(
@@ -316,9 +404,213 @@ function completedLessonIdSet(
   );
 }
 
+function lessonAccessState(
+  coursePackage: ForgeCoursePackage,
+  courseId: string,
+  userId: string
+) {
+  const completedLessonIds = completedLessonIdSet(
+    coursePackage,
+    selectedAttempts(coursePackage, courseId, userId)
+  );
+  const firstIncompleteIndex = coursePackage.lessons.findIndex(
+    (lesson) => !completedLessonIds.has(lesson.id)
+  );
+  const frontierIndex =
+    firstIncompleteIndex === -1
+      ? Math.max(0, coursePackage.lessons.length - 1)
+      : firstIncompleteIndex;
+  const accessibleLessonIds = new Set(
+    coursePackage.lessons.flatMap((lesson, index) =>
+      completedLessonIds.has(lesson.id) || index <= frontierIndex
+        ? [lesson.id]
+        : []
+    )
+  );
+  return {
+    completedLessonIds,
+    accessibleLessonIds,
+    frontierLessonId:
+      coursePackage.lessons[frontierIndex]?.id ??
+      coursePackage.course.entryLessonId
+  };
+}
+
+function requireAccessibleLesson(
+  coursePackage: ForgeCoursePackage,
+  courseId: string,
+  userId: string,
+  lessonId: string
+) {
+  const access = lessonAccessState(coursePackage, courseId, userId);
+  if (!access.accessibleLessonIds.has(lessonId)) {
+    throw new HttpError(
+      409,
+      "course_lesson_locked",
+      "Complete every required activity in the preceding lesson before opening this lesson."
+    );
+  }
+  return access;
+}
+
+type LearnerAttempt = {
+  id: string;
+  activityId: string;
+  status: string;
+  score: number | null;
+  grade: string | null;
+  pointsAwarded: number;
+  answerMarkdown: string;
+  submittedAt: string;
+  deliveryMode: "visual" | "voice";
+  lessonAttemptOrdinal: number;
+  activityAttemptOrdinal: number;
+  feedback: CourseAssessmentFeedback | null;
+};
+
+function latestLessonAttempts(
+  coursePackage: ForgeCoursePackage,
+  courseId: string,
+  userId: string,
+  lesson: CourseLesson
+) {
+  const carriedActivityIds = carriedActivityIdsForRelease(
+    courseId,
+    userId,
+    coursePackage.course.version
+  );
+  const carriedClause = carriedActivityIds.length
+    ? ` OR a.activity_id IN (${carriedActivityIds.map(() => "?").join(",")})`
+    : "";
+  return lesson.activities.map((activity): LearnerAttempt | null => {
+    const attempt = getDatabase()
+      .prepare(
+        `SELECT a.*, s.feedback_json
+         FROM course_attempts a
+         LEFT JOIN course_assessments s ON s.attempt_id = a.id
+         WHERE a.course_id = ?
+           AND (a.course_version = ?${carriedClause})
+           AND a.user_id = ? AND a.activity_id = ?
+         ORDER BY a.submitted_at DESC, a.rowid DESC LIMIT 1`
+      )
+      .get(
+        courseId,
+        coursePackage.course.version,
+        ...carriedActivityIds,
+        userId,
+        activity.id
+      ) as
+      | (JsonRecord & { feedback_json?: string | null })
+      | undefined;
+    return attempt
+      ? {
+          id: String(attempt.id),
+          activityId: String(attempt.activity_id),
+          status: String(attempt.status),
+          score:
+            typeof attempt.score === "number" ? attempt.score : null,
+          grade: typeof attempt.grade === "string" ? attempt.grade : null,
+          pointsAwarded:
+            typeof attempt.points_awarded === "number"
+              ? attempt.points_awarded
+              : 0,
+          answerMarkdown: String(attempt.answer_markdown),
+          submittedAt: String(attempt.submitted_at),
+          deliveryMode:
+            attempt.delivery_mode === "voice" ? "voice" : "visual",
+          lessonAttemptOrdinal: Number(attempt.lesson_attempt_ordinal),
+          activityAttemptOrdinal: Number(attempt.activity_attempt_ordinal),
+          feedback: attempt.feedback_json
+            ? parseJson<CourseAssessmentFeedback | null>(
+                attempt.feedback_json,
+                null
+              )
+            : null
+        }
+      : null;
+  });
+}
+
+function learnerLessonFrontier(
+  lesson: CourseLesson,
+  latestAttempts: Array<LearnerAttempt | null>
+) {
+  const checkpointBlocks = lesson.content.filter(
+    (
+      block
+    ): block is Extract<
+      (typeof lesson.content)[number],
+      { type: "checkpoint" }
+    > => block.type === "checkpoint"
+  );
+  if (checkpointBlocks.length === 0) {
+    return {
+      content: lesson.content,
+      activities: lesson.activities,
+      availableActivityIds: lesson.activities.map((activity) => activity.id),
+      submittableActivityIds: lesson.activities.map((activity) => activity.id),
+      blockedByActivityId: null as string | null
+    };
+  }
+
+  const attemptByActivityId = new Map(
+    latestAttempts.flatMap((attempt) =>
+      attempt ? [[attempt.activityId, attempt] as const] : []
+    )
+  );
+  const content: CourseLesson["content"] = [];
+  const availableActivityIds = new Set<string>();
+  const submittableActivityIds = new Set<string>();
+  let blockedByActivityId: string | null = null;
+  for (const block of lesson.content) {
+    content.push(block);
+    if (block.type !== "checkpoint") continue;
+    availableActivityIds.add(block.activityId);
+    if (block.remediationActivityId) {
+      availableActivityIds.add(block.remediationActivityId);
+    }
+    const attempt = attemptByActivityId.get(block.activityId);
+    const remediationAttempt = block.remediationActivityId
+      ? attemptByActivityId.get(block.remediationActivityId)
+      : null;
+    const passed =
+      attempt?.status === "assessed" &&
+      attempt.feedback?.verdict === "pass";
+    const remediationPassed =
+      remediationAttempt?.status === "assessed" &&
+      remediationAttempt.feedback?.verdict === "pass";
+    const reviewed =
+      attempt?.status === "assessed" && attempt.feedback !== null;
+    const mayContinue =
+      block.continuation === "always" ||
+      (block.continuation === "after_review" && reviewed) ||
+      (block.continuation === "after_pass" && passed) ||
+      (block.continuation === "after_remediation" &&
+        (passed || remediationPassed));
+    if (!mayContinue) {
+      blockedByActivityId = block.activityId;
+      submittableActivityIds.add(block.activityId);
+      if (block.remediationActivityId) {
+        submittableActivityIds.add(block.remediationActivityId);
+      }
+      break;
+    }
+  }
+
+  return {
+    content,
+    activities: lesson.activities.filter((activity) =>
+      availableActivityIds.has(activity.id)
+    ),
+    availableActivityIds: [...availableActivityIds],
+    submittableActivityIds: [...submittableActivityIds],
+    blockedByActivityId
+  };
+}
+
 function courseProgress(courseId: string, userId: string) {
   const courseRow = requireCourseRow(courseId);
-  const coursePackage = parseCoursePackage(courseRow);
+  const coursePackage = coursePackageForUser(courseRow, userId);
   const selected = selectedAttempts(coursePackage, courseRow.id, userId);
   const completed = completedLessonIdSet(coursePackage, selected).size;
   const total = coursePackage.lessons.length;
@@ -375,6 +667,15 @@ export function importCoursePackage(input: unknown) {
   const existingCourse = database
     .prepare("SELECT * FROM courses WHERE id = ?")
     .get(coursePackage.course.id) as CourseRow | undefined;
+  const existingCoursePackage = existingCourse
+    ? parseCoursePackage(existingCourse)
+    : null;
+  const conceptUpgradeById = new Map(
+    (coursePackage.conceptUpgrades ?? []).map((upgrade) => [
+      upgrade.conceptId,
+      upgrade
+    ])
+  );
   const slugOwner = database
     .prepare("SELECT id FROM courses WHERE slug = ? AND id <> ?")
     .get(coursePackage.course.slug, coursePackage.course.id) as
@@ -387,26 +688,21 @@ export function importCoursePackage(input: unknown) {
       `Course slug ${coursePackage.course.slug} is already owned by ${slugOwner.id}.`
     );
   }
-  const packageChanged =
-    existingCourse !== undefined &&
-    existingCourse.content_hash !== computedHash;
-  if (packageChanged) {
-    const evidenceCount = (
-      database
-        .prepare(
-          "SELECT COUNT(*) AS count FROM course_attempts WHERE course_id = ?"
-        )
-        .get(coursePackage.course.id) as { count: number }
-    ).count;
-    if (evidenceCount > 0) {
-      throw new HttpError(
-        409,
-        "course_version_has_learner_evidence",
-        "This course version already has learner evidence. Publish changed content under a new course id or version snapshot."
-      );
-    }
+  const sameVersionRelease = database
+    .prepare(
+      `SELECT content_hash FROM course_releases
+       WHERE course_id = ? AND version = ?`
+    )
+    .get(coursePackage.course.id, coursePackage.course.version) as
+    | { content_hash: string }
+    | undefined;
+  if (sameVersionRelease && sameVersionRelease.content_hash !== computedHash) {
+    throw new HttpError(
+      409,
+      "course_release_version_immutable",
+      `Course release ${coursePackage.course.version} already exists with different content. Publish a new version.`
+    );
   }
-
   for (const conceptRef of coursePackage.conceptRefs) {
     const existing = database
       .prepare("SELECT id, content_hash FROM concepts WHERE id = ?")
@@ -474,6 +770,30 @@ export function importCoursePackage(input: unknown) {
       .prepare("SELECT content_hash FROM concepts WHERE id = ?")
       .get(concept.id) as { content_hash: string } | undefined;
     if (!existing || existing.content_hash === hash) continue;
+    const declaredUpgrade = conceptUpgradeById.get(concept.id);
+    if (declaredUpgrade) {
+      if (declaredUpgrade.fromContentHash !== existing.content_hash) {
+        throw new HttpError(
+          409,
+          "course_concept_upgrade_source_conflict",
+          `Concept ${concept.id} no longer matches the declared prior definition.`
+        );
+      }
+      const previousDefinition = existingCoursePackage?.concepts.find(
+        (entry) => entry.id === concept.id
+      );
+      if (
+        !previousDefinition ||
+        conceptContentHash(previousDefinition) !== existing.content_hash
+      ) {
+        throw new HttpError(
+          409,
+          "course_concept_upgrade_not_owner",
+          `Course ${coursePackage.course.id} cannot upgrade concept ${concept.id} because its installed release does not own the current definition.`
+        );
+      }
+      continue;
+    }
     const linkedElsewhere = (
       database
         .prepare(
@@ -499,16 +819,57 @@ export function importCoursePackage(input: unknown) {
   }
 
   runInTransaction(() => {
-    if (packageChanged) {
+    for (const concept of coursePackage.concepts) {
+      const declaredUpgrade = conceptUpgradeById.get(concept.id);
+      if (!declaredUpgrade) continue;
+      const installed = database
+        .prepare("SELECT content_hash FROM concepts WHERE id = ?")
+        .get(concept.id) as { content_hash: string } | undefined;
+      const nextContentHash = conceptContentHash(concept);
+      if (!installed || installed.content_hash === nextContentHash) continue;
+      const previousDefinition = existingCoursePackage?.concepts.find(
+        (entry) => entry.id === concept.id
+      );
+      if (!previousDefinition) {
+        throw new HttpError(
+          409,
+          "course_concept_upgrade_not_owner",
+          `Course ${coursePackage.course.id} cannot upgrade concept ${concept.id}.`
+        );
+      }
       database
-        .prepare("DELETE FROM course_lessons WHERE course_id = ?")
-        .run(coursePackage.course.id);
+        .prepare(
+          `INSERT OR IGNORE INTO course_concept_revisions (
+             concept_id, content_hash, definition_json, source_course_id,
+             source_course_version, replaced_by_content_hash, reason,
+             upgraded_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          concept.id,
+          installed.content_hash,
+          JSON.stringify(previousDefinition),
+          coursePackage.course.id,
+          coursePackage.course.version,
+          nextContentHash,
+          declaredUpgrade.reason,
+          now
+        );
+    }
+    if (existingCourse) {
       database
-        .prepare("DELETE FROM course_modules WHERE course_id = ?")
-        .run(coursePackage.course.id);
-      database
-        .prepare("DELETE FROM course_concepts WHERE course_id = ?")
-        .run(coursePackage.course.id);
+        .prepare(
+          `INSERT OR IGNORE INTO course_releases (
+             course_id, version, content_hash, definition_json, published_at
+           ) VALUES (?, ?, ?, ?, ?)`
+        )
+        .run(
+          existingCourse.id,
+          existingCourse.version,
+          existingCourse.content_hash,
+          existingCourse.definition_json,
+          existingCourse.created_at
+        );
     }
     database
       .prepare(
@@ -558,6 +919,19 @@ export function importCoursePackage(input: unknown) {
         computedHash,
         JSON.stringify(coursePackage),
         now,
+        now
+      );
+    database
+      .prepare(
+        `INSERT OR IGNORE INTO course_releases (
+           course_id, version, content_hash, definition_json, published_at
+         ) VALUES (?, ?, ?, ?, ?)`
+      )
+      .run(
+        coursePackage.course.id,
+        coursePackage.course.version,
+        computedHash,
+        JSON.stringify(coursePackage),
         now
       );
 
@@ -710,15 +1084,23 @@ export function ensureBuiltInCourses() {
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));
   const catalogDir = path.resolve(moduleDir, "..", "course-catalog");
   if (!existsSync(catalogDir)) return [];
-  return readdirSync(catalogDir)
+  const packages = readdirSync(catalogDir)
     .filter((file) => file.endsWith(".forge-course.json"))
     .sort()
     .map((file) => {
-      const parsed = JSON.parse(
+      const parsed = forgeCoursePackageSchema.parse(JSON.parse(
         readFileSync(path.join(catalogDir, file), "utf8")
-      );
-      return importCoursePackage(parsed).course;
-    });
+      ));
+      return parsed;
+    })
+    .sort(
+      (left, right) =>
+        left.conceptRefs.length - right.conceptRefs.length ||
+        left.course.id.localeCompare(right.course.id)
+    );
+  return packages.map((coursePackage) =>
+    importCoursePackage(coursePackage).course
+  );
 }
 
 export function listCourses(userId: string) {
@@ -731,45 +1113,163 @@ export function listCourses(userId: string) {
   }));
 }
 
+export function upgradeCourseEnrollment(courseId: string, userId: string) {
+  const courseRow = requireCourseRow(courseId);
+  const database = getDatabase();
+  const enrollment = database
+    .prepare(
+      `SELECT course_version, current_lesson_id
+       FROM course_enrollments
+       WHERE course_id = ? AND user_id = ?`
+    )
+    .get(courseRow.id, userId) as
+    | { course_version: string; current_lesson_id: string | null }
+    | undefined;
+  if (!enrollment) {
+    throw new HttpError(
+      404,
+      "course_enrollment_not_found",
+      "Start the course before requesting a release upgrade."
+    );
+  }
+  if (enrollment.course_version === courseRow.version) {
+    return {
+      upgraded: false,
+      fromVersion: courseRow.version,
+      toVersion: courseRow.version,
+      carriedActivityIds: [],
+      remainingActivityIds: []
+    };
+  }
+  const nextPackage = parseCoursePackage(courseRow);
+  const nextActivityHashes = new Map(
+    nextPackage.lessons.flatMap((lesson) =>
+      lesson.activities.map((activity) => [
+        activity.id,
+        createHash("sha256").update(stableJson(activity)).digest("hex")
+      ])
+    )
+  );
+  const previouslyCarriedActivityIds = carriedActivityIdsForRelease(
+    courseRow.id,
+    userId,
+    enrollment.course_version
+  );
+  const previouslyCarriedClause = previouslyCarriedActivityIds.length
+    ? ` OR a.activity_id IN (${previouslyCarriedActivityIds
+        .map(() => "?")
+        .join(",")})`
+    : "";
+  const passedAttempts = database
+    .prepare(
+      `SELECT a.activity_id, a.activity_content_hash
+       FROM course_attempts a
+       JOIN course_assessments s ON s.attempt_id = a.id
+       WHERE a.course_id = ? AND a.user_id = ?
+         AND (a.course_version = ?${previouslyCarriedClause})
+         AND a.status = 'assessed' AND s.verdict = 'pass'
+       ORDER BY a.submitted_at DESC, a.rowid DESC`
+    )
+    .all(
+      courseRow.id,
+      userId,
+      enrollment.course_version,
+      ...previouslyCarriedActivityIds
+    ) as Array<{
+    activity_id: string;
+    activity_content_hash: string;
+  }>;
+  const carriedActivityIds = [
+    ...new Set(
+      passedAttempts.flatMap((attempt) =>
+        attempt.activity_content_hash &&
+        nextActivityHashes.get(attempt.activity_id) ===
+          attempt.activity_content_hash
+          ? [attempt.activity_id]
+          : []
+      )
+    )
+  ];
+  const carried = new Set(carriedActivityIds);
+  const remainingActivityIds = nextPackage.lessons.flatMap((lesson) =>
+    lesson.activities
+      .filter((activity) => activity.required && !carried.has(activity.id))
+      .map((activity) => activity.id)
+  );
+  const now = nowIso();
+  const receiptId = randomUUID();
+  const nextLessonId =
+    nextPackage.lessons.find((lesson) =>
+      lesson.activities
+        .filter((activity) => activity.required)
+        .some((activity) => !carried.has(activity.id))
+    )?.id ?? nextPackage.course.entryLessonId;
+  runInTransaction(() => {
+    database
+      .prepare(
+        `INSERT INTO course_enrollment_upgrade_receipts (
+           id, course_id, user_id, from_version, to_version,
+           carried_activity_ids_json, remaining_activity_ids_json, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        receiptId,
+        courseRow.id,
+        userId,
+        enrollment.course_version,
+        courseRow.version,
+        JSON.stringify(carriedActivityIds),
+        JSON.stringify(remainingActivityIds),
+        now
+      );
+    database
+      .prepare(
+        `UPDATE course_enrollments
+         SET course_version = ?, current_lesson_id = ?, updated_at = ?
+         WHERE course_id = ? AND user_id = ?`
+      )
+      .run(courseRow.version, nextLessonId, now, courseRow.id, userId);
+  });
+  return {
+    upgraded: true,
+    receiptId,
+    fromVersion: enrollment.course_version,
+    toVersion: courseRow.version,
+    carriedActivityIds,
+    remainingActivityIds
+  };
+}
+
 export function getCourseDetail(courseId: string, userId: string) {
   const row = requireCourseRow(courseId);
-  const coursePackage = parseCoursePackage(row);
-  const modules = getDatabase()
-    .prepare(
-      `SELECT definition_json FROM course_modules
-       WHERE course_id = ? ORDER BY order_index`
-    )
-    .all(row.id) as Array<{ definition_json: string }>;
-  const lessons = getDatabase()
-    .prepare(
-      `SELECT id, module_id, week, day, order_index, title, summary,
-              estimated_minutes, definition_json
-       FROM course_lessons WHERE course_id = ? ORDER BY order_index`
-    )
-    .all(row.id) as LessonRow[];
+  const coursePackage = coursePackageForUser(row, userId);
   const completed = completedLessonIdSet(
     coursePackage,
     selectedAttempts(coursePackage, row.id, userId)
   );
+  const access = lessonAccessState(coursePackage, row.id, userId);
   const concepts = listConcepts(userId, { courseId: row.id });
   return {
-    course: toCourse(row),
+    course: toCourseFromPackage(row, coursePackage),
+    release: {
+      enrolledVersion: coursePackage.course.version,
+      latestVersion: row.version,
+      updateAvailable: coursePackage.course.version !== row.version
+    },
     progress: courseProgress(row.id, userId),
-    modules: modules.map((entry) => parseJson(entry.definition_json, {})),
-    lessons: lessons.map((lesson) => ({
+    modules: coursePackage.modules,
+    lessons: coursePackage.lessons.map((lesson) => ({
       id: lesson.id,
-      moduleId: lesson.module_id,
+      moduleId: lesson.moduleId,
       week: lesson.week,
       day: lesson.day,
-      order: lesson.order_index,
+      order: lesson.order,
       title: lesson.title,
       summary: lesson.summary,
-      estimatedMinutes: lesson.estimated_minutes,
-      conceptIds: parseJson<CourseLesson>(
-        lesson.definition_json,
-        {} as CourseLesson
-      ).conceptIds,
-      completed: completed.has(lesson.id)
+      estimatedMinutes: lesson.estimatedMinutes,
+      conceptIds: lesson.conceptIds,
+      completed: completed.has(lesson.id),
+      unlocked: access.accessibleLessonIds.has(lesson.id)
     })),
     concepts,
     resources: coursePackage.resources
@@ -782,25 +1282,21 @@ export function getLearningSession(
   requestedLessonId?: string
 ) {
   const courseRow = requireCourseRow(courseId);
+  const coursePackage = coursePackageForUser(courseRow, userId);
   const progress = courseProgress(courseRow.id, userId);
+  const access = lessonAccessState(coursePackage, courseRow.id, userId);
+  const preferredLessonId = progress.currentLessonId;
   const lessonId =
     requestedLessonId ||
-    progress.currentLessonId ||
-    courseRow.featured_lesson_id ||
-    courseRow.entry_lesson_id;
-  const lessonRow = requireLessonRow(courseRow.id, lessonId);
-  const lesson = parseJson<CourseLesson>(
-    lessonRow.definition_json,
-    {} as CourseLesson
-  );
-  const navigationRows = getDatabase()
-    .prepare(
-      `SELECT id, module_id, week, day, order_index, title, summary,
-              estimated_minutes, definition_json
-       FROM course_lessons WHERE course_id = ? ORDER BY order_index`
-    )
-    .all(courseRow.id) as LessonRow[];
-  const coursePackage = parseCoursePackage(courseRow);
+    (preferredLessonId && access.accessibleLessonIds.has(preferredLessonId)
+      ? preferredLessonId
+      : access.frontierLessonId);
+  const lesson = coursePackage.lessons.find((entry) => entry.id === lessonId);
+  if (!lesson) {
+    throw new HttpError(404, "lesson_not_found", "Lesson not found.");
+  }
+  requireAccessibleLesson(coursePackage, courseRow.id, userId, lesson.id);
+  const navigationRows = coursePackage.lessons;
   const completedLessonIds = completedLessonIdSet(
     coursePackage,
     selectedAttempts(coursePackage, courseRow.id, userId)
@@ -808,12 +1304,6 @@ export function getLearningSession(
   const currentIndex = navigationRows.findIndex(
     (entry) => entry.id === lesson.id
   );
-  const moduleRows = getDatabase()
-    .prepare(
-      `SELECT definition_json FROM course_modules
-       WHERE course_id = ? ORDER BY order_index`
-    )
-    .all(courseRow.id) as Array<{ definition_json: string }>;
   const conceptIds = [
     ...new Set([
       ...lesson.conceptIds,
@@ -846,51 +1336,45 @@ export function getLearningSession(
   const conceptById = new Map(
     conceptRows.map((concept) => [concept.id, concept])
   );
-  const latestAttempts = lesson.activities.map((activity) => {
-    const attempt = getDatabase()
-      .prepare(
-        `SELECT a.*, s.feedback_json
-         FROM course_attempts a
-         LEFT JOIN course_assessments s ON s.attempt_id = a.id
-         WHERE a.course_id = ? AND a.user_id = ? AND a.activity_id = ?
-         ORDER BY a.submitted_at DESC, a.rowid DESC LIMIT 1`
-      )
-      .get(courseRow.id, userId, activity.id) as
-      | (JsonRecord & { feedback_json?: string | null })
-      | undefined;
-    return attempt
-      ? {
-          id: attempt.id,
-          activityId: attempt.activity_id,
-          status: attempt.status,
-          score: attempt.score,
-          grade: attempt.grade,
-          pointsAwarded: attempt.points_awarded,
-          answerMarkdown: attempt.answer_markdown,
-          submittedAt: attempt.submitted_at,
-          feedback: attempt.feedback_json
-            ? parseJson<CourseAssessmentFeedback | null>(
-                attempt.feedback_json,
-                null
-              )
-            : null
-        }
-      : null;
+  const latestAttempts = latestLessonAttempts(
+    coursePackage,
+    courseRow.id,
+    userId,
+    lesson
+  );
+  const frontier = learnerLessonFrontier(lesson, latestAttempts);
+  const learnerLesson = toLearnerLesson({
+    ...lesson,
+    content: frontier.content,
+    activities: frontier.activities
   });
+  const visibleActivityIds = new Set(frontier.availableActivityIds);
   return {
-    course: toCourse(courseRow),
+    course: toCourseFromPackage(courseRow, coursePackage),
+    release: {
+      enrolledVersion: coursePackage.course.version,
+      latestVersion: courseRow.version,
+      updateAvailable: coursePackage.course.version !== courseRow.version
+    },
     progress,
-    lesson: toLearnerLesson(lesson),
+    lesson: learnerLesson,
+    flow: {
+      availableActivityIds: frontier.availableActivityIds,
+      submittableActivityIds: frontier.submittableActivityIds,
+      blockedByActivityId: frontier.blockedByActivityId,
+      disclosure: "checkpoint_frontier"
+    },
     resources: coursePackage.resources,
-    modules: moduleRows.map((entry) => parseJson(entry.definition_json, {})),
+    modules: coursePackage.modules,
     navigation: navigationRows.map((entry) => ({
       id: entry.id,
-      moduleId: entry.module_id,
+      moduleId: entry.moduleId,
       week: entry.week,
       day: entry.day,
-      order: entry.order_index,
+      order: entry.order,
       title: entry.title,
-      completed: completedLessonIds.has(entry.id)
+      completed: completedLessonIds.has(entry.id),
+      unlocked: access.accessibleLessonIds.has(entry.id)
     })),
     previousLessonId:
       currentIndex > 0 ? navigationRows[currentIndex - 1]!.id : null,
@@ -924,7 +1408,74 @@ export function getLearningSession(
         }
       ];
     }),
-    latestAttempts
+    latestAttempts: latestAttempts.filter(
+      (attempt): attempt is LearnerAttempt =>
+        Boolean(attempt && visibleActivityIds.has(attempt.activityId))
+    )
+  };
+}
+
+export function createVoiceLearningSession(input: {
+  courseId: string;
+  userId: string;
+  week: number;
+  day: number;
+}) {
+  const courseRow = requireCourseRow(input.courseId);
+  const coursePackage = coursePackageForUser(courseRow, input.userId);
+  const lesson = coursePackage.lessons.find(
+    (entry) => entry.week === input.week && entry.day === input.day
+  );
+  if (!lesson) {
+    throw new HttpError(
+      404,
+      "course_lesson_not_found",
+      `Week ${input.week}, day ${input.day} does not exist in this course.`
+    );
+  }
+  requireAccessibleLesson(
+    coursePackage,
+    courseRow.id,
+    input.userId,
+    lesson.id
+  );
+  const token = randomUUID();
+  const createdAt = nowIso();
+  const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
+  getDatabase()
+    .prepare(
+      `INSERT INTO course_voice_sessions (
+        token, course_id, course_version, user_id, lesson_id, expires_at,
+        created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      token,
+      courseRow.id,
+      coursePackage.course.version,
+      input.userId,
+      lesson.id,
+      expiresAt,
+      createdAt
+    );
+  return {
+    outline: getCourseDetail(courseRow.id, input.userId),
+    session: getLearningSession(courseRow.id, input.userId, lesson.id),
+    voice: {
+      token,
+      expiresAt,
+      lessonId: lesson.id,
+      deliveryPolicy: {
+        contentOrder: "source_order",
+        disclosure: "one_block_or_activity_at_a_time",
+        answerFormatting:
+          "You may add punctuation and paragraph breaks without changing words. Show Albert every proposed deletion, replacement, uncertain mathematical symbol, or uncertain recognition and obtain explicit confirmation. Preserve meaning, uncertainty, reasoning, and claims.",
+        confirmation:
+          "Read the complete formatted answer back and obtain Albert's explicit confirmation before submission.",
+        persistence:
+          "Submit only the confirmed answerMarkdown. Do not submit or store audio, recording metadata, or a separate voice transcript."
+      }
+    }
   };
 }
 
@@ -1086,12 +1637,23 @@ export function createCourseAttempt(input: {
   activityId: string;
   userId: string;
   answerMarkdown: string;
+  deliveryMode?: "visual" | "voice";
+  voiceSessionToken?: string;
+  idempotencyKey?: string;
 }) {
   const course = requireCourseRow(input.courseId);
-  const lessonRow = requireLessonRow(course.id, input.lessonId);
-  const lesson = parseJson<CourseLesson>(
-    lessonRow.definition_json,
-    {} as CourseLesson
+  const coursePackage = coursePackageForUser(course, input.userId);
+  const lesson = coursePackage.lessons.find(
+    (entry) => entry.id === input.lessonId
+  );
+  if (!lesson) {
+    throw new HttpError(404, "lesson_not_found", "Lesson not found.");
+  }
+  requireAccessibleLesson(
+    coursePackage,
+    course.id,
+    input.userId,
+    lesson.id
   );
   const activity = lesson.activities.find(
     (entry) => entry.id === input.activityId
@@ -1099,26 +1661,207 @@ export function createCourseAttempt(input: {
   if (!activity) {
     throw new HttpError(404, "activity_not_found", "Activity not found.");
   }
+  const deliveryMode = input.deliveryMode ?? "visual";
+  const requestContentHash = createHash("sha256")
+    .update(
+      stableJson({
+        courseId: course.id,
+        courseVersion: coursePackage.course.version,
+        userId: input.userId,
+        lessonId: lesson.id,
+        activityId: activity.id,
+        answerMarkdown: input.answerMarkdown,
+        deliveryMode
+      })
+    )
+    .digest("hex");
+  if (input.idempotencyKey) {
+    const existing = getDatabase()
+      .prepare(
+        `SELECT id, request_content_hash, delivery_mode,
+                lesson_attempt_ordinal, activity_attempt_ordinal
+         FROM course_attempts
+         WHERE course_id = ? AND user_id = ?
+           AND lesson_id = ? AND activity_id = ? AND idempotency_key = ?`
+      )
+      .get(
+        course.id,
+        input.userId,
+        lesson.id,
+        activity.id,
+        input.idempotencyKey
+      ) as
+      | {
+          id: string;
+          request_content_hash: string;
+          delivery_mode: "visual" | "voice";
+          lesson_attempt_ordinal: number;
+          activity_attempt_ordinal: number;
+        }
+      | undefined;
+    if (existing) {
+      if (existing.request_content_hash !== requestContentHash) {
+        throw new HttpError(
+          409,
+          "course_attempt_idempotency_conflict",
+          "This submission key was already used for a different answer, delivery mode, or enrolled course version."
+        );
+      }
+      return {
+        attemptId: existing.id,
+        existing: true,
+        deliveryMode: existing.delivery_mode,
+        lessonAttemptOrdinal: existing.lesson_attempt_ordinal,
+        activityAttemptOrdinal: existing.activity_attempt_ordinal,
+        course: toCourseFromPackage(course, coursePackage),
+        lesson,
+        activity
+      };
+    }
+  }
+  if (deliveryMode === "voice") {
+    const voiceSession = input.voiceSessionToken
+      ? (getDatabase()
+          .prepare(
+            `SELECT course_id, course_version, user_id, lesson_id, expires_at
+             FROM course_voice_sessions WHERE token = ?`
+          )
+          .get(input.voiceSessionToken) as
+          | {
+              course_id: string;
+              course_version: string;
+              user_id: string;
+              lesson_id: string;
+              expires_at: string;
+            }
+          | undefined)
+      : undefined;
+    if (
+      !voiceSession ||
+      voiceSession.course_id !== course.id ||
+      voiceSession.course_version !== coursePackage.course.version ||
+      voiceSession.user_id !== input.userId ||
+      voiceSession.lesson_id !== lesson.id ||
+      Date.parse(voiceSession.expires_at) <= Date.now()
+    ) {
+      throw new HttpError(
+        409,
+        "course_voice_session_invalid",
+        "Start a new voice learning session for this learner and lesson before submitting."
+      );
+    }
+  }
+  const frontier = learnerLessonFrontier(
+    lesson,
+    latestLessonAttempts(coursePackage, course.id, input.userId, lesson)
+  );
+  if (!frontier.submittableActivityIds.includes(activity.id)) {
+    throw new HttpError(
+      409,
+      "course_activity_locked",
+      "Complete the current checkpoint and receive the required review before submitting this activity."
+    );
+  }
   const now = nowIso();
-  const attemptId = randomUUID();
-  runInTransaction(() => {
+  const created = runInTransaction(() => {
+    if (input.idempotencyKey) {
+      const existing = getDatabase()
+        .prepare(
+          `SELECT id, request_content_hash, delivery_mode,
+                  lesson_attempt_ordinal, activity_attempt_ordinal
+           FROM course_attempts
+           WHERE course_id = ? AND user_id = ?
+             AND lesson_id = ? AND activity_id = ? AND idempotency_key = ?`
+        )
+        .get(
+          course.id,
+          input.userId,
+          lesson.id,
+          activity.id,
+          input.idempotencyKey
+        ) as
+        | {
+            id: string;
+            request_content_hash: string;
+            delivery_mode: "visual" | "voice";
+            lesson_attempt_ordinal: number;
+            activity_attempt_ordinal: number;
+          }
+        | undefined;
+      if (existing) {
+        if (existing.request_content_hash !== requestContentHash) {
+          throw new HttpError(
+            409,
+            "course_attempt_idempotency_conflict",
+            "This submission key was already used for a different answer, delivery mode, or enrolled course version."
+          );
+        }
+        return {
+          attemptId: existing.id,
+          existing: true,
+          deliveryMode: existing.delivery_mode,
+          lessonAttemptOrdinal: existing.lesson_attempt_ordinal,
+          activityAttemptOrdinal: existing.activity_attempt_ordinal
+        };
+      }
+    }
+    const attemptId = randomUUID();
+    const ordinals = getDatabase()
+      .prepare(
+        `SELECT
+           COALESCE(MAX(lesson_attempt_ordinal), 0) + 1
+             AS lesson_attempt_ordinal,
+           COALESCE(MAX(
+             CASE WHEN activity_id = ? THEN activity_attempt_ordinal ELSE 0 END
+           ), 0) + 1 AS activity_attempt_ordinal
+         FROM course_attempts
+         WHERE course_id = ? AND course_version = ? AND user_id = ?
+           AND lesson_id = ?`
+      )
+      .get(
+        activity.id,
+        course.id,
+        coursePackage.course.version,
+        input.userId,
+        lesson.id
+      ) as {
+      lesson_attempt_ordinal: number;
+      activity_attempt_ordinal: number;
+    };
     getDatabase()
       .prepare(
         `INSERT INTO course_enrollments (
-          course_id, user_id, current_lesson_id, points_earned, enrolled_at, updated_at
-        ) VALUES (?, ?, ?, 0, ?, ?)
+          course_id, user_id, current_lesson_id, points_earned, enrolled_at,
+          updated_at, course_version
+        ) VALUES (?, ?, ?, 0, ?, ?, ?)
         ON CONFLICT(course_id, user_id) DO UPDATE SET
-          current_lesson_id = excluded.current_lesson_id,
           updated_at = excluded.updated_at`
       )
-      .run(course.id, input.userId, lesson.id, now, now);
+      .run(
+        course.id,
+        input.userId,
+        lesson.id,
+        now,
+        now,
+        coursePackage.course.version
+      );
+    const activitySnapshot = stableJson(activity);
+    const activityContentHash = createHash("sha256")
+      .update(activitySnapshot)
+      .digest("hex");
     getDatabase()
       .prepare(
         `INSERT INTO course_attempts (
           id, course_id, lesson_id, activity_id, activity_type, user_id,
           answer_markdown, status, score, grade, points_awarded,
-          submitted_at, assessed_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'assessing', NULL, NULL, 0, ?, NULL)`
+          submitted_at, assessed_at, course_version, activity_revision,
+          activity_content_hash, activity_snapshot_json, delivery_mode,
+          lesson_attempt_ordinal, activity_attempt_ordinal, idempotency_key,
+          request_content_hash
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, ?, 'assessing', NULL, NULL, 0, ?, NULL,
+          ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )`
       )
       .run(
         attemptId,
@@ -1128,10 +1871,31 @@ export function createCourseAttempt(input: {
         activity.type,
         input.userId,
         input.answerMarkdown,
-        now
+        now,
+        coursePackage.course.version,
+        activity.revision,
+        activityContentHash,
+        activitySnapshot,
+        deliveryMode,
+        ordinals.lesson_attempt_ordinal,
+        ordinals.activity_attempt_ordinal,
+        input.idempotencyKey ?? null,
+        requestContentHash
       );
+    return {
+      attemptId,
+      existing: false,
+      deliveryMode,
+      lessonAttemptOrdinal: ordinals.lesson_attempt_ordinal,
+      activityAttemptOrdinal: ordinals.activity_attempt_ordinal
+    };
   });
-  return { attemptId, course: toCourse(course), lesson, activity };
+  return {
+    ...created,
+    course: toCourseFromPackage(course, coursePackage),
+    lesson,
+    activity
+  };
 }
 
 export function completeCourseAttempt(input: {
@@ -1149,8 +1913,14 @@ export function completeCourseAttempt(input: {
     | {
         id: string;
         course_id: string;
+        course_version: string;
         lesson_id: string;
         status: string;
+        activity_content_hash: string;
+        activity_snapshot_json: string;
+        delivery_mode: "visual" | "voice";
+        lesson_attempt_ordinal: number;
+        activity_attempt_ordinal: number;
       }
     | undefined;
   if (!attempt) {
@@ -1164,15 +1934,39 @@ export function completeCourseAttempt(input: {
     );
   }
   const courseRow = requireCourseRow(attempt.course_id);
-  const coursePackage = parseCoursePackage(courseRow);
-  const lessonRow = requireLessonRow(attempt.course_id, attempt.lesson_id);
-  const lesson = parseJson<CourseLesson>(
-    lessonRow.definition_json,
-    {} as CourseLesson
+  const coursePackage = coursePackageByVersion(
+    courseRow,
+    attempt.course_version
   );
+  const activity = courseActivitySchema.parse(
+    parseJson<unknown>(attempt.activity_snapshot_json, {})
+  );
+  const computedActivityHash = createHash("sha256")
+    .update(stableJson(activity))
+    .digest("hex");
+  if (computedActivityHash !== attempt.activity_content_hash) {
+    throw new HttpError(
+      409,
+      "course_attempt_snapshot_invalid",
+      "The saved activity snapshot no longer matches its integrity hash."
+    );
+  }
+  const lesson = coursePackage.lessons.find(
+    (entry) => entry.id === attempt.lesson_id
+  );
+  if (!lesson) {
+    throw new HttpError(
+      409,
+      "course_attempt_lesson_snapshot_missing",
+      "The lesson for this saved course attempt is unavailable."
+    );
+  }
+  const nextLessonId =
+    coursePackage.lessons.find((entry) => entry.order > lesson.order)?.id ??
+    null;
   const assessed = input.feedback.score !== null;
   const assessmentProfile = coursePackage.grading.assessmentProfiles.find(
-    (profile) => profile.id === input.activity.assessmentProfileId
+    (profile) => profile.id === activity.assessmentProfileId
   );
   const gradeScale =
     assessmentProfile?.gradeScale ?? coursePackage.grading.gradeScale;
@@ -1199,12 +1993,14 @@ export function completeCourseAttempt(input: {
        FROM course_attempts a
        JOIN course_assessments s ON s.attempt_id = a.id
        WHERE a.course_id = ? AND a.user_id = ? AND a.activity_id = ?
+         AND a.activity_content_hash = ?
          AND a.status = 'assessed' AND a.id <> ?`
     )
     .get(
       attempt.course_id,
       input.userId,
-      input.activity.id,
+      activity.id,
+      attempt.activity_content_hash,
       input.attemptId
     ) as {
     count: number;
@@ -1216,7 +2012,7 @@ export function completeCourseAttempt(input: {
   const possiblePoints = eligibleForPoints
     ? Math.max(
         0,
-        Math.round((input.activity.points * normalizedFeedback.score!) / 100)
+        Math.round((activity.points * normalizedFeedback.score!) / 100)
       )
     : 0;
   const points = !eligibleForPoints
@@ -1268,16 +2064,17 @@ export function completeCourseAttempt(input: {
       getDatabase()
         .prepare(
           `UPDATE course_enrollments SET
-            current_lesson_id = COALESCE(?, current_lesson_id),
+           current_lesson_id = COALESCE(?, current_lesson_id),
             points_earned = points_earned + ?, updated_at = ?
-           WHERE course_id = ? AND user_id = ?`
+           WHERE course_id = ? AND user_id = ? AND course_version = ?`
         )
         .run(
-          lessonCompleted ? input.nextLessonId : null,
+          lessonCompleted ? nextLessonId : null,
           points,
           now,
           attempt.course_id,
-          input.userId
+          input.userId,
+          attempt.course_version
         );
     }
     if (assessed) {
@@ -1287,7 +2084,7 @@ export function completeCourseAttempt(input: {
           entry
         ])
       );
-      for (const conceptId of input.activity.conceptIds) {
+      for (const conceptId of activity.conceptIds) {
         const conceptScore = scores.get(conceptId) ?? {
           conceptId,
           score: normalizedFeedback.score!,
@@ -1308,7 +2105,7 @@ export function completeCourseAttempt(input: {
           score: conceptScore.score,
           previousIntervalDays: previous?.review_interval_days ?? null,
           successfulReviewCount: previous?.successful_review_count ?? 0,
-          scheduleDays: input.activity.reviewAfterDays
+          scheduleDays: activity.reviewAfterDays
         });
         const reviewAt = new Date(
           Date.now() + interval * 86_400_000
@@ -1363,7 +2160,7 @@ export function completeCourseAttempt(input: {
             now
           );
 
-        for (const dimensionId of input.activity.masteryDimensionIds) {
+        for (const dimensionId of activity.masteryDimensionIds) {
           const previousDimension = getDatabase()
             .prepare(
               `SELECT mastery_score, average_score, evidence_count
@@ -1449,38 +2246,108 @@ export function completeCourseAttempt(input: {
       }
     }
   });
+  const updatedAccess = lessonAccessState(
+    coursePackage,
+    attempt.course_id,
+    input.userId
+  );
+  const unlockedNextLessonId =
+    nextLessonId && updatedAccess.accessibleLessonIds.has(nextLessonId)
+      ? nextLessonId
+      : null;
   return {
     attemptId: input.attemptId,
     status: assessed ? "assessed" : "needs_review",
     score: normalizedFeedback.score,
     grade: normalizedFeedback.grade,
     pointsAwarded: points,
-    feedback: normalizedFeedback
+    feedback: normalizedFeedback,
+    deliveryMode: attempt.delivery_mode,
+    lessonAttemptOrdinal: attempt.lesson_attempt_ordinal,
+    activityAttemptOrdinal: attempt.activity_attempt_ordinal,
+    progress: courseProgress(attempt.course_id, input.userId),
+    nextLessonId: unlockedNextLessonId
+  };
+}
+
+export function getCourseAttemptResult(attemptId: string, userId: string) {
+  const row = getDatabase()
+    .prepare(
+      `SELECT a.*, s.feedback_json
+       FROM course_attempts a
+       LEFT JOIN course_assessments s ON s.attempt_id = a.id
+       WHERE a.id = ? AND a.user_id = ?`
+    )
+    .get(attemptId, userId) as
+    | (JsonRecord & {
+        course_id: string;
+        course_version: string;
+        lesson_id: string;
+        status: "assessing" | "assessed" | "needs_review";
+        score: number | null;
+        grade: string | null;
+        points_awarded: number;
+        delivery_mode: "visual" | "voice";
+        lesson_attempt_ordinal: number;
+        activity_attempt_ordinal: number;
+        feedback_json?: string | null;
+      })
+    | undefined;
+  if (!row) {
+    throw new HttpError(404, "course_attempt_not_found", "Attempt not found.");
+  }
+  const courseRow = requireCourseRow(row.course_id);
+  const coursePackage = coursePackageByVersion(
+    courseRow,
+    row.course_version
+  );
+  const access = lessonAccessState(coursePackage, row.course_id, userId);
+  const lessonIndex = coursePackage.lessons.findIndex(
+    (lesson) => lesson.id === row.lesson_id
+  );
+  const candidateNextLessonId =
+    lessonIndex >= 0 ? coursePackage.lessons[lessonIndex + 1]?.id : undefined;
+  return {
+    attemptId,
+    status: row.status,
+    score: row.score,
+    grade: row.grade,
+    pointsAwarded: row.points_awarded,
+    feedback: row.feedback_json
+      ? parseJson<CourseAssessmentFeedback | null>(row.feedback_json, null)
+      : null,
+    deliveryMode: row.delivery_mode,
+    lessonAttemptOrdinal: row.lesson_attempt_ordinal,
+    activityAttemptOrdinal: row.activity_attempt_ordinal,
+    progress: courseProgress(row.course_id, userId),
+    nextLessonId:
+      candidateNextLessonId &&
+      access.accessibleLessonIds.has(candidateNextLessonId)
+        ? candidateNextLessonId
+        : null
   };
 }
 
 export function getActivityForAssessment(
   courseId: string,
   lessonId: string,
-  activityId: string
+  activityId: string,
+  userId: string
 ) {
   const course = requireCourseRow(courseId);
-  const coursePackage = parseCoursePackage(course);
-  const lessonRow = requireLessonRow(course.id, lessonId);
-  const lesson = parseJson<CourseLesson>(
-    lessonRow.definition_json,
-    {} as CourseLesson
-  );
+  const coursePackage = coursePackageForUser(course, userId);
+  const lesson = coursePackage.lessons.find((entry) => entry.id === lessonId);
+  if (!lesson) {
+    throw new HttpError(404, "lesson_not_found", "Lesson not found.");
+  }
+  requireAccessibleLesson(coursePackage, course.id, userId, lesson.id);
   const activity = lesson.activities.find((entry) => entry.id === activityId);
   if (!activity) {
     throw new HttpError(404, "activity_not_found", "Activity not found.");
   }
-  const next = getDatabase()
-    .prepare(
-      `SELECT id FROM course_lessons
-       WHERE course_id = ? AND order_index > ? ORDER BY order_index LIMIT 1`
-    )
-    .get(course.id, lesson.order) as { id: string } | undefined;
+  const next = coursePackage.lessons.find(
+    (entry) => entry.order > lesson.order
+  );
   const conceptRows = getDatabase()
     .prepare(
       `SELECT * FROM concepts WHERE id IN (${activity.conceptIds.map(() => "?").join(",")})`
@@ -1492,7 +2359,7 @@ export function getActivityForAssessment(
     definition_markdown: string;
   }>;
   return {
-    course: toCourse(course),
+    course: toCourseFromPackage(course, coursePackage),
     lesson,
     activity,
     gradeScale:

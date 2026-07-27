@@ -94,6 +94,7 @@ describe("course renderer registry", () => {
           estimatedMinutes: 10,
           required: true,
           reviewAfterDays: [1, 3, 8, 16],
+          revision: "1",
           namespace: "example.course",
           renderer: "lab",
           version: "1",

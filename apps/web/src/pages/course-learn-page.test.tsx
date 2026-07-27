@@ -1,15 +1,23 @@
 import { useState } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   CourseDrawer,
+  CourseSectionNavigation,
   FeedbackPanel,
   activitySubmissionLabel,
   courseAccentStyle,
   courseDraftStorageKey,
+  courseLessonFlowState,
   parseCourseDraft,
   recallWeekCheckpoints
 } from "./course-learn-page";
+import type {
+  CourseActivity,
+  CourseAttempt,
+  CourseContentBlock,
+  LearningSession
+} from "@/lib/course-types";
 
 describe("course activity labels", () => {
   it("distinguishes deterministic, proof, written, and extension submission", () => {
@@ -98,6 +106,31 @@ describe("course presentation boundary", () => {
   });
 });
 
+describe("course section navigation", () => {
+  it("lets a learner revisit the previous section while a checkpoint blocks the next one", () => {
+    const onPrevious = vi.fn();
+    const onContinue = vi.fn();
+    render(
+      <CourseSectionNavigation
+        currentIndex={2}
+        totalSteps={4}
+        canContinue={false}
+        onPrevious={onPrevious}
+        onContinue={onContinue}
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Previous section" })
+    );
+    expect(onPrevious).toHaveBeenCalledOnce();
+    expect(onContinue).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: "Continue" })
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("course drafts", () => {
   it("scopes a draft to the learner, course, lesson, and activity", () => {
     expect(
@@ -120,6 +153,150 @@ describe("course drafts", () => {
     expect(parseCourseDraft(JSON.stringify(draft))).toEqual(draft);
     expect(parseCourseDraft('{"version":1,"answer":4}')).toBeNull();
     expect(parseCourseDraft("not json")).toBeNull();
+  });
+});
+
+function checkpointActivity(
+  id: string,
+  required = true
+): CourseActivity {
+  return {
+    id,
+    title: `Checkpoint ${id}`,
+    type: "short_answer",
+    promptMarkdown: "Explain your reasoning.",
+    conceptIds: ["concept"],
+    masteryDimensionIds: ["conceptual_understanding"],
+    competencyIds: [],
+    assessmentProfileId: "default",
+    points: 10,
+    estimatedMinutes: 5,
+    required,
+    reviewAfterDays: [1, 3, 8, 16],
+    revision: "2",
+    answerGuidance: []
+  };
+}
+
+function assessedAttempt(
+  activityId: string,
+  verdict: "pass" | "revise"
+): CourseAttempt {
+  return {
+    id: `attempt-${activityId}`,
+    activityId,
+    status: "assessed",
+    score: verdict === "pass" ? 90 : 55,
+    grade: verdict === "pass" ? "A-" : "F",
+    pointsAwarded: verdict === "pass" ? 10 : 0,
+    answerMarkdown: "My reasoning.",
+    submittedAt: "2026-07-25T10:00:00.000Z",
+    feedback: {
+      verdict,
+      score: verdict === "pass" ? 90 : 55,
+      grade: verdict === "pass" ? "A-" : "F",
+      summary: verdict === "pass" ? "Correct." : "Revise this step.",
+      strengths: [],
+      issues: [],
+      lineFeedback: [],
+      criterionScores: [],
+      nextStep: "Use the definition explicitly.",
+      conceptScores: [],
+      misconceptionIds: []
+    }
+  };
+}
+
+function checkpointSession(
+  attempts: CourseAttempt[] = []
+): Pick<LearningSession, "lesson" | "latestAttempts"> {
+  const firstCheckpoint: CourseContentBlock = {
+    type: "checkpoint",
+    activityId: "first",
+    title: "First check",
+    introMarkdown: "Explain the definition before continuing.",
+    continuation: "after_pass"
+  };
+  const secondCheckpoint: CourseContentBlock = {
+    type: "checkpoint",
+    activityId: "exit",
+    title: "Exit check",
+    introMarkdown: "Apply the idea without copying the model.",
+    continuation: "after_pass"
+  };
+  return {
+    lesson: {
+      id: "lesson",
+      moduleId: "module",
+      week: 1,
+      day: 1,
+      order: 0,
+      title: "A progressive lesson",
+      summary: "Learn, explain, and apply.",
+      estimatedMinutes: 40,
+      conceptIds: ["concept"],
+      objectives: ["Explain the central definition."],
+      content: [
+        { type: "markdown", markdown: "Teach the definition." },
+        firstCheckpoint,
+        { type: "markdown", markdown: "Now study a worked example." },
+        secondCheckpoint,
+        { type: "markdown", markdown: "Connect this result to tomorrow." }
+      ],
+      activities: [
+        checkpointActivity("first"),
+        checkpointActivity("exit")
+      ]
+    },
+    latestAttempts: attempts
+  };
+}
+
+describe("progressive lesson flow", () => {
+  it("shows teaching up to the first unanswered checkpoint", () => {
+    const flow = courseLessonFlowState(checkpointSession());
+    expect(flow.blocks).toHaveLength(2);
+    expect(flow.availableActivityIds).toEqual(["first"]);
+    expect(flow.blockedBy?.activityId).toBe("first");
+    expect(flow.complete).toBe(false);
+  });
+
+  it("reveals the next teaching section only after a passing review", () => {
+    const reviseFlow = courseLessonFlowState(
+      checkpointSession([assessedAttempt("first", "revise")])
+    );
+    expect(reviseFlow.availableActivityIds).toEqual(["first"]);
+    expect(reviseFlow.blockedBy?.activityId).toBe("first");
+
+    const passFlow = courseLessonFlowState(
+      checkpointSession([assessedAttempt("first", "pass")])
+    );
+    expect(passFlow.blocks).toHaveLength(4);
+    expect(passFlow.availableActivityIds).toEqual(["first", "exit"]);
+    expect(passFlow.blockedBy?.activityId).toBe("exit");
+  });
+
+  it("completes only after every required checkpoint passes", () => {
+    const flow = courseLessonFlowState(
+      checkpointSession([
+        assessedAttempt("first", "pass"),
+        assessedAttempt("exit", "pass")
+      ])
+    );
+    expect(flow.blocks).toHaveLength(5);
+    expect(flow.blockedBy).toBeNull();
+    expect(flow.complete).toBe(true);
+  });
+
+  it("keeps legacy lessons fully visible while honoring required completion", () => {
+    const session = checkpointSession([assessedAttempt("first", "pass")]);
+    session.lesson.content = [
+      { type: "markdown", markdown: "A legacy lesson page." }
+    ];
+    const flow = courseLessonFlowState(session);
+    expect(flow.blocks).toEqual(session.lesson.content);
+    expect(flow.availableActivityIds).toEqual(["first", "exit"]);
+    expect(flow.complete).toBe(false);
   });
 });
 

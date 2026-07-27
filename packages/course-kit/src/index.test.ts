@@ -138,6 +138,33 @@ describe("Forge Course Kit", () => {
     expect(parsed.conceptRefs[0]?.id).toBe("concept.shared");
   });
 
+  it("requires every declared concept upgrade to target a concept owned by the package", () => {
+    const fixture = basePackage();
+    const parsed = defineCoursePackage({
+      ...fixture,
+      conceptUpgrades: [
+        {
+          conceptId: "concept.one",
+          fromContentHash: "a".repeat(64),
+          reason: "Replace an ambiguous example with a complete one."
+        }
+      ]
+    });
+    expect(parsed.conceptUpgrades?.[0]?.conceptId).toBe("concept.one");
+    expect(() =>
+      defineCoursePackage({
+        ...fixture,
+        conceptUpgrades: [
+          {
+            conceptId: "concept.not-owned",
+            fromContentHash: "b".repeat(64),
+            reason: "This package does not own the target."
+          }
+        ]
+      })
+    ).toThrow(/must target a concept defined by this package/u);
+  });
+
   it("resolves an omitted lesson layout from the course presentation", () => {
     const fixture = basePackage();
     const parsed = defineCoursePackage({
@@ -182,6 +209,72 @@ describe("Forge Course Kit", () => {
         lessons: [...fixture.lessons, secondLesson]
       })
     ).toThrow(/duplicate activity ids: proof.one/iu);
+  });
+
+  it("places required schema 1.1 activities inside the teaching sequence", () => {
+    const fixture = basePackage();
+    const parsed = defineCoursePackage({
+      ...fixture,
+      schemaVersion: "1.1",
+      lessons: fixture.lessons.map((lesson) => ({
+        ...lesson,
+        content: [
+          {
+            type: "markdown" as const,
+            markdown:
+              "First study a complete worked example and explain each step."
+          },
+          {
+            type: "checkpoint" as const,
+            activityId: "proof.one",
+            title: "Show what you understand",
+            introMarkdown:
+              "Write the proof only after checking the example above.",
+            continuation: "after_pass" as const
+          },
+          {
+            type: "markdown" as const,
+            markdown: "Now compare your proof with the next construction."
+          }
+        ]
+      }))
+    });
+
+    expect(parsed.schemaVersion).toBe("1.1");
+    expect(parsed.lessons[0]?.content[1]).toMatchObject({
+      type: "checkpoint",
+      activityId: "proof.one",
+      continuation: "after_pass"
+    });
+    expect(parsed.lessons[0]?.activities[0]?.revision).toBe("1");
+  });
+
+  it("rejects required checkpoints that can continue without understanding", () => {
+    const fixture = basePackage();
+    expect(() =>
+      defineCoursePackage({
+        ...fixture,
+        schemaVersion: "1.1",
+        lessons: fixture.lessons.map((lesson) => ({
+          ...lesson,
+          content: [
+            {
+              type: "checkpoint" as const,
+              activityId: "proof.one",
+              title: "Required proof",
+              continuation: "after_review" as const
+            }
+          ]
+        }))
+      })
+    ).toThrow(/must use pass-based or remediation-based continuation/iu);
+  });
+
+  it("rejects schema 1.1 lessons that omit a required activity checkpoint", () => {
+    const fixture = basePackage();
+    expect(() =>
+      defineCoursePackage({ ...fixture, schemaVersion: "1.1" })
+    ).toThrow(/does not place required activity proof.one/iu);
   });
 
   it("supports a CPGE-style course with shared concepts and custom pedagogy", () => {

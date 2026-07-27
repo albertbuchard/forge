@@ -22060,7 +22060,9 @@ test("settings and local agent token management persist through the versioned AP
       "listCourses",
       "courseDetail",
       "learningSession",
+      "voiceLearningSession",
       "submitAttempt",
+      "upgradeEnrollment",
       "importCourse",
       "exportCourse",
       "listConcepts",
@@ -22073,6 +22075,7 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(courseTool);
     assert.match(courseTool.inputShape, /learningSession/);
     assert.match(courseTool.inputShape, /submitAttempt/);
+    assert.match(courseTool.inputShape, /upgradeEnrollment/);
     assert.match(
       ((courseTool as { notes?: string[] }).notes ?? []).join(" "),
       /learner-safe/i

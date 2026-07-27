@@ -164,6 +164,9 @@ export function CourseContentBlockView({
       </div>
     );
   }
+  if (block.type === "checkpoint") {
+    return null;
+  }
   const Renderer = blockRenderers.get(
     rendererKey(block.namespace, block.renderer, block.version)
   );
