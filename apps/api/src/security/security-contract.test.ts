@@ -107,6 +107,16 @@ test("every source route receives a stable operation action and exact resource t
   assert.notEqual(read.action, trust.action);
 });
 
+test("companion bootstrap has a stable exact route action", () => {
+  const contract = resolveRouteSecurityContract({
+    method: "POST",
+    routePath: "/api/v1/health/pairing-sessions"
+  });
+  assert.equal(contract.securityClass, "protected");
+  assert.equal(contract.action, "companion.pair");
+  assert.equal(contract.allowsAnonymousAdmission, false);
+});
+
 test("source routes with restore vocabulary cannot silently become ordinary without explicit review", async () => {
   const inventory = await discoverSourceRouteInventory(API_SOURCE_ROOT);
   const ordinaryRestoreRoutes = inventory.routes

@@ -159,7 +159,7 @@ const companionSourceStatesSchema = z.object({
 });
 
 export const createCompanionPairingSessionSchema = z.object({
-  label: z.string().trim().default("Forge Companion"),
+  label: z.string().trim().min(1).max(120).default("Forge Companion"),
   userId: z.string().trim().nullable().optional(),
   publicUrl: z.string().trim().optional(),
   fallbackMode: z.enum(["none", "tailscale", "fixed-ip"]).default("none"),

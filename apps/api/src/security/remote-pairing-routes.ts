@@ -5,6 +5,11 @@ import { z } from "zod";
 import { HttpError } from "../errors.js";
 import type { ApplicationSecurityRuntime } from "./application-security-runtime.js";
 import type { ForgePrincipal } from "./contracts.js";
+import {
+  isCompanionBootstrapGrant,
+  isCompanionBootstrapRequest
+} from "./companion-bootstrap-grant.js";
+import { PairingAdmissionError } from "./pairing-service.js";
 import type { SqliteSecurityStore } from "./sqlite-security-store.js";
 
 const clientKeyThumbprintSchema = z
@@ -164,6 +169,7 @@ function pairedPrincipal(
     installationId: client.installationId,
     audience: client.audience,
     scopes: client.scopes,
+    clientType: client.clientType,
     profile: client.profile,
     ownerSecurityEpoch: client.ownerSecurityEpoch,
     clientSecurityEpoch: client.clientSecurityEpoch,
@@ -309,7 +315,7 @@ export function registerRemotePairingRoutes(
     };
   });
 
-  app.post("/api/v1/auth/device", async (request) => {
+  app.post("/api/v1/auth/device", async (request, reply) => {
     const body = z
       .object({
         clientName: z.string().trim().min(1).max(120),
@@ -320,6 +326,24 @@ export function registerRemotePairingRoutes(
       })
       .strict()
       .parse(request.body ?? {});
+    const requestsCompanionBootstrap =
+      body.requestedProfile === "trusted_personal_assistant" &&
+      body.requestedScopes.length === 1 &&
+      body.requestedScopes[0] === "companion.pair";
+    if (
+      requestsCompanionBootstrap &&
+      !isCompanionBootstrapRequest({
+        profile: body.requestedProfile,
+        scopes: body.requestedScopes,
+        clientType: body.clientType
+      })
+    ) {
+      throw new HttpError(
+        400,
+        "companion_pairing_api_client_required",
+        "Forge companion bootstrap pairing requires an API client."
+      );
+    }
     requireAvailableRemoteMachineScopes(
       body.requestedScopes,
       remoteMachineScopesAvailable
@@ -337,6 +361,19 @@ export function registerRemotePairingRoutes(
         requestedProfile: body.requestedProfile
       });
     } catch (error) {
+      const retryAfterSeconds =
+        error instanceof PairingAdmissionError
+          ? error.retryAfterSeconds
+          : 60;
+      reply.header("retry-after", String(retryAfterSeconds));
+      if (error instanceof PairingAdmissionError) {
+        throw new HttpError(
+          429,
+          "pairing_admission_limited",
+          "Forge cannot admit another pairing request in the current bounded window.",
+          { retryAfterSeconds }
+        );
+      }
       pairingProtocolFailure(error, {
         statusCode: 429,
         code: "pairing_admission_limited",
@@ -726,6 +763,29 @@ export function registerRemotePairingRoutes(
           absoluteExpiresAt: session.absoluteExpiresAt
         },
         csrfToken: session.csrfToken,
+        clientId,
+        audience: principal.audience,
+        scopes: principal.scopes,
+        profile: principal.profile
+      };
+    }
+    if (
+      isCompanionBootstrapGrant({
+        clientType: polled.grant.clientType,
+        profile: principal.profile,
+        scopes: principal.scopes
+      })
+    ) {
+      const access = await runtime.accessCredentials.issue(principal, {
+        mode: "sender_constrained",
+        confirmationJkt: client.keyThumbprint
+      });
+      reply.header("cache-control", "no-store");
+      reply.header("pragma", "no-cache");
+      return {
+        tokenType: "DPoP",
+        accessToken: access.token,
+        expiresAt: access.expiresAt,
         clientId,
         audience: principal.audience,
         scopes: principal.scopes,

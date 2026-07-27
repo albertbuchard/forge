@@ -3551,6 +3551,356 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
+    func testManualProbeCandidatesAllowSecurePairingForExplicitHttpsHost() {
+        let candidates = ForgeServerDiscovery.manualProbeCandidates(
+            for: "https://forge.example/api/v1"
+        )
+
+        XCTAssertTrue(
+            candidates.contains {
+                $0.apiBaseUrl == "https://forge.example/api/v1"
+                    && $0.uiBaseUrl == "https://forge.example/forge/"
+                    && $0.canBootstrapPairing
+            }
+        )
+    }
+
+    func testKnownHostPairingUsesOneUseDeviceAuthorizationAndNoOperatorCookie() async throws {
+        PeopleWatchURLProtocol.reset()
+        defer { PeopleWatchURLProtocol.reset() }
+
+        PeopleWatchURLProtocol.handler = { request in
+            switch request.url?.path {
+            case "/api/v1/auth/device":
+                return (
+                    200,
+                    Data(
+                        """
+                        {
+                          "requestId": "pairing-request-1",
+                          "deviceCode": "fg_device_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+                          "userCode": "BCDF-GHJK",
+                          "verificationUri": "https://forge.example/forge/pair",
+                          "expiresIn": 600,
+                          "interval": 5
+                        }
+                        """.utf8
+                    )
+                )
+            case "/api/v1/auth/token":
+                return (
+                    200,
+                    Data(
+                        """
+                        {
+                          "tokenType": "DPoP",
+                          "accessToken": "one-use-access-token",
+                          "expiresAt": "2099-01-01T00:00:00Z",
+                          "clientId": "client_pairing",
+                          "audience": "urn:forge:test",
+                          "scopes": [
+                            "companion.pair",
+                            "profile:trusted_personal_assistant"
+                          ],
+                          "profile": "trusted_personal_assistant"
+                        }
+                        """.utf8
+                    )
+                )
+            case "/api/v1/health/pairing-sessions":
+                return (
+                    201,
+                    Data(
+                        """
+                        {
+                          "qrPayload": {
+                            "kind": "forge-companion-pairing",
+                            "apiBaseUrl": "https://forge.example/api/v1",
+                            "uiBaseUrl": "https://forge.example/forge/",
+                            "sessionId": "pair_test",
+                            "pairingToken": "pairing-token",
+                            "expiresAt": "2099-01-01T00:00:00Z",
+                            "capabilities": [
+                              "healthkit.sleep",
+                              "healthkit.fitness",
+                              "background-sync",
+                              "location-ready",
+                              "watch-ready"
+                            ]
+                          }
+                        }
+                        """.utf8
+                    )
+                )
+            default:
+                return (404, Data(#"{"code":"not_found"}"#.utf8))
+            }
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieAcceptPolicy = .never
+        configuration.protocolClasses = [PeopleWatchURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let client = ForgeSyncClient(
+            bootstrapURLSession: session,
+            pairingSleep: { _ in }
+        )
+        var prompt: ForgePairingAuthorizationPrompt?
+
+        let payload = try await client.bootstrapPairingSession(
+            baseUrl: "https://forge.example/api/v1",
+            label: "Albert's iPhone",
+            capabilities: ["caller-controlled-capability"],
+            onAuthorizationRequired: { prompt = $0 }
+        )
+
+        XCTAssertEqual(prompt?.userCode, "BCDF-GHJK")
+        XCTAssertEqual(
+            prompt?.verificationUri,
+            "https://forge.example/forge/pair"
+        )
+        XCTAssertEqual(payload.sessionId, "pair_test")
+        XCTAssertEqual(
+            PeopleWatchURLProtocol.requests.map { $0.url?.path },
+            [
+                "/api/v1/auth/device",
+                "/api/v1/auth/token",
+                "/api/v1/health/pairing-sessions"
+            ]
+        )
+        XCTAssertFalse(
+            PeopleWatchURLProtocol.requests.contains {
+                $0.url?.path == "/api/v1/auth/operator-session"
+            }
+        )
+
+        let beginBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: try XCTUnwrap(PeopleWatchURLProtocol.bodies[0])
+            ) as? [String: Any]
+        )
+        XCTAssertEqual(beginBody["clientType"] as? String, "api")
+        XCTAssertEqual(
+            beginBody["requestedScopes"] as? [String],
+            ["companion.pair"]
+        )
+        XCTAssertEqual(
+            beginBody["requestedProfile"] as? String,
+            "trusted_personal_assistant"
+        )
+        XCTAssertEqual(
+            (beginBody["clientKeyThumbprint"] as? String)?.count,
+            43
+        )
+
+        let tokenBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: try XCTUnwrap(PeopleWatchURLProtocol.bodies[1])
+            ) as? [String: Any]
+        )
+        XCTAssertEqual(tokenBody["grantType"] as? String, "device_code")
+        XCTAssertNotNil(tokenBody["clientProof"] as? String)
+
+        let invitationRequest = PeopleWatchURLProtocol.requests[2]
+        XCTAssertEqual(
+            invitationRequest.value(forHTTPHeaderField: "Authorization"),
+            "DPoP one-use-access-token"
+        )
+        XCTAssertNotNil(
+            invitationRequest.value(forHTTPHeaderField: "DPoP")
+        )
+        XCTAssertNil(invitationRequest.value(forHTTPHeaderField: "Cookie"))
+        let invitationBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: try XCTUnwrap(PeopleWatchURLProtocol.bodies[2])
+            ) as? [String: String]
+        )
+        XCTAssertEqual(invitationBody, ["label": "Albert's iPhone"])
+    }
+
+    func testKnownHostPairingRejectsInsecureRemoteHttpBeforeNetworkUse() async {
+        PeopleWatchURLProtocol.reset()
+        defer { PeopleWatchURLProtocol.reset() }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [PeopleWatchURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let client = ForgeSyncClient(
+            bootstrapURLSession: session,
+            pairingSleep: { _ in }
+        )
+
+        do {
+            _ = try await client.bootstrapPairingSession(
+                baseUrl: "http://192.168.1.42:4317/api/v1",
+                label: "Albert's iPhone",
+                capabilities: []
+            )
+            XCTFail("Remote HTTP pairing must fail closed.")
+        } catch {
+            XCTAssertTrue(
+                error.localizedDescription.localizedCaseInsensitiveContains(
+                    "requires HTTPS"
+                )
+            )
+        }
+        XCTAssertTrue(PeopleWatchURLProtocol.requests.isEmpty)
+    }
+
+    func testKnownHostPairingCancellationCancelsTheServerRequest() async throws {
+        PeopleWatchURLProtocol.reset()
+        defer { PeopleWatchURLProtocol.reset() }
+
+        PeopleWatchURLProtocol.handler = { request in
+            switch request.url?.path {
+            case "/api/v1/auth/device":
+                return (
+                    200,
+                    Data(
+                        """
+                        {
+                          "requestId": "pairing-request-cancel",
+                          "deviceCode": "fg_device_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+                          "userCode": "BCDF-GHJK",
+                          "verificationUri": "https://forge.example/forge/pair",
+                          "expiresIn": 600,
+                          "interval": 5
+                        }
+                        """.utf8
+                    )
+                )
+            case "/api/v1/auth/device/cancel":
+                return (200, Data(#"{"cancelled":true}"#.utf8))
+            default:
+                return (404, Data(#"{"code":"not_found"}"#.utf8))
+            }
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieAcceptPolicy = .never
+        configuration.protocolClasses = [PeopleWatchURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let client = ForgeSyncClient(
+            bootstrapURLSession: session,
+            pairingSleep: { _ in
+                try await Task.sleep(for: .seconds(60))
+            }
+        )
+        let promptShown = expectation(description: "approval code shown")
+        let task = Task {
+            try await client.bootstrapPairingSession(
+                baseUrl: "https://forge.example/api/v1",
+                label: "Albert's iPhone",
+                capabilities: [],
+                onAuthorizationRequired: { _ in promptShown.fulfill() }
+            )
+        }
+
+        await fulfillment(of: [promptShown], timeout: 2)
+        task.cancel()
+        do {
+            _ = try await task.value
+            XCTFail("Cancelled pairing must not complete.")
+        } catch is CancellationError {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected cancellation error: \(error)")
+        }
+        XCTAssertEqual(
+            PeopleWatchURLProtocol.requests.map { $0.url?.path },
+            [
+                "/api/v1/auth/device",
+                "/api/v1/auth/device/cancel"
+            ]
+        )
+    }
+
+    func testPairingRecoveryDistinguishesAuthorizationEndFromOffline() {
+        XCTAssertTrue(
+            CompanionAppModel.isTerminalPairingAuthorizationFailure(
+                NSError(domain: "ForgeSyncClient", code: 401)
+            )
+        )
+        XCTAssertTrue(
+            CompanionAppModel.isTerminalPairingAuthorizationFailure(
+                NSError(domain: "ForgeSyncClient", code: 403)
+            )
+        )
+        XCTAssertTrue(
+            CompanionAppModel.isTerminalPairingAuthorizationFailure(
+                NSError(domain: "ForgeSyncClient", code: 410)
+            )
+        )
+        XCTAssertFalse(
+            CompanionAppModel.isTerminalPairingAuthorizationFailure(
+                URLError(.notConnectedToInternet)
+            )
+        )
+        XCTAssertFalse(
+            CompanionAppModel.isTerminalPairingAuthorizationFailure(
+                NSError(domain: "ForgeSyncClient", code: 503)
+            )
+        )
+    }
+
+    func testPairingOfflineThenSuccessClearsOnlyTheTemporaryOutageState() {
+        let model = CompanionAppModel()
+        let activePairing = PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "https://forge.example/api/v1",
+            uiBaseUrl: "https://forge.example/forge/",
+            sessionId: "pair_temporarily_offline",
+            pairingToken: "preserved-token",
+            expiresAt: "2026-07-27T22:00:00Z",
+            capabilities: ["background-sync"]
+        )
+        model.pairing = activePairing
+
+        model.recordTemporaryPairingReachabilityFailure()
+
+        XCTAssertEqual(model.pairing?.sessionId, activePairing.sessionId)
+        XCTAssertTrue(model.pairingTemporarilyUnreachable)
+        XCTAssertEqual(model.lastSyncMessage, "Waiting for Forge to reconnect")
+        XCTAssertNotNil(model.latestError)
+
+        model.clearTemporaryPairingReachabilityFailure()
+
+        XCTAssertEqual(model.pairing?.sessionId, activePairing.sessionId)
+        XCTAssertFalse(model.pairingTemporarilyUnreachable)
+        XCTAssertEqual(model.lastSyncMessage, "Forge is connected")
+        XCTAssertNil(model.latestError)
+    }
+
+    func testPairingAuthorizationEndStopsUseAndEntersDirectRepairState() {
+        let model = CompanionAppModel()
+        model.pairing = PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "https://forge.example/api/v1",
+            uiBaseUrl: "https://forge.example/forge/",
+            sessionId: "pair_revoked",
+            pairingToken: "revoked-token",
+            expiresAt: "2026-07-27T22:00:00Z",
+            capabilities: ["background-sync"]
+        )
+
+        model.requireNewPairing(reason: "test-revoked")
+
+        XCTAssertNil(model.pairing)
+        XCTAssertTrue(model.pairingRecoveryRequired)
+        XCTAssertEqual(model.syncState, .disconnected)
+        XCTAssertEqual(model.lastSyncMessage, "Forge needs to be paired again")
+        XCTAssertTrue(
+            model.latestError?.localizedCaseInsensitiveContains(
+                "pairing is no longer valid"
+            ) == true
+        )
+    }
+
     func testPassiveStationaryClusterRepairsShortMoveIntoRetroactiveStay() throws {
         let store = MovementSyncStore(testingState: nil)
         store.debugSetTrackingEnabled(true)
@@ -8610,17 +8960,20 @@ final class ForgeCompanionTests: XCTestCase {
         let activeCheckpoint = companionRedactDiagnosticMessage(
             "discarding active health sync checkpoint session=sync_01J123SECRET chunkingVersion=2 currentChunkingVersion=3 ageSeconds=42 windowAgeSeconds=84"
         )
+        let approvalCode = companionRedactDiagnosticMessage(
+            "Pairing code BCDF-GHJK"
+        )
 
         for secret in [
             "pair-secret", "pair-session", "abc123", "hunter2",
             "header.payload.signature", "query-secret", "query-session",
             "session-cookie", "plain-password", "eyJhbGciOiJIUzI1NiJ9",
-            "sync_01J123SECRET"
+            "sync_01J123SECRET", "BCDF-GHJK"
         ] {
             XCTAssertFalse(
                 [
                     labeledSecrets, requestSecrets, querySecrets, cookieSecrets,
-                    userInfoSecret, jwtSecret, activeCheckpoint
+                    userInfoSecret, jwtSecret, activeCheckpoint, approvalCode
                 ]
                     .joined(separator: "\n")
                     .contains(secret)
@@ -8632,6 +8985,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(cookieSecrets.contains("Set-Cookie: <redacted>"))
         XCTAssertTrue(userInfoSecret.contains(":<redacted>@"))
         XCTAssertTrue(jwtSecret.contains("<redacted-token>"))
+        XCTAssertEqual(approvalCode, "Pairing code <redacted>")
         XCTAssertEqual(
             activeCheckpoint,
             "discarding active health sync checkpoint session=<redacted> chunkingVersion=2 currentChunkingVersion=3 ageSeconds=42 windowAgeSeconds=84"

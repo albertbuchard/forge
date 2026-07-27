@@ -66,6 +66,18 @@ export type PairingRepository = {
     admissionWindowSeconds: number;
     maximumAdmissionAttempts: number;
   }): boolean;
+  readPairingAdmissionRetryAfterSeconds(input: {
+    ownerId: string;
+    installationId: string;
+    now: string;
+    maximumPendingPerInstallation: number;
+    maximumPendingPerOwner: number;
+    maximumPendingGlobally: number;
+    admissionNetworkBucketKey: string;
+    admissionInstallationBucketKey: string;
+    admissionWindowSeconds: number;
+    maximumAdmissionAttempts: number;
+  }): number;
   findPairingByDeviceDigest(deviceDigest: string): PairingRequest | null;
   findPairingByUserCodeDigest(userCodeDigest: string): PairingRequest | null;
   readPairingRequest(id: string): PairingRequest | null;
@@ -128,6 +140,13 @@ export type PairingPollResult =
         profile: string;
       };
     };
+
+export class PairingAdmissionError extends Error {
+  constructor(readonly retryAfterSeconds: number) {
+    super("Forge pairing has reached its bounded pending-request cap.");
+    this.name = "PairingAdmissionError";
+  }
+}
 
 const PAIRING_PROFILES = new Set([
   "viewer",
@@ -239,6 +258,10 @@ export class PairingService<ServerContext = unknown> {
       throw new Error("Forge pairing owner state is unavailable.");
     }
     const now = this.clock.now();
+    const effectiveLifetimeSeconds =
+      input.clientType === "browser"
+        ? Math.min(this.lifetimeSeconds, 180)
+        : this.lifetimeSeconds;
     const deviceCode = createOpaqueSecret(this.secrets, "fg_device");
     const userCode = createHumanUserCode(this.secrets);
     const request: PairingRequest = {
@@ -261,32 +284,42 @@ export class PairingService<ServerContext = unknown> {
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
       expiresAt: new Date(
-        now.getTime() + this.lifetimeSeconds * 1000
+        now.getTime() + effectiveLifetimeSeconds * 1000
       ).toISOString(),
       pollIntervalSeconds: 5,
       nextPollAt: new Date(now.getTime() + 5_000).toISOString(),
       approval: null
     };
+    const admissionNetworkBucketKey = this.digester.digest(
+      "pairing-admission-network",
+      networkIdentity
+    );
+    const admissionInstallationBucketKey = this.digester.digest(
+      "pairing-admission-installation",
+      `${input.ownerId}\0${input.installationId}`
+    );
+    const admissionInput = {
+      maximumPendingPerInstallation: this.maximumPendingPerInstallation,
+      maximumPendingPerOwner: this.maximumPendingPerOwner,
+      maximumPendingGlobally: this.maximumPendingGlobally,
+      admissionNetworkBucketKey,
+      admissionInstallationBucketKey,
+      admissionWindowSeconds: this.admissionWindowSeconds,
+      maximumAdmissionAttempts: this.maximumAdmissionAttempts
+    };
     if (
       !this.repository.createPairingRequestWithCaps({
         record: request,
-        maximumPendingPerInstallation: this.maximumPendingPerInstallation,
-        maximumPendingPerOwner: this.maximumPendingPerOwner,
-        maximumPendingGlobally: this.maximumPendingGlobally,
-        admissionNetworkBucketKey: this.digester.digest(
-          "pairing-admission-network",
-          networkIdentity
-        ),
-        admissionInstallationBucketKey: this.digester.digest(
-          "pairing-admission-installation",
-          `${input.ownerId}\0${input.installationId}`
-        ),
-        admissionWindowSeconds: this.admissionWindowSeconds,
-        maximumAdmissionAttempts: this.maximumAdmissionAttempts
+        ...admissionInput
       })
     ) {
-      throw new Error(
-        "Forge pairing has reached its bounded pending-request cap."
+      throw new PairingAdmissionError(
+        this.repository.readPairingAdmissionRetryAfterSeconds({
+          ownerId: input.ownerId,
+          installationId: input.installationId,
+          now: request.createdAt,
+          ...admissionInput
+        })
       );
     }
     return {
@@ -294,7 +327,7 @@ export class PairingService<ServerContext = unknown> {
       deviceCode,
       userCode,
       verificationUri: this.verificationUri,
-      expiresIn: this.lifetimeSeconds,
+      expiresIn: effectiveLifetimeSeconds,
       interval: request.pollIntervalSeconds
     };
   }

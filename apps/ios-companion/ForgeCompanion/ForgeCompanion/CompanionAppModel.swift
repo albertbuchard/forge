@@ -827,6 +827,10 @@ final class CompanionAppModel: ObservableObject {
             companionDebugLog("CompanionAppModel", "discoveryMessage -> \(discoveryMessage)")
         }
     }
+    @Published private(set) var pairingAuthorizationPrompt:
+        ForgePairingAuthorizationPrompt?
+    @Published private(set) var pairingRecoveryRequired = false
+    @Published private(set) var pairingTemporarilyUnreachable = false
     @Published var discoveredTailscaleDevices: [DiscoveredTailscaleDevice] = [] {
         didSet {
             companionDebugLog(
@@ -1094,6 +1098,8 @@ final class CompanionAppModel: ObservableObject {
         cancelHistoricalWorkoutImport(reason: "disconnect")
         pairing = nil
         pairingOwnerUserId = nil
+        pairingRecoveryRequired = false
+        pairingTemporarilyUnreachable = false
         syncState = .disconnected
         lastSyncMessage = "Not paired"
         latestError = nil
@@ -1309,11 +1315,20 @@ final class CompanionAppModel: ObservableObject {
             "CompanionAppModel",
             "bootstrapPairing start serverId=\(server.id) apiBaseUrl=\(server.apiBaseUrl)"
         )
+        pairingAuthorizationPrompt = nil
+        defer { pairingAuthorizationPrompt = nil }
         let payload = try await syncClient.bootstrapPairingSession(
             baseUrl: server.apiBaseUrl,
             label: UIDevice.current.name,
             capabilities: SimulatorLocalForge.capabilities,
-            transport: server.transport
+            transport: server.transport,
+            onAuthorizationRequired: { [weak self] prompt in
+                await MainActor.run {
+                    self?.pairingAuthorizationPrompt = prompt
+                    self?.lastSyncMessage =
+                        "Waiting for approval in Forge Settings → Agents"
+                }
+            }
         )
         companionDebugLog(
             "CompanionAppModel",
@@ -1327,6 +1342,10 @@ final class CompanionAppModel: ObservableObject {
         lastSyncMessage = "Connected to \(server.name)"
         ForgeServerDiscovery.rememberSuccessfulServer(server)
         companionDebugLog("CompanionAppModel", "bootstrapPairing complete")
+    }
+
+    func clearPairingAuthorizationPrompt() {
+        pairingAuthorizationPrompt = nil
     }
 
     func connectToManualRuntime(_ rawInput: String) async throws {
@@ -1387,6 +1406,7 @@ final class CompanionAppModel: ObservableObject {
                 self.pairing = refreshed
                 persistPairing()
                 applyPairingSessionState(session, reason: "renewal-heartbeat-\(reason)")
+                clearTemporaryPairingReachabilityFailure()
                 companionDebugLog(
                     "CompanionAppModel",
                     "ensureActivePairingIfPossible refreshed existing session reason=\(reason)"
@@ -1397,18 +1417,77 @@ final class CompanionAppModel: ObservableObject {
                     "CompanionAppModel",
                     "ensureActivePairingIfPossible heartbeat refresh failed reason=\(reason) error=\(error.localizedDescription)"
                 )
+                if Self.isTerminalPairingAuthorizationFailure(error) {
+                    requireNewPairing(reason: reason)
+                } else {
+                    recordTemporaryPairingReachabilityFailure()
+                }
+                return nil
             }
         }
-        do {
-            let renewed = try await renewPairingSession(from: normalized, reason: reason)
-            return renewed
-        } catch {
-            companionDebugLog(
-                "CompanionAppModel",
-                "ensureActivePairingIfPossible renewal failed reason=\(reason) error=\(error.localizedDescription)"
-            )
-            return nil
+        requireNewPairing(reason: reason)
+        return nil
+    }
+
+    static func isTerminalPairingAuthorizationFailure(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == "ForgeSyncClient"
+            && [401, 403, 410].contains(nsError.code)
+    }
+
+    func recordTemporaryPairingReachabilityFailure() {
+        pairingTemporarilyUnreachable = true
+        latestError =
+            "Forge is temporarily unreachable. Your pairing is preserved and will retry automatically."
+        lastSyncMessage = "Waiting for Forge to reconnect"
+    }
+
+    func clearTemporaryPairingReachabilityFailure() {
+        guard pairingTemporarilyUnreachable else {
+            return
         }
+        pairingTemporarilyUnreachable = false
+        if latestError ==
+            "Forge is temporarily unreachable. Your pairing is preserved and will retry automatically."
+        {
+            latestError = nil
+        }
+        if lastSyncMessage == "Waiting for Forge to reconnect" {
+            lastSyncMessage = "Forge is connected"
+        }
+    }
+
+    func requireNewPairing(reason: String) {
+        companionDebugLog(
+            "CompanionAppModel",
+            "requireNewPairing reason=\(reason)"
+        )
+        cancelActiveSync(
+            reason: "pairing authorization ended",
+            userMessage: "Forge needs to be paired again"
+        )
+        cancelHistoricalWorkoutImport(reason: "pairing authorization ended")
+        maintenanceTask?.cancel()
+        maintenanceTask = nil
+        autoSyncDebounceTask?.cancel()
+        deferredStartupRefreshTask?.cancel()
+        remoteSourceReconciliationTask?.cancel()
+        pairingAuthorizationPrompt = nil
+        pairing = nil
+        pairingOwnerUserId = nil
+        pairingRecoveryRequired = true
+        pairingTemporarilyUnreachable = false
+        syncState = .disconnected
+        latestError =
+            "This Forge pairing is no longer valid. Approve one new secure pairing request to reconnect."
+        lastSyncMessage = "Forge needs to be paired again"
+        keychain.delete(forKey: StorageKeys.pairingPayload)
+        keychain.delete(forKey: StorageKeys.pairingOwner)
+        UserDefaults.standard.removeObject(forKey: StorageKeys.pairingPayload)
+        backgroundScheduler.schedule(
+            activeSync: false,
+            reason: "pairing authorization ended"
+        )
     }
 
     private func persistPairing() {
@@ -1819,6 +1898,8 @@ final class CompanionAppModel: ObservableObject {
             keychain.delete(forKey: StorageKeys.pairingOwner)
         }
         pairing = normalizedPairingPayload(payload, preferredUiBaseUrl: preferredUiBaseUrl)
+        pairingRecoveryRequired = false
+        pairingTemporarilyUnreachable = false
         if let activePairing = pairing,
            let host = CompanionPairingURLResolver.rememberableHost(for: activePairing) {
             ForgeServerDiscovery.rememberSuccessfulHost(host)
@@ -1947,7 +2028,7 @@ final class CompanionAppModel: ObservableObject {
         {
             return true
         }
-        guard let resolvedPairing = await ensureActivePairingIfPossible(reason: "heartbeat-\(reason)") ?? pairing else {
+        guard let resolvedPairing = await ensureActivePairingIfPossible(reason: "heartbeat-\(reason)") else {
             return false
         }
         do {
@@ -1956,6 +2037,7 @@ final class CompanionAppModel: ObservableObject {
                 apiBaseUrl: resolvedPairing.apiBaseUrl
             )
             applyPairingSessionState(session, reason: "heartbeat-\(reason)")
+            clearTemporaryPairingReachabilityFailure()
             lastHeartbeatAt = Date()
             backgroundScheduler.schedule()
             companionDebugLog(
@@ -1968,6 +2050,11 @@ final class CompanionAppModel: ObservableObject {
                 "CompanionAppModel",
                 "performMaintenanceHeartbeat failed reason=\(reason) error=\(error.localizedDescription)"
             )
+            if Self.isTerminalPairingAuthorizationFailure(error) {
+                requireNewPairing(reason: "heartbeat-\(reason)")
+            } else {
+                recordTemporaryPairingReachabilityFailure()
+            }
             return false
         }
     }
@@ -2271,7 +2358,7 @@ final class CompanionAppModel: ObservableObject {
 
     private func runSync(trigger: String) async -> Bool {
         companionDebugLog("CompanionAppModel", "performSync start trigger=\(trigger)")
-        let resolvedPairing = await ensureActivePairingIfPossible(reason: "sync-\(trigger)") ?? self.pairing
+        let resolvedPairing = await ensureActivePairingIfPossible(reason: "sync-\(trigger)")
         guard let pairing = resolvedPairing else {
             return false
         }
@@ -3624,7 +3711,7 @@ final class CompanionAppModel: ObservableObject {
 
     @discardableResult
     private func refreshMovementBootstrap() async -> Bool {
-        let resolvedPairing = await ensureActivePairingIfPossible(reason: "movement-bootstrap") ?? self.pairing
+        let resolvedPairing = await ensureActivePairingIfPossible(reason: "movement-bootstrap")
         guard let pairing = resolvedPairing else {
             return false
         }
@@ -4050,57 +4137,6 @@ final class CompanionAppModel: ObservableObject {
         let fractionalFormatter = ISO8601DateFormatter()
         fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return fractionalFormatter.date(from: rawValue)
-    }
-
-    private func renewPairingSession(
-        from payload: PairingPayload,
-        reason: String
-    ) async throws -> PairingPayload {
-        guard let server = await preferredAutomaticPairingServer(for: payload) else {
-            throw NSError(
-                domain: "CompanionAppModel",
-                code: 1,
-                userInfo: [
-                    NSLocalizedDescriptionKey: "No trusted Forge target was available to renew the pairing automatically."
-                ]
-            )
-        }
-
-        companionDebugLog(
-            "CompanionAppModel",
-            "renewPairingSession start reason=\(reason) server=\(server.host)"
-        )
-        let renewedPayload = try await syncClient.bootstrapPairingSession(
-            baseUrl: server.apiBaseUrl,
-            label: UIDevice.current.name,
-            capabilities: SimulatorLocalForge.capabilities
-        )
-        let normalizedRenewedPayload = normalizedPairingPayload(
-            renewedPayload,
-            preferredUiBaseUrl: server.uiBaseUrl,
-            preferredApiBaseUrl: server.apiBaseUrl
-        )
-        let verifiedSession = try await syncClient.verifyPairing(
-            payload: normalizedRenewedPayload,
-            apiBaseUrl: normalizedRenewedPayload.apiBaseUrl
-        )
-        let verifiedRenewedPayload = CompanionPairingURLResolver.payload(
-            normalizedRenewedPayload,
-            refreshedBy: verifiedSession
-        )
-        completeConnection(
-            with: verifiedRenewedPayload,
-            preferredUiBaseUrl: server.uiBaseUrl,
-            message: "Reconnected to Forge"
-        )
-        applyPairingSessionState(verifiedSession, reason: "renewal-\(reason)")
-        lastSyncMessage = "Reconnected to \(server.name)"
-        latestError = nil
-        companionDebugLog(
-            "CompanionAppModel",
-            "renewPairingSession success reason=\(reason) session=\(verifiedRenewedPayload.sessionId)"
-        )
-        return verifiedRenewedPayload
     }
 
     private func preferredAutomaticPairingServer(

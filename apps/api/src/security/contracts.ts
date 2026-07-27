@@ -17,6 +17,11 @@ export type ForgePrincipal = {
   installationId: string | null;
   audience: string;
   scopes: readonly string[];
+  /**
+   * Paired credentials retain the reviewed client class so narrow grants
+   * cannot be reinterpreted through a different renewal or session path.
+   */
+  clientType?: "api" | "browser";
   profile:
     | "viewer"
     | "trusted_personal_assistant"

@@ -1,5 +1,42 @@
 import SwiftUI
 
+struct PairingAuthorizationPromptCard: View {
+    let prompt: ForgePairingAuthorizationPrompt
+    let cancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Approve this iPhone")
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .foregroundStyle(CompanionStyle.textPrimary)
+
+            Text(prompt.userCode)
+                .font(.system(size: 26, weight: .bold, design: .monospaced))
+                .tracking(2)
+                .foregroundStyle(CompanionStyle.accentStrong)
+                .accessibilityLabel("Pairing code \(prompt.userCode)")
+
+            Text("In an already authorized Forge browser, open Settings → Agents, enter this code, review “Forge Companion on iPhone,” and approve. This screen will continue automatically.")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(CompanionStyle.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("The code expires automatically and can be used only for this request.")
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(CompanionStyle.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button("Cancel request", action: cancel)
+                .buttonStyle(CompanionGhostButtonStyle())
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(0.06))
+        )
+    }
+}
+
 struct SetupManualScreen: View {
     @EnvironmentObject private var appModel: CompanionAppModel
 
@@ -12,12 +49,14 @@ struct SetupManualScreen: View {
     @State private var isResolvingHost = false
     @State private var manualProgressMessage: String?
     @State private var localError: String?
+    @State private var connectionTask: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 CompanionIconButton(systemName: "chevron.left") {
                     companionDebugLog("SetupManualScreen", "tap Back")
+                    cancelKnownHostConnection()
                     goBack()
                 }
 
@@ -91,6 +130,15 @@ struct SetupManualScreen: View {
                                         .font(.system(size: 13, weight: .medium, design: .rounded))
                                         .foregroundStyle(CompanionStyle.textSecondary)
                                 }
+                            }
+
+                            if let prompt = appModel.pairingAuthorizationPrompt {
+                                PairingAuthorizationPromptCard(
+                                    prompt: prompt,
+                                    cancel: {
+                                        cancelKnownHostConnection()
+                                    }
+                                )
                             }
                         }
                     }
@@ -168,14 +216,20 @@ struct SetupManualScreen: View {
         manualProgressMessage = "Checking that Forge is reachable."
         isResolvingHost = true
         let target = knownHost.trimmingCharacters(in: .whitespacesAndNewlines)
-        Task {
+        connectionTask = Task {
             do {
-                manualProgressMessage = "Opening one-tap pairing."
+                manualProgressMessage = "Creating a secure pairing request."
                 try await appModel.connectToManualRuntime(target)
                 companionDebugLog("SetupManualScreen", "connectKnownHost success target=\(target)")
                 isResolvingHost = false
                 manualProgressMessage = nil
+                connectionTask = nil
                 openHealth()
+            } catch is CancellationError {
+                companionDebugLog("SetupManualScreen", "connectKnownHost cancelled")
+                isResolvingHost = false
+                manualProgressMessage = nil
+                connectionTask = nil
             } catch {
                 companionDebugLog(
                     "SetupManualScreen",
@@ -184,8 +238,17 @@ struct SetupManualScreen: View {
                 isResolvingHost = false
                 manualProgressMessage = nil
                 localError = error.localizedDescription
+                connectionTask = nil
             }
         }
+    }
+
+    private func cancelKnownHostConnection() {
+        connectionTask?.cancel()
+        connectionTask = nil
+        isResolvingHost = false
+        manualProgressMessage = nil
+        appModel.clearPairingAuthorizationPrompt()
     }
 
     private func connectPairingCode() {

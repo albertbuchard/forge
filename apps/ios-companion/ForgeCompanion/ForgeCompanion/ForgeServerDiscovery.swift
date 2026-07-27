@@ -728,6 +728,8 @@ final class ForgeServerDiscovery {
 
         let normalizedApiBaseUrl = CompanionPairingURLResolver.normalizeApiBaseUrl(explicitUrl.absoluteString)
         let normalizedUiBaseUrl = CompanionPairingURLResolver.normalizeUiBaseUrl(explicitUrl.absoluteString)
+        let isSecureExplicitTarget =
+            explicitUrl.scheme?.lowercased() == "https"
         candidates.append(
             ManualProbeCandidate(
                 host: normalizedHost,
@@ -736,8 +738,10 @@ final class ForgeServerDiscovery {
                 source: isMagicDNS ? .tailscale : .lan,
                 detail: isMagicDNS
                     ? "Manual Tailscale target via a known machine name"
-                    : "Manual Forge host on your local network",
-                canBootstrapPairing: isMagicDNS
+                    : isSecureExplicitTarget
+                        ? "Manual Forge HTTPS target"
+                        : "Manual Forge host on your local network",
+                canBootstrapPairing: isSecureExplicitTarget
             )
         )
 

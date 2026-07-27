@@ -32,6 +32,10 @@ private let companionDiagnosticRedactionRules: [CompanionDiagnosticRedactionRule
         "$1<redacted>"
     ),
     (
+        #"(?i)(\b(?:pairing|approval)\s+code(?:\s+is)?\s*[:=]?\s*)[A-Z0-9]{4}-[A-Z0-9]{4}\b"#,
+        "$1<redacted>"
+    ),
+    (
         #"(?i)(https?://[^:/\s]+:)[^@\s/]+@"#,
         "$1<redacted>@"
     ),

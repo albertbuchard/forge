@@ -9,6 +9,8 @@ struct SetupDiscoveryScreen: View {
     let close: () -> Void
 
     @State private var connectingServerId: String?
+    @State private var connectionTask: Task<Void, Never>?
+    @State private var connectionError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -28,6 +30,11 @@ struct SetupDiscoveryScreen: View {
         }
         .onChange(of: connectingServerId) { _, nextValue in
             companionDebugLog("SetupDiscoveryScreen", "connectingServerId -> \(nextValue ?? "nil")")
+        }
+        .onDisappear {
+            if connectionTask != nil {
+                cancelConnection()
+            }
         }
         .task {
             if appModel.screenshotScenario == nil && appModel.discoveredServers.isEmpty && !appModel.discoveryInFlight {
@@ -52,6 +59,7 @@ struct SetupDiscoveryScreen: View {
             Spacer()
 
             CompanionIconButton(systemName: "xmark") {
+                cancelConnection()
                 close()
             }
         }
@@ -146,7 +154,7 @@ struct SetupDiscoveryScreen: View {
             }
             .buttonStyle(CompanionGhostButtonStyle())
 
-            if let error = appModel.latestError {
+            if let error = connectionError ?? appModel.latestError {
                 Text(error)
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(CompanionStyle.destructive)
@@ -201,24 +209,7 @@ struct SetupDiscoveryScreen: View {
                         "tap server action id=\(server.id) canBootstrap=\(server.canBootstrapPairing)"
                     )
                     if server.canBootstrapPairing {
-                        connectingServerId = server.id
-                        Task {
-                            do {
-                                try await appModel.bootstrapPairing(for: server)
-                                companionDebugLog(
-                                    "SetupDiscoveryScreen",
-                                    "server bootstrap success id=\(server.id)"
-                                )
-                                connectingServerId = nil
-                                openHealth()
-                            } catch {
-                                companionDebugLog(
-                                    "SetupDiscoveryScreen",
-                                    "server bootstrap failed id=\(server.id) error=\(error.localizedDescription)"
-                                )
-                                connectingServerId = nil
-                            }
-                        }
+                        connect(server)
                     } else {
                         companionDebugLog("SetupDiscoveryScreen", "server requires QR id=\(server.id)")
                         openQR()
@@ -233,8 +224,55 @@ struct SetupDiscoveryScreen: View {
                 }
                 .disabled(connectingServerId != nil)
                 .opacity(connectingServerId == server.id ? 0.88 : 1)
+
+                if connectingServerId == server.id,
+                   let prompt = appModel.pairingAuthorizationPrompt {
+                    PairingAuthorizationPromptCard(
+                        prompt: prompt,
+                        cancel: cancelConnection
+                    )
+                }
             }
         }
+    }
+
+    private func connect(_ server: DiscoveredForgeServer) {
+        connectionError = nil
+        connectingServerId = server.id
+        connectionTask = Task {
+            do {
+                try await appModel.bootstrapPairing(for: server)
+                companionDebugLog(
+                    "SetupDiscoveryScreen",
+                    "server bootstrap success id=\(server.id)"
+                )
+                connectingServerId = nil
+                connectionTask = nil
+                openHealth()
+            } catch is CancellationError {
+                companionDebugLog(
+                    "SetupDiscoveryScreen",
+                    "server bootstrap cancelled id=\(server.id)"
+                )
+                connectingServerId = nil
+                connectionTask = nil
+            } catch {
+                companionDebugLog(
+                    "SetupDiscoveryScreen",
+                    "server bootstrap failed id=\(server.id) error=\(error.localizedDescription)"
+                )
+                connectionError = error.localizedDescription
+                connectingServerId = nil
+                connectionTask = nil
+            }
+        }
+    }
+
+    private func cancelConnection() {
+        connectionTask?.cancel()
+        connectionTask = nil
+        connectingServerId = nil
+        appModel.clearPairingAuthorizationPrompt()
     }
 
     private func sourceLabel(_ source: ForgeDiscoverySource) -> String {

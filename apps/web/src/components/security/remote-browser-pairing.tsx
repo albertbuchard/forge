@@ -6,8 +6,11 @@ import { Card } from "@/components/ui/card";
 import {
   beginRemoteBrowserPairing,
   cancelRemoteBrowserPairing,
-  pollRemoteBrowserPairing
+  cancelRemoteBrowserPairingOnPageExit,
+  pollRemoteBrowserPairing,
+  refreshRemoteBrowserPairingCancelProof
 } from "@/lib/api";
+import { ForgeApiError } from "@/lib/api-error";
 
 type Pairing = Awaited<ReturnType<typeof beginRemoteBrowserPairing>>;
 
@@ -24,9 +27,11 @@ export function RemoteBrowserPairing({
     | "paired"
     | "denied"
     | "expired"
+    | "limited"
     | "failed"
   >("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [retrySeconds, setRetrySeconds] = useState(0);
   const timer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -83,14 +88,62 @@ export function RemoteBrowserPairing({
     };
   }, [onPaired, pairing, status]);
 
+  useEffect(() => {
+    if (!pairing || status !== "pending") return;
+    const cancelOnExit = () => {
+      cancelRemoteBrowserPairingOnPageExit(pairing);
+    };
+    const proofRefresh = window.setInterval(() => {
+      void refreshRemoteBrowserPairingCancelProof(pairing).catch(() => {
+        // The server request still expires quickly if this browser cannot sign.
+      });
+    }, 30_000);
+    window.addEventListener("pagehide", cancelOnExit);
+    return () => {
+      window.clearInterval(proofRefresh);
+      window.removeEventListener("pagehide", cancelOnExit);
+    };
+  }, [pairing, status]);
+
+  useEffect(() => {
+    if (status !== "limited" || retrySeconds <= 0) return;
+    const retryTimer = window.setTimeout(() => {
+      setRetrySeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1_000);
+    return () => window.clearTimeout(retryTimer);
+  }, [retrySeconds, status]);
+
   const start = async () => {
     setStatus("starting");
     setMessage(null);
+    setRetrySeconds(0);
     try {
       const next = await beginRemoteBrowserPairing();
       setPairing(next);
       setStatus("pending");
     } catch (error) {
+      if (
+        error instanceof ForgeApiError &&
+        error.code === "pairing_admission_limited"
+      ) {
+        const reportedRetrySeconds =
+          error.retryAfterSeconds ??
+          (typeof error.response === "object" &&
+          error.response !== null &&
+          typeof error.response.retryAfterSeconds === "number"
+            ? error.response.retryAfterSeconds
+            : 180);
+        const boundedRetrySeconds = Math.max(
+          1,
+          Math.min(600, Math.ceil(reportedRetrySeconds))
+        );
+        setStatus("limited");
+        setRetrySeconds(boundedRetrySeconds);
+        setMessage(
+          `Forge is protecting this installation from too many unfinished pairing requests. Leave this page open, then try again when the ${boundedRetrySeconds}-second countdown ends.`
+        );
+        return;
+      }
       setStatus("failed");
       setMessage(
         error instanceof Error
@@ -111,6 +164,7 @@ export function RemoteBrowserPairing({
     setPairing(null);
     setStatus("idle");
     setMessage(null);
+    setRetrySeconds(0);
   };
 
   return (
@@ -168,9 +222,12 @@ export function RemoteBrowserPairing({
             onClick={() => void start()}
             pending={status === "starting"}
             pendingLabel="Creating secure request"
+            disabled={status === "limited" && retrySeconds > 0}
           >
             <KeyRound className="mr-2 size-4" />
-            Pair this browser
+            {status === "limited" && retrySeconds > 0
+              ? `Try again in ${retrySeconds}s`
+              : "Pair this browser"}
           </Button>
         </div>
       )}

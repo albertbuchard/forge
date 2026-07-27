@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct UnpairedHeroScreen: View {
+    var recoveryMessage: String?
     let startSetup: () -> Void
 
     var body: some View {
@@ -25,12 +26,18 @@ struct UnpairedHeroScreen: View {
                         .foregroundStyle(CompanionStyle.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text("Pair once. Then this app stays in the background.")
+                    Text(
+                        recoveryMessage
+                            ?? "Pair once. Then this app stays in the background."
+                    )
                         .font(.system(size: 17, weight: .medium, design: .rounded))
                         .foregroundStyle(CompanionStyle.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Button("Set up sync", action: startSetup)
+                    Button(
+                        recoveryMessage == nil ? "Set up sync" : "Pair again",
+                        action: startSetup
+                    )
                         .buttonStyle(CompanionFilledButtonStyle())
                 }
                 .padding(.horizontal, 26)

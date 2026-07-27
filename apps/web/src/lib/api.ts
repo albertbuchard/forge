@@ -333,7 +333,11 @@ function readApiErrorCode(body: unknown) {
 function isAuthRequiredResponse(response: Response, body: unknown) {
   return (
     response.status === 401 &&
-    ["auth_required", "gateway_authentication_required"].includes(
+    [
+      "auth_required",
+      "gateway_authentication_required",
+      "operator_browser_session_required"
+    ].includes(
       readApiErrorCode(body)
     )
   );
@@ -519,6 +523,11 @@ function createApiError(path: string, response: Response, body: unknown) {
   const details = Array.isArray(maybeBody?.details)
     ? (maybeBody.details as ForgeValidationIssue[])
     : [];
+  const retryAfterHeader = response.headers.get("retry-after");
+  const retryAfterSeconds =
+    retryAfterHeader !== null && /^\d+$/.test(retryAfterHeader)
+      ? Number(retryAfterHeader)
+      : null;
   return new ForgeApiError({
     status: response.status,
     code: readApiErrorCode(body),
@@ -537,7 +546,8 @@ function createApiError(path: string, response: Response, body: unknown) {
         ? body
         : body && typeof body === "object"
           ? (body as Record<string, unknown>)
-          : null
+          : null,
+    retryAfterSeconds
   });
 }
 
@@ -925,6 +935,7 @@ type RemoteBrowserPairing = {
   intervalSeconds: number;
   privateKey: CryptoKey;
   publicJwk: JsonWebKey;
+  cancelProof?: string;
 };
 
 function randomProofId(prefix: string) {
@@ -1048,7 +1059,7 @@ export async function beginRemoteBrowserPairing() {
       details: []
     });
   }
-  return {
+  const pairing: RemoteBrowserPairing = {
     requestId: body.requestId,
     deviceCode: body.deviceCode,
     userCode: body.userCode,
@@ -1057,7 +1068,9 @@ export async function beginRemoteBrowserPairing() {
     intervalSeconds: Math.max(5, body.interval),
     privateKey: keys.privateKey,
     publicJwk
-  } satisfies RemoteBrowserPairing;
+  };
+  pairing.cancelProof = await signPairingProof(pairing, "cancel");
+  return pairing;
 }
 
 export async function pollRemoteBrowserPairing(
@@ -1125,6 +1138,35 @@ export async function cancelRemoteBrowserPairing(
       cancelled.body
     );
   }
+}
+
+export async function refreshRemoteBrowserPairingCancelProof(
+  pairing: RemoteBrowserPairing
+) {
+  pairing.cancelProof = await signPairingProof(pairing, "cancel");
+}
+
+export function cancelRemoteBrowserPairingOnPageExit(
+  pairing: RemoteBrowserPairing
+) {
+  if (!pairing.cancelProof) return;
+  void globalThis
+    .fetch(REMOTE_DEVICE_CANCEL_PATH, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        deviceCode: pairing.deviceCode,
+        clientProof: pairing.cancelProof
+      }),
+      keepalive: true
+    })
+    .catch(() => {
+      // The request expires quickly even if the browser cannot finish unload.
+    });
 }
 
 export type RemotePairingReview = {

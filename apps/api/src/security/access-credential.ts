@@ -14,6 +14,7 @@ type AccessCredentialClaims = JWTPayload & {
   owner_epoch: number;
   client_epoch: number;
   principal_kind: ForgePrincipal["kind"];
+  client_type?: "api" | "browser";
   credential_mode: "sender_constrained" | "compatibility_bearer";
   cnf?: { jkt: string };
   compatibility_authorization_id?: string;
@@ -151,6 +152,7 @@ export class AccessCredentialService {
       owner_epoch: principal.ownerSecurityEpoch,
       client_epoch: principal.clientSecurityEpoch,
       principal_kind: principal.kind,
+      ...(principal.clientType ? { client_type: principal.clientType } : {}),
       credential_mode: issuance.mode,
       ...(issuance.mode === "sender_constrained"
         ? { cnf: { jkt: issuance.confirmationJkt } }

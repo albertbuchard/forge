@@ -224,6 +224,12 @@ enum ForgeIrohTransportClient {
     }
 }
 
+struct ForgePairingAuthorizationPrompt: Equatable {
+    let userCode: String
+    let verificationUri: String
+    let expiresAt: Date
+}
+
 final class ForgeBackgroundUploadCoordinator: NSObject, URLSessionDataDelegate {
     static let shared = ForgeBackgroundUploadCoordinator()
     static let sessionIdentifier = "com.albertbuchard.ForgeCompanion.healthkit.uploads"
@@ -427,6 +433,20 @@ struct ForgeSyncClient {
     private static let workoutRouteEstimatedBytesPerRecord = 520
     private static let healthSyncMinimumCompressionBytes = 256
     private static let lowercaseHexDigits = Array("0123456789abcdef".utf8)
+    private let bootstrapURLSession: URLSession
+    private let pairingSleep: (TimeInterval) async throws -> Void
+
+    init(
+        bootstrapURLSession: URLSession = Self.remotePairingSession,
+        pairingSleep: @escaping (TimeInterval) async throws -> Void = {
+            try await Task.sleep(
+                nanoseconds: UInt64(max(0, $0) * 1_000_000_000)
+            )
+        }
+    ) {
+        self.bootstrapURLSession = bootstrapURLSession
+        self.pairingSleep = pairingSleep
+    }
 
     static func healthSyncChunkingVersion(for pairing: PairingPayload) -> String {
         if pairing.usesIrohTransportForActiveApiUrl {
@@ -559,23 +579,95 @@ struct ForgeSyncClient {
         return URLSession(configuration: configuration)
     }()
 
+    private static let remotePairingSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieAcceptPolicy = .never
+        configuration.httpShouldSetCookies = false
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.timeoutIntervalForRequest = 20
+        configuration.timeoutIntervalForResource = 30
+        configuration.waitsForConnectivity = true
+        return URLSession(configuration: configuration)
+    }()
+
     private struct PairingSessionRequest: Encodable {
         let label: String
-        let capabilities: [String]
     }
 
     private struct PairingSessionEnvelope: Decodable {
         let qrPayload: PairingPayload
     }
 
-    private struct OperatorSessionEnvelope: Decodable {
-        let session: OperatorSession
+    private struct BootstrapPublicJWK: Codable, Equatable {
+        let kty = "EC"
+        let crv = "P-256"
+        let x: String
+        let y: String
     }
 
-    private struct OperatorSession: Decodable {
-        let id: String
-        let actorLabel: String
-        let expiresAt: String
+    private struct BootstrapBeginRequest: Encodable {
+        let clientName: String
+        let clientType = "api"
+        let clientKeyThumbprint: String
+        let requestedScopes = ["companion.pair"]
+        let requestedProfile = "trusted_personal_assistant"
+    }
+
+    private struct BootstrapBeginResponse: Decodable {
+        let requestId: String
+        let deviceCode: String
+        let userCode: String
+        let verificationUri: String
+        let expiresIn: TimeInterval
+        let interval: TimeInterval
+    }
+
+    private struct BootstrapTokenRequest: Encodable {
+        let grantType = "device_code"
+        let deviceCode: String
+        let clientProof: String
+    }
+
+    private struct BootstrapTokenResponse: Decodable {
+        let status: String?
+        let intervalSeconds: TimeInterval?
+        let tokenType: String?
+        let accessToken: String?
+        let expiresAt: String?
+        let refreshToken: String?
+        let clientId: String?
+        let audience: String?
+        let scopes: [String]?
+        let profile: String?
+    }
+
+    private struct BootstrapJWTHeader: Encodable {
+        let alg = "ES256"
+        let typ: String
+        let jwk: BootstrapPublicJWK
+    }
+
+    private struct BootstrapPairingProofClaims: Encodable {
+        let request_id: String
+        let operation: String
+        let iat: Int
+        let jti: String
+    }
+
+    private struct BootstrapDPoPClaims: Encodable {
+        let htm: String
+        let htu: String
+        let ath: String
+        let iat: Int
+        let jti: String
+    }
+
+    private struct BootstrapErrorResponse: Decodable {
+        let code: String?
+        let error: String?
+        let message: String?
+        let status: String?
+        let intervalSeconds: TimeInterval?
     }
 
     private struct PairingVerificationRequest: Encodable {
@@ -1539,35 +1631,380 @@ struct ForgeSyncClient {
         baseUrl: String,
         label: String,
         capabilities: [String],
-        transport: PairingTransport? = nil
+        transport: PairingTransport? = nil,
+        onAuthorizationRequired: (ForgePairingAuthorizationPrompt) async -> Void = { _ in }
     ) async throws -> PairingPayload {
         companionDebugLog(
             "ForgeSyncClient",
             "bootstrapPairingSession start baseUrl=\(baseUrl) label=\(label)"
         )
-        let session = makeSession()
-        _ = try await sendRequest(
-            path: "/auth/operator-session",
-            apiBaseUrl: normalizedApiBaseUrl(from: baseUrl),
-            method: "GET",
-            body: Optional<String>.none as String?,
-            session: session,
-            transport: transport
-        ) as OperatorSessionEnvelope
-
-        let envelope: PairingSessionEnvelope = try await sendRequest(
-            path: "/health/pairing-sessions",
-            apiBaseUrl: normalizedApiBaseUrl(from: baseUrl),
+        _ = capabilities
+        guard transport?.isIrohTransport != true else {
+            throw NSError(
+                domain: "ForgeCompanion",
+                code: 400,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Known-host authorization uses the Forge HTTPS endpoint. Scan the Forge QR to pair through Iroh."
+                ]
+            )
+        }
+        let apiBaseUrl = normalizedApiBaseUrl(from: baseUrl)
+        try requireSecureBootstrapTarget(apiBaseUrl)
+        let privateKey = P256.Signing.PrivateKey()
+        let publicJWK = try bootstrapPublicJWK(for: privateKey.publicKey)
+        let keyThumbprint = try bootstrapKeyThumbprint(publicJWK)
+        let beginURL = try bootstrapURL(
+            apiBaseUrl: apiBaseUrl,
+            path: "/auth/device"
+        )
+        let begin: BootstrapBeginResponse = try await bootstrapRequest(
+            url: beginURL,
             method: "POST",
-            body: PairingSessionRequest(label: label, capabilities: capabilities),
-            session: session,
-            transport: transport
+            body: BootstrapBeginRequest(
+                clientName:
+                    "Forge Companion on \((await currentDeviceDescriptor()).name)",
+                clientKeyThumbprint: keyThumbprint
+            )
         )
-        companionDebugLog(
-            "ForgeSyncClient",
-            "bootstrapPairingSession success session=\(envelope.qrPayload.sessionId)"
+        let expiresAt = Date().addingTimeInterval(begin.expiresIn)
+        await onAuthorizationRequired(
+            ForgePairingAuthorizationPrompt(
+                userCode: begin.userCode,
+                verificationUri: begin.verificationUri,
+                expiresAt: expiresAt
+            )
         )
-        return envelope.qrPayload
+
+        let tokenURL = try bootstrapURL(
+            apiBaseUrl: apiBaseUrl,
+            path: "/auth/token"
+        )
+        let cancelURL = try bootstrapURL(
+            apiBaseUrl: apiBaseUrl,
+            path: "/auth/device/cancel"
+        )
+        do {
+            var interval = max(5, begin.interval)
+            var issued: BootstrapTokenResponse?
+            while Date() < expiresAt {
+                try Task.checkCancellation()
+                try await pairingSleep(interval)
+                let proof = try bootstrapPairingProof(
+                    privateKey: privateKey,
+                    publicJWK: publicJWK,
+                    requestId: begin.requestId,
+                    operation: "poll"
+                )
+                let response = try await bootstrapRawRequest(
+                    url: tokenURL,
+                    method: "POST",
+                    body: BootstrapTokenRequest(
+                        deviceCode: begin.deviceCode,
+                        clientProof: proof
+                    )
+                )
+                let token = try JSONDecoder().decode(
+                    BootstrapTokenResponse.self,
+                    from: response.data
+                )
+                if (200..<300).contains(response.statusCode) {
+                    issued = token
+                    break
+                }
+                if token.status == "authorization_pending" {
+                    interval = max(interval, token.intervalSeconds ?? interval)
+                    continue
+                }
+                if token.status == "slow_down" {
+                    interval = max(
+                        interval + 5,
+                        token.intervalSeconds ?? interval + 5
+                    )
+                    continue
+                }
+                if token.status == "access_denied" {
+                    throw bootstrapError(
+                        "The Forge owner denied this pairing request."
+                    )
+                }
+                if token.status == "expired_token" {
+                    throw bootstrapError(
+                        "The Forge pairing request expired. Start it again when the owner is ready."
+                    )
+                }
+                throw bootstrapResponseError(response.data)
+            }
+            guard
+                let issued,
+                issued.tokenType == "DPoP",
+                let accessToken = issued.accessToken,
+                issued.refreshToken == nil,
+                issued.profile == "trusted_personal_assistant",
+                Set(issued.scopes ?? []) == Set([
+                    "companion.pair",
+                    "profile:trusted_personal_assistant"
+                ])
+            else {
+                throw bootstrapError(
+                    "Forge returned an invalid one-use companion authorization."
+                )
+            }
+            let invitationURL = try bootstrapURL(
+                apiBaseUrl: apiBaseUrl,
+                path: "/health/pairing-sessions"
+            )
+            let dpop = try bootstrapDPoPProof(
+                privateKey: privateKey,
+                publicJWK: publicJWK,
+                method: "POST",
+                url: invitationURL,
+                accessToken: accessToken
+            )
+            let envelope: PairingSessionEnvelope = try await bootstrapRequest(
+                url: invitationURL,
+                method: "POST",
+                body: PairingSessionRequest(label: label),
+                headers: [
+                    "Authorization": "DPoP \(accessToken)",
+                    "DPoP": dpop
+                ]
+            )
+            companionDebugLog(
+                "ForgeSyncClient",
+                "bootstrapPairingSession success session=\(envelope.qrPayload.sessionId)"
+            )
+            return envelope.qrPayload
+        } catch {
+            if Task.isCancelled {
+                let cancelProof = try? bootstrapPairingProof(
+                    privateKey: privateKey,
+                    publicJWK: publicJWK,
+                    requestId: begin.requestId,
+                    operation: "cancel"
+                )
+                if let cancelProof {
+                    let cancellationRequest = Task {
+                        try? await bootstrapRawRequest(
+                            url: cancelURL,
+                            method: "POST",
+                            body: [
+                                "deviceCode": begin.deviceCode,
+                                "clientProof": cancelProof
+                            ]
+                        )
+                    }
+                    _ = await cancellationRequest.value
+                }
+            }
+            throw error
+        }
+    }
+
+    private func requireSecureBootstrapTarget(_ apiBaseUrl: String) throws {
+        guard
+            let url = URL(string: apiBaseUrl),
+            url.user == nil,
+            url.password == nil,
+            url.query == nil,
+            url.fragment == nil
+        else {
+            throw bootstrapError("Enter a valid Forge HTTPS address.")
+        }
+        if url.scheme?.lowercased() == "https" {
+            return
+        }
+#if targetEnvironment(simulator)
+        let host = url.host?.lowercased()
+        if url.scheme?.lowercased() == "http",
+           ["127.0.0.1", "localhost", "::1"].contains(host) {
+            return
+        }
+#endif
+        throw bootstrapError(
+            "Secure known-host pairing requires HTTPS. Use the Forge QR for Iroh, or enter the Forge HTTPS address."
+        )
+    }
+
+    private func bootstrapURL(apiBaseUrl: String, path: String) throws -> URL {
+        guard let url = URL(string: "\(apiBaseUrl)\(path)") else {
+            throw bootstrapError("Forge produced an invalid pairing address.")
+        }
+        return url
+    }
+
+    private func bootstrapPublicJWK(
+        for publicKey: P256.Signing.PublicKey
+    ) throws -> BootstrapPublicJWK {
+        let representation = publicKey.x963Representation
+        guard representation.count == 65, representation.first == 0x04 else {
+            throw bootstrapError(
+                "This device could not create a Forge pairing key."
+            )
+        }
+        return BootstrapPublicJWK(
+            x: bootstrapBase64URL(representation.subdata(in: 1..<33)),
+            y: bootstrapBase64URL(representation.subdata(in: 33..<65))
+        )
+    }
+
+    private func bootstrapKeyThumbprint(
+        _ publicJWK: BootstrapPublicJWK
+    ) throws -> String {
+        guard
+            let canonical = """
+            {"crv":"P-256","kty":"EC","x":"\(publicJWK.x)","y":"\(publicJWK.y)"}
+            """.data(using: .utf8)
+        else {
+            throw bootstrapError(
+                "This device could not bind the Forge pairing key."
+            )
+        }
+        return bootstrapBase64URL(Data(SHA256.hash(data: canonical)))
+    }
+
+    private func bootstrapPairingProof(
+        privateKey: P256.Signing.PrivateKey,
+        publicJWK: BootstrapPublicJWK,
+        requestId: String,
+        operation: String
+    ) throws -> String {
+        try bootstrapSignedJWT(
+            privateKey: privateKey,
+            header: BootstrapJWTHeader(
+                typ: "forge-pairing+jwt",
+                jwk: publicJWK
+            ),
+            claims: BootstrapPairingProofClaims(
+                request_id: requestId,
+                operation: operation,
+                iat: Int(Date().timeIntervalSince1970),
+                jti: "ios-pairing-\(UUID().uuidString.lowercased())"
+            )
+        )
+    }
+
+    private func bootstrapDPoPProof(
+        privateKey: P256.Signing.PrivateKey,
+        publicJWK: BootstrapPublicJWK,
+        method: String,
+        url: URL,
+        accessToken: String
+    ) throws -> String {
+        try bootstrapSignedJWT(
+            privateKey: privateKey,
+            header: BootstrapJWTHeader(
+                typ: "dpop+jwt",
+                jwk: publicJWK
+            ),
+            claims: BootstrapDPoPClaims(
+                htm: method,
+                htu: url.absoluteString,
+                ath: bootstrapBase64URL(
+                    Data(SHA256.hash(data: Data(accessToken.utf8)))
+                ),
+                iat: Int(Date().timeIntervalSince1970),
+                jti: "ios-dpop-\(UUID().uuidString.lowercased())"
+            )
+        )
+    }
+
+    private func bootstrapSignedJWT<
+        Header: Encodable,
+        Claims: Encodable
+    >(
+        privateKey: P256.Signing.PrivateKey,
+        header: Header,
+        claims: Claims
+    ) throws -> String {
+        let encoder = JSONEncoder()
+        let signingInput = [
+            bootstrapBase64URL(try encoder.encode(header)),
+            bootstrapBase64URL(try encoder.encode(claims))
+        ].joined(separator: ".")
+        let signature = try privateKey.signature(
+            for: Data(signingInput.utf8)
+        )
+        return "\(signingInput).\(bootstrapBase64URL(signature.rawRepresentation))"
+    }
+
+    private func bootstrapBase64URL(_ data: Data) -> String {
+        data.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
+    private func bootstrapRequest<
+        Body: Encodable,
+        Response: Decodable
+    >(
+        url: URL,
+        method: String,
+        body: Body,
+        headers: [String: String] = [:]
+    ) async throws -> Response {
+        let response = try await bootstrapRawRequest(
+            url: url,
+            method: method,
+            body: body,
+            headers: headers
+        )
+        guard (200..<300).contains(response.statusCode) else {
+            throw bootstrapResponseError(response.data)
+        }
+        do {
+            return try JSONDecoder().decode(Response.self, from: response.data)
+        } catch {
+            throw bootstrapError(
+                "Forge returned an invalid secure-pairing response."
+            )
+        }
+    }
+
+    private func bootstrapRawRequest<Body: Encodable>(
+        url: URL,
+        method: String,
+        body: Body,
+        headers: [String: String] = [:]
+    ) async throws -> (data: Data, statusCode: Int) {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = 20
+        request.httpBody = try JSONEncoder().encode(body)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
+        )
+        for (name, value) in headers {
+            request.setValue(value, forHTTPHeaderField: name)
+        }
+        let (data, response) = try await bootstrapURLSession.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+        return (data, httpResponse.statusCode)
+    }
+
+    private func bootstrapResponseError(_ data: Data) -> Error {
+        let response = try? JSONDecoder().decode(
+            BootstrapErrorResponse.self,
+            from: data
+        )
+        return bootstrapError(
+            response?.message
+                ?? response?.error
+                ?? "Forge could not complete secure companion pairing."
+        )
+    }
+
+    private func bootstrapError(_ message: String) -> NSError {
+        NSError(
+            domain: "ForgeCompanion.SecurePairing",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: message]
+        )
     }
 
     func pushHealthSync(payload: CompanionSyncPayload, pairing: PairingPayload) async throws -> SyncReceipt {

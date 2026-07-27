@@ -1,4 +1,8 @@
 import type { ForgePrincipal, RouteSecurityContract } from "./contracts.js";
+import {
+  isCompanionBootstrapGrant,
+  isCompanionBootstrapRoute
+} from "./companion-bootstrap-grant.js";
 
 export type RouteAuthorizationRisk =
   | "ordinary"
@@ -92,6 +96,12 @@ export function profileAllowsRoute(
   principal: ForgePrincipal,
   contract: RouteSecurityContract
 ) {
+  if (isCompanionBootstrapRoute(contract)) {
+    return (
+      principal.kind === "paired_client" &&
+      isCompanionBootstrapGrant(principal)
+    );
+  }
   const risk = routeAuthorizationRisk(contract);
   if (risk === "operator_administration") {
     return principal.profile === "operator";

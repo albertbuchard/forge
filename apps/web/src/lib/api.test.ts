@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   beginRemoteBrowserPairing,
   cancelRemoteBrowserPairing,
+  cancelRemoteBrowserPairingOnPageExit,
   claimTaskRun,
   completePreparedLocalBrowserAuthorization,
   createCalendarConnection,
@@ -13,6 +14,7 @@ import {
   getDeletedPlanningRecord,
   getLifeEvent,
   getNote,
+  ensureOperatorSession,
   getPreparedLocalBrowserAuthorizationUrl,
   getPreferenceWorkspace,
   getPsycheMetricsView,
@@ -38,10 +40,15 @@ function mockJsonResponse(body: unknown) {
   } as unknown as Response;
 }
 
-function mockJsonErrorResponse(status: number, body: unknown) {
+function mockJsonErrorResponse(
+  status: number,
+  body: unknown,
+  headers: Record<string, string> = {}
+) {
   return {
     ok: false,
     status,
+    headers: new Headers(headers),
     text: vi.fn().mockResolvedValue(JSON.stringify(body))
   } as unknown as Response;
 }
@@ -108,6 +115,7 @@ describe("notes API contract", () => {
 
 describe("remote browser pairing client", () => {
   afterEach(() => {
+    retryLocalBrowserAuthorization();
     vi.unstubAllGlobals();
     localStorage.clear();
   });
@@ -190,6 +198,87 @@ describe("remote browser pairing client", () => {
     expect(protectedHeader.jwk).not.toHaveProperty("d");
 
     await cancelRemoteBrowserPairing(pairing);
+  });
+
+  it("turns the operator-session 401 into the secure remote pairing journey", async () => {
+    vi.stubGlobal("window", {
+      location: {
+        origin: "https://forge.example.test",
+        protocol: "https:",
+        hostname: "forge.example.test"
+      }
+    });
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonErrorResponse(401, {
+        code: "operator_browser_session_required",
+        error: "A paired Forge browser session is required."
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(ensureOperatorSession()).rejects.toMatchObject({
+      code: "browser_pairing_required"
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves the server retry window on pairing admission limits", async () => {
+    vi.stubGlobal("window", {
+      location: { protocol: "https:" }
+    });
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonErrorResponse(
+        429,
+        {
+          code: "pairing_admission_limited",
+          error:
+            "Forge cannot admit another pairing request in the current bounded window.",
+          retryAfterSeconds: 600
+        },
+        { "retry-after": "600" }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(beginRemoteBrowserPairing()).rejects.toMatchObject({
+      code: "pairing_admission_limited",
+      retryAfterSeconds: 600
+    });
+  });
+
+  it("cancels an unfinished pairing on page exit without persisting the key", async () => {
+    vi.stubGlobal("window", {
+      location: { protocol: "https:" }
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          requestId: "pair_exit_1234567890123456",
+          deviceCode: `fg_device_${"E".repeat(43)}`,
+          userCode: "JKLM-NPQR",
+          verificationUri: "/forge/pair",
+          expiresIn: 180,
+          interval: 5
+        })
+      )
+      .mockResolvedValueOnce(mockJsonResponse({ cancelled: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const pairing = await beginRemoteBrowserPairing();
+    cancelRemoteBrowserPairingOnPageExit(pairing);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const exitRequest = fetchMock.mock.calls[1]![1] as RequestInit;
+    expect(exitRequest.keepalive).toBe(true);
+    expect(exitRequest.credentials).toBe("same-origin");
+    const body = JSON.parse(String(exitRequest.body)) as {
+      deviceCode: string;
+      clientProof: string;
+    };
+    expect(body.deviceCode).toBe(`fg_device_${"E".repeat(43)}`);
+    expect(body.clientProof.split(".")).toHaveLength(3);
+    expect(localStorage.length).toBe(0);
   });
 
   it("silently renews a persisted paired browser before its next API request", async () => {

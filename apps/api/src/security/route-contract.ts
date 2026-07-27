@@ -5,6 +5,10 @@ import {
   type RouteSecurityContract
 } from "./contracts.js";
 import { PEER_ROUTE_CONTRACTS, peerRouteKey } from "../peer-route-contract.js";
+import {
+  COMPANION_BOOTSTRAP_ACTION,
+  isCompanionBootstrapRoute
+} from "./companion-bootstrap-grant.js";
 
 export type RouteRegistration = {
   method: string;
@@ -387,6 +391,9 @@ function actionForRoute(
   routePath: string,
   securityClass: RouteSecurityClass
 ) {
+  if (isCompanionBootstrapRoute({ method, routePath })) {
+    return COMPANION_BOOTSTRAP_ACTION;
+  }
   if (securityClass === "public_static_or_health") {
     return method === "OPTIONS"
       ? "system.cors.preflight"

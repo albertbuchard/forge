@@ -13,7 +13,9 @@ import { resolveRouteSecurityContract } from "./route-contract.js";
 
 function principal(
   profile: ForgePrincipal["profile"],
-  kind: ForgePrincipal["kind"] = "paired_client"
+  kind: ForgePrincipal["kind"] = "paired_client",
+  scopes?: string[],
+  clientType?: "api" | "browser"
 ): ForgePrincipal {
   return {
     kind,
@@ -23,9 +25,11 @@ function principal(
     installationId: "profile-test-installation",
     audience: "urn:forge:profile-test:api",
     scopes:
-      kind === "legacy_agent_token"
+      scopes ??
+      (kind === "legacy_agent_token"
         ? ["read", "write"]
-        : [`profile:${profile}`],
+        : [`profile:${profile}`]),
+    clientType,
     profile,
     ownerSecurityEpoch: 1,
     clientSecurityEpoch: 1,
@@ -196,6 +200,81 @@ test("the gateway enforces paired-client profiles without breaking the bounded l
       principal: principal("trusted_personal_assistant", "legacy_agent_token"),
       method: "POST",
       routePath: "/api/v1/settings/tokens/:id/revoke"
+    }),
+    /verified Forge client profile/i
+  );
+});
+
+test("the companion bootstrap grant authorizes exactly one route capability", () => {
+  const pairingRoute = contract(
+    "POST",
+    "/api/v1/health/pairing-sessions"
+  );
+  assert.equal(pairingRoute.action, "companion.pair");
+  assert.doesNotThrow(
+    authorize({
+      principal: principal(
+        "trusted_personal_assistant",
+        "paired_client",
+        ["companion.pair", "profile:trusted_personal_assistant"],
+        "api"
+      ),
+      method: "POST",
+      routePath: "/api/v1/health/pairing-sessions"
+    })
+  );
+
+  for (const denied of [
+    principal(
+      "trusted_personal_assistant",
+      "paired_client",
+      ["profile:trusted_personal_assistant"]
+    ),
+    principal(
+      "trusted_personal_assistant",
+      "paired_client",
+      [
+        "companion.pair",
+        "profile:trusted_personal_assistant",
+        "read"
+      ]
+    ),
+    principal("operator", "paired_client", [
+      "companion.pair",
+      "profile:operator"
+    ]),
+    principal(
+      "trusted_personal_assistant",
+      "legacy_agent_token",
+      ["companion.pair", "profile:trusted_personal_assistant"]
+    ),
+    principal(
+      "trusted_personal_assistant",
+      "paired_client",
+      ["companion.pair", "profile:trusted_personal_assistant"],
+      "browser"
+    )
+  ]) {
+    assert.throws(
+      authorize({
+        principal: denied,
+        method: "POST",
+        routePath: "/api/v1/health/pairing-sessions"
+      }),
+      /verified Forge client profile/i
+    );
+  }
+
+  assert.throws(
+    authorize({
+      principal: principal(
+        "trusted_personal_assistant",
+        "paired_client",
+        ["companion.pair", "profile:trusted_personal_assistant"],
+        "api"
+      ),
+      method: "DELETE",
+      routePath: "/api/v1/health/pairing-sessions/:id"
     }),
     /verified Forge client profile/i
   );

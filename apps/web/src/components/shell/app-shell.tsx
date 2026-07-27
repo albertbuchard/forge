@@ -1617,6 +1617,7 @@ export function AppShell() {
       operatorSessionQuery.error instanceof ForgeApiError &&
       [
         "browser_pairing_required",
+        "operator_browser_session_required",
         "local_owner_verification_failed",
         "local_browser_owner_handler_unavailable"
       ].includes(operatorSessionQuery.error.code);
@@ -1625,7 +1626,10 @@ export function AppShell() {
       : null;
     const remotePairingRequired =
       operatorSessionQuery.error instanceof ForgeApiError &&
-      operatorSessionQuery.error.code === "browser_pairing_required" &&
+      [
+        "browser_pairing_required",
+        "operator_browser_session_required"
+      ].includes(operatorSessionQuery.error.code) &&
       typeof window !== "undefined" &&
       window.location.protocol === "https:" &&
       !["localhost", "127.0.0.1", "[::1]"].includes(

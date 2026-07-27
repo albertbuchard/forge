@@ -15,7 +15,11 @@ struct CompanionAppRoot: View {
                 CompanionSetupFlow(onFinish: {})
                     .environmentObject(appModel)
             } else if appModel.pairing == nil {
-                UnpairedHeroScreen {
+                UnpairedHeroScreen(
+                    recoveryMessage: appModel.pairingRecoveryRequired
+                        ? "This device’s Forge authorization ended. Pair again once to resume background sync."
+                        : nil
+                ) {
                     setupVisible = true
                 }
             } else {
@@ -58,6 +62,11 @@ struct CompanionAppRoot: View {
             )
             Task { await peoplePeerStore.refreshWatchGlance() }
             companionDebugLog("CompanionAppRoot", "pairing session changed -> \(sessionId ?? "nil")")
+        }
+        .onChange(of: appModel.pairingRecoveryRequired) { _, required in
+            if required {
+                setupVisible = true
+            }
         }
         .onChange(of: appModel.pairingOwnerUserId) { _, ownerUserId in
             peoplePeerStore.configure(

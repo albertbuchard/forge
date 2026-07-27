@@ -1142,7 +1142,7 @@ private struct MovementLifeTimelineView: View {
             loadError = nil
             return
         }
-        let resolvedPairing = await appModel.ensureActivePairingIfPossible(reason: "life-timeline-initial") ?? appModel.pairing
+        let resolvedPairing = await appModel.ensureActivePairingIfPossible(reason: "life-timeline-initial")
         guard let pairing = resolvedPairing else {
             loadError = localHistoricalItems.isEmpty
                 ? "Connect the companion to Forge to page historical movement. The phone has no repaired local history cached yet."
@@ -1205,7 +1205,7 @@ private struct MovementLifeTimelineView: View {
             hasMore = false
             return
         }
-        let resolvedPairing = await appModel.ensureActivePairingIfPossible(reason: "life-timeline-pagination") ?? appModel.pairing
+        let resolvedPairing = await appModel.ensureActivePairingIfPossible(reason: "life-timeline-pagination")
         guard let pairing = resolvedPairing else {
             hasMore = false
             return
@@ -1919,7 +1919,7 @@ private struct MovementLifeTimelineView: View {
         reason: String,
         reconnectMessage: String
     ) async throws -> PairingPayload {
-        let resolvedPairing = await appModel.ensureActivePairingIfPossible(reason: reason) ?? appModel.pairing
+        let resolvedPairing = await appModel.ensureActivePairingIfPossible(reason: reason)
         guard let pairing = resolvedPairing else {
             companionDebugLog(
                 "MovementLifeTimeline",

@@ -9,6 +9,7 @@ export class ForgeApiError extends Error {
   readonly details: ForgeValidationIssue[];
   readonly requestPath: string;
   readonly response: Record<string, unknown> | string | null;
+  readonly retryAfterSeconds: number | null;
 
   constructor(input: {
     status: number;
@@ -17,6 +18,7 @@ export class ForgeApiError extends Error {
     requestPath: string;
     details?: ForgeValidationIssue[];
     response?: Record<string, unknown> | string | null;
+    retryAfterSeconds?: number | null;
   }) {
     super(input.message);
     this.name = "ForgeApiError";
@@ -25,6 +27,7 @@ export class ForgeApiError extends Error {
     this.details = input.details ?? [];
     this.requestPath = input.requestPath;
     this.response = input.response ?? null;
+    this.retryAfterSeconds = input.retryAfterSeconds ?? null;
   }
 }
 

@@ -375,6 +375,7 @@ function accessPrincipal(
     installationId: claims.installation_id,
     audience,
     scopes: claims.scopes,
+    clientType: claims.client_type,
     profile: claims.profile,
     ownerSecurityEpoch: claims.owner_epoch,
     clientSecurityEpoch: claims.client_epoch,

@@ -102,7 +102,9 @@ test("remote API client pairs once, renews with DPoP, and is denied after revoca
       requestId: string;
       deviceCode: string;
       userCode: string;
+      expiresIn: number;
     }>();
+    assert.equal(pairing.expiresIn, 600);
     const request = runtime.store.readPairingRequest(pairing.requestId);
     assert.ok(request);
 
@@ -229,6 +231,26 @@ test("remote API client pairs once, renews with DPoP, and is denied after revoca
     });
     assert.equal(revoked.statusCode, 200, revoked.body);
     assert.equal(revoked.json<{ revoked: boolean }>().revoked, true);
+    const revokedEpoch =
+      runtime.store.readClient(issued.clientId)?.clientSecurityEpoch;
+    const repeatedRevocation = await app.inject({
+      method: "POST",
+      url: `/api/v1/auth/clients/${issued.clientId}/revoke`,
+      headers: {
+        host: "127.0.0.1",
+        cookie: `forge_session=${encodeURIComponent(ownerSession.sessionToken)}`,
+        "x-forge-csrf": ownerSession.csrfToken
+      }
+    });
+    assert.equal(repeatedRevocation.statusCode, 200, repeatedRevocation.body);
+    assert.equal(
+      repeatedRevocation.json<{ revoked: boolean }>().revoked,
+      true
+    );
+    assert.equal(
+      runtime.store.readClient(issued.clientId)?.clientSecurityEpoch,
+      revokedEpoch
+    );
 
     const denied = await app.inject({
       method: "GET",
@@ -246,6 +268,229 @@ test("remote API client pairs once, renews with DPoP, and is denied after revoca
       }
     });
     assert.equal(denied.statusCode, 401, denied.body);
+  } finally {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("companion bootstrap grants one pairing invitation and no renewable API credential", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "forge-companion-bootstrap-")
+  );
+  let runtime!: ApplicationSecurityRuntime;
+  const canonicalOrigin = "https://forge.example.test";
+  const forwardedHeaders = {
+    host: "forge.example.test",
+    "x-forwarded-proto": "https"
+  };
+  const app = await buildServer({
+    dataRoot: root,
+    seedDemoData: false,
+    taskRunWatchdog: false,
+    devrageMetricSync: false,
+    peerRuntime: false,
+    canonicalExternalOrigin: canonicalOrigin,
+    onSecurityRuntimeReady(value) {
+      runtime = value;
+    }
+  });
+  try {
+    const key = await clientKey();
+    const browserBootstrap = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/device",
+      headers: forwardedHeaders,
+      payload: {
+        clientName: "Wrong browser bootstrap",
+        clientType: "browser",
+        clientKeyThumbprint: key.thumbprint,
+        requestedScopes: ["companion.pair"],
+        requestedProfile: "trusted_personal_assistant"
+      }
+    });
+    assert.equal(browserBootstrap.statusCode, 400, browserBootstrap.body);
+    assert.equal(
+      browserBootstrap.json<{ code: string }>().code,
+      "companion_pairing_api_client_required"
+    );
+
+    const begun = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/device",
+      headers: forwardedHeaders,
+      payload: {
+        clientName: "Forge Companion on iPhone",
+        clientType: "api",
+        clientKeyThumbprint: key.thumbprint,
+        requestedScopes: ["companion.pair"],
+        requestedProfile: "trusted_personal_assistant"
+      }
+    });
+    assert.equal(begun.statusCode, 200, begun.body);
+    const pairing = begun.json<{
+      requestId: string;
+      deviceCode: string;
+      userCode: string;
+      expiresIn: number;
+    }>();
+    assert.equal(pairing.expiresIn, 600);
+    const request = runtime.store.readPairingRequest(pairing.requestId);
+    assert.ok(request);
+    const ownerSession = runtime.browserSessions.create({
+      kind: "operator_session",
+      subjectId: "test-owner-browser",
+      ownerId: request.ownerId,
+      clientId: null,
+      installationId: null,
+      audience: runtime.audience,
+      scopes: ["*"],
+      profile: "operator",
+      ownerSecurityEpoch: request.ownerSecurityEpoch,
+      clientSecurityEpoch: null,
+      authenticatedAt: new Date().toISOString()
+    });
+    const approved = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/device/approve",
+      headers: {
+        ...forwardedHeaders,
+        cookie: `forge_session=${encodeURIComponent(ownerSession.sessionToken)}`,
+        "x-forge-csrf": ownerSession.csrfToken
+      },
+      payload: {
+        userCode: pairing.userCode,
+        scopes: ["companion.pair"],
+        profile: "trusted_personal_assistant"
+      }
+    });
+    assert.equal(approved.statusCode, 200, approved.body);
+
+    const approvedRequest = runtime.store.readPairingRequest(pairing.requestId);
+    assert.ok(approvedRequest);
+    assert.equal(
+      runtime.store.updatePairingPoll({
+        id: approvedRequest.id,
+        expectedNextPollAt: approvedRequest.nextPollAt,
+        pollIntervalSeconds: approvedRequest.pollIntervalSeconds,
+        nextPollAt: new Date(Date.now() - 1_000).toISOString(),
+        now: new Date().toISOString()
+      }),
+      true
+    );
+    const exchanged = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/token",
+      headers: forwardedHeaders,
+      payload: {
+        grantType: "device_code",
+        deviceCode: pairing.deviceCode,
+        clientProof: await pairingProof({
+          privateKey: key.privateKey,
+          publicJwk: key.publicJwk,
+          requestId: pairing.requestId,
+          operation: "poll"
+        })
+      }
+    });
+    assert.equal(exchanged.statusCode, 200, exchanged.body);
+    const issued = exchanged.json<{
+      accessToken: string;
+      refreshToken?: string;
+      clientId: string;
+      scopes: string[];
+      profile: string;
+    }>();
+    assert.equal(issued.refreshToken, undefined);
+    assert.deepEqual(issued.scopes, [
+      "companion.pair",
+      "profile:trusted_personal_assistant"
+    ]);
+    assert.equal(issued.profile, "trusted_personal_assistant");
+
+    const unrelatedTarget = `${canonicalOrigin}/api/v1/context`;
+    const unrelated = await app.inject({
+      method: "GET",
+      url: "/api/v1/context",
+      headers: {
+        ...forwardedHeaders,
+        authorization: `DPoP ${issued.accessToken}`,
+        dpop: await dpopProof({
+          privateKey: key.privateKey,
+          publicJwk: key.publicJwk,
+          method: "GET",
+          target: unrelatedTarget,
+          credential: issued.accessToken
+        })
+      }
+    });
+    assert.equal(unrelated.statusCode, 403, unrelated.body);
+
+    const invitationTarget =
+      `${canonicalOrigin}/api/v1/health/pairing-sessions`;
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        ...forwardedHeaders,
+        authorization: `DPoP ${issued.accessToken}`,
+        dpop: await dpopProof({
+          privateKey: key.privateKey,
+          publicJwk: key.publicJwk,
+          method: "POST",
+          target: invitationTarget,
+          credential: issued.accessToken
+        })
+      },
+      payload: {
+        label: "Albert's iPhone"
+      }
+    });
+    assert.equal(created.statusCode, 201, created.body);
+    const invitation = created.json<{
+      session: {
+        userId: string;
+        label: string;
+        capabilities: string[];
+      };
+      qrPayload: {
+        apiBaseUrl: string;
+        transportMode: string;
+        expiresAt: string;
+        capabilities: string[];
+      };
+    }>();
+    assert.equal(invitation.session.userId, request.ownerId);
+    assert.equal(invitation.session.label, "Albert's iPhone");
+    assert.equal(invitation.qrPayload.apiBaseUrl, `${canonicalOrigin}/api/v1`);
+    assert.equal(invitation.qrPayload.transportMode, "manual-http");
+    assert.deepEqual(
+      invitation.session.capabilities,
+      invitation.qrPayload.capabilities
+    );
+    assert.ok(
+      Date.parse(invitation.qrPayload.expiresAt) - Date.now() <=
+        10 * 60 * 1_000
+    );
+    assert.ok(runtime.store.readClient(issued.clientId)?.revokedAt);
+
+    const replayed = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        ...forwardedHeaders,
+        authorization: `DPoP ${issued.accessToken}`,
+        dpop: await dpopProof({
+          privateKey: key.privateKey,
+          publicJwk: key.publicJwk,
+          method: "POST",
+          target: invitationTarget,
+          credential: issued.accessToken
+        })
+      },
+      payload: { label: "Replay" }
+    });
+    assert.equal(replayed.statusCode, 401, replayed.body);
   } finally {
     await app.close();
     await rm(root, { recursive: true, force: true });
@@ -413,6 +658,191 @@ test("remote pairing rejects unavailable machine scopes and requires owner step-
   }
 });
 
+test("remote browser pairing reports a bounded retry window after unfinished requests fill the cap", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "forge-browser-pairing-cap-"));
+  const app = await buildServer({
+    dataRoot: root,
+    seedDemoData: false,
+    taskRunWatchdog: false,
+    devrageMetricSync: false,
+    peerRuntime: false
+  });
+  try {
+    const key = await clientKey();
+    for (let index = 0; index < 3; index += 1) {
+      const admitted = await app.inject({
+        method: "POST",
+        url: "/api/v1/auth/device",
+        headers: { host: "127.0.0.1" },
+        payload: {
+          clientName: `Remote browser ${index + 1}`,
+          clientType: "browser",
+          clientKeyThumbprint: key.thumbprint,
+          requestedScopes: ["read"],
+          requestedProfile: "viewer"
+        }
+      });
+      assert.equal(admitted.statusCode, 200, admitted.body);
+      assert.equal(admitted.json<{ expiresIn: number }>().expiresIn, 180);
+    }
+
+    const limited = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/device",
+      headers: { host: "127.0.0.1" },
+      payload: {
+        clientName: "Remote browser 4",
+        clientType: "browser",
+        clientKeyThumbprint: key.thumbprint,
+        requestedScopes: ["read"],
+        requestedProfile: "viewer"
+      }
+    });
+    assert.equal(limited.statusCode, 429, limited.body);
+    assert.equal(limited.headers["retry-after"], "180");
+    assert.equal(
+      limited.json<{ code: string }>().code,
+      "pairing_admission_limited"
+    );
+  } finally {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("remote browser pairing reports the longer retry window when API clients fill the shared cap", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "forge-mixed-pairing-cap-")
+  );
+  const app = await buildServer({
+    dataRoot: root,
+    seedDemoData: false,
+    taskRunWatchdog: false,
+    devrageMetricSync: false,
+    peerRuntime: false
+  });
+  try {
+    const key = await clientKey();
+    for (let index = 0; index < 3; index += 1) {
+      const admitted = await app.inject({
+        method: "POST",
+        url: "/api/v1/auth/device",
+        headers: { host: "127.0.0.1" },
+        payload: {
+          clientName: `API client ${index + 1}`,
+          clientType: "api",
+          clientKeyThumbprint: key.thumbprint,
+          requestedScopes: ["read"],
+          requestedProfile: "viewer"
+        }
+      });
+      assert.equal(admitted.statusCode, 200, admitted.body);
+      assert.equal(admitted.json<{ expiresIn: number }>().expiresIn, 600);
+    }
+
+    const limited = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/device",
+      headers: { host: "127.0.0.1" },
+      payload: {
+        clientName: "Remote browser",
+        clientType: "browser",
+        clientKeyThumbprint: key.thumbprint,
+        requestedScopes: ["read"],
+        requestedProfile: "viewer"
+      }
+    });
+    assert.equal(limited.statusCode, 429, limited.body);
+    assert.equal(limited.headers["retry-after"], "600");
+    assert.deepEqual(
+      limited.json<{ code: string; retryAfterSeconds: number }>(),
+      {
+        code: "pairing_admission_limited",
+        error:
+          "Forge cannot admit another pairing request in the current bounded window.",
+        statusCode: 429,
+        retryAfterSeconds: 600
+      }
+    );
+  } finally {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("remote pairing reports the remaining admission window after rapid start and cancel attempts", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "forge-pairing-rate-window-")
+  );
+  const app = await buildServer({
+    dataRoot: root,
+    seedDemoData: false,
+    taskRunWatchdog: false,
+    devrageMetricSync: false,
+    peerRuntime: false
+  });
+  try {
+    const key = await clientKey();
+    for (let index = 0; index < 10; index += 1) {
+      const admitted = await app.inject({
+        method: "POST",
+        url: "/api/v1/auth/device",
+        headers: { host: "127.0.0.1" },
+        payload: {
+          clientName: `Cancelled browser ${index + 1}`,
+          clientType: "browser",
+          clientKeyThumbprint: key.thumbprint,
+          requestedScopes: ["read"],
+          requestedProfile: "viewer"
+        }
+      });
+      assert.equal(admitted.statusCode, 200, admitted.body);
+      const pairing = admitted.json<{
+        requestId: string;
+        deviceCode: string;
+      }>();
+      const cancelled = await app.inject({
+        method: "POST",
+        url: "/api/v1/auth/device/cancel",
+        headers: { host: "127.0.0.1" },
+        payload: {
+          deviceCode: pairing.deviceCode,
+          clientProof: await pairingProof({
+            privateKey: key.privateKey,
+            publicJwk: key.publicJwk,
+            requestId: pairing.requestId,
+            operation: "cancel"
+          })
+        }
+      });
+      assert.equal(cancelled.statusCode, 200, cancelled.body);
+    }
+
+    const limited = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/device",
+      headers: { host: "127.0.0.1" },
+      payload: {
+        clientName: "Rate-limited browser",
+        clientType: "browser",
+        clientKeyThumbprint: key.thumbprint,
+        requestedScopes: ["read"],
+        requestedProfile: "viewer"
+      }
+    });
+    assert.equal(limited.statusCode, 429, limited.body);
+    const retryAfterSeconds = Number(limited.headers["retry-after"]);
+    assert.ok(retryAfterSeconds >= 1 && retryAfterSeconds <= 60);
+    assert.equal(
+      limited.json<{ retryAfterSeconds: number }>().retryAfterSeconds,
+      retryAfterSeconds
+    );
+  } finally {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("remote browser pairing returns only an HttpOnly session and revocation closes it", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "forge-browser-pairing-"));
   let runtime!: ApplicationSecurityRuntime;
@@ -446,7 +876,9 @@ test("remote browser pairing returns only an HttpOnly session and revocation clo
       requestId: string;
       deviceCode: string;
       userCode: string;
+      expiresIn: number;
     }>();
+    assert.equal(pairing.expiresIn, 180);
     const request = runtime.store.readPairingRequest(pairing.requestId);
     assert.ok(request);
     assert.equal(request.clientType, "browser");

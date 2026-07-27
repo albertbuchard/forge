@@ -735,6 +735,10 @@ import {
 import { SqliteBackgroundJobAuthorizationStore } from "./security/background-job-authorization-store.js";
 import { registerRemotePairingRoutes } from "./security/remote-pairing-routes.js";
 import {
+  COMPANION_BOOTSTRAP_CAPABILITIES,
+  isCompanionBootstrapGrant
+} from "./security/companion-bootstrap-grant.js";
+import {
   InMemorySecurityRateLimiter,
   SqliteRateLimitStatePersistence
 } from "./security/security-rate-limiter.js";
@@ -15603,23 +15607,71 @@ export async function buildServer(
     };
   });
   app.post("/api/v1/health/pairing-sessions", async (request, reply) => {
-    requireOperatorSession(request.headers as Record<string, unknown>, {
-      route: "/api/v1/health/pairing-sessions"
-    });
-    const parsed = createCompanionPairingSessionSchema.parse(
-      request.body ?? {}
-    );
-    const requestApiBaseUrl = buildApiBaseUrl({
-      protocol: request.protocol,
-      headers: request.headers as Record<string, unknown>
-    });
+    const authentication = request.forgeSecurity?.authentication;
+    const candidateBootstrapPrincipal =
+      authentication?.mode === "access_credential" &&
+      authentication.principal.kind === "paired_client" &&
+      isCompanionBootstrapGrant(authentication.principal)
+        ? authentication.principal
+        : null;
+    const bootstrapPairingRequest = candidateBootstrapPrincipal
+      ? applicationSecurity.store.readPairingRequest(
+          candidateBootstrapPrincipal.subjectId
+        )
+      : null;
+    const bootstrapPrincipal =
+      bootstrapPairingRequest?.clientType === "api"
+        ? candidateBootstrapPrincipal
+        : null;
+    const parsed = bootstrapPrincipal
+      ? createCompanionPairingSessionSchema.parse({
+          label: z
+            .object({
+              label: z.string().trim().min(1).max(120).optional()
+            })
+            .strict()
+            .parse(request.body ?? {}).label,
+          userId: bootstrapPrincipal.ownerId,
+          fallbackMode: "none",
+          expiresInMinutes: 10,
+          transportMode: "manual-http",
+          capabilities: [...COMPANION_BOOTSTRAP_CAPABILITIES]
+        })
+      : (() => {
+          requireOperatorSession(request.headers as Record<string, unknown>, {
+            route: "/api/v1/health/pairing-sessions"
+          });
+          return createCompanionPairingSessionSchema.parse(request.body ?? {});
+        })();
+    const requestApiBaseUrl = bootstrapPrincipal
+      ? new URL(
+          "/api/v1",
+          applicationSecurity.exactTargetUri(request)
+        ).toString()
+      : buildApiBaseUrl({
+          protocol: request.protocol,
+          headers: request.headers as Record<string, unknown>
+        });
     const pairingTransport = await buildCompanionPairingTransport({
-      requestedMode: parsed.transportMode,
+      requestedMode: bootstrapPrincipal ? "manual-http" : parsed.transportMode,
       requestApiBaseUrl,
       requestUiBaseUrl: buildUiBaseUrlFromApiBaseUrl(requestApiBaseUrl),
-      fallbackMode: parsed.fallbackMode,
-      publicUrl: parsed.publicUrl
+      fallbackMode: bootstrapPrincipal ? "none" : parsed.fallbackMode,
+      publicUrl: bootstrapPrincipal ? null : parsed.publicUrl
     });
+    if (
+      bootstrapPrincipal?.clientId &&
+      !applicationSecurity.store.consumeActiveClient(
+        bootstrapPrincipal.clientId,
+        "companion_pairing_bootstrap_consumed"
+      )
+    ) {
+      throw new HttpError(
+        401,
+        "companion_pairing_bootstrap_consumed",
+        "This one-use Forge companion pairing authorization is no longer valid."
+      );
+    }
     reply.code(201);
     return createCompanionPairingSession(pairingTransport, parsed);
   });

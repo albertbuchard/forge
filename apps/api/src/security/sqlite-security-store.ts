@@ -233,6 +233,7 @@ type ClientRow = {
   owner_epoch: number;
   created_at: string;
   revoked_at: string | null;
+  client_type: "api" | "browser" | null;
 };
 
 type ClientListRow = ClientRow & {
@@ -253,7 +254,8 @@ function mapClient(row: ClientRow) {
     ownerSecurityEpoch: row.owner_epoch,
     clientSecurityEpoch: row.client_epoch,
     createdAt: row.created_at,
-    revokedAt: row.revoked_at
+    revokedAt: row.revoked_at,
+    clientType: row.client_type ?? undefined
   };
 }
 
@@ -506,9 +508,12 @@ export class SqliteSecurityStore
                 client.installation_id, client.key_thumbprint,
                 client.audience, client.profile,
                 client.scopes_json, client.client_epoch, owner.security_epoch AS owner_epoch,
-                client.created_at, client.revoked_at
+                client.created_at, client.revoked_at,
+                metadata.client_type
          FROM security_clients client
          JOIN security_owners owner ON owner.owner_id = client.owner_id
+         LEFT JOIN security_pairing_client_metadata metadata
+           ON metadata.pairing_request_id = client.subject_id
          WHERE client.id = ?`
       )
       .get(clientId) as ClientRow | undefined;
@@ -551,7 +556,8 @@ export class SqliteSecurityStore
           `UPDATE security_clients
            SET revoked_at = COALESCE(revoked_at, ?),
                revocation_reason = COALESCE(revocation_reason, ?),
-               client_epoch = client_epoch + CASE WHEN revoked_at IS NULL THEN 1 ELSE 0 END
+               client_epoch = client_epoch
+                 + CASE WHEN revoked_at IS NULL THEN 1 ELSE 0 END
            WHERE id = ?`
         )
         .run(now, reason, clientId);
@@ -564,6 +570,34 @@ export class SqliteSecurityStore
         )
         .run(now, reason, clientId);
       return Number(result.changes) > 0;
+    });
+  }
+
+  consumeActiveClient(clientId: string, reason: string) {
+    const now = this.clock.now().toISOString();
+    return this.transaction(() => {
+      const result = this.database
+        .prepare(
+          `UPDATE security_clients
+           SET revoked_at = ?,
+               revocation_reason = ?,
+               client_epoch = client_epoch + 1
+           WHERE id = ?
+             AND revoked_at IS NULL`
+        )
+        .run(now, reason, clientId);
+      if (Number(result.changes) !== 1) {
+        return false;
+      }
+      this.database
+        .prepare(
+          `UPDATE security_refresh_families
+           SET revoked_at = COALESCE(revoked_at, ?),
+               revocation_reason = COALESCE(revocation_reason, ?)
+           WHERE client_id = ?`
+        )
+        .run(now, reason, clientId);
+      return true;
     });
   }
 
@@ -837,6 +871,90 @@ export class SqliteSecurityStore
         .run(input.record.id, input.record.clientType ?? "api");
       return true;
     });
+  }
+
+  readPairingAdmissionRetryAfterSeconds(input: {
+    ownerId: string;
+    installationId: string;
+    now: string;
+    maximumPendingPerInstallation: number;
+    maximumPendingPerOwner: number;
+    maximumPendingGlobally: number;
+    admissionNetworkBucketKey: string;
+    admissionInstallationBucketKey: string;
+    admissionWindowSeconds: number;
+    maximumAdmissionAttempts: number;
+  }) {
+    const nowMs = Date.parse(input.now);
+    const retryAfterSeconds: number[] = [];
+    const appendPendingRetry = (
+      rows: Array<{ expires_at: string }>,
+      maximumPending: number
+    ) => {
+      if (rows.length < maximumPending) return;
+      const release = rows[rows.length - maximumPending];
+      if (!release) return;
+      retryAfterSeconds.push(
+        Math.max(1, Math.ceil((Date.parse(release.expires_at) - nowMs) / 1_000))
+      );
+    };
+    const activeStatusClause =
+      "status IN ('pending', 'approved') AND expires_at > ?";
+    appendPendingRetry(
+      this.database
+        .prepare(
+          `SELECT expires_at FROM security_pairing_requests
+           WHERE owner_id = ? AND installation_id = ?
+             AND ${activeStatusClause}
+           ORDER BY expires_at ASC`
+        )
+        .all(input.ownerId, input.installationId, input.now) as Array<{
+        expires_at: string;
+      }>,
+      input.maximumPendingPerInstallation
+    );
+    appendPendingRetry(
+      this.database
+        .prepare(
+          `SELECT expires_at FROM security_pairing_requests
+           WHERE owner_id = ? AND ${activeStatusClause}
+           ORDER BY expires_at ASC`
+        )
+        .all(input.ownerId, input.now) as Array<{ expires_at: string }>,
+      input.maximumPendingPerOwner
+    );
+    appendPendingRetry(
+      this.database
+        .prepare(
+          `SELECT expires_at FROM security_pairing_requests
+           WHERE ${activeStatusClause}
+           ORDER BY expires_at ASC`
+        )
+        .all(input.now) as Array<{ expires_at: string }>,
+      input.maximumPendingGlobally
+    );
+
+    const rateRows = this.database
+      .prepare(
+        `SELECT window_started_at, failures
+         FROM security_pairing_rate_limits
+         WHERE bucket_key IN (?, ?)`
+      )
+      .all(
+        input.admissionNetworkBucketKey,
+        input.admissionInstallationBucketKey
+      ) as Array<{ window_started_at: string; failures: number }>;
+    for (const row of rateRows) {
+      if (row.failures < input.maximumAdmissionAttempts) continue;
+      const releaseMs =
+        Date.parse(row.window_started_at) +
+        input.admissionWindowSeconds * 1_000;
+      retryAfterSeconds.push(
+        Math.max(1, Math.ceil((releaseMs - nowMs) / 1_000))
+      );
+    }
+
+    return Math.max(1, ...retryAfterSeconds);
   }
 
   findPairingByDeviceDigest(deviceDigest: string) {
