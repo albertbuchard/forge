@@ -9106,10 +9106,11 @@ final class ForgeCompanionTests: XCTestCase {
             request.headers["X-Forge-Companion-Request-Issued-At"]
         )
         let identity = try identityStore.identity()
+        let bodySha256 = SHA256.hash(data: Data())
+            .map { String(format: "%02x", $0) }
+            .joined()
         let proof = PeerTestRequestSignatureProof(
-            bodySha256: SHA256.hash(data: Data())
-                .map { String(format: "%02x", $0) }
-                .joined(),
+            bodySha256: bodySha256,
             deviceId: identity.deviceId,
             enrollmentId: "enrollment-test",
             issuedAt: issuedAt,
@@ -9139,6 +9140,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(request.headers["X-Forge-Companion-Device-Id"], identity.deviceId)
         XCTAssertEqual(request.headers["X-Forge-Companion-Enrollment-Id"], "enrollment-test")
         XCTAssertEqual(request.headers["X-Forge-Companion-Key-Id"], "key-test")
+        XCTAssertEqual(request.headers["X-Forge-Companion-Body-SHA256"], bodySha256)
         XCTAssertNil(request.headers["X-Forge-Companion-Pairing-Token"])
         XCTAssertNil(request.headers["X-Forge-Companion-Public-Key"])
         XCTAssertEqual(nonce.count, 32)

@@ -510,8 +510,10 @@ openclaw gateway restart
 
 ## Local and remote connection modes
 
-For localhost or Tailscale Forge instances, the plugin can bootstrap an operator session automatically.
-For pure localhost targets, it also auto-starts Forge if the local runtime is not already running.
+For a direct localhost Forge instance, the plugin uses Forge's verified
+local-owner helper automatically and starts Forge when the managed runtime is
+not already running. A Tailscale address is remote: reachability alone never
+authorizes Forge.
 If `actorLabel` is blank, the plugin now inherits the effective operator label
 from that trusted bootstrap. Set `actorLabel` only when a bot or child agent
 should act under its own explicit identity.
@@ -746,9 +748,10 @@ The curated route contract is:
 
 ## Token creation
 
-Tokens are optional for trusted localhost and Tailscale operator-session flows.
-Use them when the target is remote, intentionally external, or when you want an
-explicit long-lived scoped credential for a bot.
+Direct localhost use does not require a manually managed token. Tailscale and
+other remote clients require a one-time paired, scoped credential over HTTPS.
+Legacy manually copied tokens remain a compatibility fallback, not the default
+installation path.
 
 Best path when a token is actually needed:
 
@@ -758,34 +761,16 @@ Best path when a token is actually needed:
 4. copy the raw `fg_live_...` token when it is revealed once
 5. paste it into `plugins.entries["forge-openclaw-plugin"].config.apiToken`
 
-CLI path:
+The supported local command path is:
 
 ```bash
-curl -i -c /tmp/forge.cookie http://127.0.0.1:4317/api/v1/auth/operator-session
-
-curl -X POST http://127.0.0.1:4317/api/v1/settings/tokens \
-  -b /tmp/forge.cookie \
-  -H 'content-type: application/json' \
-  -d '{
-    "label": "Aurel full operator",
-    "agentLabel": "aurel",
-    "agentType": "assistant",
-    "trustLevel": "trusted",
-    "autonomyMode": "scoped_write",
-    "approvalMode": "high_impact_only",
-    "scopes": [
-      "read",
-      "write",
-      "insights",
-      "rewards.manage",
-      "psyche.read",
-      "psyche.write",
-      "psyche.note",
-      "psyche.insight",
-      "psyche.mode"
-    ]
-  }'
+npx forge-memory ui
 ```
+
+That command verifies the local operating-system owner and opens a single-use
+browser handoff. It does not print or require a long-lived secret. Remote
+clients should use the device-pairing flow; a legacy token can still be entered
+explicitly when compatibility requires it.
 
 ## Diagnose
 

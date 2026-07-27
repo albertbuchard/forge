@@ -1629,6 +1629,7 @@ final class PeerAPIClient {
         let enrollment: PeerCompanionEnrollmentReceipt
         let requestTarget: String
         let requestSignature: String
+        let bodyDigest: String
         let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
         let issuedAt = ISO8601DateFormatter().string(from: Date())
         do {
@@ -1639,7 +1640,7 @@ final class PeerAPIClient {
             )
             let path = try route.resolvedPath(parameters: pathParameters)
             requestTarget = try PeerRequestTarget.make(path: path, queryItems: queryItems)
-            let bodyDigest = SHA256.hash(data: body ?? Data())
+            bodyDigest = SHA256.hash(data: body ?? Data())
                 .map { String(format: "%02x", $0) }
                 .joined()
             let proof = PeerCompanionRequestProof(
@@ -1674,6 +1675,7 @@ final class PeerAPIClient {
             "X-Forge-Companion-Request-Protocol": PeerCompanionSecurityContract.requestProtocol,
             "X-Forge-Companion-Request-Nonce": nonce,
             "X-Forge-Companion-Request-Issued-At": issuedAt,
+            "X-Forge-Companion-Body-SHA256": bodyDigest,
             "X-Forge-Companion-Request-Signature": requestSignature
         ]
         if body != nil {

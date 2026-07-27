@@ -35,6 +35,7 @@ import {
   listCalendarConnections,
   listCalendarResources,
   patchCalendarConnection,
+  requestMacOSLocalCalendarAccess,
   syncCalendarConnection
 } from "@/lib/api";
 import {
@@ -174,6 +175,53 @@ function providerConnectionCountLabel(count: number) {
   return `${count} connection${count === 1 ? "" : "s"}`;
 }
 
+function connectionStatusLabel(
+  status: "connected" | "needs_attention" | "error"
+) {
+  switch (status) {
+    case "connected":
+      return "Connected";
+    case "needs_attention":
+      return "Needs attention";
+    case "error":
+      return "Error";
+  }
+}
+
+function readableCalendarConnectionError(value: string) {
+  const trimmed = value.trim();
+  const legacyHelperError =
+    /^(?:invalidRequest|unavailable)\("([\s\S]*)"\)$/.exec(trimmed);
+  return legacyHelperError?.[1]
+    ? legacyHelperError[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\")
+    : trimmed;
+}
+
+function effectiveCalendarConnectionStatus(input: {
+  provider: CalendarProvider;
+  status: "connected" | "needs_attention" | "error";
+  lastSyncError: string | null;
+}) {
+  if (
+    input.provider === "macos_local" &&
+    input.status === "error" &&
+    input.lastSyncError &&
+    /calendar (?:full )?access|privacy & security > calendars/i.test(
+      readableCalendarConnectionError(input.lastSyncError)
+    )
+  ) {
+    return "needs_attention" as const;
+  }
+  return input.status;
+}
+
+function calendarAccessLabel(calendar: CalendarResource) {
+  if (!calendar.forgeManaged) {
+    return "Read-only mirror";
+  }
+  return calendar.canWrite ? "Writable" : "Read only";
+}
+
 export function SettingsCalendarPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -191,6 +239,10 @@ export function SettingsCalendarPage() {
   const [removeConnectionId, setRemoveConnectionId] = useState<string | null>(
     null
   );
+  const [macOSRepairMessage, setMacOSRepairMessage] = useState<{
+    connectionId: string;
+    message: string;
+  } | null>(null);
   const [displayPreferences, setDisplayPreferences] = useState(() =>
     readCalendarDisplayPreferences()
   );
@@ -239,6 +291,36 @@ export function SettingsCalendarPage() {
   const syncMutation = useMutation({
     mutationFn: (connectionId: string) => syncCalendarConnection(connectionId),
     onSuccess: invalidateCalendarSettings
+  });
+
+  const repairMacOSAccessMutation = useMutation({
+    mutationFn: async (connectionId: string) => {
+      const result = await requestMacOSLocalCalendarAccess();
+      if (result.granted && result.status === "full_access") {
+        await syncCalendarConnection(connectionId);
+      }
+      return result;
+    },
+    onSuccess: async (result, connectionId) => {
+      await invalidateCalendarSettings();
+      setMacOSRepairMessage({
+        connectionId,
+        message:
+          result.granted && result.status === "full_access"
+            ? "Calendar access is repaired and this connection has been synced."
+            : (result.message ??
+              "Allow Forge full Calendar access in System Settings, then click Repair Calendar access again.")
+      });
+    },
+    onError: (error, connectionId) => {
+      setMacOSRepairMessage({
+        connectionId,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Forge could not repair Calendar access."
+      });
+    }
   });
 
   const patchConnectionMutation = useMutation({
@@ -303,12 +385,29 @@ export function SettingsCalendarPage() {
     }
     return grouped;
   }, [displayCalendars]);
-  const connectionCountsByProvider = useMemo(() => {
-    const counts: Partial<Record<CalendarProvider, number>> = {};
+  const connectionHealthByProvider = useMemo(() => {
+    const health: Partial<
+      Record<
+        CalendarProvider,
+        { total: number; connected: number; needsAttention: number }
+      >
+    > = {};
     for (const connection of connectionsQuery.data?.connections ?? []) {
-      counts[connection.provider] = (counts[connection.provider] ?? 0) + 1;
+      const effectiveStatus = effectiveCalendarConnectionStatus(connection);
+      const current = health[connection.provider] ?? {
+        total: 0,
+        connected: 0,
+        needsAttention: 0
+      };
+      current.total += 1;
+      if (effectiveStatus === "connected") {
+        current.connected += 1;
+      } else {
+        current.needsAttention += 1;
+      }
+      health[connection.provider] = current;
     }
-    return counts;
+    return health;
   }, [connectionsQuery.data?.connections]);
   const calendarDisplayColors = useMemo(
     () =>
@@ -322,6 +421,7 @@ export function SettingsCalendarPage() {
     () =>
       (connectionsQuery.data?.connections ?? []).find(
         (connection) =>
+          connection.status === "connected" &&
           typeof connection.config?.forgeCalendarUrl === "string" &&
           connection.config.forgeCalendarUrl.trim().length > 0
       ) ?? null,
@@ -600,25 +700,37 @@ export function SettingsCalendarPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             {providers.map((provider) => {
               const ProviderIcon = providerConnectionIcon(provider.provider);
-              const connectionCount =
-                connectionCountsByProvider[provider.provider] ?? 0;
+              const providerHealth = connectionHealthByProvider[
+                provider.provider
+              ] ?? {
+                total: 0,
+                connected: 0,
+                needsAttention: 0
+              };
+              const connectionCount = providerHealth.total;
               const hasConnections = connectionCount > 0;
+              const hasConnectedConnections = providerHealth.connected > 0;
+              const needsAttention = providerHealth.needsAttention > 0;
 
               return (
                 <div
                   key={provider.provider}
                   className={`flex min-h-[248px] min-w-0 max-w-full flex-col overflow-hidden rounded-[26px] border p-5 shadow-[inset_0_1px_0_var(--ui-border-subtle)] ${
-                    hasConnections
-                      ? "border-[var(--ui-success-soft)] bg-[var(--ui-success-soft)]"
-                      : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]"
+                    needsAttention
+                      ? "border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)]"
+                      : hasConnectedConnections
+                        ? "border-[var(--ui-success-soft)] bg-[var(--ui-success-soft)]"
+                        : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]"
                   }`}
                 >
                   <div className="flex min-w-0 items-start gap-4">
                     <div
                       className={`shrink-0 rounded-[18px] p-3 ${
-                        hasConnections
-                          ? SETTINGS_SUCCESS_BADGE_CLASS
-                          : "bg-[var(--primary)]/14 text-[var(--primary)]"
+                        needsAttention
+                          ? "bg-[var(--ui-danger-soft)] text-[var(--danger)]"
+                          : hasConnectedConnections
+                            ? SETTINGS_SUCCESS_BADGE_CLASS
+                            : "bg-[var(--primary)]/14 text-[var(--primary)]"
                       }`}
                     >
                       <ProviderIcon className="size-4" />
@@ -630,8 +742,14 @@ export function SettingsCalendarPage() {
                         </div>
                         {hasConnections ? (
                           <>
-                            <Badge className={SETTINGS_SUCCESS_BADGE_CLASS}>
-                              Connected
+                            <Badge
+                              className={
+                                needsAttention
+                                  ? "bg-[var(--ui-danger-soft)] text-[var(--danger)]"
+                                  : SETTINGS_SUCCESS_BADGE_CLASS
+                              }
+                            >
+                              {needsAttention ? "Needs attention" : "Connected"}
                             </Badge>
                             <Badge className={SETTINGS_META_BADGE_CLASS}>
                               {providerConnectionCountLabel(connectionCount)}
@@ -643,11 +761,16 @@ export function SettingsCalendarPage() {
                         {providerConnectionSummary(provider.provider)}
                       </p>
                       {hasConnections ? (
-                        <div className="mt-3 min-w-0 text-sm text-[color-mix(in_srgb,var(--success)_68%,var(--ui-ink-strong)_32%)] [overflow-wrap:anywhere]">
-                          Forge already has{" "}
-                          {providerConnectionCountLabel(connectionCount)} for
-                          this provider. Open the guided flow again to add
-                          another account or reconfigure one.
+                        <div
+                          className={`mt-3 min-w-0 text-sm [overflow-wrap:anywhere] ${
+                            needsAttention
+                              ? "text-[var(--danger)]"
+                              : "text-[color-mix(in_srgb,var(--success)_68%,var(--ui-ink-strong)_32%)]"
+                          }`}
+                        >
+                          {needsAttention
+                            ? "At least one configured connection needs attention. Use its repair action below."
+                            : `Forge already has ${providerConnectionCountLabel(connectionCount)} for this provider. Open the guided flow again to add another account or reconfigure one.`}
                         </div>
                       ) : null}
                     </div>
@@ -749,7 +872,7 @@ export function SettingsCalendarPage() {
                             {calendarLabel}
                           </div>
                           <div className="mt-1 min-w-0 text-sm text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
-                            {calendar.canWrite ? "Writable" : "Read only"} ·{" "}
+                            {calendarAccessLabel(calendar)} ·{" "}
                             {calendar.timezone}
                           </div>
                         </div>
@@ -817,6 +940,8 @@ export function SettingsCalendarPage() {
               {connections.map((connection) => {
                 const calendars =
                   calendarsByConnection.get(connection.id) ?? [];
+                const effectiveStatus =
+                  effectiveCalendarConnectionStatus(connection);
                 const usesSharedWriteTargetElsewhere =
                   connection.provider !== "microsoft" &&
                   sharedForgeWriteTargetConnection !== null &&
@@ -843,7 +968,9 @@ export function SettingsCalendarPage() {
                         ) : null}
                         {connection.lastSyncError ? (
                           <div className="mt-2 min-w-0 text-sm text-[var(--danger)] [overflow-wrap:anywhere]">
-                            {connection.lastSyncError}
+                            {readableCalendarConnectionError(
+                              connection.lastSyncError
+                            )}
                           </div>
                         ) : null}
                         {usesSharedWriteTargetElsewhere ? (
@@ -860,8 +987,14 @@ export function SettingsCalendarPage() {
                         ) : null}
                       </div>
                       <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-                        <Badge className={SETTINGS_META_BADGE_CLASS}>
-                          {connection.status}
+                        <Badge
+                          className={
+                            effectiveStatus === "connected"
+                              ? SETTINGS_SUCCESS_BADGE_CLASS
+                              : "bg-[var(--ui-danger-soft)] text-[var(--danger)]"
+                          }
+                        >
+                          {connectionStatusLabel(effectiveStatus)}
                         </Badge>
                         {connection.config?.readOnly === true ? (
                           <Badge className={SETTINGS_INFO_BADGE_CLASS}>
@@ -883,6 +1016,26 @@ export function SettingsCalendarPage() {
                           <RefreshCcw className="size-4" />
                           Sync
                         </Button>
+                        {connection.provider === "macos_local" &&
+                        connection.status !== "connected" ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            pending={
+                              repairMacOSAccessMutation.isPending &&
+                              repairMacOSAccessMutation.variables ===
+                                connection.id
+                            }
+                            pendingLabel="Waiting for macOS"
+                            onClick={() => {
+                              setMacOSRepairMessage(null);
+                              repairMacOSAccessMutation.mutate(connection.id);
+                            }}
+                          >
+                            <KeyRound className="size-4" />
+                            Repair Calendar access
+                          </Button>
+                        ) : null}
                         <Button
                           size="sm"
                           variant="secondary"
@@ -924,7 +1077,7 @@ export function SettingsCalendarPage() {
                               {readCalendarDisplayName(calendar)}
                             </div>
                             <div className="mt-1 min-w-0 text-xs uppercase tracking-[0.16em] text-[var(--ui-ink-faint)] [overflow-wrap:anywhere]">
-                              {calendar.canWrite ? "Writable" : "Read only"} ·{" "}
+                              {calendarAccessLabel(calendar)} ·{" "}
                               {calendar.timezone}
                             </div>
                           </div>
@@ -941,6 +1094,12 @@ export function SettingsCalendarPage() {
                         </div>
                       ))}
                     </div>
+                    {connection.provider === "macos_local" &&
+                    macOSRepairMessage?.connectionId === connection.id ? (
+                      <div className="mt-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                        {macOSRepairMessage.message}
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}

@@ -68,21 +68,28 @@ describe("EntityLinkMultiSelect", () => {
     const listbox = screen.getByRole("listbox");
     expect(within(clipShell).queryByRole("listbox")).toBeNull();
     expect(listbox).toBeInTheDocument();
-    expect(listbox.parentElement).toHaveClass("overflow-y-auto");
+    expect(listbox.parentElement).toHaveClass(
+      "pointer-events-auto",
+      "overflow-y-auto"
+    );
     expect(listbox.parentElement?.style.position).toBe("fixed");
   });
 
   it("wires stable combobox relationships and supports keyboard navigation", () => {
+    const onParentKeyDown = vi.fn();
+
     function Example() {
       const [selectedValues, setSelectedValues] = useState<string[]>([]);
 
       return (
-        <EntityLinkMultiSelect
-          options={OPTIONS}
-          selectedValues={selectedValues}
-          onChange={setSelectedValues}
-          placeholder="Keyboard entity search"
-        />
+        <div onKeyDown={onParentKeyDown}>
+          <EntityLinkMultiSelect
+            options={OPTIONS}
+            selectedValues={selectedValues}
+            onChange={setSelectedValues}
+            placeholder="Keyboard entity search"
+          />
+        </div>
       );
     }
 
@@ -125,6 +132,9 @@ describe("EntityLinkMultiSelect", () => {
     expect(input).toHaveAttribute("aria-activedescendant", options[1]?.id);
     fireEvent.keyDown(input, { key: "Escape" });
     expect(input).toHaveAttribute("aria-expanded", "false");
+    expect(onParentKeyDown).not.toHaveBeenCalledWith(
+      expect.objectContaining({ key: "Escape" })
+    );
 
     fireEvent.focus(input);
     expect(screen.getByRole("listbox").id).toBe(listboxId);
@@ -133,10 +143,11 @@ describe("EntityLinkMultiSelect", () => {
     fireEvent.keyDown(input, { key: "Enter" });
 
     expect(screen.getByText("Forge option 2")).toBeInTheDocument();
-    expect(input).toHaveAttribute("aria-expanded", "false");
+    expect(input).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
   });
 
-  it("filters matches and selects an option from the overlay list", () => {
+  it("selects exactly once after a real pointer sequence and keeps the multiselect open", () => {
     function Example() {
       const [selectedValues, setSelectedValues] = useState<string[]>([]);
 
@@ -170,9 +181,69 @@ describe("EntityLinkMultiSelect", () => {
     const input = screen.getByPlaceholderText("Search options");
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "option 11" } });
-    fireEvent.click(screen.getByRole("option", { name: /forge option 11/i }));
+    const option = screen.getByRole("option", { name: /forge option 11/i });
+    fireEvent.pointerDown(option);
+    expect(
+      screen.queryByRole("button", { name: "Remove Forge option 11" })
+    ).toBeNull();
+    fireEvent.click(option);
 
-    expect(screen.getByText("Forge option 11")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Remove Forge option 11" })
+    ).toBeInTheDocument();
+    expect(input).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("exposes a scrollable result set and scrolls the active keyboard option into view", async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView
+    });
+
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      () =>
+        ({
+          x: 24,
+          y: 140,
+          width: 320,
+          height: 48,
+          top: 140,
+          right: 344,
+          bottom: 188,
+          left: 24,
+          toJSON: () => ({})
+        }) as DOMRect
+    );
+
+    render(
+      <EntityLinkMultiSelect
+        options={OPTIONS}
+        selectedValues={[]}
+        onChange={() => undefined}
+        placeholder="Scrollable entity search"
+      />
+    );
+
+    const input = screen.getByRole("combobox", {
+      name: "Scrollable entity search"
+    });
+    fireEvent.focus(input);
+
+    const listbox = screen.getByRole("listbox");
+    const options = within(listbox).getAllByRole("option");
+    expect(options).toHaveLength(OPTIONS.length);
+
+    scrollIntoView.mockClear();
+    fireEvent.keyDown(input, { key: "End" });
+
+    expect(input).toHaveAttribute(
+      "aria-activedescendant",
+      options[OPTIONS.length - 1]?.id
+    );
+    await waitFor(() =>
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" })
+    );
   });
 
   it("searches remote Forge entities and merges the results", async () => {

@@ -93,6 +93,7 @@ const uploadInput = {
 describe("Artifact upload API client", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     FakeArtifactUploadXhr.plans = [];
     FakeArtifactUploadXhr.requests = [];
   });
@@ -158,6 +159,11 @@ describe("Artifact upload API client", () => {
   });
 
   it("retries once after local session bootstrap without changing identity", async () => {
+    localStorage.clear();
+    window.history.replaceState(null, "", "/");
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(
+      () => undefined
+    );
     installFakeArtifactUploadXhr(
       {
         status: 401,
@@ -170,15 +176,40 @@ describe("Artifact upload API client", () => {
         body: { artifact: { id: "artifact_replayed" } }
       }
     );
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({ session: { id: "operator_session_local" } }),
+    const fetchMock = vi.fn(async (rawPath: unknown, init?: RequestInit) => {
+      const requestPath = String(rawPath);
+      if (requestPath.endsWith("/api/v1/auth/local/browser/begin")) {
+        const body = JSON.parse(String(init?.body)) as {
+          browserOrigin: string;
+          browserNonce: string;
+        };
+        const handlerUrl = new URL("forge://local-auth");
+        handlerUrl.searchParams.set("apiOrigin", "http://127.0.0.1:4317");
+        handlerUrl.searchParams.set("browserOrigin", body.browserOrigin);
+        handlerUrl.searchParams.set("transactionId", "local_artifact_browser");
+        handlerUrl.searchParams.set("browserNonce", body.browserNonce);
+        return new Response(
+          JSON.stringify({
+            transactionId: "local_artifact_browser",
+            handlerUrl: handlerUrl.toString()
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          }
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          session: { id: "operator_session_local" },
+          csrfToken: "fg_csrf_artifact_test"
+        }),
         {
           status: 200,
           headers: { "content-type": "application/json" }
         }
-      )
-    );
+      );
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     const response = await uploadArtifact(uploadInput, {
@@ -187,9 +218,12 @@ describe("Artifact upload API client", () => {
     });
 
     expect(response.artifact.id).toBe("artifact_replayed");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(String(fetchMock.mock.calls[0]?.[0])).toMatch(
-      /\/api\/v1\/auth\/operator-session$/
+      /\/api\/v1\/auth\/local\/browser\/begin$/
+    );
+    expect(String(fetchMock.mock.calls[1]?.[0])).toMatch(
+      /\/api\/v1\/auth\/local\/browser\/exchange$/
     );
     expect(FakeArtifactUploadXhr.requests).toHaveLength(2);
     for (const request of FakeArtifactUploadXhr.requests) {
@@ -198,5 +232,8 @@ describe("Artifact upload API client", () => {
       );
       expect(JSON.parse(String(request.requestBody))).toEqual(uploadInput);
     }
+    expect(
+      FakeArtifactUploadXhr.requests[1]?.requestHeaders.get("x-forge-csrf")
+    ).toBe("fg_csrf_artifact_test");
   });
 });

@@ -457,8 +457,12 @@ but not necessarily a full Psyche formulation: `questionnaire_instrument`,
 `sleep_session`, `workout_session`, and some `preference_judgment` or
 `preference_signal` moments.
 
-- Start by asking what the reflection should help the user understand, decide,
-  notice, remember, or change later.
+- For guided reflection, ask what the record should help the user understand, decide,
+  notice, remember, or change later only when they have not already supplied usable
+  direct wording or a narrow action.
+- Self-observation direct capture is the explicit fast-path exception: preserve the
+  user's wording, ask only for missing `observedAt` plus one accuracy or consent
+  check, and do not add a purpose question.
 - Reflect the lived or practical stake once before asking for fields, but do not
   over-therapize if the user is only trying to store a clear answer, note, or
   health-context update.
@@ -469,10 +473,12 @@ but not necessarily a full Psyche formulation: `questionnaire_instrument`,
   or complete the run, then focus on the next answer, uncertainty, or insight that
   changes the run. Do not turn answer collection into generic Psyche intake unless a
   belief, mode, trigger report, or behavior pattern clearly emerges.
-- For self-observation, keep the chain concrete: situation, cue, emotion/body,
-  thought/meaning, behavior/urge, and consequence. If that chain reveals a recurring
-  loop, belief, mode, schema theme, or one charged trigger episode, route to the
-  stronger Psyche container.
+- For self-observation, first distinguish immediate support, direct capture, guided
+  reflection, and exact-record review or narrow update. In guided work, keep
+  situation, cue, emotion/body, thought/meaning, behavior/urge, and consequence
+  concrete without forcing every link. Offer a stronger Psyche container only after
+  the user is understood, and never make it a prerequisite for support or a
+  lightweight save.
 - For sleep and workout enrichment, ask what the user wants future review to remember:
   recovery context, subjective effort, mood, meaning, social context, or links.
   Preserve raw health facts through the health model and store reflection as notes,
@@ -482,8 +488,10 @@ but not necessarily a full Psyche formulation: `questionnaire_instrument`,
   reusable knowledge, source synthesis, person/context memory, or a personal manual.
 - Route posture still matters: `questionnaire_instrument`, `note`, `sleep_session`,
   and `workout_session` use shared batch routes for normal CRUD; `questionnaire_run`
-  uses questionnaire run actions; `self_observation` is note-backed; `wiki_page` uses
-  the wiki routes.
+  uses questionnaire run actions; `self_observation` reads its bounded calendar and
+  writes the underlying `note` through batch CRUD with `frontmatter.observedAt`;
+  `wiki_page` uses the wiki routes. Never write `entityType: self_observation` or
+  invent a standalone mutation route.
 
 ## Progressive disclosure after partial answers
 
@@ -739,7 +747,9 @@ Use this quick split before the conversation gets too detailed.
 - `task_run`, `work_adjustment`, `questionnaire_run`, `preference_judgment`,
   `preference_signal`, and `self_observation` are action workflows. Start from what
   the user is trying to do, then use the dedicated action tool or note-backed write
-  model.
+  model. For `self_observation`, read the bounded calendar and create or update the
+  underlying `entityType: note` through shared batch CRUD with
+  `frontmatter.observedAt`; never send `entityType: self_observation` to batch CRUD.
 - `attention_inbox` and `entity_navigation` are specialized domain surfaces. Use
   `forge_call_attention_route` for a bounded queue read and eligible snooze,
   dismiss, or restore actions. Use `forge_call_entity_navigation_route` for bounded
@@ -935,8 +945,9 @@ still knowing the exact write/read family before it acts.
   result, and latest-node-output work.
 - `course` and `concept`: specialized learning surfaces. Use
   `forge_call_course_route` for installed-course catalog/detail, learner-safe
-  sessions, attempts, validated package import/export, concept discovery, and
-  concept evidence. Never use shared batch CRUD for either surface.
+  visual and voice sessions, attempts, explicit enrollment upgrades, validated
+  package import/export, concept discovery, and concept evidence. Never use shared
+  batch CRUD for either surface.
 
 ## Active-listening patterns
 
@@ -2544,29 +2555,38 @@ Preferred opening question:
 
 ## Self Observation
 
-Aim: capture one observed episode with enough structure to be useful later without
-turning a lightweight note into a forced functional analysis. A self-observation can
-name whichever parts are actually present: situation, cue, emotion/body,
-thought/meaning, behavior/urge, or consequence. If the material reveals a recurring
-loop, belief, mode, schema theme, or trigger chain, offer the stronger Psyche record
-and let the user confirm or correct that fit.
+Aim: support, directly capture, explore, or review one observed moment without
+forcing a full chain, rewriting accepted wording, or making a stronger Psyche
+container a prerequisite. A self-observation can preserve whichever parts are
+actually present: situation, cue, emotion/body, thought/meaning, behavior/urge, or
+consequence.
 
 Arc:
 
-1. Ask what happened in the situation.
-2. Ask when it happened, or what observed date/time should anchor the note, if the
-   timing is not already clear.
-3. Reflect what seems most important in what the user already said.
-4. Ask one next question about the most meaningful missing cue, emotion/body signal,
-   thought/meaning, behavior/urge, or consequence. Do not require every link.
-5. Ask about what happened next only when it changes the usefulness or likely
-   container of the observation.
-6. Decide whether this should stay a lightweight self-observation or become a
-   `trigger_report`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`,
-   `mode_guide_session`, `flashcard`, `event_type`, `emotion_definition`, or wiki
-   page.
-7. Link the observation to the structured record when the structured record is the
-   real container.
+1. Distinguish immediate support, direct capture, guided reflection, and exact-record
+   review or narrow update. Skip this question when the user's request is already
+   clear.
+2. For immediate support, respond to what needs steadying or understanding now.
+   Support never depends on saving.
+3. For direct capture, preserve the user's supplied wording, ask for `observedAt`
+   only when it is missing, and ask one accuracy or consent question. Do not require
+   a title, complete chain, interpretation, link, or different container.
+4. For review or narrow update, read the bounded calendar to identify the exact
+   backing note, then read that note. Preserve accepted sparse content, `observedAt`,
+   frontmatter, and links; ask only what is newly true or inaccurate, and include
+   `expectedRevisionHash` when changing note content.
+5. For guided reflection, begin with one concrete moment. Keep observable events
+   separate from the user's meaning, then ask one question about the most useful
+   missing cue, emotion/body signal, thought, behavior/urge, or consequence. Do not
+   require every link.
+6. Offer at most one tentative functional or emotional hypothesis. Explain the
+   observation that suggests it and ask whether it fits or needs correction.
+7. Only after the user is understood, optionally offer `trigger_report`,
+   `behavior_pattern`, `belief_entry`, `mode_guide_session`, `mode_profile`,
+   `flashcard`, or `wiki_page` when it is a better durable container. The user may
+   still save a lightweight observation without accepting that reclassification.
+8. After a write, read the exact note or bounded calendar result and confirm the
+   accepted wording and observed time without reopening intake.
 
 Helpful follow-up lanes:
 
@@ -2580,33 +2600,46 @@ Helpful follow-up lanes:
 
 Route note:
 
-- `self_observation` is a Psyche-adjacent note-backed workflow, not generic quick
-  capture. Read the calendar first, then create or update an observed `note` with
-  `frontmatter.observedAt` instead of inventing a standalone CRUD write. The read
-  path is `/api/v1/psyche/self-observation/calendar`; the stored write is a linked
-  `note` through the shared batch entity route.
+- `self_observation` is a Psyche-adjacent note-backed workflow. Read the bounded
+  calendar before review, update, or likely-duplicate work, but do not make that read
+  a prerequisite for an explicit direct capture. The read path is
+  `/api/v1/psyche/self-observation/calendar`.
+- Read the exact backing note before updating it. Create or update that observed
+  `note` through shared batch CRUD with `frontmatter.observedAt`; never invent a
+  standalone `self_observation` mutation route.
 - Do not promote self-observation over functional analysis. If the user is describing
   a loop, use `behavior_pattern`; if they are describing one emotionally meaningful
   episode, use `trigger_report`; if a part-state is central, use `mode_guide_session`
   or `mode_profile`; if a belief sentence is central, use `belief_entry`; if the
   user needs a rehearsable reminder during the trigger or urge, use `flashcard`.
+  Offer that fit as an optional next container after understanding the user; do not
+  block support or a lightweight observation on reclassification.
 - If the user wants to remember a source, concept, book, article, or durable personal
   explanation, use `wiki_page` rather than self-observation.
 
-If the user already gave the event or timing, reflect what stands out and ask only for
-the one missing part that would make the note more useful or change its container.
+If the user already gave usable wording and timing for direct capture, reflect it
+once and ask only whether it is accurate enough to save. In guided reflection, ask
+only for the one missing part that would materially improve understanding.
 
 Ready to save when:
 
-- the situation/event and observed time are clear
-- at least one meaningful cue, emotion/body signal, thought/meaning, behavior/urge,
-  or consequence is clear enough to be useful later
-- any stronger Psyche container supported by the material has been accepted or
-  corrected by the user
+- immediate support is ready without a save
+- direct capture has accepted note wording, `frontmatter.observedAt`, and one
+  accuracy or consent check
+- read-only review has read the exact backing note and does not manufacture a write
+- narrow update has read the exact note, preserves sparse accepted content and
+  frontmatter, and changes only what is newly true or inaccurate
+- guided reflection has one concrete moment, its observed time, accepted wording,
+  and one fit-or-correction check if an agent hypothesis was used
+- a stronger container may be offered, but support and lightweight capture do not
+  depend on accepting it
+- the exact note or calendar result will be read after a write to verify the saved
+  observation
 
 Preferred opening question:
 
-- "What happened in the situation, and what did you feel, think, or do next?"
+- "Do you want support with what you noticed, save it as-is, explore it together, or
+  review an existing observation?"
 
 ## Sleep Session
 
@@ -2894,7 +2927,12 @@ Arc:
    a matching result through `item.foodId`. If there is no match, create a custom
    food only after researching calories, protein, carbohydrate, and fat; include
    `caloriesKcal`, `proteinG`, `carbsG`, and `fatG` in the item.
-6. Use `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, and
+6. For a correction, read the overview, identify the exact existing log, reflect
+   the current value and smallest proposed change, then use
+   `forge_update_food_log` with its `foodLogId` and only the fields the user
+   accepted changing. If `items` changes, send the complete desired item list
+   and keep the same searched-food and researched-custom-food rules.
+7. Use `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, and
    `forge_update_nutrition_experiment` when repeated observations should become
    an N-of-1 test instead of vague advice.
 
@@ -2903,6 +2941,7 @@ Helpful follow-up lanes:
 - whether the decision is weight trend, protein/fiber sufficiency, sport fuel,
   visual look, water retention, gut comfort, cravings, or energy
 - whether a meal should be confirmed precisely or logged as a candidate estimate
+- whether the user is adding a new meal or correcting one exact existing log
 - whether a searched/catalog food can be reused by `foodId` or whether a researched
   custom food with calories and macros is needed
 - which outcome metric should define a nutrition experiment before interpreting it
@@ -2914,7 +2953,9 @@ Route note:
   overview. Do not invent generic batch entities for food logs or body check-ins
   when the dedicated tools exist. Food search reads Forge's local custom/cache
   database plus public nutrition catalogs. `forge_log_food` rejects custom items
-  without calories, protein, carbohydrate, and fat.
+  without calories, protein, carbohydrate, and fat. `forge_update_food_log`
+  requires the exact `foodLogId`, reads before changing, and patches only the
+  accepted difference.
 
 Ready to review or act when:
 
@@ -2924,6 +2965,8 @@ Ready to review or act when:
   N-of-1 experiment path
 - if logging food, the item can reuse a searched `foodId`, barcode match, or has
   researched calories, protein, carbohydrate, and fat
+- if correcting food, the overview has resolved one exact log and the user has
+  accepted the smallest field-level change
 
 Preferred opening question:
 
@@ -3695,39 +3738,48 @@ Preferred opening question:
 
 ## Course
 
-Aim: help the user choose, continue, understand, submit, review, install, or export
-learning work through the dedicated Course surface without turning every request into
-an enrollment form or exposing hidden assessment material.
+Aim: help the user choose, continue visually or by voice, understand, submit, review,
+upgrade, install, or export learning work through the dedicated Course surface without
+turning every request into an enrollment form or exposing hidden assessment material.
 
 Arc:
 
-1. Distinguish choosing a course, reviewing progress, continuing a lesson, getting
-   learning support, submitting an activity, importing a package, and exporting a
-   package.
+1. Distinguish choosing a course, reviewing progress, continuing visually, starting
+   or resuming a spoken lesson, getting learning support, submitting an activity,
+   upgrading an enrolled release, importing a package, and exporting a package.
 2. If the course is not exact, list installed courses before asking for an internal id.
    If it is exact, read course detail or the learner-safe session before asking the user
    to repeat syllabus, progress, lesson, or activity context.
 3. For learning support, stay with the current explanation, example, or activity. Ask
    what is unclear and help directly; support never depends on saving an attempt.
-4. For an attempt, identify the exact course, lesson, and activity from the learner-safe
+4. For a spoken lesson, ask for week and day only when they are not already clear,
+   call the learner-safe voice session, and teach its returned blocks in source order,
+   one manageable block or activity at a time.
+5. For an attempt, identify the exact course, lesson, and activity from the learner-safe
    session, preserve the learner's answer wording, and ask for confirmation only when
-   they have not already asked to submit it.
-5. After submission, explain the saved answer, assessment status, feedback, score,
+   they have not already asked to submit it. Voice attempts also use the current
+   lesson-scoped token and the confirmed formatted answer.
+6. After submission, explain the saved answer, assessment status, feedback, score,
    grade, points, and next lesson without inflating missing results. If structured
    assessment is unavailable, say that grading was withheld.
-6. For import, identify the trusted Forge course package and whether the user intends a
+7. For an enrollment upgrade, read the exact installed and available release state
+   first. Explain what version will change and that only passed activities with
+   unchanged content hashes can carry forward, then ask the learner to accept or stop.
+8. For import, identify the trusted Forge course package and whether the user intends a
    new install or an accepted replacement. Let Forge validate references and the
    canonical hash; report conflicts rather than bypassing them.
-7. For export, identify the exact course and confirm that the user wants the canonical
+9. For export, identify the exact course and confirm that the user wants the canonical
    portable package. Never use export as a learner-facing lesson read.
-8. Skip the broad lane question when the exact course and action are already clear.
+10. Skip the broad lane question when the exact course and action are already clear.
 
 Lane-to-route map:
 
 - choose or browse -> `listCourses`
 - review syllabus or progress -> `courseDetail`
 - continue, learn, or get activity help -> `learningSession`
+- start or continue a spoken lesson for an exact week and day -> `voiceLearningSession`
 - submit an accepted answer -> `submitAttempt`
+- accept an available published release after exact review -> `upgradeEnrollment`
 - install a trusted package -> `importCourse`
 - explicitly transfer a portable package -> `exportCourse`
 - find due or matching concepts -> `listConcepts`
@@ -3745,6 +3797,22 @@ Learner-safety rules:
   instructor material. Call it only for explicit package transfer.
 - `POST /api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts`
   needs exact path identifiers and `answerMarkdown`. Preserve the user's wording.
+- For spoken lessons, call `voiceLearningSession` with the exact course, week, and day.
+  Teach the returned learner-safe blocks in source order, one manageable block or
+  activity at a time.
+- Before a voice submission, add punctuation and paragraph breaks without changing
+  Albert's words. Show him every proposed deletion, replacement, uncertain
+  mathematical symbol, or uncertain recognition and obtain explicit confirmation.
+  Preserve his meaning, uncertainty, reasoning, and claims. Read the complete
+  formatted answer back and obtain final explicit confirmation.
+- Submit only `answerMarkdown`, `deliveryMode: "voice"`, the current
+  `voiceSessionToken`, `voiceConfirmation: true`, and one stable `idempotencyKey`.
+  Never send audio, recording metadata, or a separate voice transcript.
+- Use the returned attempt ordinals, feedback, progress, and next unlocked lesson to
+  adapt the next teaching step.
+- `upgradeEnrollment` is a separate explicit version change. Read current course detail
+  first, explain the available release and evidence carry-forward rule, and never
+  treat package import as learner consent to move an existing enrollment.
 - Written assessment can be withheld when the configured model cannot return a valid
   structured assessment. Never manufacture a score, grade, misconception, or mastery
   update.
@@ -3755,14 +3823,19 @@ Ready to act when:
 
 - catalog, detail, progress, or learner guidance has only the learner scope and exact
   course or lesson needed for the read
+- starting voice guidance has the exact course, week, and day
+- a later voice attempt has the returned lesson-scoped token, accepted answer wording,
+  explicit confirmation, and one stable idempotency key
 - an attempt has exact course, lesson, and activity identifiers plus accepted answer
   wording
+- enrollment upgrade has an exact current release read, an available release, a clear
+  carry-forward explanation, and the learner's explicit choice
 - import has the trusted package plus new-install or accepted-replacement intent
 - export has the exact course plus explicit portable-package intent
 
 Preferred opening question:
 
-- "Are you trying to choose a course, continue a lesson, submit work, review progress, or import or export a course?"
+- "Are you trying to choose or continue a course, learn by voice, submit work, review progress, update your enrollment, or import or export a course?"
 
 ## Concept
 
@@ -3857,36 +3930,100 @@ Preferred opening question:
 
 ## Preference Catalog Item
 
-Aim: add one candidate in a way that will make later comparisons feel clear and fair.
+Aim: preserve one comparable option efficiently, clarify it only when ambiguity
+matters, and keep preference evidence on its dedicated action path.
+
+Choose the lane first:
+
+- direct capture
+- guided disambiguation
+- exact-record review or narrow update
+- soft delete or restore
 
 Arc:
 
-1. Ask what makes this item worth including in the catalog.
-2. Ask what catalog or domain it belongs to if that is still unclear.
-3. Ask what would make the comparison confusing or unfair if the label stayed as-is.
-4. Ask for a short clarifying description only if the label would be ambiguous later.
-5. Ask about aliases or tags only if they help retrieval.
+1. For direct capture, read the exact active parent `preference_catalog`. Search
+   `preference_catalog_item` inside that parent with `linkedTo: { entityType:
+   "preference_catalog", id: catalogId }`, reflect the supplied label, and ask one
+   accuracy or consent question.
+2. Forge requires only `catalogId` and `label`. Do not ask why the option deserves
+   inclusion or require a description, tags, `featureWeights`, position, rationale,
+   or comparison criteria. Omit position to append after the current last item.
+3. If the parent-scoped search finds an exact or near duplicate, show the existing
+   item and ask whether the user means to keep it, narrowly update it, or create a
+   genuinely distinct option.
+4. For read-only review or narrow update, read the exact existing item and parent
+   catalog first. Answer the practical review before proposing a write. Preserve
+   accepted sparse label, description, tags, `featureWeights`, position, and catalog
+   membership; ask only what is newly true or inaccurate and patch the smallest
+   accepted change.
+5. Use guided disambiguation only when the label is unclear, a near duplicate
+   exists, or the user asks for help. Ask for the one observable distinction that
+   will matter during later comparison, then offer a concise label or optional
+   description for correction.
+6. Keep the item separate from preference evidence. If the user is saying they
+   prefer, veto, favorite, bookmark, or want to compare it later, create or resolve
+   the concept item as needed and then use the published `preference_judgment` or
+   `preference_signal` action. Never infer `featureWeights` or a score from that
+   evidence; explicit score correction uses the dedicated score-override action.
+7. For soft delete, read the exact item and parent, confirm the intended item and
+   that it will move to the reversible Settings Bin, then use shared batch delete.
+   Verify deletion by searching the exact item id inside its parent with
+   `includeDeleted: true`; require the deleted marker and preserved snapshot.
+8. For restore, use that exact `includeDeleted: true` search and read the parent
+   catalog lifecycle state. If the parent is archived, explain that the item cannot
+   be restored yet, obtain acceptance to restore the parent first, restore and
+   verify the parent, then repeat the parent-scoped active-label conflict check.
+   Resolve any conflict before using shared batch restore.
+9. Verify create and update with an exact active read, delete with the exact
+   `includeDeleted: true` read, and restore with another exact active read. In every
+   case verify catalog membership, label, preserved optional fields, and active or
+   binned state.
 
 Helpful follow-up lanes:
 
-- why this item belongs in the comparison pool
-- what would distinguish it from nearby items
-- whether the label alone will be clear later
+- the exact parent catalog and supplied label
+- one distinction from an existing near duplicate, only when needed
+- whether the user's statement is item definition or preference evidence
+- the exact item and reversible bin effect for delete or restore
 
 Route note:
 
-- `preference_catalog_item` is normal stored Preferences CRUD. Use batch entity
-  create/update/search for catalog membership and wording changes.
+- `preference_catalog_item` is normal stored Preferences CRUD. Use shared batch
+  search, create, update, soft delete, and restore.
+- Parent-scoped search uses `forge_search_entities` with `entityTypes:
+  ["preference_catalog_item"]` and `linkedTo: { entityType: "preference_catalog",
+  id: catalogId }`.
+- `catalogId` is immutable after create. Moving an item to another catalog requires
+  a separately accepted replacement create and optional soft delete of the old item.
+- An archived parent blocks item restore. Restore and verify the parent catalog first
+  after the user accepts that prerequisite.
+- Preference judgments, signals, and score overrides stay on their published
+  dedicated action routes; they are not catalog-item batch updates.
 
 Ready to save when:
 
-- the item label is clear
-- the parent catalog is clear
-- there is enough context to recognize it later if the label is ambiguous
+- direct capture has the exact active parent catalog, a parent-scoped duplicate
+  search, an accepted label, and one accuracy or consent check
+- read-only review has read the exact item and parent and does not manufacture a
+  write
+- narrow update has isolated the smallest accepted change while preserving sparse
+  optional fields and immutable catalog membership
+- guided disambiguation has one accepted observable distinction only when ambiguity
+  genuinely requires it
+- delete has the exact item and parent, accepted action, and a post-delete search by
+  exact id and parent with `includeDeleted: true` that confirms the deleted marker
+  and preserved snapshot
+- restore has that exact deleted-item read, an active verified parent catalog, and
+  any active-label conflict resolved; an archived parent is restored first only
+  after the user accepts the prerequisite
+- every lifecycle write uses shared batch CRUD and is verified through the
+  state-appropriate exact read
 
 Preferred opening question:
 
-- "What makes this option meaningfully worth comparing?"
+- "Are you adding a named option, clarifying an ambiguous one, or reviewing,
+  removing, or restoring an existing item?"
 
 ## Preference Context
 

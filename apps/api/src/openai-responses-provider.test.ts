@@ -318,7 +318,12 @@ test("OpenAI Codex connection tests use the ChatGPT Codex backend and headers", 
   assert.equal(request.headers.get("OpenAI-Beta"), "responses=experimental");
   assert.equal(request.body.model, "gpt-5.4-mini");
   assert.equal(request.body.instructions, "Reply with the single word ok.");
-  assert.equal(request.body.input, "Connection test.");
+  assert.deepEqual(request.body.input, [
+    {
+      role: "user",
+      content: [{ type: "input_text", text: "Connection test." }]
+    }
+  ]);
   assert.equal(request.body.stream, true);
   assert.equal(request.body.store, false);
   assert.equal(request.body.max_output_tokens, undefined);

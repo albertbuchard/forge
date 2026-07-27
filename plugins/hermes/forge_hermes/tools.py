@@ -24,13 +24,12 @@ from .version import __version__
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 NODE_RUNTIME_HELPER = PACKAGE_DIR / "scripts" / "ensure-runtime.mjs"
-SESSION_COOKIES: Dict[str, str] = {}
+NODE_API_HELPER = PACKAGE_DIR / "scripts" / "request-api.mjs"
 DEFAULT_HERMES_ACTOR_LABEL = ""
 DEFAULT_HERMES_RUNTIME_AGENT_LABEL = "Forge Hermes"
 DEFAULT_HERMES_GATEWAY_SESSION_KEY = "gateway:main"
 SESSION_STARTUP_CONTEXTS: Dict[str, str] = {}
 SESSION_RUNTIME_IDS: Dict[str, str] = {}
-SESSION_ACTOR_LABELS: Dict[str, str] = {}
 GATEWAY_RUNTIME_THREAD: Optional[threading.Thread] = None
 GATEWAY_RUNTIME_STOP: Optional[threading.Event] = None
 
@@ -464,8 +463,6 @@ def _disconnect_runtime_session(
         logger.exception("Forge Hermes runtime session disconnect failed")
     finally:
         SESSION_RUNTIME_IDS.pop(cache_key, None)
-        if config is not None:
-            SESSION_ACTOR_LABELS.pop(config.base_url.rstrip("/"), None)
 
 
 def _gateway_runtime_presence_loop(stop_event: threading.Event) -> None:
@@ -687,43 +684,22 @@ def _load_config() -> ForgeConfig:
     )
 
 
-def _is_tailscale_ipv4(hostname: str) -> bool:
-    parts = hostname.split(".")
-    if len(parts) != 4:
-        return False
-    try:
-        a, b = int(parts[0]), int(parts[1])
-    except ValueError:
-        return False
-    return a == 100 and 64 <= b <= 127
-
-
 def _can_bootstrap_operator_session(base_url: str) -> bool:
-    hostname = parse.urlparse(base_url).hostname or ""
-    hostname = hostname.lower()
-    return hostname in {"localhost", "127.0.0.1", "::1"} or hostname.endswith(".ts.net") or _is_tailscale_ipv4(hostname)
+    parsed = parse.urlparse(base_url)
+    hostname = (parsed.hostname or "").lower()
+    return parsed.scheme == "http" and hostname in {"localhost", "127.0.0.1", "::1"}
 
 
 def _resolve_effective_actor_label(config: ForgeConfig) -> str:
     explicit = _normalize_text(config.actor_label)
     if explicit:
         return explicit
-    session_actor = SESSION_ACTOR_LABELS.get(config.base_url.rstrip("/"), "")
-    if session_actor:
-        return session_actor
-    if not config.api_token and _can_bootstrap_operator_session(config.base_url):
-        try:
-            _ensure_operator_session_cookie(config)
-        except ForgePluginError:
-            pass
-        session_actor = SESSION_ACTOR_LABELS.get(config.base_url.rstrip("/"), "")
-        if session_actor:
-            return session_actor
     return _fallback_actor_label()
 
 
 def _requires_remote_token(config: ForgeConfig, write: bool) -> bool:
-    return write and not config.api_token and not _can_bootstrap_operator_session(config.base_url)
+    del write
+    return not config.api_token and not _can_bootstrap_operator_session(config.base_url)
 
 
 def _health_url(config: ForgeConfig) -> str:
@@ -741,7 +717,16 @@ def _request_json(
     if _requires_remote_token(config, (method != "GET") if write is None else write):
         raise ForgePluginError(
             "forge_api_token_required",
-            "Forge apiToken is required for remote Hermes mutations when this target cannot use local or Tailscale operator-session bootstrap.",
+            "Remote Hermes access requires a paired, scoped Forge credential. Tailscale reachability alone does not authorize the API.",
+        )
+    if not config.api_token and _can_bootstrap_operator_session(config.base_url):
+        return _request_json_via_node(config, method, path, body)
+
+    target = parse.urlparse(config.base_url)
+    if config.api_token and target.scheme != "https" and not _can_bootstrap_operator_session(config.base_url):
+        raise ForgePluginError(
+            "forge_secure_transport_required",
+            "Remote Forge credentials require HTTPS. Tailscale users should use the tailnet-only HTTPS Serve URL.",
         )
 
     timeout = max(1.0, config.timeout_ms / 1000.0)
@@ -754,12 +739,6 @@ def _request_json(
     }
     if config.api_token:
         headers["authorization"] = f"Bearer {config.api_token}"
-
-    session_key = config.base_url.rstrip("/")
-    if not config.api_token and _can_bootstrap_operator_session(config.base_url):
-        cookie = _ensure_operator_session_cookie(config)
-        if cookie:
-            headers["cookie"] = cookie
 
     data = None
     if body is not None:
@@ -781,10 +760,6 @@ def _request_json(
         except json.JSONDecodeError:
             parsed_payload = {"message": payload_text}
 
-        if exc.code == 401 and "cookie" in headers and retry_with_fresh_session:
-            SESSION_COOKIES.pop(session_key, None)
-            return _request_json(config, method, path, body=body, write=write, retry_with_fresh_session=False)
-
         if isinstance(parsed_payload, dict):
             message = parsed_payload.get("message") or parsed_payload.get("error") or payload_text or exc.reason
         else:
@@ -797,46 +772,73 @@ def _request_json(
         raise ForgePluginError("forge_unreachable", str(exc.reason))
 
 
-def _ensure_operator_session_cookie(config: ForgeConfig) -> str:
-    key = config.base_url.rstrip("/")
-    cached = SESSION_COOKIES.get(key)
-    if cached:
-        return cached
-
-    req = request.Request(
-        f"{config.base_url}/api/v1/auth/operator-session",
-        headers={
-            "accept": "application/json",
-            "x-forge-source": "agent",
-        },
-        method="GET",
+def _request_json_via_node(
+    config: ForgeConfig,
+    method: str,
+    path: str,
+    body: Optional[Any],
+) -> Any:
+    node = shutil.which("node")
+    if not node or not NODE_API_HELPER.exists():
+        raise ForgePluginError(
+            "forge_local_owner_client_unavailable",
+            "Hermes could not find Forge's authenticated local-owner client. Rerun the one-command Forge installer.",
+        )
+    env = os.environ.copy()
+    env.update(
+        {
+            "FORGE_ORIGIN": config.origin,
+            "FORGE_PORT": str(config.port),
+            "FORGE_DATA_ROOT": config.data_root,
+            "FORGE_ACTOR_LABEL": config.actor_label or DEFAULT_HERMES_RUNTIME_AGENT_LABEL,
+            "FORGE_TIMEOUT_MS": str(config.timeout_ms),
+        }
     )
-    try:
-        with request.urlopen(req, timeout=max(1.0, config.timeout_ms / 1000.0)) as response:
-            cookie_header = response.headers.get("Set-Cookie", "")
-            payload_text = response.read().decode("utf-8", errors="replace").strip()
-    except Exception as exc:  # pragma: no cover - surfaced in handler output
-        raise ForgePluginError(
-            "forge_session_bootstrap_failed",
-            f"Forge did not issue an operator session. {exc}",
-        )
-
-    cookie = cookie_header.split(";", 1)[0].strip()
-    if not cookie:
-        raise ForgePluginError(
-            "forge_session_bootstrap_failed",
-            "Forge issued an unusable operator session cookie.",
-        )
-    if payload_text:
+    env.pop("FORGE_API_TOKEN", None)
+    completed = subprocess.run(
+        [node, str(NODE_API_HELPER)],
+        cwd=str(PACKAGE_DIR),
+        env=env,
+        input=json.dumps({"method": method, "path": path, "body": body}),
+        capture_output=True,
+        text=True,
+        timeout=max(5, int(config.timeout_ms / 1000) + 20),
+        check=False,
+    )
+    if completed.returncode != 0:
         try:
-            payload = json.loads(payload_text)
-            actor_label = _normalize_text(_safe_dict(_safe_dict(payload).get("session")).get("actorLabel"))
-            if actor_label:
-                SESSION_ACTOR_LABELS[key] = actor_label
+            failure = json.loads(completed.stderr)
         except json.JSONDecodeError:
-            pass
-    SESSION_COOKIES[key] = cookie
-    return cookie
+            failure = {}
+        raise ForgePluginError(
+            str(failure.get("code") or "forge_local_owner_request_failed"),
+            str(
+                failure.get("message")
+                or "Forge's authenticated local-owner client could not complete the request."
+            ),
+        )
+    try:
+        result = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise ForgePluginError(
+            "forge_local_owner_response_invalid",
+            "Forge's authenticated local-owner client returned invalid data.",
+        ) from exc
+    status = int(result.get("status") or 0)
+    payload = result.get("body")
+    if 200 <= status < 300:
+        return payload
+    message = ""
+    if isinstance(payload, dict):
+        message = str(payload.get("message") or payload.get("error") or "")
+    raise ForgePluginError(
+        f"forge_http_{status or 502}",
+        _build_guided_error_message(
+            status or 502,
+            payload if isinstance(payload, dict) else {},
+            message or f"Forge API request failed with HTTP {status or 502}.",
+        ),
+    )
 
 
 def _is_local_origin(config: ForgeConfig) -> bool:
@@ -982,11 +984,11 @@ def _resolve_doctor(config: ForgeConfig) -> Dict[str, Any]:
     can_bootstrap = _can_bootstrap_operator_session(config.base_url)
     if not config.api_token and can_bootstrap:
         warnings.append(
-            "Forge apiToken is not set. Hermes will rely on operator-session bootstrap for protected reads and writes."
+            "Forge apiToken is not set. Direct localhost requests use Forge's verified local-owner client automatically."
         )
     if not config.api_token and not can_bootstrap:
         warnings.append(
-            "Forge apiToken is missing, and this target cannot use local or Tailscale operator-session bootstrap. Protected writes will fail."
+            "Forge has no paired remote credential. Tailscale or other network reachability alone cannot authorize protected reads or writes."
         )
     if isinstance(capabilities, dict) and capabilities.get("canReadPsyche") is False:
         warnings.append(
@@ -1005,7 +1007,7 @@ def _resolve_doctor(config: ForgeConfig) -> Dict[str, Any]:
         "baseUrl": config.base_url,
         "webAppUrl": config.web_app_url,
         "apiTokenConfigured": bool(config.api_token.strip()),
-        "operatorSessionBootstrapAvailable": can_bootstrap,
+        "localOwnerAuthenticationAvailable": can_bootstrap,
         "warnings": warnings,
         "overview": overview,
         "onboarding": onboarding,

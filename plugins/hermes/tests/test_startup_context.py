@@ -10,13 +10,11 @@ from forge_hermes import tools
 def clear_session_startup_contexts():
     tools.SESSION_STARTUP_CONTEXTS.clear()
     tools.SESSION_RUNTIME_IDS.clear()
-    tools.SESSION_ACTOR_LABELS.clear()
     tools.GATEWAY_RUNTIME_THREAD = None
     tools.GATEWAY_RUNTIME_STOP = None
     yield
     tools.SESSION_STARTUP_CONTEXTS.clear()
     tools.SESSION_RUNTIME_IDS.clear()
-    tools.SESSION_ACTOR_LABELS.clear()
     tools.GATEWAY_RUNTIME_THREAD = None
     tools.GATEWAY_RUNTIME_STOP = None
 

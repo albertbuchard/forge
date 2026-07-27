@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import {
+  createHash,
+  createHmac,
   createPrivateKey,
   createPublicKey,
   generateKeyPairSync,
@@ -15,6 +17,11 @@ import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase } from "./db.js";
 import { PEER_ROUTE_CONTRACTS } from "./peer-route-contract.js";
+import type { ApplicationSecurityRuntime } from "./security/application-security-runtime.js";
+import {
+  MOBILE_REQUEST_PROTOCOL,
+  canonicalMobileRequest
+} from "./security/mobile-companion-request.js";
 import {
   PEER_COMPANION_AUTHORIZED_OPERATION_IDS,
   PEER_COMPANION_CAPABILITIES,
@@ -109,6 +116,7 @@ type PairedCompanion = {
   sessionId: string;
   pairingToken: string;
   operatorCookie: string;
+  operatorCsrf: string;
 };
 
 type EnrolledCompanion = PairedCompanion &
@@ -116,6 +124,11 @@ type EnrolledCompanion = PairedCompanion &
     enrollmentId: string;
     keyId: string;
   };
+
+const securityRuntimeByApp = new WeakMap<
+  Awaited<ReturnType<typeof buildServer>>,
+  ApplicationSecurityRuntime
+>();
 
 function p256Device(pair: {
   privateKey: KeyObject;
@@ -174,12 +187,18 @@ async function withServer(
     path.join(os.tmpdir(), "forge-peer-companion-v2-")
   );
   await chmod(dataRoot, 0o700);
+  let securityRuntime: ApplicationSecurityRuntime | null = null;
   const app = await buildServer({
     dataRoot,
     seedDemoData: false,
     taskRunWatchdog: false,
-    devrageMetricSync: false
+    devrageMetricSync: false,
+    onSecurityRuntimeReady(runtime) {
+      securityRuntime = runtime;
+    }
   });
+  assert.ok(securityRuntime);
+  securityRuntimeByApp.set(app, securityRuntime);
   try {
     await app.ready();
     await run(app);
@@ -190,53 +209,98 @@ async function withServer(
   }
 }
 
-async function createOperatorCookie(
+async function createOperatorAuthority(
   app: Awaited<ReturnType<typeof buildServer>>
 ) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host }
+  const security = securityRuntimeByApp.get(app);
+  assert.ok(security);
+  const ownerEpoch = security.store.readOwnerSecurityEpoch(ownerUserId);
+  assert.ok(ownerEpoch);
+  const session = security.browserSessions.create({
+    kind: "operator_session",
+    subjectId: ownerUserId,
+    ownerId: ownerUserId,
+    clientId: null,
+    installationId: null,
+    audience: security.audience,
+    scopes: ["*"],
+    profile: "operator",
+    ownerSecurityEpoch: ownerEpoch,
+    clientSecurityEpoch: null,
+    authenticatedAt: new Date().toISOString()
   });
-  assert.equal(response.statusCode, 200, response.body);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
+  return {
+    cookie: `forge_session=${encodeURIComponent(session.sessionToken)}`,
+    csrf: session.csrfToken
+  };
 }
 
 async function establishCompanion(
   app: Awaited<ReturnType<typeof buildServer>>
 ): Promise<PairedCompanion> {
-  const operatorCookie = await createOperatorCookie(app);
+  const operator = await createOperatorAuthority(app);
   const created = await app.inject({
     method: "POST",
     url: "/api/v1/health/pairing-sessions",
-    headers: { host, cookie: operatorCookie },
+    headers: {
+      host,
+      cookie: operator.cookie,
+      "x-forge-csrf": operator.csrf
+    },
     payload: { userId: ownerUserId }
   });
   assert.equal(created.statusCode, 201, created.body);
   const pairing = created.json() as {
     qrPayload: { sessionId: string; pairingToken: string };
   };
+  const mobileBody = {
+    sessionId: pairing.qrPayload.sessionId,
+    pairingToken: pairing.qrPayload.pairingToken,
+    device: {
+      name: "Secure Enclave integration iPhone",
+      platform: "ios",
+      appVersion: "2.0",
+      sourceDevice: "iPhone"
+    }
+  };
+  const encodedBody = JSON.stringify(mobileBody);
+  const bodySha256 = createHash("sha256")
+    .update(encodedBody, "utf8")
+    .digest("hex");
+  const issuedAt = new Date().toISOString();
+  const nonce = randomBytes(16).toString("base64url");
+  const signature = createHmac("sha256", pairing.qrPayload.pairingToken)
+    .update(
+      canonicalMobileRequest({
+        method: "POST",
+        path: "/api/v1/mobile/pairing/verify",
+        sessionId: pairing.qrPayload.sessionId,
+        issuedAt,
+        nonce,
+        bodySha256
+      })
+    )
+    .digest("hex");
   const verified = await app.inject({
     method: "POST",
     url: "/api/v1/mobile/pairing/verify",
-    payload: {
-      sessionId: pairing.qrPayload.sessionId,
-      pairingToken: pairing.qrPayload.pairingToken,
-      device: {
-        name: "Secure Enclave integration iPhone",
-        platform: "ios",
-        appVersion: "2.0",
-        sourceDevice: "iPhone"
-      }
-    }
+    headers: {
+      "content-type": "application/json",
+      "x-forge-mobile-request-protocol": MOBILE_REQUEST_PROTOCOL,
+      "x-forge-mobile-session-id": pairing.qrPayload.sessionId,
+      "x-forge-mobile-request-issued-at": issuedAt,
+      "x-forge-mobile-request-nonce": nonce,
+      "x-forge-mobile-body-sha256": bodySha256,
+      "x-forge-mobile-request-signature": signature
+    },
+    payload: encodedBody
   });
   assert.equal(verified.statusCode, 200, verified.body);
   return {
     sessionId: pairing.qrPayload.sessionId,
     pairingToken: pairing.qrPayload.pairingToken,
-    operatorCookie
+    operatorCookie: operator.cookie,
+    operatorCsrf: operator.csrf
   };
 }
 
@@ -261,7 +325,11 @@ async function enrollCompanion(
   const optionsResponse = await app.inject({
     method: "POST",
     url: "/api/v1/peers/companion-enrollments/options",
-    headers: { host, cookie: pairing.operatorCookie },
+    headers: {
+      host,
+      cookie: pairing.operatorCookie,
+      "x-forge-csrf": pairing.operatorCsrf
+    },
     payload: optionsBody
   });
   assert.equal(optionsResponse.statusCode, 200, optionsResponse.body);
@@ -289,7 +357,11 @@ async function enrollCompanion(
   const verified = await app.inject({
     method: "POST",
     url: "/api/v1/peers/companion-enrollments/verify",
-    headers: { host, cookie: pairing.operatorCookie },
+    headers: {
+      host,
+      cookie: pairing.operatorCookie,
+      "x-forge-csrf": pairing.operatorCsrf
+    },
     payload: {
       protocol: PEER_COMPANION_ENROLLMENT_PROTOCOL,
       challengeId: options.challengeId,
@@ -347,6 +419,7 @@ function signedRequestHeaders(
     "X-Forge-Companion-Request-Protocol": PEER_COMPANION_REQUEST_PROTOCOL,
     "X-Forge-Companion-Request-Nonce": proof.nonce,
     "X-Forge-Companion-Request-Issued-At": proof.issuedAt,
+    "X-Forge-Companion-Body-SHA256": proof.bodySha256,
     "X-Forge-Companion-Request-Signature": signature
   };
 }
@@ -422,15 +495,16 @@ test("operator-only enrollment rejects stolen bootstrap and key substitution", a
       payload: optionsBody
     });
     assert.equal(stolenToken.statusCode, 401, stolenToken.body);
-    assert.equal(
-      stolenToken.json().code,
-      "peer_companion_enrollment_operator_required"
-    );
+    assert.equal(stolenToken.json().code, "gateway_authentication_required");
 
     const optionsResponse = await app.inject({
       method: "POST",
       url: "/api/v1/peers/companion-enrollments/options",
-      headers: { host, cookie: pairing.operatorCookie },
+      headers: {
+        host,
+        cookie: pairing.operatorCookie,
+        "x-forge-csrf": pairing.operatorCsrf
+      },
       payload: optionsBody
     });
     assert.equal(optionsResponse.statusCode, 200, optionsResponse.body);
@@ -458,7 +532,11 @@ test("operator-only enrollment rejects stolen bootstrap and key substitution", a
     const substitution = await app.inject({
       method: "POST",
       url: "/api/v1/peers/companion-enrollments/verify",
-      headers: { host, cookie: pairing.operatorCookie },
+      headers: {
+        host,
+        cookie: pairing.operatorCookie,
+        "x-forge-csrf": pairing.operatorCsrf
+      },
       payload: {
         protocol: PEER_COMPANION_ENROLLMENT_PROTOCOL,
         challengeId: options.challengeId,
@@ -770,7 +848,7 @@ test("companion consent signs only server challenge time and rejects caller time
 test("enrollment verification is bound to the issuing operator session", async () => {
   await withServer(async (app) => {
     const pairing = await establishCompanion(app);
-    const otherCookie = await createOperatorCookie(app);
+    const otherOperator = await createOperatorAuthority(app);
     const device = createDevice();
     const body = {
       protocol: PEER_COMPANION_ENROLLMENT_PROTOCOL,
@@ -787,7 +865,11 @@ test("enrollment verification is bound to the issuing operator session", async (
     const issued = await app.inject({
       method: "POST",
       url: "/api/v1/peers/companion-enrollments/options",
-      headers: { host, cookie: pairing.operatorCookie },
+      headers: {
+        host,
+        cookie: pairing.operatorCookie,
+        "x-forge-csrf": pairing.operatorCsrf
+      },
       payload: body
     });
     assert.equal(issued.statusCode, 200, issued.body);
@@ -814,7 +896,11 @@ test("enrollment verification is bound to the issuing operator session", async (
     const substituted = await app.inject({
       method: "POST",
       url: "/api/v1/peers/companion-enrollments/verify",
-      headers: { host, cookie: otherCookie },
+      headers: {
+        host,
+        cookie: otherOperator.cookie,
+        "x-forge-csrf": otherOperator.csrf
+      },
       payload: {
         protocol: PEER_COMPANION_ENROLLMENT_PROTOCOL,
         challengeId: options.challengeId,

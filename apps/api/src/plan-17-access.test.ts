@@ -11,18 +11,72 @@ import { claimTaskRun } from "./repositories/task-runs.js";
 import { createTag } from "./repositories/tags.js";
 import { createTask, getTaskById, listTasks } from "./repositories/tasks.js";
 import { createUser } from "./repositories/users.js";
+import { createAgentToken } from "./repositories/settings.js";
+import type { ApplicationSecurityRuntime } from "./security/application-security-runtime.js";
+import { createAgentTokenSchema } from "./types.js";
 
 type TestApp = Awaited<ReturnType<typeof buildServer>>;
+const operatorAuthorities = new WeakMap<
+  TestApp,
+  { cookie: string; csrf: string }
+>();
 
 async function withIsolatedForge(run: (app: TestApp) => Promise<void> | void) {
   const dataRoot = await mkdtemp(
     path.join(os.tmpdir(), "forge-plan17-access-")
   );
+  let security!: ApplicationSecurityRuntime;
   const app = await buildServer({
     dataRoot,
     seedDemoData: false,
-    devrageMetricSync: false
+    devrageMetricSync: false,
+    onSecurityRuntimeReady(runtime) {
+      security = runtime;
+    }
   });
+  const ownerEpoch = security.store.readOwnerSecurityEpoch("user_operator");
+  assert.ok(ownerEpoch);
+  const session = security.browserSessions.create({
+    kind: "operator_session",
+    subjectId: "user_operator",
+    ownerId: "user_operator",
+    clientId: null,
+    installationId: null,
+    audience: security.audience,
+    scopes: ["*"],
+    profile: "operator",
+    ownerSecurityEpoch: ownerEpoch,
+    clientSecurityEpoch: null,
+    authenticatedAt: new Date().toISOString()
+  });
+  const authority = {
+    cookie: `forge_session=${encodeURIComponent(session.sessionToken)}`,
+    csrf: session.csrfToken
+  };
+  operatorAuthorities.set(app, authority);
+  const inject = app.inject.bind(app);
+  app.inject = ((options: {
+    method?: string;
+    headers?: Record<string, string>;
+    [key: string]: unknown;
+  }) => {
+    const headers = {
+      ...(options.headers ?? {})
+    };
+    if (
+      headers.cookie === authority.cookie &&
+      !["GET", "HEAD", "OPTIONS"].includes(
+        String(options.method ?? "GET").toUpperCase()
+      )
+    ) {
+      headers["x-forge-csrf"] = authority.csrf;
+    }
+    return inject({
+      remoteAddress: "127.0.0.1",
+      ...options,
+      headers
+    } as never);
+  }) as unknown as typeof app.inject;
   try {
     await run(app);
   } finally {
@@ -33,35 +87,25 @@ async function withIsolatedForge(run: (app: TestApp) => Promise<void> | void) {
 }
 
 async function issueOperatorCookie(app: TestApp) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host: "127.0.0.1:4317" }
-  });
-  assert.equal(response.statusCode, 200, response.body);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
+  const authority = operatorAuthorities.get(app);
+  assert.ok(authority);
+  return authority.cookie;
 }
 
 async function issueTaskToken(
-  app: TestApp,
-  cookie: string,
+  _app: TestApp,
+  _cookie: string,
   scopePolicy: { userIds: string[]; projectIds: string[]; tagIds: string[] }
 ) {
-  const response = await app.inject({
-    method: "POST",
-    url: "/api/v1/settings/tokens",
-    headers: { cookie },
-    payload: {
+  return createAgentToken(
+    createAgentTokenSchema.parse({
       label: "PLAN-17 scoped task token",
       agentLabel: "PLAN-17 scoped task agent",
       scopes: ["read", "write", "rewards.manage", "artifact.readMetadata"],
       scopePolicy
-    }
-  });
-  assert.equal(response.statusCode, 201, response.body);
-  return (response.json() as { token: { token: string } }).token.token;
+    }),
+    { actor: "PLAN-17 test", source: "system" }
+  ).token;
 }
 
 function createOwnedPlanningFixture(label: string) {
@@ -225,6 +269,48 @@ test("PLAN-17 enforces user, project, and tag scope across task, batch, and run 
       tagIds: [allowed.tag.id]
     });
     const headers = { authorization: `Bearer ${token}` };
+    const projectToken = await issueTaskToken(app, cookie, {
+      userIds: [allowed.user.id],
+      projectIds: [allowed.project.id],
+      tagIds: []
+    });
+    const projectHeaders = {
+      authorization: `Bearer ${projectToken}`
+    };
+
+    const projectList = await app.inject({
+      method: "GET",
+      url: "/api/v1/projects",
+      headers: projectHeaders
+    });
+    assert.equal(projectList.statusCode, 200, projectList.body);
+    assert.deepEqual(
+      (projectList.json() as { projects: Array<{ id: string }> }).projects.map(
+        (project) => project.id
+      ),
+      [allowed.project.id]
+    );
+    for (const request of [
+      {
+        method: "GET",
+        url: `/api/v1/projects/${foreign.project.id}`
+      },
+      {
+        method: "PATCH",
+        url: `/api/v1/projects/${foreign.project.id}`,
+        payload: { title: "PLAN-17 forbidden project update" }
+      },
+      {
+        method: "DELETE",
+        url: `/api/v1/projects/${foreign.project.id}`
+      }
+    ] as const) {
+      const response = await app.inject({
+        ...request,
+        headers: projectHeaders
+      });
+      assert.equal(response.statusCode, 404, response.body);
+    }
 
     for (const route of [
       `/api/v1/tasks/${wrongProjectTask.id}`,
@@ -483,7 +569,7 @@ test("PLAN-17 Git helper and watchdog routes require operator auth and enforce b
         url: route,
         headers: bearer
       });
-      assert.equal(tokenOnly.statusCode, 401, `${route}: ${tokenOnly.body}`);
+      assert.equal(tokenOnly.statusCode, 403, `${route}: ${tokenOnly.body}`);
     }
 
     for (const route of [
@@ -502,7 +588,7 @@ test("PLAN-17 Git helper and watchdog routes require operator auth and enforce b
         headers: bearer,
         payload: {}
       });
-      assert.equal(tokenOnly.statusCode, 401, `${route}: ${tokenOnly.body}`);
+      assert.equal(tokenOnly.statusCode, 403, `${route}: ${tokenOnly.body}`);
     }
 
     const overview = await app.inject({

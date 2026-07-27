@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -165,6 +165,64 @@ test("all adapters ship byte-identical shared playbooks", () => {
     read("plugins/hermes/forge_hermes/skill.md"),
     "Hermes source and packaged skill contracts must be identical"
   );
+});
+
+test("generated OpenClaw and Codex bundles contain the current Course route contract", async () => {
+  const serverSource = read("apps/api/src/app.ts");
+  const courseStart = serverSource.indexOf("courses: {");
+  const methodRoutesStart = serverSource.indexOf(
+    "methodRoutes: {",
+    courseStart
+  );
+  const methodRoutesEnd = serverSource.indexOf(
+    "readRoutes: {",
+    methodRoutesStart
+  );
+  assert.ok(
+    courseStart >= 0 &&
+      methodRoutesStart > courseStart &&
+      methodRoutesEnd > methodRoutesStart,
+    "Could not locate the onboarding Course methodRoutes contract"
+  );
+  const expected = Object.fromEntries(
+    [
+      ...serverSource
+        .slice(methodRoutesStart, methodRoutesEnd)
+        .matchAll(/([A-Za-z][A-Za-z0-9]+):\s*(?:\n\s*)?"([^"]+)"/g)
+    ].map((match) => [match[1], match[2]])
+  );
+  assert.equal(
+    Object.keys(expected).length,
+    10,
+    "The generated-bundle guard must cover all 10 Course lanes"
+  );
+
+  for (const relativePath of [
+    "plugins/openclaw/dist/openclaw/tools.js",
+    "plugins/codex/runtime/dist/openclaw/tools.js"
+  ]) {
+    const absolutePath = path.join(repoRoot, relativePath);
+    assert.ok(
+      fs.existsSync(absolutePath),
+      `${relativePath} is missing; rebuild the OpenClaw plugin`
+    );
+    const generated = await import(
+      `${pathToFileURL(absolutePath).href}?contract=${Date.now()}`
+    );
+    const actual = Object.fromEntries(
+      Object.entries(generated.courseRouteSpecs ?? {}).map(
+        ([routeKey, route]) => [
+          routeKey,
+          `${route.method} ${route.path}`
+        ]
+      )
+    );
+    assert.deepEqual(
+      actual,
+      expected,
+      `${relativePath} drifted from live onboarding Course methodRoutes`
+    );
+  }
 });
 
 test("adapter skills reconcile with onboarding and keep route families exact", () => {

@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -9,19 +10,7 @@ import { closeDatabase, getDatabase } from "./db.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { createTag } from "./repositories/tags.js";
 
-async function issueOperatorSessionCookie(
-  app: Awaited<ReturnType<typeof buildServer>>
-) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host: "127.0.0.1:4317" }
-  });
-  assert.equal(response.statusCode, 200);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const issueOperatorSessionCookie = issueTestOperatorSessionCookie;
 
 async function issueReadToken(
   app: Awaited<ReturnType<typeof buildServer>>,
@@ -246,7 +235,7 @@ test("all gamification reads require read auth, enforce scope, and stay pure", a
       headers,
       payload: { style: "dark-fantasy" }
     });
-    assert.equal(readOnlyInstall.statusCode, 401);
+    assert.equal(readOnlyInstall.statusCode, 403);
 
     const anonymousEquipmentUpdate = await app.inject({
       method: "PUT",
@@ -260,7 +249,7 @@ test("all gamification reads require read auth, enforce scope, and stay pure", a
       headers,
       payload: {}
     });
-    assert.equal(tokenEquipmentUpdate.statusCode, 401);
+    assert.equal(tokenEquipmentUpdate.statusCode, 403);
     const invalidEquipmentUpdate = await app.inject({
       method: "PUT",
       url: "/api/v1/gamification/equipment?timezone=Not%2FA_Timezone",
@@ -279,7 +268,7 @@ test("all gamification reads require read auth, enforce scope, and stay pure", a
       url: "/api/v1/rewards/ledger",
       headers
     });
-    assert.equal(tokenLedger.statusCode, 401);
+    assert.equal(tokenLedger.statusCode, 403);
     const invalidLedger = await app.inject({
       method: "GET",
       url: "/api/v1/rewards/ledger?limit=0",
@@ -301,7 +290,7 @@ test("all gamification reads require read auth, enforce scope, and stay pure", a
   }
 });
 
-test("celebration acknowledgement is operator-only and rejects tokens with 401", async () => {
+test("celebration acknowledgement is operator-only and rejects tokens", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-game-celebration-auth-route-")
   );
@@ -318,7 +307,7 @@ test("celebration acknowledgement is operator-only and rejects tokens with 401",
       url,
       headers: { authorization: `Bearer ${token}` }
     });
-    assert.equal(tokenResponse.statusCode, 401);
+    assert.equal(tokenResponse.statusCode, 403);
     const operator = await app.inject({
       method: "POST",
       url,

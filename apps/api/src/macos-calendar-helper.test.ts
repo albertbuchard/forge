@@ -2,8 +2,24 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildMacOSCalendarHelperLaunchArgs,
+  buildMacOSCalendarHelperSigningArgs,
   waitForMacOSCalendarHelperResponse
 } from "./services/macos-calendar-helper.js";
+
+test("macOS Calendar Helper signs the app bundle with its stable identifier", () => {
+  assert.deepEqual(
+    buildMacOSCalendarHelperSigningArgs("/tmp/ForgeMacOSCalendarHelper.app"),
+    [
+      "--force",
+      "--deep",
+      "--sign",
+      "-",
+      "--identifier",
+      "ai.openclaw.forge.macos-calendar-helper",
+      "/tmp/ForgeMacOSCalendarHelper.app"
+    ]
+  );
+});
 
 test("macOS Calendar Helper launch does not use open's racy wait mode", () => {
   const args = buildMacOSCalendarHelperLaunchArgs({

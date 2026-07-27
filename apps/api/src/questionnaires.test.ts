@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -6,30 +7,18 @@ import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase } from "./db.js";
 
-async function issueOperatorSessionCookie(
-  app: Awaited<ReturnType<typeof buildServer>>
-) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: {
-      host: "127.0.0.1:4317"
-    }
-  });
-  assert.equal(response.statusCode, 200);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const issueOperatorSessionCookie = issueTestOperatorSessionCookie;
 
 test("questionnaire seeds are present in the psyche library", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-questionnaire-library-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
     const response = await app.inject({
       method: "GET",
-      url: "/api/v1/psyche/questionnaires"
+      url: "/api/v1/psyche/questionnaires",
+      headers: { cookie: operatorCookie }
     });
     assert.equal(response.statusCode, 200);
     const payload = response.json() as {
@@ -54,7 +43,8 @@ test("completing a PHQ-9 run stores answers, score rows, and history", async () 
     const operatorCookie = await issueOperatorSessionCookie(app);
     const libraryResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/psyche/questionnaires"
+      url: "/api/v1/psyche/questionnaires",
+      headers: { cookie: operatorCookie }
     });
     const library = libraryResponse.json() as {
       instruments: Array<{ id: string; key: string }>;
@@ -168,7 +158,8 @@ test("AUDIT hides downstream alcohol questions when drinking frequency is never"
     const operatorCookie = await issueOperatorSessionCookie(app);
     const libraryResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/psyche/questionnaires"
+      url: "/api/v1/psyche/questionnaires",
+      headers: { cookie: operatorCookie }
     });
     const library = libraryResponse.json() as {
       instruments: Array<{ id: string; key: string }>;
@@ -497,7 +488,8 @@ test("custom questionnaire drafts can publish new versions without mutating past
 
     const runDetail = await app.inject({
       method: "GET",
-      url: `/api/v1/psyche/questionnaire-runs/${started.run.id}`
+      url: `/api/v1/psyche/questionnaire-runs/${started.run.id}`,
+      headers: { cookie: operatorCookie }
     });
     assert.equal(runDetail.statusCode, 200);
     const preserved = runDetail.json() as {

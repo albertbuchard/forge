@@ -256,5 +256,6 @@ plugin guidance as closely as possible.
 ## Notes
 
 - bundled skills use native plugin registration when available and only use `~/.hermes/skills/forge-hermes/` as a compatibility fallback
-- remote write calls still need `FORGE_API_TOKEN` unless the target supports trusted local or Tailscale operator-session bootstrap
+- direct localhost calls use Forge's verified local-owner helper automatically
+- Tailscale and other remote targets require HTTPS plus a paired scoped credential; network reachability never authorizes Forge by itself
 - the curated Forge tool names stay identical to the OpenClaw adapter so the operating model does not drift between agent platforms

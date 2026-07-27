@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -8,19 +9,7 @@ import { closeDatabase, getDatabase } from "./db.js";
 import { parseNutritionFoodLogWithChatGpt } from "./health-weight-loss.js";
 import type { LlmManager } from "./managers/platform/llm-manager.js";
 
-async function issueOperatorSessionCookie(
-  app: Awaited<ReturnType<typeof buildServer>>
-) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host: "127.0.0.1:4317" }
-  });
-  assert.equal(response.statusCode, 200);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const issueOperatorSessionCookie = issueTestOperatorSessionCookie;
 
 function insertVitalsDay(input: {
   id: string;
@@ -241,7 +230,8 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
 
     const overview = await app.inject({
       method: "GET",
-      url: "/api/v1/health/weight-loss"
+      url: "/api/v1/health/weight-loss",
+      headers: { cookie }
     });
     assert.equal(overview.statusCode, 200);
     const overviewBody = overview.json() as {
@@ -774,7 +764,8 @@ test("weight loss overview keeps formula resting baseline despite partial Health
 
     const overview = await app.inject({
       method: "GET",
-      url: `/api/v1/health/weight-loss?dateKey=${today}`
+      url: `/api/v1/health/weight-loss?dateKey=${today}`,
+      headers: { cookie }
     });
     assert.equal(overview.statusCode, 200);
     const overviewBody = overview.json() as {
@@ -938,7 +929,8 @@ test("weight loss active baseline averages only measured prior days across the p
 
     const overview = await app.inject({
       method: "GET",
-      url: "/api/v1/health/weight-loss?dateKey=2030-01-04"
+      url: "/api/v1/health/weight-loss?dateKey=2030-01-04",
+      headers: { cookie }
     });
     assert.equal(overview.statusCode, 200);
     const overviewBody = overview.json() as {
@@ -1056,6 +1048,7 @@ test("custom nutrition foods require calories and macros and are cached for reus
     const searchCustom = await app.inject({
       method: "POST",
       url: "/api/v1/health/weight-loss/foods/search",
+      headers: { cookie },
       payload: { query: "custom toast", limit: 5 }
     });
     assert.equal(searchCustom.statusCode, 200);
@@ -1285,7 +1278,8 @@ test("weight loss ledger and active override are scoped to the requested local d
       url:
         "/api/v1/health/weight-loss?dateKey=2030-01-01" +
         "&dayStartAt=2029-12-31T23%3A00%3A00.000Z" +
-        "&dayEndAt=2030-01-01T23%3A00%3A00.000Z"
+        "&dayEndAt=2030-01-01T23%3A00%3A00.000Z",
+      headers: { cookie }
     });
     assert.equal(dayOneOverview.statusCode, 200);
     const dayOneBody = dayOneOverview.json() as {
@@ -1328,7 +1322,8 @@ test("weight loss ledger and active override are scoped to the requested local d
       url:
         "/api/v1/health/weight-loss?dateKey=2030-01-02" +
         "&dayStartAt=2030-01-01T23%3A00%3A00.000Z" +
-        "&dayEndAt=2030-01-02T23%3A00%3A00.000Z"
+        "&dayEndAt=2030-01-02T23%3A00%3A00.000Z",
+      headers: { cookie }
     });
     assert.equal(dayTwoOverview.statusCode, 200);
     const dayTwoBody = dayTwoOverview.json() as {
@@ -1408,7 +1403,8 @@ test("food logs without dayKey use the supplied local timezone day", async () =>
       method: "GET",
       url:
         "/api/v1/health/weight-loss?dateKey=2030-01-01" +
-        "&timeZone=Europe%2FZurich"
+        "&timeZone=Europe%2FZurich",
+      headers: { cookie }
     });
     assert.equal(dayOneOverview.statusCode, 200);
     const dayOneBody = dayOneOverview.json() as {
@@ -1423,7 +1419,8 @@ test("food logs without dayKey use the supplied local timezone day", async () =>
       method: "GET",
       url:
         "/api/v1/health/weight-loss?dateKey=2030-01-02" +
-        "&timeZone=Europe%2FZurich"
+        "&timeZone=Europe%2FZurich",
+      headers: { cookie }
     });
     assert.equal(dayTwoOverview.statusCode, 200);
     const dayTwoBody = dayTwoOverview.json() as {
@@ -1528,7 +1525,8 @@ test("weight loss energy gap averages intake over the same recent log window", a
 
     const overview = await app.inject({
       method: "GET",
-      url: "/api/v1/health/weight-loss?dateKey=2030-01-15"
+      url: "/api/v1/health/weight-loss?dateKey=2030-01-15",
+      headers: { cookie }
     });
     assert.equal(overview.statusCode, 200);
     const overviewBody = overview.json() as {
@@ -1562,6 +1560,7 @@ test("weight loss overview seeds latest weight from HealthKit body mass", async 
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
+    const cookie = await issueOperatorSessionCookie(app);
     const today = currentLocalDateKey();
     const now = new Date().toISOString();
     getDatabase()
@@ -1592,7 +1591,8 @@ test("weight loss overview seeds latest weight from HealthKit body mass", async 
 
     const overview = await app.inject({
       method: "GET",
-      url: "/api/v1/health/weight-loss"
+      url: "/api/v1/health/weight-loss",
+      headers: { cookie }
     });
     assert.equal(overview.statusCode, 200);
     const overviewBody = overview.json() as {
@@ -1717,7 +1717,8 @@ test("weight loss overview uses same-day workout, movement, and step active calo
 
     const overview = await app.inject({
       method: "GET",
-      url: "/api/v1/health/weight-loss"
+      url: "/api/v1/health/weight-loss",
+      headers: { cookie }
     });
     assert.equal(overview.statusCode, 200);
     const overviewBody = overview.json() as {
@@ -1796,7 +1797,8 @@ test("weight loss overview uses same-day workout, movement, and step active calo
 
     const overriddenOverview = await app.inject({
       method: "GET",
-      url: "/api/v1/health/weight-loss"
+      url: "/api/v1/health/weight-loss",
+      headers: { cookie }
     });
     assert.equal(overriddenOverview.statusCode, 200);
     const overriddenBody = overriddenOverview.json() as {
@@ -1862,7 +1864,8 @@ test("weight loss overview uses same-day workout, movement, and step active calo
 
     const lowOverview = await app.inject({
       method: "GET",
-      url: "/api/v1/health/weight-loss"
+      url: "/api/v1/health/weight-loss",
+      headers: { cookie }
     });
     assert.equal(lowOverview.statusCode, 200);
     const lowBody = lowOverview.json() as {
@@ -1917,7 +1920,8 @@ test("weight loss overview uses same-day workout, movement, and step active calo
 
     const resetOverview = await app.inject({
       method: "GET",
-      url: "/api/v1/health/weight-loss"
+      url: "/api/v1/health/weight-loss",
+      headers: { cookie }
     });
     assert.equal(resetOverview.statusCode, 200);
     const resetBody = resetOverview.json() as {
@@ -1997,7 +2001,8 @@ test("weight loss overview uses movement calories when only movement trips exist
 
     const overview = await app.inject({
       method: "GET",
-      url: "/api/v1/health/weight-loss"
+      url: "/api/v1/health/weight-loss",
+      headers: { cookie }
     });
     assert.equal(overview.statusCode, 200);
     const overviewBody = overview.json() as {
@@ -2123,7 +2128,8 @@ test("weight loss overview estimates active calories from steps before using the
 
     const overview = await app.inject({
       method: "GET",
-      url: "/api/v1/health/weight-loss"
+      url: "/api/v1/health/weight-loss",
+      headers: { cookie }
     });
     assert.equal(overview.statusCode, 200);
     const overviewBody = overview.json() as {
@@ -2246,7 +2252,8 @@ test("weight loss overview keeps the default active calories when only trivial s
 
     const overview = await app.inject({
       method: "GET",
-      url: "/api/v1/health/weight-loss"
+      url: "/api/v1/health/weight-loss",
+      headers: { cookie }
     });
     assert.equal(overview.statusCode, 200);
     const overviewBody = overview.json() as {

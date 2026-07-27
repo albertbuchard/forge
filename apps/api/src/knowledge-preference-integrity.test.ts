@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -6,18 +7,7 @@ import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase, initializeDatabase } from "./db.js";
 
-async function issueOperatorSessionCookie(
-  app: Awaited<ReturnType<typeof buildServer>>
-) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host: "127.0.0.1:4317" }
-  });
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const issueOperatorSessionCookie = issueTestOperatorSessionCookie;
 
 async function issuePreferenceToken(
   app: Awaited<ReturnType<typeof buildServer>>,
@@ -122,7 +112,11 @@ test("linked preference identity is reused while direct duplicate labels stay di
     const userId = (users.json() as { users: Array<{ id: string }> }).users[0]
       ?.id;
     assert.ok(userId);
-    const goals = await app.inject({ method: "GET", url: "/api/v1/goals" });
+    const goals = await app.inject({
+      method: "GET",
+      url: "/api/v1/goals",
+      headers: { cookie }
+    });
     const goalId = (goals.json() as { goals: Array<{ id: string }> }).goals[0]
       ?.id;
     assert.ok(goalId);

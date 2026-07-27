@@ -13,6 +13,8 @@ import { useAnchoredOverlayPosition } from "@/components/ui/use-anchored-overlay
 import type { EntityKind } from "@/lib/entity-visuals";
 import { cn } from "@/lib/utils";
 
+const MAX_VISIBLE_OPTIONS = 50;
+
 export type EntityLinkOption = {
   value: string;
   label: string;
@@ -73,6 +75,7 @@ export function EntityLinkMultiSelect({
   const [searchError, setSearchError] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const safeOptions = useMemo(() => options ?? [], [options]);
   const safeSelectedValues = useMemo(
     () => selectedValues ?? [],
@@ -149,7 +152,7 @@ export function EntityLinkMultiSelect({
       (option) => !safeSelectedValues.includes(option.value)
     );
     if (!normalizedQuery) {
-      return pool.slice(0, 8);
+      return pool.slice(0, MAX_VISIBLE_OPTIONS);
     }
     return pool
       .filter((option) => {
@@ -157,7 +160,7 @@ export function EntityLinkMultiSelect({
           `${option.label} ${option.description ?? ""} ${option.searchText ?? ""}`.toLowerCase();
         return haystack.includes(normalizedQuery);
       })
-      .slice(0, 8);
+      .slice(0, MAX_VISIBLE_OPTIONS);
   }, [mergedOptions, normalizedQuery, safeSelectedValues]);
 
   const hasExactMatch = mergedOptions.some(
@@ -185,26 +188,33 @@ export function EntityLinkMultiSelect({
       setOpen(false);
     };
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    };
-
     document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!activeOption) {
+      return;
+    }
+
+    document
+      .getElementById(getOptionId(listboxId, activeOption.value))
+      ?.scrollIntoView?.({ block: "nearest" });
+  }, [activeOption, listboxId]);
+
+  const restoreInputFocus = () => {
+    window.requestAnimationFrame(() => inputRef.current?.focus());
+  };
 
   const selectValue = (value: string) => {
     onChange(appendUnique(safeSelectedValues, value));
     setQuery("");
     setCreateError(null);
     setHighlightedIndex(0);
-    setOpen(false);
+    setOpen(true);
+    restoreInputFocus();
   };
 
   const removeValue = (value: string) => {
@@ -229,7 +239,8 @@ export function EntityLinkMultiSelect({
       setQuery("");
       setCreateError(null);
       setHighlightedIndex(0);
-      setOpen(false);
+      setOpen(true);
+      restoreInputFocus();
     } catch (error) {
       setCreateError(
         error instanceof Error
@@ -242,7 +253,11 @@ export function EntityLinkMultiSelect({
   };
 
   return (
-    <div className={cn("relative grid gap-2", className)} ref={rootRef}>
+    <div
+      className={cn("relative grid gap-2", className)}
+      data-forge-escape-scope="entity-link-multiselect"
+      ref={rootRef}
+    >
       <div
         className={cn(
           "rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]",
@@ -316,6 +331,7 @@ export function EntityLinkMultiSelect({
             )}
           />
           <input
+            ref={inputRef}
             id={comboboxId}
             type="text"
             role="combobox"
@@ -392,7 +408,9 @@ export function EntityLinkMultiSelect({
                 return;
               }
 
-              if (event.key === "Escape") {
+              if (event.key === "Escape" && open) {
+                event.preventDefault();
+                event.stopPropagation();
                 setOpen(false);
                 return;
               }
@@ -435,7 +453,7 @@ export function EntityLinkMultiSelect({
             <div
               ref={menuRef}
               className={cn(
-                "z-[80] overflow-y-auto overscroll-contain rounded-[22px] p-2 [webkit-overflow-scrolling:touch]",
+                "pointer-events-auto z-[80] overflow-y-auto overscroll-contain rounded-[22px] p-2 [webkit-overflow-scrolling:touch]",
                 actionBarVariant
                   ? "border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--ui-surface-1)_94%,transparent)] shadow-[var(--ui-shadow-floating)]"
                   : "border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--ui-surface-1)_96%,transparent)] shadow-[var(--ui-shadow-floating)]",
@@ -468,11 +486,6 @@ export function EntityLinkMultiSelect({
                           : "text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                     )}
                     onMouseEnter={() => setHighlightedIndex(index)}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onPointerDown={(event) => {
-                      event.preventDefault();
-                      selectValue(option.value);
-                    }}
                     onClick={() => selectValue(option.value)}
                   >
                     <div className="min-w-0">
@@ -540,11 +553,6 @@ export function EntityLinkMultiSelect({
                       ? "text-[var(--secondary)] hover:bg-[var(--ui-surface-hover)]"
                       : "text-[var(--secondary)] hover:bg-[var(--ui-surface-hover)]"
                   )}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onPointerDown={(event) => {
-                    event.preventDefault();
-                    void createValue();
-                  }}
                   onClick={() => void createValue()}
                 >
                   <Plus className="size-4" />

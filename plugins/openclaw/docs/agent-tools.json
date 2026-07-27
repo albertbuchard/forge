@@ -148,9 +148,9 @@
       "groupId": "other",
       "groupTitle": "Other Forge Tools",
       "label": "Forge Course Route",
-      "summary": "Call one allowed dedicated Course or Concept operation after the learning job has narrowed to catalog, detail, learner session, attempt, package import/export, or concept mastery.",
-      "whenToUse": "Use for installed-course discovery, progress and syllabus reads, learner-safe lesson guidance, activity attempts, validated package import/export, concept search, due review, and cross-course concept evidence. Do not use batch CRUD for Course or Concept.",
-      "inputShape": "{ routeKey: \"listCourses\"|\"courseDetail\"|\"learningSession\"|\"submitAttempt\"|\"importCourse\"|\"exportCourse\"|\"listConcepts\"|\"conceptDetail\", pathParams?: { courseId?: string, lessonId?: string, activityId?: string, conceptId?: string }, query?: { userId?: string, lessonId?: string, courseId?: string, query?: string, dueOnly?: \"true\"|\"false\" }, body?: object }",
+      "summary": "Call one allowed dedicated Course or Concept operation after the learning job has narrowed to catalog, detail, learner session, attempt, enrollment upgrade, package import/export, or concept mastery.",
+      "whenToUse": "Use for installed-course discovery, progress and syllabus reads, learner-safe visual or voice lesson guidance, activity attempts, explicit enrollment upgrades, validated package import/export, concept search, due review, and cross-course concept evidence. Do not use batch CRUD for Course or Concept.",
+      "inputShape": "{ routeKey: \"listCourses\"|\"courseDetail\"|\"learningSession\"|\"voiceLearningSession\"|\"submitAttempt\"|\"upgradeEnrollment\"|\"importCourse\"|\"exportCourse\"|\"listConcepts\"|\"conceptDetail\", pathParams?: { courseId?: string, lessonId?: string, activityId?: string, conceptId?: string }, query?: { userId?: string, lessonId?: string, courseId?: string, query?: string, dueOnly?: \"true\"|\"false\" }, body?: object }",
       "requiredFields": [
         "routeKey"
       ],
@@ -158,11 +158,14 @@
         "Choose routeKey from live onboarding specializedDomainSurfaces.courses routeKeys and methodRoutes.",
         "Fill courseId, lessonId, activityId, and conceptId through pathParams when the selected methodRoutes path publishes those placeholders; do not hide them in query or body.",
         "Use learningSession as the learner-safe view for guidance because it removes instructor references, correct option ids, answer explanations, and extension assessment data.",
-        "submitAttempt requires body.answerMarkdown and may include body.userId. Preserve the learner's wording and report a withheld grade truthfully when structured assessment is unavailable.",
+        "For voice guidance, call voiceLearningSession with body.week and body.day. Teach one returned learner-safe block at a time in source order.",
+        "Before a voice attempt, you may add punctuation and paragraph breaks without changing words. Show Albert every proposed deletion, replacement, uncertain mathematical symbol, or uncertain recognition and obtain explicit confirmation. Preserve his meaning and uncertainty, read the complete formatted answer back, and obtain final explicit confirmation. Submit only answerMarkdown, deliveryMode voice, voiceSessionToken, voiceConfirmation true, and one stable idempotencyKey. Never submit audio or a separate transcript.",
+        "submitAttempt requires body.answerMarkdown and may include body.userId. Preserve the learner's wording and report the returned attempt ordinals, progress, next unlocked lesson, and any withheld grade truthfully.",
+        "upgradeEnrollment requires an exact courseId and may include body.userId. Use it only after the learner chooses the published update; Forge carries passed evidence only when the activity definition is byte-for-byte equivalent.",
         "importCourse accepts one validated Forge course package as the request body. Use exportCourse only when the user explicitly wants the canonical portable package, not as a learner read.",
         "Concept list supports query.userId, courseId, query, and dueOnly; concept detail supports query.userId. Concept definitions are package-managed and have no direct mutation route."
       ],
-      "example": "{\"routeKey\":\"submitAttempt\",\"pathParams\":{\"courseId\":\"course.polynomials-etale-triple-covers\",\"lessonId\":\"lesson.week-01.day-01\",\"activityId\":\"activity.check-01\"},\"body\":{\"answerMarkdown\":\"My accepted answer\"}}",
+      "example": "{\"routeKey\":\"voiceLearningSession\",\"pathParams\":{\"courseId\":\"course.polynomials-etale-triple-covers\"},\"body\":{\"week\":1,\"day\":1}}",
       "catalogDocumented": true
     },
     {
@@ -1601,6 +1604,26 @@
         "Use this same route to move or relink calendar_event records, edit work_block_template, task_timebox, sleep_session, or workout_session records, and do normal field updates on preference_catalog, preference_catalog_item, preference_context, preference_item, and questionnaire_instrument."
       ],
       "example": "{\"operations\":[{\"entityType\":\"project\",\"id\":\"project_123\",\"patch\":{\"status\":\"completed\"},\"clientRef\":\"project-finish-1\"}]}",
+      "catalogDocumented": true
+    },
+    {
+      "name": "forge_update_food_log",
+      "groupId": "health",
+      "groupTitle": "Health, Food, And Training",
+      "label": "Forge Update Food Log",
+      "summary": "Correct one existing nutrition food log by exact id while preserving every field the user did not ask to change.",
+      "whenToUse": "Use after reading the weight-loss overview when the user wants to correct the time, meal label, confirmation state, notes, links, contextual associations, or complete item list on one identified food log.",
+      "inputShape": "{ foodLogId: string, loggedAt?: string, dayKey?: string|null, timeZone?: string, mealLabel?: string, source?: string, confirmationState?: string, notes?: string, placeId?: string|null, stayId?: string|null, workoutId?: string|null, sleepId?: string|null, imageRefs?: string[], parserProvenance?: object, links?: Array<object>, items?: Array<{ foodId?, name, quantity, unit?, grams?, caloriesKcal?, proteinG?, carbsG?, fatG?, fiberG?, tags? }>, userIds?: string[] }",
+      "requiredFields": [
+        "foodLogId"
+      ],
+      "notes": [
+        "Read forge_get_weight_loss_overview first and identify the exact existing log; do not ask the user for an internal id when current results can resolve it.",
+        "Reflect the current value and the proposed correction, then send only fields the user accepted changing.",
+        "If items is present, it is the complete desired item list for that log. Search foods or use barcode lookup first and preserve the same foodId and researched custom-food nutrition rules used by forge_log_food.",
+        "The exact API method is PATCH /api/v1/health/weight-loss/food-logs/:id, with foodLogId supplied by the tool as the path id."
+      ],
+      "example": "{\"foodLogId\":\"food_log_123\",\"mealLabel\":\"post-workout\",\"confirmationState\":\"confirmed\"}",
       "catalogDocumented": true
     },
     {

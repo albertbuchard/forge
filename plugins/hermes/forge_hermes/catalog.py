@@ -190,9 +190,19 @@ COURSE_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
     "listCourses": {"method": "GET", "path": "/api/v1/courses"},
     "courseDetail": {"method": "GET", "path": "/api/v1/courses/:courseId"},
     "learningSession": {"method": "GET", "path": "/api/v1/courses/:courseId/learn"},
+    "voiceLearningSession": {
+        "method": "POST",
+        "path": "/api/v1/courses/:courseId/voice-session",
+        "write": True,
+    },
     "submitAttempt": {
         "method": "POST",
         "path": "/api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
+        "write": True,
+    },
+    "upgradeEnrollment": {
+        "method": "POST",
+        "path": "/api/v1/courses/:courseId/upgrade",
         "write": True,
     },
     "importCourse": {"method": "POST", "path": "/api/v1/courses/import", "write": True},
@@ -208,13 +218,29 @@ COURSE_ROUTE_EXAMPLES: List[Dict[str, Any]] = [
         "query": {"lessonId": "lesson.week-01.day-01"},
     },
     {
+        "routeKey": "voiceLearningSession",
+        "pathParams": {"courseId": "course.polynomials-etale-triple-covers"},
+        "body": {"week": 1, "day": 1},
+    },
+    {
+        "routeKey": "upgradeEnrollment",
+        "pathParams": {"courseId": "course.polynomials-etale-triple-covers"},
+        "body": {},
+    },
+    {
         "routeKey": "submitAttempt",
         "pathParams": {
             "courseId": "course.polynomials-etale-triple-covers",
             "lessonId": "lesson.week-01.day-01",
             "activityId": "activity.check-01",
         },
-        "body": {"answerMarkdown": "My accepted answer"},
+        "body": {
+            "answerMarkdown": "My confirmed answer.",
+            "deliveryMode": "voice",
+            "voiceSessionToken": "returned-session-token",
+            "voiceConfirmation": True,
+            "idempotencyKey": "stable-voice-attempt-key",
+        },
     },
 ]
 
@@ -1057,8 +1083,22 @@ def nutrition_experiment_path(args: Dict[str, Any]) -> str:
     return nutrition_scoped_path(f"/api/v1/health/weight-loss/experiments/{experiment_id}", args)
 
 
+def nutrition_food_log_path(args: Dict[str, Any]) -> str:
+    food_log_id = str(args.get("foodLogId") or "").strip()
+    if not food_log_id:
+        raise ValueError("Food log updates require a non-empty foodLogId.")
+    return nutrition_scoped_path(
+        f"/api/v1/health/weight-loss/food-logs/{quote(food_log_id, safe='')}",
+        args,
+    )
+
+
 def without_user_ids_body(args: Dict[str, Any], _config: Any) -> Dict[str, Any]:
-    return {key: value for key, value in args.items() if key not in {"userIds", "experimentId"}}
+    return {
+        key: value
+        for key, value in args.items()
+        if key not in {"userIds", "experimentId", "foodLogId"}
+    }
 
 
 def sync_calendar_connection_path(args: Dict[str, Any]) -> str:
@@ -1285,8 +1325,12 @@ NUTRITION_FOOD_LOG = object_schema(
         "userIds": array_schema({"type": "string"}, "Optional user ownership scope."),
         "loggedAt": optional_string("Optional ISO logged-at timestamp."),
         "mealLabel": optional_nullable_string("Optional meal label."),
-        "source": {"enum": ["manual", "search", "barcode", "chatgpt", "photo", "saved_meal"]},
-        "confirmationState": {"enum": ["candidate", "confirmed", "needs_review", "discarded"]},
+        "source": {
+            "enum": ["manual", "search", "barcode", "chatgpt", "photo", "saved_meal"]
+        },
+        "confirmationState": {
+            "enum": ["candidate", "confirmed", "needs_review", "discarded"]
+        },
         "satietyScore": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "hungerBefore": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "hungerAfter": {"anyOf": [{"type": "number"}, {"type": "null"}]},
@@ -1296,6 +1340,59 @@ NUTRITION_FOOD_LOG = object_schema(
         "items": array_schema(NUTRITION_MEAL_ITEM, "Food items in the meal."),
     },
     required=["items"],
+)
+
+NUTRITION_FOOD_LOG_PATCH = object_schema(
+    {
+        "foodLogId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Exact id of the existing nutrition food log to edit.",
+        },
+        "userIds": array_schema({"type": "string"}, "Optional user ownership scope."),
+        "loggedAt": optional_string("Optional ISO logged-at timestamp."),
+        "dayKey": {
+            "anyOf": [
+                {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                },
+                {"type": "null"},
+            ]
+        },
+        "timeZone": optional_string("Optional IANA timezone."),
+        "mealLabel": optional_string("Optional meal label."),
+        "source": {
+            "enum": ["manual", "search", "barcode", "chatgpt", "photo", "saved_meal"]
+        },
+        "confirmationState": {
+            "enum": ["candidate", "confirmed", "needs_review", "discarded"]
+        },
+        "notes": optional_string("Optional notes."),
+        "placeId": optional_nullable_string("Optional linked place id."),
+        "stayId": optional_nullable_string("Optional linked stay id."),
+        "workoutId": optional_nullable_string("Optional linked workout id."),
+        "sleepId": optional_nullable_string("Optional linked sleep id."),
+        "imageRefs": array_schema(
+            {"type": "string", "minLength": 1}, "Replacement image references."
+        ),
+        "parserProvenance": {"type": "object"},
+        "links": array_schema(
+            object_schema(
+                {
+                    "entityType": {"type": "string", "minLength": 1},
+                    "entityId": {"type": "string", "minLength": 1},
+                    "relationshipType": {"type": "string", "minLength": 1},
+                },
+                required=["entityType", "entityId"],
+            ),
+            "Replacement entity links.",
+        ),
+        "items": array_schema(
+            NUTRITION_MEAL_ITEM, "Replacement food items for the meal."
+        ),
+    },
+    required=["foodLogId"],
 )
 
 NUTRITION_SCORE_CHECKIN = object_schema(
@@ -1586,7 +1683,7 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_call_course_route",
-        "description": "Call one allowed dedicated Course or Concept route after the conversation has narrowed to installed-course discovery, progress or syllabus detail, a learner-safe lesson session, one activity attempt, validated package import/export, concept search, due review, or cross-course mastery evidence. Use the learner-safe session for coaching and do not use batch CRUD for Course or Concept.",
+        "description": "Call one allowed dedicated Course or Concept route after the conversation has narrowed to installed-course discovery, progress or syllabus detail, a learner-safe visual or voice lesson session, one activity attempt, an explicit enrollment upgrade, validated package import/export, concept search, due review, or cross-course mastery evidence. Use the learner-safe session for coaching, read exact release state before an upgrade, and do not use batch CRUD for Course or Concept.",
         "parameters": specialized_route_parameters(
             COURSE_ROUTE_SPECS, COURSE_ROUTE_EXAMPLES
         ),
@@ -1896,6 +1993,15 @@ TOOL_CATALOG: List[ToolSpec] = [
         "parameters": NUTRITION_FOOD_LOG,
         "method": "POST",
         "path_builder": lambda args: nutrition_scoped_path("/api/v1/health/weight-loss/food-logs", args),
+        "body_builder": without_user_ids_body,
+        "write": True,
+    },
+    {
+        "name": "forge_update_food_log",
+        "description": "Edit one existing nutrition food log by its exact foodLogId. Read the weight-loss overview first to identify the intended log, then send only the fields that should change.",
+        "parameters": NUTRITION_FOOD_LOG_PATCH,
+        "method": "PATCH",
+        "path_builder": nutrition_food_log_path,
         "body_builder": without_user_ids_body,
         "write": True,
     },

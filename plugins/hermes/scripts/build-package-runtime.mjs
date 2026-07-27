@@ -56,7 +56,8 @@ async function writeRuntimePackageJson() {
     version: hermesVersion,
     private: true,
     type: "module",
-    dependencies: openclawPackageJson.dependencies ?? {}
+    dependencies: openclawPackageJson.dependencies ?? {},
+    overrides: openclawPackageJson.overrides ?? {}
   };
   await writeFile(`${runtimePackageJsonPath}`, `${JSON.stringify(runtimePackageJson, null, 2)}\n`, "utf8");
 }

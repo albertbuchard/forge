@@ -345,7 +345,11 @@ function routeContract(operationId: PeerApiOperationId) {
 }
 
 function hasScope(auth: AuthContext, scope: string) {
-  return Boolean(auth.session || auth.token?.scopes.includes(scope));
+  return Boolean(
+    auth.session ||
+      auth.token?.scopes.includes("*") ||
+      auth.token?.scopes.includes(scope)
+  );
 }
 
 function resolvePersonOwnerUserId(

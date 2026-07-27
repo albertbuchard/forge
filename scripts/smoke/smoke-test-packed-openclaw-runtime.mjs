@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -45,7 +46,7 @@ const ownerUserId = "user_operator";
 const referenceCourse = {
   id: "course.polynomials-etale-triple-covers",
   slug: "from-polynomials-to-etale-triple-covers",
-  version: "1.1.0",
+  version: "2.7.0",
   fileName: "from-polynomials-to-etale-triple-covers.forge-course.json"
 };
 const releaseMode = (process.env.FORGE_RELEASE_MODE ?? "").trim();
@@ -60,6 +61,9 @@ const requireSignedSource =
   process.env.FORGE_REQUIRE_SIGNED_NATIVE_SOURCE === "1" ||
   ["full", "publish-from-tag"].includes(releaseMode);
 let child = null;
+const previousOwnerBrokerBinary = process.env.FORGE_OWNER_BROKER_BIN;
+const previousOwnerBrokerSha256 = process.env.FORGE_OWNER_BROKER_SHA256;
+let ownerBrokerEnvironmentChanged = false;
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -87,10 +91,16 @@ async function waitForHealth() {
       );
     }
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/v1/health`);
+      const response = await fetch(`http://127.0.0.1:${port}/api/health`);
       if (response.ok) {
         const body = await response.json();
-        if (body?.ok === true) return body;
+        if (
+          body?.ok === true &&
+          body?.app === "forge" &&
+          body?.security === "credential-required"
+        ) {
+          return body;
+        }
       }
     } catch (error) {
       lastError = error;
@@ -163,8 +173,52 @@ async function verifyPackedForgePeerSource(
     );
   }
 
+  run(
+    "cargo",
+    [
+      "build",
+      "--locked",
+      "--release",
+      "--manifest-path",
+      cargoManifest,
+      "--no-default-features",
+      "--features",
+      "owner-broker",
+      "--bin",
+      "forge-owner-broker"
+    ],
+    {
+      cwd: sourceRoot,
+      timeout: 600_000,
+      env: { ...process.env, CARGO_TARGET_DIR: peerSourceTarget }
+    }
+  );
+
+  const ownerBrokerBinaryName =
+    process.platform === "win32"
+      ? "forge-owner-broker.exe"
+      : "forge-owner-broker";
+  const ownerBrokerBinaryPath = path.join(
+    peerSourceTarget,
+    "release",
+    ownerBrokerBinaryName
+  );
+  if (!existsSync(ownerBrokerBinaryPath)) {
+    throw new Error(
+      "locked packed forge-peer build did not produce its owner-broker binary"
+    );
+  }
+  const ownerBrokerSha256 = createHash("sha256")
+    .update(readFileSync(ownerBrokerBinaryPath))
+    .digest("hex");
+
   if (!buildBinary) {
-    return { binaryPath: null, sourceRoot };
+    return {
+      binaryPath: null,
+      ownerBrokerBinaryPath,
+      ownerBrokerSha256,
+      sourceRoot
+    };
   }
 
   run(
@@ -193,7 +247,12 @@ async function verifyPackedForgePeerSource(
       "locked packed forge-peer build did not produce its daemon binary"
     );
   }
-  return { binaryPath, sourceRoot };
+  return {
+    binaryPath,
+    ownerBrokerBinaryPath,
+    ownerBrokerSha256,
+    sourceRoot
+  };
 }
 
 function packedPeerEnvironment(binaryPath) {
@@ -284,63 +343,17 @@ async function verifyPackedPeerDaemon(installedPluginRoot, binaryPath) {
   return { health, identity };
 }
 
-function readSetCookie(headers) {
-  if (typeof headers.getSetCookie === "function") {
-    return headers.getSetCookie();
-  }
-  const header = headers.get("set-cookie");
-  return header ? [header] : [];
-}
-
-function cookiePairFromSetCookie(headers) {
-  for (const header of headers) {
-    const first = String(header).split(";")[0]?.trim();
-    if (first) return first;
-  }
-  return null;
-}
-
-async function getOperatorCookie() {
-  const sessionResponse = await fetch(
-    `http://127.0.0.1:${port}/api/v1/auth/operator-session`,
-    {
-      headers: {
-        accept: "application/json",
-        host: `127.0.0.1:${port}`
-      }
-    }
-  );
-  if (!sessionResponse.ok) {
-    throw new Error(
-      `operator session bootstrap failed with HTTP ${sessionResponse.status}`
-    );
-  }
-  const cookie = cookiePairFromSetCookie(
-    readSetCookie(sessionResponse.headers)
-  );
-  if (!cookie) {
-    throw new Error("operator session bootstrap did not return a cookie");
-  }
-  return cookie;
-}
-
-async function verifyPackedCourseApi(cookie) {
-  const response = await fetch(
-    `http://127.0.0.1:${port}/api/v1/courses?userId=${ownerUserId}`,
-    {
-      headers: {
-        accept: "application/json",
-        cookie,
-        host: `127.0.0.1:${port}`
-      }
-    }
-  );
-  const body = await response.json().catch(() => null);
+async function verifyPackedCourseApi(requestForge) {
+  const response = await requestForge({
+    method: "GET",
+    path: `/api/v1/courses?userId=${ownerUserId}`
+  });
+  const body = response.body;
   const course = body?.courses?.find(
     (entry) => entry.id === referenceCourse.id
   );
   if (
-    !response.ok ||
+    response.status !== 200 ||
     course?.slug !== referenceCourse.slug ||
     course?.version !== referenceCourse.version
   ) {
@@ -350,88 +363,59 @@ async function verifyPackedCourseApi(cookie) {
   }
 }
 
-async function verifyPackedIrohPairing(cookie) {
-  const response = await fetch(
-    `http://127.0.0.1:${port}/api/v1/health/pairing-sessions`,
-    {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-        cookie,
-        host: `127.0.0.1:${port}`
-      },
-      body: JSON.stringify({ userId: null, transportMode: "iroh" })
-    }
-  );
-  const body = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(
-      `packed runtime pairing failed with HTTP ${response.status}: ${JSON.stringify(body)}`
-    );
-  }
+async function verifyPackedPairingRequiresOperator(requestForge) {
+  const response = await requestForge({
+    method: "POST",
+    path: "/api/v1/health/pairing-sessions",
+    body: { userId: null, transportMode: "iroh" }
+  });
+  const body = response.body;
   if (
-    body?.qrPayload?.transportMode !== "iroh" ||
-    body?.qrPayload?.transport?.provider !== "forge-companion-iroh" ||
-    !String(body?.qrPayload?.apiBaseUrl ?? "").startsWith("forge-iroh://") ||
-    !String(body?.qrPayload?.uiBaseUrl ?? "").startsWith("forge-iroh://") ||
-    body?.qrPayload?.transport?.publicBaseUrl !== undefined ||
-    body?.qrPayload?.transport?.fallbackMode !== "none" ||
-    body?.qrPayload?.transport?.localBaseUrl !== `http://127.0.0.1:${port}` ||
-    !body?.qrPayload?.transport?.pairPayload?.node_id
+    response.status !== 401 ||
+    body?.code !== "auth_required" ||
+    !String(body?.error ?? "").includes("operator session")
   ) {
     throw new Error(
-      `packed runtime did not create an Iroh pairing: ${JSON.stringify(body)}`
+      `packed runtime allowed a local service to create a pairing session: HTTP ${response.status}: ${JSON.stringify(body)}`
     );
   }
-  return { body, cookie };
 }
 
-async function verifyPackedPeopleApi(cookie) {
-  const createdResponse = await fetch(
-    `http://127.0.0.1:${port}/api/v1/entities/create`,
-    {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-        cookie,
-        host: `127.0.0.1:${port}`
-      },
-      body: JSON.stringify({
-        atomic: true,
-        operations: [
-          {
-            entityType: "person",
-            clientRef: "packed-runtime-person",
-            idempotencyKey: "packed-runtime-person-v1",
-            data: {
-              userId: ownerUserId,
-              displayName: "Packed runtime Person",
-              relationshipCategory: "colleague",
-              shortDescription: "Isolated packed-runtime verification record."
-            }
+async function verifyPackedPeopleApi(requestForge) {
+  const createdResponse = await requestForge({
+    method: "POST",
+    path: "/api/v1/entities/create",
+    body: {
+      atomic: true,
+      operations: [
+        {
+          entityType: "person",
+          clientRef: "packed-runtime-person",
+          idempotencyKey: "packed-runtime-person-v1",
+          data: {
+            userId: ownerUserId,
+            displayName: "Packed runtime Person",
+            relationshipCategory: "colleague",
+            shortDescription: "Isolated packed-runtime verification record."
           }
-        ]
-      })
+        }
+      ]
     }
-  );
-  const created = await createdResponse.json().catch(() => null);
-  if (!createdResponse.ok || created?.results?.[0]?.ok !== true) {
+  });
+  const created = createdResponse.body;
+  if (createdResponse.status !== 200 || created?.results?.[0]?.ok !== true) {
     throw new Error(
       `packed runtime Person create failed with HTTP ${createdResponse.status}: ${JSON.stringify(created)}`
     );
   }
 
-  const listResponse = await fetch(
-    `http://127.0.0.1:${port}/api/v1/people?limit=20&source=both&sort=display_name&direction=asc`,
-    {
-      headers: { accept: "application/json", cookie, host: `127.0.0.1:${port}` }
-    }
-  );
-  const listed = await listResponse.json().catch(() => null);
+  const listResponse = await requestForge({
+    method: "GET",
+    path: "/api/v1/people?limit=20&source=both&sort=display_name&direction=asc"
+  });
+  const listed = listResponse.body;
   if (
-    !listResponse.ok ||
+    listResponse.status !== 200 ||
     !Array.isArray(listed?.people) ||
     !listed.people.some(
       (person) => person.displayName === "Packed runtime Person"
@@ -550,6 +534,42 @@ try {
   const peerRuntime = await verifyPackedForgePeerSource(installedPluginRoot, {
     buildBinary: !runtimeOnly
   });
+  process.env.FORGE_OWNER_BROKER_BIN = peerRuntime.ownerBrokerBinaryPath;
+  process.env.FORGE_OWNER_BROKER_SHA256 = peerRuntime.ownerBrokerSha256;
+  ownerBrokerEnvironmentChanged = true;
+  const localOwnerClientModulePath = path.join(
+    installedPluginRoot,
+    "dist",
+    "openclaw",
+    "local-owner-client.js"
+  );
+  const { createLocalOwnerSession } = await import(
+    pathToFileURL(localOwnerClientModulePath).href
+  );
+  const forgeBaseUrl = `http://127.0.0.1:${port}`;
+  const requestForge = async (args) => {
+    const session = await createLocalOwnerSession(
+      forgeBaseUrl,
+      15_000,
+      dataRoot
+    );
+    const response = await fetch(new URL(args.path, `${forgeBaseUrl}/`), {
+      method: args.method,
+      headers: {
+        accept: "application/json",
+        cookie: session.cookie,
+        "x-forge-csrf": session.csrfToken,
+        ...(args.body === undefined
+          ? {}
+          : { "content-type": "application/json" })
+      },
+      body: args.body === undefined ? undefined : JSON.stringify(args.body)
+    });
+    return {
+      status: response.status,
+      body: await response.json().catch(() => null)
+    };
+  };
 
   mkdirSync(installRoot, { recursive: true });
   child = spawn(
@@ -560,6 +580,8 @@ try {
       env: {
         ...process.env,
         FORGE_DATA_ROOT: dataRoot,
+        FORGE_OWNER_BROKER_BIN: peerRuntime.ownerBrokerBinaryPath,
+        FORGE_OWNER_BROKER_SHA256: peerRuntime.ownerBrokerSha256,
         ...(runtimeOnly
           ? {
               FORGE_PEER_ENABLED: "0",
@@ -586,23 +608,24 @@ try {
   });
 
   const health = await waitForHealth();
-  if (health.backend !== "forge-node-runtime") {
+  await verifyPackedWebRoutes();
+  const protectedHealth = await requestForge({
+    method: "GET",
+    path: "/api/v1/health"
+  });
+  if (
+    protectedHealth.status !== 200 ||
+    protectedHealth.body?.backend !== "forge-node-runtime"
+  ) {
     throw new Error(
-      `packed runtime health returned unexpected backend ${health.backend}`
+      `packed runtime protected health returned unexpected response ${JSON.stringify(protectedHealth)}`
     );
   }
-  await verifyPackedWebRoutes();
-  const operatorCookie = await getOperatorCookie();
-  await verifyPackedCourseApi(operatorCookie);
+  await verifyPackedCourseApi(requestForge);
   if (!runtimeOnly) {
     await verifyPackedPeerDaemon(installedPluginRoot, peerRuntime.binaryPath);
-    const pairing = await verifyPackedIrohPairing(operatorCookie);
-    await verifyPackedPeopleApi(pairing.cookie);
-    if (!pairing.body?.qrPayload?.transport?.pairPayload?.node_id) {
-      throw new Error(
-        "packed companion pairing did not expose its verified Iroh node id"
-      );
-    }
+    await verifyPackedPairingRequiresOperator(requestForge);
+    await verifyPackedPeopleApi(requestForge);
   }
   console.log("packed openclaw runtime smoke passed");
 } finally {
@@ -616,6 +639,18 @@ try {
       });
     });
     if (child.exitCode === null) child.kill("SIGKILL");
+  }
+  if (ownerBrokerEnvironmentChanged) {
+    if (previousOwnerBrokerBinary === undefined) {
+      delete process.env.FORGE_OWNER_BROKER_BIN;
+    } else {
+      process.env.FORGE_OWNER_BROKER_BIN = previousOwnerBrokerBinary;
+    }
+    if (previousOwnerBrokerSha256 === undefined) {
+      delete process.env.FORGE_OWNER_BROKER_SHA256;
+    } else {
+      process.env.FORGE_OWNER_BROKER_SHA256 = previousOwnerBrokerSha256;
+    }
   }
   console.log(`packed runtime evidence preserved at ${tempRoot}`);
 }

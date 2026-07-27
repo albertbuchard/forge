@@ -19,6 +19,8 @@ import {
   stopForgeRuntime
 } from "./local-runtime.js";
 import {
+  collectPublishedOnboardingApiRouteKeys,
+  collectRequiredMirroredOnboardingApiRouteKeys,
   collectSupportedPluginApiRouteKeys,
   makeApiRouteKey,
   type ApiRouteKey
@@ -734,6 +736,18 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
       },
       {
         method: "POST",
+        pattern: /^\/forge\/v1\/courses\/([^/]+)\/voice-session$/,
+        upstreamPath: "/api/v1/courses/:courseId/voice-session",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(
+            `/api/v1/courses/${match[1]}/voice-session`,
+            url
+          )
+      },
+      {
+        method: "POST",
         pattern:
           /^\/forge\/v1\/courses\/([^/]+)\/lessons\/([^/]+)\/activities\/([^/]+)\/attempts$/,
         upstreamPath:
@@ -745,6 +759,15 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
             `/api/v1/courses/${match[1]}/lessons/${match[2]}/activities/${match[3]}/attempts`,
             url
           )
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/courses\/([^/]+)\/upgrade$/,
+        upstreamPath: "/api/v1/courses/:courseId/upgrade",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/courses/${match[1]}/upgrade`, url)
       },
       {
         method: "GET",
@@ -1654,10 +1677,15 @@ export function collectMirroredApiRouteKeys(): Set<ApiRouteKey> {
 }
 
 export function buildRouteParityReport(
-  pathMap: Record<string, Record<string, unknown>>
+  pathMap: Record<string, Record<string, unknown>>,
+  onboarding?: unknown
 ) {
   const mirrored = collectMirroredApiRouteKeys();
   const supported = collectSupportedPluginApiRouteKeys();
+  const publishedByOnboarding =
+    collectPublishedOnboardingApiRouteKeys(onboarding);
+  const requiredMirrorsFromOnboarding =
+    collectRequiredMirroredOnboardingApiRouteKeys(onboarding);
   const openApiRoutes = new Set(
     Object.entries(pathMap)
       .flatMap(([path, methods]) =>
@@ -1682,13 +1710,23 @@ export function buildRouteParityReport(
   const unexpectedMirrors = [...mirrored]
     .filter((key) => !supported.has(key))
     .sort();
+  const missingPublishedFromOpenApi = [...publishedByOnboarding]
+    .filter((key) => !openApiRoutes.has(key))
+    .sort();
+  const missingRequiredMirrors = [...requiredMirrorsFromOnboarding]
+    .filter((key) => !mirrored.has(key))
+    .sort();
 
   return {
     supported: [...supported].sort(),
     mirrored: [...mirrored].sort(),
+    publishedByOnboarding: [...publishedByOnboarding].sort(),
+    requiredMirrorsFromOnboarding: [...requiredMirrorsFromOnboarding].sort(),
     missingFromPlugin,
     missingFromOpenApi,
-    unexpectedMirrors
+    unexpectedMirrors,
+    missingPublishedFromOpenApi,
+    missingRequiredMirrors
   };
 }
 
@@ -1738,7 +1776,10 @@ async function runPost(config: ForgePluginConfig, path: string, body: unknown) {
 }
 
 export async function runRouteCheck(config: ForgePluginConfig) {
-  const openapi = await runReadOnly(config, "/api/v1/openapi.json");
+  const [openapi, onboarding] = await Promise.all([
+    runReadOnly(config, "/api/v1/openapi.json"),
+    runReadOnly(config, "/api/v1/agents/onboarding")
+  ]);
   const pathMap =
     typeof openapi === "object" &&
     openapi !== null &&
@@ -1747,7 +1788,7 @@ export async function runRouteCheck(config: ForgePluginConfig) {
     openapi.paths !== null
       ? (openapi.paths as Record<string, Record<string, unknown>>)
       : {};
-  return buildRouteParityReport(pathMap);
+  return buildRouteParityReport(pathMap, onboarding);
 }
 
 export async function runDoctor(config: ForgePluginConfig) {
@@ -1827,6 +1868,16 @@ export async function runDoctor(config: ForgePluginConfig) {
       `Plugin still mirrors ${routeParity.unexpectedMirrors.length} unexpected route${routeParity.unexpectedMirrors.length === 1 ? "" : "s"} outside the curated contract.`
     );
   }
+  if (routeParity.missingPublishedFromOpenApi.length > 0) {
+    warnings.push(
+      `Forge OpenAPI is missing ${routeParity.missingPublishedFromOpenApi.length} route${routeParity.missingPublishedFromOpenApi.length === 1 ? "" : "s"} published by live onboarding.`
+    );
+  }
+  if (routeParity.missingRequiredMirrors.length > 0) {
+    warnings.push(
+      `Plugin route coverage is missing ${routeParity.missingRequiredMirrors.length} route${routeParity.missingRequiredMirrors.length === 1 ? "" : "s"} required by a mirrored live onboarding surface.`
+    );
+  }
 
   return {
     ...(doctorBody ?? {}),
@@ -1837,7 +1888,9 @@ export async function runDoctor(config: ForgePluginConfig) {
         canBootstrap) &&
       routeParity.missingFromPlugin.length === 0 &&
       routeParity.missingFromOpenApi.length === 0 &&
-      routeParity.unexpectedMirrors.length === 0,
+      routeParity.unexpectedMirrors.length === 0 &&
+      routeParity.missingPublishedFromOpenApi.length === 0 &&
+      routeParity.missingRequiredMirrors.length === 0,
     origin: config.origin,
     port: config.port,
     baseUrl: config.baseUrl,
@@ -2007,7 +2060,7 @@ export function registerForgePluginCli(
       command
         .command("route-check")
         .description(
-          "Compare curated plugin route coverage against the live Forge OpenAPI paths"
+          "Compare curated and live-onboarding plugin route coverage against Forge OpenAPI"
         )
         .action(async () => {
           console.log(JSON.stringify(await runRouteCheck(config), null, 2));

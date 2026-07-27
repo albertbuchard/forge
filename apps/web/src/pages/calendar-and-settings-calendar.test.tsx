@@ -1,4 +1,11 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -127,7 +134,8 @@ vi.mock("@/lib/api", () => ({
   startGoogleCalendarOauth: startGoogleCalendarOauthMock,
   getGoogleCalendarOauthSession: getGoogleCalendarOauthSessionMock,
   startMicrosoftCalendarOauth: startMicrosoftCalendarOauthMock,
-  testMicrosoftCalendarOauthConfiguration: testMicrosoftCalendarOauthConfigurationMock,
+  testMicrosoftCalendarOauthConfiguration:
+    testMicrosoftCalendarOauthConfigurationMock,
   getMicrosoftCalendarOauthSession: getMicrosoftCalendarOauthSessionMock,
   discoverExistingCalendarConnection: discoverExistingCalendarConnectionMock,
   createCalendarConnection: createCalendarConnectionMock,
@@ -550,7 +558,8 @@ beforeEach(() => {
     session: {
       sessionId: "google_session_1",
       status: "pending",
-      authUrl: "https://accounts.google.com/o/oauth2/v2/auth?state=google_session_1",
+      authUrl:
+        "https://accounts.google.com/o/oauth2/v2/auth?state=google_session_1",
       accountLabel: null,
       error: null,
       discovery: null
@@ -560,15 +569,18 @@ beforeEach(() => {
     session: {
       sessionId: "google_session_1",
       status: "authorized",
-      authUrl: "https://accounts.google.com/o/oauth2/v2/auth?state=google_session_1",
+      authUrl:
+        "https://accounts.google.com/o/oauth2/v2/auth?state=google_session_1",
       accountLabel: "albert@example.com",
       error: null,
       discovery: {
         provider: "google",
         accountLabel: "albert@example.com",
         serverUrl: "https://apidata.googleusercontent.com/caldav/v2/",
-        principalUrl: "https://apidata.googleusercontent.com/caldav/v2/albert@example.com/",
-        homeUrl: "https://apidata.googleusercontent.com/caldav/v2/albert@example.com/events/",
+        principalUrl:
+          "https://apidata.googleusercontent.com/caldav/v2/albert@example.com/",
+        homeUrl:
+          "https://apidata.googleusercontent.com/caldav/v2/albert@example.com/events/",
         calendars: [
           {
             url: "https://apidata.googleusercontent.com/caldav/v2/albert@example.com/events/",
@@ -614,13 +626,15 @@ beforeEach(() => {
         provider: "microsoft",
         label: "Exchange Online",
         supportsDedicatedForgeCalendar: false,
-        connectionHelp: "Sign in with Microsoft in a guided popup flow. Forge mirrors the selected calendars in read-only mode for now."
+        connectionHelp:
+          "Sign in with Microsoft in a guided popup flow. Forge mirrors the selected calendars in read-only mode for now."
       },
       {
         provider: "macos_local",
         label: "Calendars On This Mac",
         supportsDedicatedForgeCalendar: true,
-        connectionHelp: "Use EventKit to access the calendars already configured in Calendar.app on this Mac."
+        connectionHelp:
+          "Use EventKit to access the calendars already configured in Calendar.app on this Mac."
       },
       {
         provider: "caldav",
@@ -851,14 +865,14 @@ describe("calendar routing surfaces", () => {
 
     expect(await screen.findByText("Week view")).toBeInTheDocument();
     expect(screen.getByText("Manage provider settings")).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText("Google client id")).not.toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText("Google client id")
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Half-day work blocks")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Open work-block guide"));
 
-    expect(
-      await screen.findByText("Create a work block")
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Create a work block")).toBeInTheDocument();
   });
 
   it("surfaces Life Force summary and AP badges across work blocks, events, and timeboxes", async () => {
@@ -988,7 +1002,9 @@ describe("calendar routing surfaces", () => {
     expect(screen.getByText("Hiring meeting")).toBeInTheDocument();
     expect(screen.getAllByText("Focus block").length).toBeGreaterThan(0);
     expect(screen.getByText("Planning window")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open task" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open task" })
+    ).toBeInTheDocument();
   });
 
   it("opens existing timeboxes for editing from the calendar surface", async () => {
@@ -1105,7 +1121,9 @@ describe("calendar routing surfaces", () => {
     renderWithRouter(<CalendarPage />, "/calendar");
 
     fireEvent.click(await screen.findByText("Planning window"));
-    fireEvent.click(await screen.findByRole("button", { name: "Delete timebox" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Delete timebox" })
+    );
 
     await waitFor(() =>
       expect(deleteTaskTimeboxMock.mock.calls[0]?.[0]).toBe("timebox_planning")
@@ -1167,7 +1185,9 @@ describe("calendar routing surfaces", () => {
     renderWithRouter(<CalendarPage />, "/calendar");
 
     expect((await screen.findAllByText("Vacation")).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: "Open actions for Vacation" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open actions for Vacation" })
+    );
     fireEvent.click((await screen.findAllByText("Edit")).at(-1) as HTMLElement);
 
     expect(await screen.findByText("Edit work block")).toBeInTheDocument();
@@ -1199,12 +1219,18 @@ describe("calendar routing surfaces", () => {
       });
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Open actions for Vacation" }));
-    fireEvent.click((await screen.findAllByText("Delete")).at(-1) as HTMLElement);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open actions for Vacation" })
+    );
+    fireEvent.click(
+      (await screen.findAllByText("Delete")).at(-1) as HTMLElement
+    );
 
     await waitFor(() => {
       expect(deleteWorkBlockTemplateMock).toHaveBeenCalled();
-      expect(deleteWorkBlockTemplateMock.mock.calls[0]?.[0]).toBe("wbtpl_holiday");
+      expect(deleteWorkBlockTemplateMock.mock.calls[0]?.[0]).toBe(
+        "wbtpl_holiday"
+      );
     });
   });
 
@@ -1270,7 +1296,9 @@ describe("calendar routing surfaces", () => {
     expect(await screen.findByText("Week view")).toBeInTheDocument();
     expect(screen.getByText("Family")).toBeInTheDocument();
     expect(screen.queryByText("Apple")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Colors on" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Colors on" })
+    ).not.toBeInTheDocument();
   });
 
   it("closes the event dialog immediately and updates the week view optimistically", async () => {
@@ -1362,7 +1390,9 @@ describe("calendar routing surfaces", () => {
 
     expect(await screen.findByText("Old title")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Old title"));
-    expect(await screen.findByText("Refine the Forge event")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Refine the Forge event")
+    ).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Title"), {
       target: { value: "New title" }
@@ -1373,7 +1403,9 @@ describe("calendar routing surfaces", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save event" }));
 
     await waitFor(() => {
-      expect(screen.queryByText("Refine the Forge event")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Refine the Forge event")
+      ).not.toBeInTheDocument();
     });
     expect(screen.getByText("New title")).toBeInTheDocument();
     expect(screen.getByText("Syncing changes")).toBeInTheDocument();
@@ -1407,9 +1439,12 @@ describe("calendar routing surfaces", () => {
     });
 
     await waitFor(() => {
-      expect(patchCalendarEventMock).toHaveBeenCalledWith("event_edit", expect.objectContaining({
-        title: "New title"
-      }));
+      expect(patchCalendarEventMock).toHaveBeenCalledWith(
+        "event_edit",
+        expect.objectContaining({
+          title: "New title"
+        })
+      );
     });
   });
 
@@ -1419,11 +1454,15 @@ describe("calendar routing surfaces", () => {
       "/settings/calendar?intent=connect&provider=apple"
     );
 
-    expect(screen.queryByText("Before you connect anything")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Before you connect anything")
+    ).not.toBeInTheDocument();
     expect(
       await screen.findByText("Connect a calendar provider")
     ).toBeInTheDocument();
-    expect(await screen.findByText("Before you connect anything")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Before you connect anything")
+    ).toBeInTheDocument();
     expect(screen.getAllByText("Apple Calendar").length).toBeGreaterThan(0);
   });
 
@@ -1432,19 +1471,31 @@ describe("calendar routing surfaces", () => {
 
     expect(await screen.findByText("Provider connections")).toBeInTheDocument();
     expect(
-      screen.getByText(/Connect a provider here, then choose which calendars Forge should mirror/i)
+      screen.getByText(
+        /Connect a provider here, then choose which calendars Forge should mirror/i
+      )
     ).toBeInTheDocument();
     expect(
-      screen.queryByText(/Google sign-in is only available from one of these local browser origins/i)
+      screen.queryByText(
+        /Google sign-in is only available from one of these local browser origins/i
+      )
     ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Open Google guided flow" }));
-    expect(await screen.findByText("Connect a calendar provider")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Google guided flow" })
+    );
+    expect(
+      await screen.findByText("Connect a calendar provider")
+    ).toBeInTheDocument();
     expect(screen.getByText(/Detected browser origin:/i)).toBeInTheDocument();
     expect(screen.getByText(window.location.origin)).toBeInTheDocument();
     expect(
-      screen.getByText(/Google sign-in has to start from a local browser on the host running Forge/i)
+      screen.getByText(
+        /Google sign-in has to start from a local browser on the host running Forge/i
+      )
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Sign in with Google" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Sign in with Google" })
+    ).toBeDisabled();
   });
 
   it("shows provider connection badges without blocking additional connections", async () => {
@@ -1472,7 +1523,8 @@ describe("calendar routing surfaces", () => {
           status: "connected",
           config: {
             selectedCalendarCount: 1,
-            forgeCalendarUrl: "https://apidata.googleusercontent.com/caldav/v2/albert.buchard%40gmail.com/forge/"
+            forgeCalendarUrl:
+              "https://apidata.googleusercontent.com/caldav/v2/albert.buchard%40gmail.com/forge/"
           },
           forgeCalendarId: "calendar_google_forge",
           lastSyncedAt: "2026-04-03T08:00:00.000Z",
@@ -1488,7 +1540,8 @@ describe("calendar routing surfaces", () => {
           status: "connected",
           config: {
             selectedCalendarCount: 2,
-            forgeCalendarUrl: "https://apidata.googleusercontent.com/caldav/v2/work%40example.com/forge/"
+            forgeCalendarUrl:
+              "https://apidata.googleusercontent.com/caldav/v2/work%40example.com/forge/"
           },
           forgeCalendarId: "calendar_google_work",
           lastSyncedAt: "2026-04-03T08:00:00.000Z",
@@ -1501,17 +1554,156 @@ describe("calendar routing surfaces", () => {
 
     renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
 
-    const googleAction = await screen.findByRole("button", { name: "Open Google guided flow" });
+    const googleAction = await screen.findByRole("button", {
+      name: "Open Google guided flow"
+    });
     const googleCard = googleAction.closest(".rounded-\\[26px\\]");
     expect(googleCard).toBeTruthy();
-    expect(within(googleCard as HTMLElement).getByText("Connected")).toBeInTheDocument();
-    expect(within(googleCard as HTMLElement).getByText("2 connections")).toBeInTheDocument();
+    expect(
+      within(googleCard as HTMLElement).getByText("Connected")
+    ).toBeInTheDocument();
+    expect(
+      within(googleCard as HTMLElement).getByText("2 connections")
+    ).toBeInTheDocument();
     expect(
       within(googleCard as HTMLElement).getByText(
         /Forge already has 2 connections for this provider/i
       )
     ).toBeInTheDocument();
     expect(googleAction).toBeInTheDocument();
+  });
+
+  it("shows and repairs macOS Calendar permission failures without mislabelling mirrors", async () => {
+    listCalendarConnectionsMock.mockResolvedValue({
+      providers: [
+        {
+          provider: "apple",
+          label: "Apple Calendar",
+          supportsDedicatedForgeCalendar: true,
+          connectionHelp: "Use Apple autodiscovery from caldav.icloud.com."
+        },
+        {
+          provider: "macos_local",
+          label: "Calendars On This Mac",
+          supportsDedicatedForgeCalendar: true,
+          connectionHelp:
+            "Use EventKit to access calendars configured in Calendar.app."
+        }
+      ],
+      connections: [
+        {
+          id: "conn_icloud",
+          provider: "apple",
+          label: "iCloud",
+          accountLabel: "albert.buchard@gmail.com",
+          status: "connected",
+          config: {
+            forgeCalendarUrl:
+              "https://caldav.icloud.com/calendars/albert/forge/"
+          },
+          forgeCalendarId: "calendar_forge",
+          lastSyncedAt: "2026-07-25T07:19:41.000Z",
+          lastSyncError: null,
+          createdAt: "2026-04-03T08:00:00.000Z",
+          updatedAt: "2026-07-25T07:19:41.000Z"
+        },
+        {
+          id: "conn_macos",
+          provider: "macos_local",
+          label: "Calendars On This Mac",
+          accountLabel: "Exchange",
+          status: "error",
+          config: {},
+          forgeCalendarId: null,
+          lastSyncedAt: "2026-04-27T05:18:25.000Z",
+          lastSyncError:
+            'unavailable("Forge needs Calendar full access before it can read calendars already configured on this Mac.")',
+          createdAt: "2026-04-03T08:00:00.000Z",
+          updatedAt: "2026-07-25T07:19:41.000Z"
+        }
+      ]
+    });
+    listCalendarResourcesMock.mockResolvedValue({
+      calendars: [
+        {
+          id: "calendar_forge",
+          connectionId: "conn_icloud",
+          remoteId: "https://caldav.icloud.com/calendars/albert/forge/",
+          title: "Forge",
+          description: "",
+          color: "#7dd3fc",
+          timezone: "Europe/Zurich",
+          isPrimary: false,
+          canWrite: true,
+          selectedForSync: true,
+          forgeManaged: true,
+          lastSyncedAt: "2026-07-25T07:19:41.000Z",
+          createdAt: "2026-04-03T08:00:00.000Z",
+          updatedAt: "2026-07-25T07:19:41.000Z"
+        },
+        {
+          id: "calendar_exchange",
+          connectionId: "conn_macos",
+          remoteId:
+            "forge-macos-local://calendar/source_exchange/calendar_exchange/",
+          title: "Calendrier",
+          description: "",
+          color: "#22c55e",
+          timezone: "Europe/Zurich",
+          isPrimary: true,
+          canWrite: true,
+          selectedForSync: true,
+          forgeManaged: false,
+          lastSyncedAt: "2026-04-27T05:18:25.000Z",
+          createdAt: "2026-04-03T08:00:00.000Z",
+          updatedAt: "2026-04-27T05:18:25.000Z"
+        }
+      ]
+    });
+    requestMacOSLocalCalendarAccessMock.mockResolvedValueOnce({
+      granted: true,
+      status: "full_access"
+    });
+    syncCalendarConnectionMock.mockResolvedValueOnce({
+      connection: { id: "conn_macos", status: "connected" }
+    });
+
+    renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
+
+    const macOSAction = await screen.findByRole("button", {
+      name: "Open Mac calendar flow"
+    });
+    const macOSCard = macOSAction.closest(".rounded-\\[26px\\]");
+    expect(macOSCard).toBeTruthy();
+    expect(
+      within(macOSCard as HTMLElement).getByText("Needs attention")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Forge needs Calendar full access before it can read calendars already configured on this Mac."
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/^unavailable\(/)).not.toBeInTheDocument();
+    expect(
+      screen.getAllByText("Read-only mirror · Europe/Zurich").length
+    ).toBeGreaterThan(0);
+    expect(document.body).toHaveTextContent(
+      "Forge writes through iCloud · albert.buchard@gmail.com."
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Repair Calendar access" })
+    );
+
+    await waitFor(() => {
+      expect(requestMacOSLocalCalendarAccessMock).toHaveBeenCalledTimes(1);
+      expect(syncCalendarConnectionMock).toHaveBeenCalledWith("conn_macos");
+    });
+    expect(
+      await screen.findByText(
+        "Calendar access is repaired and this connection has been synced."
+      )
+    ).toBeInTheDocument();
   });
 
   it("shows both the wrong-machine warning and missing Google client ID in the guided modal", async () => {
@@ -1666,7 +1858,11 @@ describe("calendar routing surfaces", () => {
             appBaseUrl: "http://127.0.0.1:4317",
             redirectUri:
               "http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback",
-            allowedOrigins: [browserOrigin, "http://127.0.0.1:3027", "http://127.0.0.1:4317"],
+            allowedOrigins: [
+              browserOrigin,
+              "http://127.0.0.1:3027",
+              "http://127.0.0.1:4317"
+            ],
             usesPkce: true,
             requiresServerClientSecret: false,
             oauthClientType: "desktop_app",
@@ -1907,7 +2103,9 @@ describe("calendar routing surfaces", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Open Google guided flow" })
     );
-    fireEvent.click(screen.getByRole("button", { name: "Sign in with Google" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sign in with Google" })
+    );
 
     await waitFor(() => {
       expect(startGoogleCalendarOauthMock).toHaveBeenCalled();
@@ -1930,16 +2128,22 @@ describe("calendar routing surfaces", () => {
 
   it("explains why Google pairing fails from a Tailscale phone route", () => {
     const message = describeGoogleRouteRequirement({
-      currentOrigin: "https://macbook-pro--de-francis-lalanne.tail47ba04.ts.net",
+      currentOrigin:
+        "https://macbook-pro--de-francis-lalanne.tail47ba04.ts.net",
       appBaseUrl: "http://127.0.0.1:4317",
-      redirectUri: "http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback",
+      redirectUri:
+        "http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback",
       allowedOrigins: ["http://127.0.0.1:3027", "http://127.0.0.1:4317"],
       isLocalOnly: true
     });
 
-    expect(message).toMatch(/Google sign-in has to start from a local browser on the host running Forge/i);
+    expect(message).toMatch(
+      /Google sign-in has to start from a local browser on the host running Forge/i
+    );
     expect(message).toMatch(/Forge is currently open through Tailscale/i);
-    expect(message).toMatch(/that callback goes to that device instead of the Forge host/i);
+    expect(message).toMatch(
+      /that callback goes to that device instead of the Forge host/i
+    );
   });
 
   it("supports the Exchange Online guided flow as read only", async () => {
@@ -2018,14 +2222,25 @@ describe("calendar routing surfaces", () => {
 
     renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
 
-    expect((await screen.findAllByText("Exchange Online")).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: "Open Microsoft guided flow" }));
-    expect(await screen.findByText("Connect a calendar provider")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText("Exchange Online")).length
+    ).toBeGreaterThan(0);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Microsoft guided flow" })
+    );
+    expect(
+      await screen.findByText("Connect a calendar provider")
+    ).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText("00000000-0000-0000-0000-000000000000"), {
-      target: { value: "00000000-0000-0000-0000-000000000000" }
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save Microsoft settings" }));
+    fireEvent.change(
+      screen.getByPlaceholderText("00000000-0000-0000-0000-000000000000"),
+      {
+        target: { value: "00000000-0000-0000-0000-000000000000" }
+      }
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save Microsoft settings" })
+    );
 
     await waitFor(() => {
       expect(patchSettingsMock).toHaveBeenCalledWith({
@@ -2040,14 +2255,18 @@ describe("calendar routing surfaces", () => {
       });
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Test Microsoft configuration" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Test Microsoft configuration" })
+    );
     expect(
       await screen.findByText(
         "Forge can open a local Microsoft sign-in with this client ID and redirect URI. Final verification happens when you complete the Microsoft popup and consent."
       )
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Sign in with Microsoft" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sign in with Microsoft" })
+    );
 
     await waitFor(() => {
       expect(startMicrosoftCalendarOauthMock).toHaveBeenCalledWith({
@@ -2067,7 +2286,9 @@ describe("calendar routing surfaces", () => {
     );
 
     await waitFor(() => {
-      expect(getMicrosoftCalendarOauthSessionMock).toHaveBeenCalledWith("ms_session_1");
+      expect(getMicrosoftCalendarOauthSessionMock).toHaveBeenCalledWith(
+        "ms_session_1"
+      );
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -2075,7 +2296,9 @@ describe("calendar routing surfaces", () => {
       expect(screen.getAllByText("Read only").length).toBeGreaterThan(0);
     });
     expect(screen.queryByText("Use for Forge writes")).not.toBeInTheDocument();
-    expect(screen.queryByText("Create a new Forge calendar")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Create a new Forge calendar")
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByText("Forge writes:")).toBeInTheDocument();
@@ -2088,7 +2311,9 @@ describe("calendar routing surfaces", () => {
         provider: "microsoft",
         label: "Primary Exchange Online",
         authSessionId: "ms_session_1",
-        selectedCalendarUrls: ["https://graph.microsoft.com/v1.0/me/calendars/AAMkAGI2TAAA="]
+        selectedCalendarUrls: [
+          "https://graph.microsoft.com/v1.0/me/calendars/AAMkAGI2TAAA="
+        ]
       });
     });
   });
@@ -2106,7 +2331,8 @@ describe("calendar routing surfaces", () => {
           provider: "macos_local",
           label: "Calendars On This Mac",
           supportsDedicatedForgeCalendar: true,
-          connectionHelp: "Use EventKit to access the calendars already configured on this Mac."
+          connectionHelp:
+            "Use EventKit to access the calendars already configured on this Mac."
         }
       ],
       connections: [
@@ -2205,8 +2431,12 @@ describe("calendar routing surfaces", () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
-    expect(await screen.findByText("macOS Calendar access")).toBeInTheDocument();
-    expect(await screen.findByText("Host calendar sources")).toBeInTheDocument();
+    expect(
+      await screen.findByText("macOS Calendar access")
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("Host calendar sources")
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(
@@ -2214,7 +2444,9 @@ describe("calendar routing surfaces", () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
-    expect(await screen.findByText("Selected host source:")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Selected host source:")
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Connect provider" }));
 
     await waitFor(() => {
@@ -2228,7 +2460,9 @@ describe("calendar routing surfaces", () => {
       screen.getByRole("button", { name: "Replace and connect" })
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Replace and connect" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replace and connect" })
+    );
 
     await waitFor(() => {
       expect(createCalendarConnectionMock).toHaveBeenCalledTimes(2);
@@ -2259,7 +2493,8 @@ describe("calendar routing surfaces", () => {
           provider: "macos_local",
           label: "Calendars On This Mac",
           supportsDedicatedForgeCalendar: true,
-          connectionHelp: "Use EventKit to access the calendars already configured on this Mac."
+          connectionHelp:
+            "Use EventKit to access the calendars already configured on this Mac."
         }
       ],
       connections: [
@@ -2349,15 +2584,21 @@ describe("calendar routing surfaces", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
 
     expect(
-      await screen.findByText(/Forge already writes work blocks and owned timeboxes through/i)
+      await screen.findByText(
+        /Forge already writes work blocks and owned timeboxes through/i
+      )
     ).toBeInTheDocument();
     expect(screen.queryByText("Use for Forge writes")).not.toBeInTheDocument();
-    expect(screen.queryByText("Create a new Forge calendar")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Create a new Forge calendar")
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByText("Forge writes:")).toBeInTheDocument();
     expect(
-      screen.getByText("shared target via Primary Apple · albert.buchard@gmail.com")
+      screen.getByText(
+        "shared target via Primary Apple · albert.buchard@gmail.com"
+      )
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Connect provider" }));
@@ -2447,19 +2688,27 @@ describe("calendar routing surfaces", () => {
 
     renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
 
-    fireEvent.click((await screen.findAllByText("Manage mirrored calendars"))[0]!);
-    expect(screen.getAllByText("Manage mirrored calendars").length).toBeGreaterThan(1);
+    fireEvent.click(
+      (await screen.findAllByText("Manage mirrored calendars"))[0]!
+    );
+    expect(
+      screen.getAllByText("Manage mirrored calendars").length
+    ).toBeGreaterThan(1);
 
     const dialog = await screen.findByTestId("question-flow-dialog");
     const familyLabel = await within(dialog).findByText("Family");
-    const familyCard = familyLabel.closest(".rounded-\\[24px\\]") ?? familyLabel.parentElement?.parentElement;
+    const familyCard =
+      familyLabel.closest(".rounded-\\[24px\\]") ??
+      familyLabel.parentElement?.parentElement;
     expect(familyCard).toBeTruthy();
     fireEvent.click(
       within(familyCard as HTMLElement).getByRole("button", {
         name: /Mirrored into Forge|Do not mirror/i
       })
     );
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save mirror selection" }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Save mirror selection" })
+    );
 
     await waitFor(() => {
       expect(patchCalendarConnectionMock).toHaveBeenCalledWith("conn_1", {
@@ -2553,7 +2802,9 @@ describe("calendar routing surfaces", () => {
 
     renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
 
-    expect((await screen.findAllByText("Forge (Google)")).length).toBeGreaterThan(0);
+    expect(
+      (await screen.findAllByText("Forge (Google)")).length
+    ).toBeGreaterThan(0);
     expect(screen.getAllByText("Forge (Apple)").length).toBeGreaterThan(0);
     expect(
       screen.getByLabelText("Choose display color for Forge (Google)")
@@ -2617,8 +2868,12 @@ describe("calendar routing surfaces", () => {
     renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
 
     expect(await screen.findByText("Calendar colors")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Colors on" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Choose display color for Family")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Colors on" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Choose display color for Family")
+    ).toBeInTheDocument();
   });
 
   it("restores the colors toggle state from persisted settings", async () => {
@@ -2633,7 +2888,9 @@ describe("calendar routing surfaces", () => {
     renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
 
     expect(await screen.findByText("Calendar colors")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Colors off" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Colors off" })
+    ).toBeInTheDocument();
   });
 
   it("persists color-toggle changes from calendar settings", async () => {
@@ -2642,9 +2899,14 @@ describe("calendar routing surfaces", () => {
     const toggle = await screen.findByRole("button", { name: "Colors on" });
     fireEvent.click(toggle);
 
-    expect(screen.getByRole("button", { name: "Colors off" })).toBeInTheDocument();
     expect(
-      JSON.parse(window.localStorage.getItem("forge.calendar-display-preferences") ?? "{}")
+      screen.getByRole("button", { name: "Colors off" })
+    ).toBeInTheDocument();
+    expect(
+      JSON.parse(
+        window.localStorage.getItem("forge.calendar-display-preferences") ??
+          "{}"
+      )
     ).toMatchObject({ useCalendarColors: false });
   });
 
@@ -2682,7 +2944,9 @@ describe("calendar routing surfaces", () => {
     renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
 
     fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Remove connection" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Remove connection" })
+    );
 
     await waitFor(() => {
       expect(deleteCalendarConnectionMock).toHaveBeenCalledWith("conn_1");
@@ -2757,6 +3021,8 @@ describe("calendar routing surfaces", () => {
       ]
     });
 
-    expect(await screen.findByText("Copied · Research block")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Copied · Research block")
+    ).toBeInTheDocument();
   });
 });

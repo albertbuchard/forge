@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -18,17 +19,7 @@ type ArtifactDownloadPath = {
   post: DownloadOperation;
 };
 
-async function operatorCookie(app: TestApp) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host: "127.0.0.1:4317" }
-  });
-  assert.equal(response.statusCode, 200, response.body);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const operatorCookie = issueTestOperatorSessionCookie;
 
 test("Artifact download OpenAPI media type matches plaintext and encrypted runtime responses", async () => {
   const rootDir = await mkdtemp(
@@ -40,9 +31,11 @@ test("Artifact download OpenAPI media type matches plaintext and encrypted runti
     devrageMetricSync: false
   });
   try {
+    const cookie = await operatorCookie(app);
     const openApi = await app.inject({
       method: "GET",
-      url: "/api/v1/openapi.json"
+      url: "/api/v1/openapi.json",
+      headers: { cookie }
     });
     assert.equal(openApi.statusCode, 200, openApi.body);
     const downloadPath = (
@@ -58,7 +51,6 @@ test("Artifact download OpenAPI media type matches plaintext and encrypted runti
       );
     }
 
-    const cookie = await operatorCookie(app);
     const plaintext = Buffer.from("download contract plaintext", "utf8");
     const plaintextUpload = await app.inject({
       method: "POST",

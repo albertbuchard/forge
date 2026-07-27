@@ -13,13 +13,13 @@ import {
   requestMacOSCalendarAccess,
   upsertMacOSLocalEvent,
   listMacOSLocalEvents,
+  type MacOSCalendarAccessStatus,
   type MacOSLocalCalendarRecord,
   type MacOSLocalEventRecord
 } from "./macos-calendar-helper.js";
 import {
   isGoogleCalendarOriginAllowed,
-  isGoogleCalendarLoopbackOrigin,
-  resolveGoogleCalendarOauthPrivateConfig
+  isGoogleCalendarLoopbackOrigin
 } from "./google-calendar-oauth-config.js";
 import { providerDateToInstant } from "./calendar-time.js";
 import {
@@ -278,6 +278,21 @@ type ProviderState =
   | DavProviderState
   | MicrosoftProviderState
   | MacOSLocalProviderState;
+
+class MacOSCalendarAccessError extends Error {
+  constructor(
+    readonly status: Exclude<MacOSCalendarAccessStatus, "full_access">
+  ) {
+    super(
+      status === "not_determined"
+        ? "Forge needs Calendar full access before it can read calendars already configured on this Mac."
+        : status === "denied" || status === "restricted"
+          ? "Calendar access is blocked for Forge. Open System Settings > Privacy & Security > Calendars and allow full access."
+          : "The macOS Calendar service is unavailable. Check Calendar access in System Settings, then try again."
+    );
+    this.name = "MacOSCalendarAccessError";
+  }
+}
 
 function isWritableCalendarCredentials(
   credentials: StoredCalendarCredentials
@@ -1352,6 +1367,9 @@ async function createProviderClient(
 ): Promise<ProviderState> {
   if (credentials.provider === "macos_local") {
     const discovery = await discoverMacOSLocalCalendars();
+    if (discovery.status !== "full_access") {
+      throw new MacOSCalendarAccessError(discovery.status);
+    }
     const source = discovery.sources.find(
       (entry) => entry.sourceId === credentials.sourceId
     );
@@ -3788,7 +3806,8 @@ export async function syncCalendarConnection(
     return getCalendarConnectionById(connectionId)!;
   } catch (error) {
     updateCalendarConnectionRecord(connectionId, {
-      status: "error",
+      status:
+        error instanceof MacOSCalendarAccessError ? "needs_attention" : "error",
       lastSyncError:
         error instanceof Error ? error.message : "Calendar sync failed"
     });

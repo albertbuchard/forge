@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -6,21 +7,7 @@ import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase } from "./db.js";
 
-async function issueOperatorSessionCookie(
-  app: Awaited<ReturnType<typeof buildServer>>
-) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: {
-      host: "127.0.0.1:4317"
-    }
-  });
-  assert.equal(response.statusCode, 200);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const issueOperatorSessionCookie = issueTestOperatorSessionCookie;
 
 test("linkedTo search follows general entity links in both directions for ordinary entities", async () => {
   const rootDir = await mkdtemp(
@@ -843,11 +830,13 @@ test("batch entity routes create, update, search, and delete sleep and workout s
 
     const deletedSleep = await app.inject({
       method: "GET",
-      url: `/api/v1/health/sleep/${sleepEntity!.id}`
+      url: `/api/v1/health/sleep/${sleepEntity!.id}`,
+      headers: { cookie: operatorCookie }
     });
     const deletedWorkout = await app.inject({
       method: "GET",
-      url: `/api/v1/health/workouts/${workoutEntity!.id}`
+      url: `/api/v1/health/workouts/${workoutEntity!.id}`,
+      headers: { cookie: operatorCookie }
     });
     assert.equal(deletedSleep.statusCode, 404);
     assert.equal(deletedWorkout.statusCode, 404);

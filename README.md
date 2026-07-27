@@ -139,6 +139,23 @@ pair the iOS companion at the end.
 Use the same command whether you want the browser UI, OpenClaw, Hermes, Codex, Claude
 Code, or all of them sharing one local Forge memory system.
 
+The installer prepares a per-user local authentication helper. Local adapters use that
+helper automatically, so you do not copy or maintain an API key. Open the browser with
+`npx forge-memory ui`. On macOS, Forge registers an owner-only local handler and uses a
+short public transaction that is bound to an ephemeral key held by that browser. No
+session credential is placed in the URL, command arguments, or browser storage. Forge
+keeps the resulting renewable local session in an HttpOnly cookie. The separate,
+non-authenticating CSRF value stays in same-origin browser storage for the same browser
+profile, so new tabs can keep writing without another prompt. A browser that blocks
+automatic external-protocol launches receives a pre-staged **Authorize this browser**
+link so the owner check starts directly from that explicit click.
+
+Network access does not authorize Forge. A browser or API client that reaches Forge
+through Tailscale or another network still needs a Forge-issued scoped credential.
+Tailscale Serve can provide private HTTPS transport, but it is an additional network
+filter rather than a substitute for Forge authentication. Tailscale Funnel is not
+required.
+
 Development installs use the same flow, but link adapters to this source checkout and
 default to the real shared Forge data folder:
 
@@ -228,7 +245,8 @@ http://127.0.0.1:4317/forge/
 ```
 
 Vite may also run on `3027` during development, but the stable app entrypoint is still
-the backend mount on `4317`.
+the backend mount on `4317`. Opening the Vite port directly does not bypass Forge
+authentication.
 
 ## Advanced Adapter Setup
 

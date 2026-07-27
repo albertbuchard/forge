@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -85,19 +86,7 @@ function createPlanningFixture(label: string) {
   return { user, goal, project, task };
 }
 
-async function issueOperatorSessionCookie(
-  app: Awaited<ReturnType<typeof buildServer>>
-) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host: "127.0.0.1:4317" }
-  });
-  assert.equal(response.statusCode, 200, response.body);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const issueOperatorSessionCookie = issueTestOperatorSessionCookie;
 
 async function issueScopedToken(
   app: Awaited<ReturnType<typeof buildServer>>,
@@ -241,7 +230,7 @@ test("PLAN-10 batch CRUD enforces owner scope, replays idempotency, and keeps im
       assert.equal(response.statusCode, 200, response.body);
       assert.equal(
         response.json().results[0].error.code,
-        "user_scope_forbidden"
+        "not_found"
       );
     }
 
@@ -313,7 +302,7 @@ test("PLAN-10 batch CRUD enforces owner scope, replays idempotency, and keeps im
         payload: deletePayload
       });
       assert.equal(deleted.statusCode, 200, deleted.body);
-      assert.equal(deleted.json().results[0].ok, true);
+      assert.equal(deleted.json().results[0].ok, true, deleted.body);
       assert.equal(
         getEntityOwnerId("task_timebox", createdTimeboxId),
         alpha.user.id

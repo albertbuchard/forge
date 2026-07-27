@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -7,19 +8,7 @@ import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase } from "./db.js";
 import { listPreferenceCatalogHardDeleteDescendants } from "./repositories/preferences.js";
 
-async function issueOperatorSessionCookie(
-  app: Awaited<ReturnType<typeof buildServer>>
-) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host: "127.0.0.1:4317" }
-  });
-  assert.equal(response.statusCode, 200);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const issueOperatorSessionCookie = issueTestOperatorSessionCookie;
 
 async function issueScopedToken(
   app: Awaited<ReturnType<typeof buildServer>>,
@@ -416,7 +405,7 @@ test("preference catalog owner scope applies to direct and batch routes", async 
     assert.equal(forbiddenItemMutations.json().results[0]?.ok, false);
     assert.equal(
       forbiddenItemMutations.json().results[0]?.error?.code,
-      "user_scope_forbidden"
+      "not_found"
     );
 
     const forbiddenItemCreate = await app.inject({
@@ -455,7 +444,7 @@ test("preference catalog owner scope applies to direct and batch routes", async 
     assert.equal(forbiddenItemDelete.json().results[0]?.ok, false);
     assert.equal(
       forbiddenItemDelete.json().results[0]?.error?.code,
-      "user_scope_forbidden"
+      "not_found"
     );
 
     const unchangedOperatorItem = await app.inject({
@@ -495,7 +484,7 @@ test("preference catalog owner scope applies to direct and batch routes", async 
     assert.equal(forbiddenRestore.json().results[0]?.ok, false);
     assert.equal(
       forbiddenRestore.json().results[0]?.error?.code,
-      "user_scope_forbidden"
+      "not_found"
     );
 
     const stillArchived = await app.inject({

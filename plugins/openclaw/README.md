@@ -22,7 +22,10 @@ It gives OpenClaw a clear way to:
 - create and update goals, projects, issues, tasks, notes, wiki pages, health records, preferences, and Psyche records
 - run Forge Doctor when the local setup looks wrong
 
-When the plugin targets `localhost` or `127.0.0.1`, it can auto-start the bundled Forge runtime. That is why current OpenClaw installers may ask for explicit approval during install.
+When the plugin targets `localhost` or `127.0.0.1`, it can auto-start the bundled
+Forge runtime and authenticate through Forge's verified per-user owner helper. It does
+not store a reusable Forge API key for this local path. Current OpenClaw installers may
+ask for explicit approval because the package includes local runtime startup helpers.
 
 ## Open the UI
 
@@ -40,8 +43,7 @@ http://127.0.0.1:4317/forge/
 
 That `4317` backend URL is the stable entrypoint for normal local plugin installs.
 
-Albert's MacBook also has a repo-local development mode used for plugin/dashboard work.
-The restored 6-hour Tailscale automation exposes `/forge` through the `4317` backend as
+The repository development setup can expose `/forge` through the `4317` backend as
 `http://127.0.0.1:4317/forge/`, while that backend is started locally with
 `FORGE_OPENCLAW_DEV=1` and proxies the Vite dev server at `127.0.0.1:3027`. A correct
 dev-mode response contains `/forge/@vite/client` and `/forge/src/main.tsx`.
@@ -368,7 +370,8 @@ If you want to move the data folder, edit the same config entry and set:
 Recommended local behavior:
 
 - leave `actorLabel` blank so Forge can inherit the trusted local operator label automatically
-- leave `apiToken` blank for localhost and trusted Tailscale setups
+- leave `apiToken` blank only for direct localhost, where Forge uses the verified local-owner helper
+- configure a Forge-issued scoped credential for Tailscale or any other remote target; network reachability alone never authorizes the client
 - keep `dataRoot` aligned across OpenClaw, Hermes, Codex, and the browser runtime when they should share data
 - before changing or merging data roots, back up every candidate Forge database and verify which database the live runtime is using
 

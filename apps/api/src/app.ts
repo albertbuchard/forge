@@ -1758,7 +1758,8 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
         name: "timezone",
         type: "string",
         required: false,
-        description: "IANA timezone that defines the recurring local-time window.",
+        description:
+          "IANA timezone that defines the recurring local-time window.",
         defaultValue: "UTC"
       },
       {
@@ -3404,7 +3405,7 @@ function buildPreferredMutationPath(entityType: string) {
     case "training_load":
       return "Read-only surface. Use it for cardiovascular load, HR zones, zone-time buckets, smart training modes, acute/chronic stress, VO2max context, next-workout guidance, and target analysis; use batch CRUD for underlying workout_session records.";
     case "weight_loss":
-      return "Read-only surface for the nutrition and body-composition overview. Use dedicated nutrition tools for food logs, body check-ins, appearance check-ins, subjective effects, gut check-ins, and N-of-1 experiments.";
+      return "Read-only surface for the nutrition and body-composition overview. Use dedicated nutrition tools for food-log capture and exact-record correction, body check-ins, appearance check-ins, subjective effects, gut check-ins, and N-of-1 experiments.";
     case "preferences_workspace":
       return "Read-only Preferences surface. Read inferred scores and their supporting judgments, signals, overrides, and evidence counts first; use dedicated Preferences actions only when the user then chooses a comparison game, context merge, entity enqueue, judgment, signal, or score override.";
     default:
@@ -3492,7 +3493,7 @@ function buildPreferredMutationTool(entityType: string) {
     case "concept":
       return "forge_call_course_route";
     case "weight_loss":
-      return "forge_get_weight_loss_overview | forge_search_foods | forge_search_nutrition_foods | forge_lookup_nutrition_barcode | forge_log_food | forge_parse_food_log_with_chatgpt | forge_log_body_checkin | forge_log_appearance_checkin | forge_log_subjective_food_effect | forge_log_gut_checkin | forge_get_nutrition_patterns | forge_start_nutrition_experiment | forge_update_nutrition_experiment";
+      return "forge_get_weight_loss_overview | forge_search_foods | forge_search_nutrition_foods | forge_lookup_nutrition_barcode | forge_log_food | forge_update_food_log | forge_parse_food_log_with_chatgpt | forge_log_body_checkin | forge_log_appearance_checkin | forge_log_subjective_food_effect | forge_log_gut_checkin | forge_get_nutrition_patterns | forge_start_nutrition_experiment | forge_update_nutrition_experiment";
     case "preferences_workspace":
       return "forge_get_preferences_workspace | forge_start_preferences_game | forge_merge_preferences_contexts | forge_enqueue_preferences_item_from_entity | forge_submit_preferences_judgment | forge_submit_preferences_signal | forge_update_preferences_score";
     default:
@@ -4036,10 +4037,16 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     minimumCreateFields: ["catalogId", "label"],
     relationshipRules: [
       "Catalog items belong to a preference_catalog and use batch CRUD.",
-      "They are concept seeds, not judgments or inferred scores."
+      "They are concept seeds, not judgments or inferred scores.",
+      "Catalog membership is immutable after create; replacing an item in another catalog requires a separately accepted create and optional soft delete.",
+      "Soft deletion moves an item to the Settings Bin and shared batch restore can recover it.",
+      "A catalog item cannot be restored while its parent catalog is archived; restore and verify the parent first after the user accepts that prerequisite."
     ],
     searchHints: [
-      "Search inside the catalog before creating another near-duplicate concept item."
+      "Read the exact parent preference_catalog before create.",
+      "Search preference_catalog_item with linkedTo { entityType: preference_catalog, id: catalogId } before creating another normalized-label or near-duplicate concept item.",
+      "Read the exact existing item before review, update, or soft delete.",
+      "After soft delete and before restore, search the exact item id inside its parent with includeDeleted: true so the deleted marker and preserved snapshot are visible."
     ],
     examples: ['{"catalogId":"preference_catalog_123","label":"Flat white"}'],
     fieldGuide: [
@@ -4075,6 +4082,13 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         required: false,
         description: "Optional interpretable feature weight hints.",
         defaultValue: {}
+      },
+      {
+        name: "position",
+        type: "integer",
+        required: false,
+        description:
+          "Optional zero-based ordering position. Omit it to append after the current last item."
       }
     ]
   }),
@@ -4677,10 +4691,11 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Mutate it by creating or updating a note with frontmatter.observedAt."
     ],
     searchHints: [
-      "Read the self-observation calendar before proposing new reflected notes or edits.",
+      "Read the bounded self-observation calendar before review, update, or likely-duplicate work; do not make that read a prerequisite for an explicit direct capture.",
       "Write through note creation or note update with frontmatter.observedAt instead of inventing a standalone self-observation mutation route.",
-      "After the situation and observed time are clear, ask only one next question about the most meaningful missing cue, emotion or body signal, thought or meaning, behavior or urge, or consequence; a lightweight observation does not require every link in the chain.",
-      "If the material is already an emotionally meaningful episode, recurring functional loop, central belief, or part-state, offer trigger_report, behavior_pattern, belief_entry, mode_guide_session, or mode_profile as the stronger container and let the user confirm or correct that fit."
+      "For direct capture, preserve the user's wording, ask only for observedAt when it is missing, and use one accuracy or consent check; do not require a full chain.",
+      "For review or update, read the exact backing note, preserve sparse accepted content and frontmatter, and patch only what the user says is newly true or inaccurate.",
+      "If guided reflection reveals an emotionally meaningful episode, recurring functional loop, central belief, or part-state, offer trigger_report, behavior_pattern, belief_entry, mode_guide_session, or mode_profile as an optional stronger container after the user is understood; saving support or a lightweight observation never depends on reclassification."
     ],
     fieldGuide: []
   }),
@@ -4762,7 +4777,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "Before asking a follow-up, know what the user's answer would change: save, update, review, link, schedule, correct, run, publish, preserve, enrich, open the UI, or stop. If no possible answer would change the next action, summarize and act instead of asking.",
   "Use a minimum save-readiness checkpoint before asking another follow-up. For normal batch entities, act when you have accepted wording, meaningful body, and any ownership or placement that changes later use; do not ask for tags, links, priority, dates, assignees, or status just because optional fields exist. For operational records, act when the target action plus the time, object, or state that makes it truthful is clear. For read-model surfaces, read once the practical question and answer-changing scope are clear. For Attention, list as soon as the user asks what needs a next move; act only on a stable returned item whose allowedActions permits the request, with a future return time for snooze. For Entity Navigation, list bounded pins and recents as soon as the retrieval question is clear; touch only an exact record the agent actually viewed, and leave pin or unpin to the human operator. For specialized Movement, Life Events, Life Force, and Workbench writes, act once the lane plus surface-specific target is clear: Movement span/place/stay/trip/settings/correction, Life Event event/calendar match/ticket artifact/travel-status target, Life Force weekday/profile/signal/planning effect, or Workbench flow/run/node/input/output/preservation choice.",
   "For strategic, reflective, or emotionally meaningful non-Psyche records, ask what feels important to keep true before you ask for labels, dates, or taxonomy.",
-  "For reflection-sensitive non-Psyche records such as questionnaire_instrument, questionnaire_run, self_observation, reflective note, wiki_page, sleep_session, workout_session, preference_judgment, and preference_signal, first ask what the reflection should help the user understand, decide, notice, remember, or change later; then keep the API posture exact: batch CRUD for normal stored records, questionnaire run actions for answer lifecycle, self-observation calendar reads plus observed-note writes, and wiki routes for wiki pages.",
+  "For guided work on reflection-sensitive non-Psyche records such as questionnaire_instrument, questionnaire_run, reflective note, wiki_page, sleep_session, workout_session, preference_judgment, and preference_signal, ask what the reflection should help the user understand, decide, notice, remember, or change later only when the user has not already supplied usable direct wording or a narrow action. Self-observation direct capture is the explicit fast-path exception: preserve the supplied wording, ask only for missing observedAt plus one accuracy or consent check, and do not add a purpose question. Keep the API posture exact: batch CRUD for normal stored records, questionnaire run actions for answer lifecycle, self-observation calendar reads plus underlying observed-note batch writes, and wiki routes for wiki pages.",
   "For reusable records such as tags, event types, emotion definitions, preference contexts, or questionnaires, ask what distinction or decision the record should help with before you ask for wording.",
   "When useful, help the user name, define, and connect the record in that order: offer a working label, clarify what belongs inside it, then ask about links only after the record itself feels steady.",
   "When the meaning is clearer than the wording, offer a tentative title or formulation yourself and invite correction instead of forcing the user to wordsmith alone.",
@@ -4777,7 +4792,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "The opening question should help the user understand what they are actually trying to save, decide, review, or change, not make them perform the schema out loud.",
   "If the user already named the exact correction in usable language, confirm only the missing scope, timing, or route-selecting detail that still matters, then act.",
   "Use the known-target fast path when the user already supplied the object, action, and likely lane: for normal entities ask only for parent, owner, or duplicate disambiguation that changes the write; for task hierarchy ask only for the project, issue, or parent task that changes placement; for Movement ask only for the missing interval, boundary, saved object, or confirmation; for Life Force ask only for the weekday, profile field, signal intensity, or planning effect; for Workbench ask only for the missing flow, run, node, input, output, or preservation choice; for direct Psyche saves ask one accuracy or consent question instead of restarting exploration.",
-  "Use the route execution handoff before any read, write, run, repair, or publish call: freeze the accepted user-facing target, choose exactly one lane, use batch CRUD only for normal stored catalog entities, use named tools or documented routes for specialized CRUD and action workflows, use forge_call_attention_route or forge_call_entity_navigation_route for their bounded operational surfaces, and for Movement, Life Events, Life Force, or Workbench verify routeKey, method, path, and pathParams from live onboarding methodRoutes before calling. Never hide placeholders in query or body, and never guess a nearby path.",
+  "Use the route execution handoff before any read, write, run, repair, or publish call: freeze the accepted user-facing target, choose exactly one lane, use batch CRUD only for normal stored catalog entities or an explicitly documented underlying record such as the note that backs self_observation, use named tools or documented routes for specialized CRUD and action workflows, use forge_call_attention_route or forge_call_entity_navigation_route for their bounded operational surfaces, and for Movement, Life Events, Life Force, or Workbench verify routeKey, method, path, and pathParams from live onboarding methodRoutes before calling. For self_observation, read the bounded calendar, then create or update entityType note through batch CRUD; never call batch CRUD with entityType self_observation or invent a dedicated mutation route. Never hide placeholders in query or body, and never guess a nearby path.",
   "For Attention, list the bounded queue through forge_call_attention_route as soon as the user asks what needs a next move instead of asking them to classify the queue first. Reflect why the leading returned item matters using its severity, source, and current consequence. Before snooze, dismiss, or restore, use a current stable item id, verify the action in allowedActions, pass the id through pathParams.id, never dismiss blocked or overdue work, and treat snooze or dismiss as reversible actor-scoped decisions rather than edits to the source record.",
   "For pins and recent records, use forge_call_entity_navigation_route. Agents may list bounded pins and their own actor-scoped recent history or touch an existing in-scope record after viewing it. Pin and unpin are deliberate human-operator actions and must not be attempted through an agent tool, batch CRUD, or an invented route.",
   "Keep API and architecture nouns out of user-facing questions unless the user asks about implementation. Do not ask the user about surfaces, route families, CRUD, payloads, mutation paths, or read paths; ask about the human object such as a wiki page, note, trigger report, behavior pattern, belief, mode, movement timeline, energy model, weekday pattern, flow, run, or node result.",
@@ -4801,7 +4816,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "When the user already named a precise correction or review target, do not widen back out into a meta lane question. Confirm only the missing route-selecting detail and then act.",
   "Once the route family is clear, say it plainly enough that another agent could follow the same path without guessing.",
   "For Movement specifically, treat missing-data corrections as user-defined overlay boxes unless the user is editing an already-recorded stay or trip. When the user already gave a clear instruction like 'that missing block was home', act after only the last ambiguity is resolved.",
-  "For action workflows such as task_run, work_adjustment, questionnaire_run, preference_judgment, preference_signal, and self_observation, keep the question focused on the missing action detail and do not downgrade the request into generic batch CRUD.",
+  "For action workflows such as task_run, work_adjustment, questionnaire_run, preference_judgment, and preference_signal, keep the question focused on the missing action detail and do not downgrade the request into generic batch CRUD. Self_observation is the note-backed exception: use its bounded calendar read, then create or update the underlying entityType note through shared batch CRUD with frontmatter.observedAt; never use entityType self_observation or guess a standalone mutation route.",
   "For read-model-only health surfaces such as sleep_overview, sports_overview, and training_load, use the dedicated overview reads first when the user wants review, pattern interpretation, recovery context, training-load context, or cardiovascular target analysis. Move to sleep_session or workout_session writes only after one specific stored session needs enrichment.",
   "For normal stored Preferences and questionnaire records, use batch CRUD by default; switch to dedicated action routes only for judgments, signals, run answers, clone/draft/publish lifecycle, or visual comparison gameplay.",
   "For a Person record, first understand who the user means and what remembering or connecting this person should make easier. Search by name and aliases before creating, ask only for missing context that changes later usefulness, and leave contact details, private notes, birthdays, and sensitive facts optional unless the user explicitly wants them recorded.",
@@ -5129,18 +5144,19 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "self_observation",
     openingQuestion:
-      "What happened in the situation, and what did you feel, think, or do next?",
+      "Do you want support with what you noticed, save it as-is, explore it together, or review an existing observation?",
     coachingGoal:
-      "Capture one observed episode with enough of the situation, cue, emotion/body, thought/meaning, behavior/urge, or consequence to be useful later without forcing every link, then offer a stronger Psyche or wiki container only when one is visible.",
+      "Meet the user's current need first, then preserve or explore one observed moment without forcing a full chain, rewriting accepted wording, or making a stronger Psyche container a prerequisite.",
     askSequence: [
-      "Ask what happened in the situation.",
-      "Ask when it happened or what observedAt date should anchor the note if the timing is not already clear.",
-      "Reflect what seems most important in what the user already said.",
-      "Ask only one next question about the most meaningful missing cue, emotion or body signal, thought or meaning, behavior or urge, or consequence; a lightweight observation does not require every link in the chain.",
-      "Ask what happened next only when the consequence changes how useful the note will be or which container fits.",
-      "Decide whether this should stay a lightweight self-observation or become a trigger_report, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, flashcard, event_type, emotion_definition, or wiki page.",
-      "Remember that self-observation is note-backed and should be written through an observed note with frontmatter.observedAt only when a lightweight observation is the right container.",
-      "Do not promote self-observation over functional analysis: use behavior_pattern for recurring loops, trigger_report for one emotionally meaningful episode, mode_guide_session or mode_profile for a central part-state, belief_entry for a central sentence, flashcard for a rehearsable reminder during an urge or trigger, and wiki_page for durable memory, then let the user accept or correct the proposed fit."
+      "Distinguish immediate support, direct capture, guided reflection, and exact-record review or narrow update. Skip this lane question when the user's request already makes it clear.",
+      "For immediate support, respond to what needs steadying or understanding now. Support never depends on saving an observation.",
+      "For direct capture, preserve and reflect the user's supplied wording, ask for observedAt only when it is missing, and ask one accuracy or consent question. Do not require a title, full functional chain, interpretation, link, or stronger container.",
+      "For review or narrow update, read the bounded calendar to identify the exact backing note, then read that note before asking about changes. Preserve its accepted content, observedAt, frontmatter, and links; ask only what is newly true or inaccurate, and include expectedRevisionHash when changing note content.",
+      "For guided reflection, begin with one concrete moment. Keep observable events separate from the user's meaning, ask only one question about the most useful missing cue, emotion or body signal, thought, behavior or urge, or consequence, and do not require every link.",
+      "Offer at most one tentative functional or emotional hypothesis, explain what in the user's account suggests it, and ask whether it fits or needs correction.",
+      "Only after the user is understood, optionally offer trigger_report for one emotionally meaningful episode, behavior_pattern for a recurring loop, belief_entry for a central sentence, mode_guide_session or mode_profile for a part-state, flashcard for a rehearsable reminder, or wiki_page for durable memory. A lightweight observation may be saved without accepting a different container.",
+      "Write a lightweight self-observation by creating or updating the backing note with frontmatter.observedAt through shared note batch CRUD; never invent a standalone self_observation mutation route.",
+      "After a write, read the exact note or bounded calendar result and confirm the accepted observation and observed time without reopening intake."
     ]
   },
   {
@@ -5244,6 +5260,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Use forge_get_weight_loss_overview before asking the user to reconstruct recent food, weight, workouts, or subjective state from memory.",
       "Use forge_parse_food_log_with_chatgpt only for rough meal text or photo descriptions through Forge's configured openai-codex ChatGPT subscription connection, not a metered OpenAI Platform API path.",
       "Before forge_log_food, search foods or barcode lookup first; reuse a matching result with item.foodId, and create custom/no-foodId items only with researched calories, protein, carbohydrate, and fat.",
+      "For a correction, read the weight-loss overview, identify the exact existing food log, reflect the smallest accepted change, and call forge_update_food_log with its foodLogId plus only fields that should change.",
       "Use the dedicated nutrition tools for food logs, body check-ins, appearance check-ins, subjective food effects, gut check-ins, nutrition patterns, and N-of-1 experiments instead of generic batch CRUD.",
       "Ask for the one outcome metric that would make a nutrition experiment interpretable before turning repeated observations into a hypothesis."
     ]
@@ -5263,15 +5280,20 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   },
   {
     focus: "preference_catalog_item",
-    openingQuestion: "What makes this option meaningfully worth comparing?",
+    openingQuestion:
+      "Are you adding a named option, clarifying an ambiguous one, or reviewing, removing, or restoring an existing item?",
     coachingGoal:
-      "Add one candidate in a way that will make later comparisons feel clear and fair.",
+      "Preserve one comparable option efficiently, clarify it only when ambiguity matters, and keep preference evidence on its dedicated action path.",
     askSequence: [
-      "Ask what makes this item worth including in the catalog.",
-      "Ask what catalog or domain it belongs to if that is still unclear.",
-      "Ask what would make the comparison confusing or unfair if the label stayed as-is.",
-      "Ask for a short clarifying description only if the label would be ambiguous later.",
-      "Ask about aliases or tags only if they help retrieval."
+      "First distinguish direct capture, guided disambiguation, exact-record review or narrow update, and soft delete or restore. Skip this lane question when the user's action is already clear.",
+      "For direct capture, read the exact parent preference_catalog, search preference_catalog_item inside it with linkedTo { entityType: preference_catalog, id: catalogId }, reflect the supplied label, and ask one accuracy or consent question. Forge requires only catalogId and label; do not ask why the option deserves inclusion or require description, tags, featureWeights, position, rationale, or comparison criteria.",
+      "If that parent-scoped search finds an exact or near duplicate, show the existing item and ask whether the user means to keep it, narrowly update it, or create a genuinely distinct option.",
+      "For read-only review or narrow update, read the exact existing item and parent catalog first. Preserve accepted sparse label, description, tags, featureWeights, position, and catalog membership; answer the review before proposing a write, then ask only what is newly true or inaccurate and patch the smallest accepted change. Catalog membership is immutable.",
+      "Use guided disambiguation only when the label is unclear, a near duplicate exists, or the user asks for help. Ask for the one observable distinction that will matter during later comparison, then offer a concise label or optional description for correction.",
+      "Keep the item separate from preference evidence. If the user is saying they prefer, veto, favorite, bookmark, or want to compare it later, create or resolve the concept item as needed and then use the published preference_judgment or preference_signal action. Never convert that evidence into inferred featureWeights or a batch score update; explicit score correction uses the dedicated score-override action.",
+      "For soft delete, read the exact item and parent, confirm the intended item and that it will move to the reversible Settings Bin, then use shared batch delete. Verify deletion with an exact id and parent-scoped search using includeDeleted: true; require the deleted marker and preserved snapshot.",
+      "For restore, use that same exact includeDeleted search and read the parent catalog lifecycle state. If the parent is archived, explain that the item cannot be restored yet, obtain acceptance to restore the parent first, restore and verify the parent, then repeat the parent-scoped active-label conflict check. Resolve any conflict before using shared batch restore.",
+      "After create or update, read the exact active item. After delete, verify the exact deleted item with includeDeleted: true. After restore, read the exact active item again. In every case verify catalog membership, label, preserved optional fields, and active or binned state."
     ]
   },
   {
@@ -6134,6 +6156,9 @@ function buildQuestionFlowReadinessCheck(
   if (guide.entityType === "tag") {
     return "Ready on the selected Tag lane. Direct capture is ready for shared batch CRUD after searching by the supplied name, accepting that name, and completing one accuracy or consent check; the agent payload field is name, Forge requires only name, kind defaults to category, color defaults to #71717a, and description defaults to an empty string, so do not require purpose, taxonomy boundaries, kind, color, description, owner, parent grouping, or an attachment target. Read-only review is ready after reading the exact existing Tag and must not manufacture a write. Narrow update is ready only after that exact read isolates the smallest accepted change while preserving sparse name, kind, color, description, and ownership. Guided taxonomy is ready when an ambiguous or near-duplicate label has a clear retrieval purpose and accepted distinction from the nearest existing Tag; do not require this lane for direct capture. Creating a Tag never applies it to another record: update an exact target's supported tagIds separately, while Note and Wiki tags remain their own free-text labels. All Tag search, create, update, soft delete, and restore operations use shared batch CRUD; never guess a dedicated Tag route or parent-tag field.";
   }
+  if (guide.entityType === "preference_catalog_item") {
+    return "Ready on the selected Preference Catalog Item lane. Direct capture is ready for shared batch CRUD when the exact active parent preference_catalog has been read, a parent-scoped duplicate search uses linkedTo { entityType: preference_catalog, id: catalogId }, the supplied label is accepted, and one accuracy or consent check confirms the save. Forge requires only catalogId and label; description, tags, featureWeights, position, rationale, and comparison criteria are optional, and an omitted position appends the item. Read-only review is ready after reading the exact existing item and parent catalog and must not manufacture a write. Narrow update is ready only after that exact read isolates the smallest accepted change while preserving sparse label, description, tags, featureWeights, position, and catalog membership; catalogId is immutable, so moving catalogs requires a separately accepted replacement. Guided disambiguation is ready only when an unclear or near-duplicate label has one accepted observable distinction that matters during comparison. Soft delete is ready after reading the exact item and confirming that it will move to the reversible Settings Bin; post-delete verification must search the exact item id inside its parent with includeDeleted: true and confirm the deleted marker plus preserved snapshot. Restore is ready only after that exact includeDeleted search and a parent lifecycle read. If the parent catalog is archived, explain the prerequisite, obtain acceptance to restore it, restore and verify the parent first, then repeat the parent-scoped active-label conflict check before restoring the item. The item remains a concept seed: preference evidence uses the published preference_judgment or preference_signal action, and explicit score correction uses the dedicated score-override action; never infer featureWeights or scores from that evidence. All item lifecycle writes use shared batch CRUD. Verify create and update with an exact active read, delete with an exact includeDeleted read, and restore with another exact active read, preserving catalog membership, label, and optional fields.";
+  }
   if (guide.entityType === "strategy") {
     return "Ready on the selected Strategy lane. Review is ready after reading the exact current strategy and answering from its end state, targets, lock state, and active, blocked, out-of-order, or off-plan evidence. A draft create or update is ready for shared batch CRUD when the accepted title, meaningful target or end state, existing project or task nodes, and directed acyclic sequence are clear without missing or duplicate nodes, self-loops, or duplicate edges. Lock is ready only when at least one target, an overview or end-state description, the graph, and explicit acceptance of the summarized contract are present. Unlock is ready only when the user explicitly wants to renegotiate the contract; progress or status changes do not require unlocking. All Strategy writes remain on shared batch CRUD.";
   }
@@ -6156,7 +6181,7 @@ function buildQuestionFlowReadinessCheck(
     return "Ready on one of two paths. Direct save or update: when the user supplies clear entity-specific wording and explicit save or update intent, plus the exact existing target for an update, reflect it and ask at most one accuracy or consent question; do not require a new concrete example or hypothesis before shared batch CRUD. Guided formulation: ready when at least one concrete example has become a user-recognized working formulation, any tentative hypothesis used has been accepted or corrected with one fit-or-correction check, and one accuracy or consent check confirms the saveable record shape is true enough to save through shared batch CRUD.";
   }
   if (guide.entityType === "self_observation") {
-    return "Ready to save a lightweight note-backed observation when the observed situation and timestamp or observedAt date are clear, at least one meaningful cue, emotion or body signal, thought or meaning, behavior or urge, or consequence is present, and any stronger Psyche container such as trigger_report, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, flashcard, event_type, or emotion_definition has been offered only when the material supports it and accepted or corrected by the user.";
+    return "Ready on the selected Self Observation lane. Immediate support is ready whenever the user needs help with the current moment and never requires a save. Direct capture is ready when accepted note content, frontmatter.observedAt, and one accuracy or consent check are present; do not require a title, complete cue-to-consequence chain, interpretation, link, or stronger container. Read-only review is ready after reading the bounded calendar and exact backing note and must not manufacture a write. Narrow update is ready only after that exact read separates accepted sparse content, observedAt, frontmatter, and links from the smallest newly true or inaccurate change; include expectedRevisionHash when note content changes. Guided reflection is ready when one concrete moment, its observed time, and the user's meaning are clear enough to preserve, any agent interpretation remains one tentative hypothesis followed by a fit-or-correction check, and the user accepts the resulting wording. A trigger_report, behavior_pattern, belief_entry, mode_guide_session, mode_profile, flashcard, or wiki_page may be offered after the user is understood, but support and lightweight capture never depend on reclassification. Read through forge_get_self_observation_calendar when reviewing, updating, or checking a likely duplicate; write only through note batch CRUD with frontmatter.observedAt, then verify the exact saved note or calendar result.";
   }
   if (guide.entityType === "sleep_session") {
     return "Ready on the selected Sleep Session lane. Direct manual capture is ready for shared batch CRUD when accepted offset-bearing startedAt and endedAt form an interval with end after start, an overlapping-interval or local-wake-date duplicate search is complete, and one accuracy or consent check confirms the night; Forge requires only startedAt and endedAt, defaults source fields for a manual record, and derives duration, score, and localDateKey, so do not require quality, stages, metrics, reflection, tags, links, source detail, or ownership when already clear. Resolve local clock wording with an IANA timezone only when it changes the instants or wake date. Read-only review is ready after reading the exact existing night and must not manufacture a write. Narrow correction is ready only after that exact read isolates the smallest accepted change while preserving sparse timing, source, provenance, stage, metric, annotation, tag, and link evidence; do not rewrite provider-backed measurement fields merely to add context. Reflective enrichment is ready after reading the exact night and accepting the qualitySummary, notes, tags, or links to preserve through forge_update_sleep_session, which leaves imported measurement fields untouched. Delete is ready only after identifying the exact night and receiving explicit confirmation that deletion is immediate, non-restorable, and bypasses the settings bin. Ordinary search, manual create, narrow correction, and delete use shared batch CRUD; the named helper is only for post-review reflection, and sleep_session has no restore lane.";
@@ -6186,7 +6211,7 @@ function buildQuestionFlowReadinessCheck(
     return "Ready on the selected Concept lane after selecting the published route key without guessing. Ready to list when the practical concept question and only the learner, course, search, or due-review filters that change the answer are clear. Ready for exact detail when the concept is identified from a current result or accepted id or slug. Explain definition, evidence, and mastery separately; there is no direct concept mutation, and definition changes require a validated course-package import.";
   }
   if (guide.entityType === "weight_loss") {
-    return "Ready when the practical food-body question and answer-changing scope are clear enough to read before asking write-shaped follow-ups, or when the dedicated nutrition action path is clear: food log, body check-in, appearance check-in, subjective food effect, gut check-in, pattern read, or N-of-1 experiment.";
+    return "Ready when the practical food-body question and answer-changing scope are clear enough to read before asking write-shaped follow-ups, or when the dedicated nutrition action path is clear: new food log, exact-record food-log correction, body check-in, appearance check-in, subjective food effect, gut check-in, pattern read, or N-of-1 experiment. A correction is ready only after the overview identifies the exact foodLogId and the user accepts the smallest field-level change.";
   }
   if (guide.classification === "specialized_domain_surface") {
     return "Ready when the dedicated lane plus the surface-specific target, correction, effect, or preservation choice are clear enough to call the published route key without guessing.";
@@ -7343,6 +7368,24 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       '{"mealLabel":"post-workout","items":[{"foodId":"food_123","name":"Greek yogurt","quantity":250,"unit":"g"}]}'
   },
   {
+    toolName: "forge_update_food_log",
+    summary:
+      "Correct one existing nutrition food log by exact id while preserving every field the user did not ask to change.",
+    whenToUse:
+      "Use after reading the weight-loss overview when the user wants to correct the time, meal label, confirmation state, notes, links, contextual associations, or complete item list on one identified food log.",
+    inputShape:
+      "{ foodLogId: string, loggedAt?: string, dayKey?: string|null, timeZone?: string, mealLabel?: string, source?: string, confirmationState?: string, notes?: string, placeId?: string|null, stayId?: string|null, workoutId?: string|null, sleepId?: string|null, imageRefs?: string[], parserProvenance?: object, links?: Array<object>, items?: Array<{ foodId?, name, quantity, unit?, grams?, caloriesKcal?, proteinG?, carbsG?, fatG?, fiberG?, tags? }>, userIds?: string[] }",
+    requiredFields: ["foodLogId"],
+    notes: [
+      "Read forge_get_weight_loss_overview first and identify the exact existing log; do not ask the user for an internal id when current results can resolve it.",
+      "Reflect the current value and the proposed correction, then send only fields the user accepted changing.",
+      "If items is present, it is the complete desired item list for that log. Search foods or use barcode lookup first and preserve the same foodId and researched custom-food nutrition rules used by forge_log_food.",
+      "The exact API method is PATCH /api/v1/health/weight-loss/food-logs/:id, with foodLogId supplied by the tool as the path id."
+    ],
+    example:
+      '{"foodLogId":"food_log_123","mealLabel":"post-workout","confirmationState":"confirmed"}'
+  },
+  {
     toolName: "forge_log_body_checkin",
     summary: "Record a body-composition check-in for trend calculations.",
     whenToUse:
@@ -7864,16 +7907,16 @@ function buildAgentOnboardingPayload(request: {
     effectiveScopePolicy,
     authModes: {
       operatorSession: {
-        label: "Quick connect",
+        label: "Local owner",
         summary:
-          "Recommended for localhost and Tailscale. No token is required up front; Forge can bootstrap an operator session automatically.",
+          "Recommended for direct localhost. Forge verifies the current operating-system owner through its local helper, so no reusable API key is required.",
         tokenRequired: false,
-        trustedTargets: ["localhost", "127.0.0.1", "*.ts.net", "100.64.0.0/10"]
+        trustedTargets: ["localhost", "127.0.0.1", "::1"]
       },
       managedToken: {
-        label: "Managed token",
+        label: "Scoped remote credential",
         summary:
-          "Use a long-lived token when you want explicit scoped auth, remote non-Tailscale access, durable agent credentials, a custom bootstrap budget, or default user/project/tag read boundaries per agent.",
+          "Remote and Tailscale clients need a Forge-issued scoped credential over HTTPS. Legacy manually copied tokens remain a compatibility fallback while renewable client pairing is completed.",
         tokenRequired: true
       }
     },
@@ -7939,7 +7982,7 @@ function buildAgentOnboardingPayload(request: {
       workbench:
         "Workbench is Forge's graph-flow execution system. Treat flows, runs, published outputs, node results, and latest-node-output reads as a dedicated API family instead of a normal entity-batch surface.",
       weightLoss:
-        "Weight Loss is Forge's nutrition, body-composition, sport-fueling, appearance, gut-comfort, craving, and subjective-energy surface. Read it through the health overview route and use the dedicated nutrition tools for food logs, reusable searched/custom food catalog entries, body check-ins, appearance check-ins, subjective effects, gut check-ins, and N-of-1 experiments instead of inventing batch CRUD records.",
+        "Weight Loss is Forge's nutrition, body-composition, sport-fueling, appearance, gut-comfort, craving, and subjective-energy surface. Read it through the health overview route and use the dedicated nutrition tools for food-log capture and exact-record correction, reusable searched/custom food catalog entries, body check-ins, appearance check-ins, subjective effects, gut check-ins, and N-of-1 experiments instead of inventing batch CRUD records.",
       psyche:
         "Forge Psyche is the reflective domain for values, patterns, behaviors, beliefs, modes, flashcards, and trigger reports. It is sensitive and should be handled deliberately."
     },
@@ -9027,7 +9070,7 @@ function buildAgentOnboardingPayload(request: {
     },
     multiUserModel: {
       summary:
-        "Forge is multi-user by default. Humans and bots share one entity graph, with explicit ownership on every record and directional relationship settings between every pair of users.",
+        "This Forge installation has one security owner. Forge can still model several human and bot identities in one entity graph, with explicit record ownership and directional relationship settings, but those identities are not separate authenticated tenants.",
       defaultUserScopeBehavior:
         "If no user scope is provided, Forge returns all visible users. Use userId or repeated userIds when an agent should focus on one owner namespace or on a specific human/bot slice.",
       routeScoping: [
@@ -9066,11 +9109,11 @@ function buildAgentOnboardingPayload(request: {
         installSteps: [
           "Install the Forge plugin from the repo or published package.",
           "Restart the OpenClaw gateway so the tool surface and UI proxy routes refresh.",
-          "For localhost or Tailscale, finish onboarding through operator-session bootstrap and CLI verification without opening the Forge UI.",
-          "If remote scoped auth is needed, issue or rotate a managed token through /api/v1/settings/tokens and update the plugin config without a Settings click."
+          "Direct localhost connections use the verified local-owner helper automatically; no manual key is required.",
+          "Tailscale and other remote clients must complete one-time pairing and then use a scoped renewable credential over HTTPS."
         ],
         verifyCommands: [
-          `curl -s ${origin}/api/v1/health`,
+          `curl -s ${origin}/api/health`,
           "openclaw plugins install --link --dangerously-force-unsafe-install ./projects/forge/plugins/openclaw",
           "openclaw plugins inspect forge-openclaw-plugin --runtime",
           "openclaw gateway restart",
@@ -9078,12 +9121,12 @@ function buildAgentOnboardingPayload(request: {
           "openclaw forge health"
         ],
         configNotes: [
-          "Localhost and Tailscale targets can usually use the operator-session path without a long-lived token.",
-          "The operator-session route is /api/v1/auth/operator-session, so trusted local OpenClaw onboarding does not need a browser confirmation step.",
+          "Only direct loopback uses transparent local-owner authentication. Tailscale reachability never grants Forge authority by itself.",
+          "The public /api/health route proves liveness only; the authenticated /api/v1/health route verifies Forge identity and its configured data root.",
           "If your current OpenClaw build blocks the repo-local install because of the package scanner, keep the repo folder on plugins.load.paths and verify that plugins inspect --runtime still points at the local Forge source path before continuing.",
           "Use a distinct actor label such as Albert (claw) so OpenClaw-originated work stays obvious in Forge provenance.",
           "Create each agent as a Forge bot user, then use userId or userIds in tool inputs whenever the agent should focus on one human, one bot, or a specific collaboration slice.",
-          "If you genuinely need a durable managed token, create it through /api/v1/settings/tokens instead of sending the operator into the Settings UI."
+          "Use a paired scoped client credential for remote automation; keep legacy manually copied tokens as an explicit compatibility fallback only."
         ]
       },
       hermes: {
@@ -9346,6 +9389,7 @@ function buildAgentOnboardingPayload(request: {
         "forge_search_nutrition_foods",
         "forge_lookup_nutrition_barcode",
         "forge_log_food",
+        "forge_update_food_log",
         "forge_parse_food_log_with_chatgpt",
         "forge_log_body_checkin",
         "forge_log_appearance_checkin",

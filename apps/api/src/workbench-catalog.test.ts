@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -8,19 +9,7 @@ import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase, runInTransaction } from "./db.js";
 import { createAiProcessor } from "./repositories/ai-processors.js";
 
-async function issueOperatorSessionCookie(
-  app: Awaited<ReturnType<typeof buildServer>>
-) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host: "127.0.0.1:4317" }
-  });
-  assert.equal(response.statusCode, 200);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const issueOperatorSessionCookie = issueTestOperatorSessionCookie;
 
 function insertCatalogFlows(count: number) {
   const database = getDatabase();
@@ -316,9 +305,11 @@ test("Workbench OpenAPI and onboarding publish the paged catalog contract", asyn
   });
 
   try {
+    const cookie = await issueOperatorSessionCookie(app);
     const openApiResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/openapi.json"
+      url: "/api/v1/openapi.json",
+      headers: { cookie }
     });
     assert.equal(openApiResponse.statusCode, 200);
     const document = openApiResponse.json() as {
@@ -409,7 +400,7 @@ test("Workbench OpenAPI and onboarding publish the paged catalog contract", asyn
     const onboardingResponse = await app.inject({
       method: "GET",
       url: "/api/v1/agents/onboarding",
-      headers: { host: "127.0.0.1:4317" }
+      headers: { cookie, host: "127.0.0.1:4317" }
     });
     assert.equal(onboardingResponse.statusCode, 200);
     assert.match(onboardingResponse.body, /hasMore/);

@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -23,19 +24,7 @@ const dimensions = {
   surprise: 0
 };
 
-async function issueOperatorSessionCookie(
-  app: Awaited<ReturnType<typeof buildServer>>
-) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host: "127.0.0.1:4317" }
-  });
-  assert.equal(response.statusCode, 200);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const issueOperatorSessionCookie = issueTestOperatorSessionCookie;
 
 async function issueScopedToken(
   app: Awaited<ReturnType<typeof buildServer>>,
@@ -84,7 +73,7 @@ function itemInput(label: string, domain: "projects" | "fashion" = "projects") {
   };
 }
 
-test("Settings Bin preference records and counts are owner-scoped", async () => {
+test("Settings Bin is operator-only and preserves archived preference records", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-pref-bin-scope-")
   );
@@ -144,44 +133,46 @@ test("Settings Bin preference records and counts are owner-scoped", async () => 
       created.push({ userId, catalogId, itemId });
     }
 
-    for (const [userId, token] of [
-      ["user_operator", operatorToken],
-      ["user_forge_bot", botToken]
-    ] as const) {
+    for (const token of [operatorToken, botToken]) {
       const response = await app.inject({
         method: "GET",
         url: "/api/v1/settings/bin",
         headers: { authorization: `Bearer ${token}` }
       });
-      assert.equal(response.statusCode, 200, response.body);
-      const bin = response.json().bin as {
-        totalCount: number;
-        countsByEntityType: Record<string, number>;
-        records: Array<{ entityType: string; entityId: string }>;
-      };
-      const own = created.find((entry) => entry.userId === userId)!;
-      const foreign = created.find((entry) => entry.userId !== userId)!;
+      assert.equal(response.statusCode, 403, response.body);
+      assert.equal(response.json().code, "gateway_profile_forbidden");
+    }
+
+    const operatorResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/settings/bin",
+      headers: { cookie }
+    });
+    assert.equal(operatorResponse.statusCode, 200, operatorResponse.body);
+    const bin = operatorResponse.json().bin as {
+      totalCount: number;
+      countsByEntityType: Record<string, number>;
+      records: Array<{ entityType: string; entityId: string }>;
+    };
+    for (const record of created) {
       assert.ok(
-        bin.records.some((record) => record.entityId === own.catalogId)
-      );
-      assert.ok(bin.records.some((record) => record.entityId === own.itemId));
-      assert.ok(
-        bin.records.every((record) => record.entityId !== foreign.catalogId)
+        bin.records.some((entry) => entry.entityId === record.catalogId),
+        JSON.stringify(bin)
       );
       assert.ok(
-        bin.records.every((record) => record.entityId !== foreign.itemId)
+        bin.records.some((entry) => entry.entityId === record.itemId),
+        JSON.stringify(bin)
       );
-      assert.equal(bin.totalCount, bin.records.length);
-      for (const entityType of [
-        "preference_catalog",
-        "preference_catalog_item"
-      ]) {
-        assert.equal(
-          bin.countsByEntityType[entityType],
-          bin.records.filter((record) => record.entityType === entityType)
-            .length
-        );
-      }
+    }
+    assert.equal(bin.totalCount, bin.records.length);
+    for (const entityType of [
+      "preference_catalog",
+      "preference_catalog_item"
+    ]) {
+      assert.equal(
+        bin.countsByEntityType[entityType],
+        bin.records.filter((record) => record.entityType === entityType).length
+      );
     }
   } finally {
     await app.close();

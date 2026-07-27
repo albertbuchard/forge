@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import net from "node:net";
@@ -188,6 +188,195 @@ function runtimeInstallRoot() {
 
 function ownerBrokerDescriptorPath() {
   return path.join(forgeHome(), "native", "owner-broker.json");
+}
+
+function windowsOwnerDescriptorPath() {
+  return path.join(forgeHome(), "native", "windows-owner.json");
+}
+
+function windowsOwnerKeyPath() {
+  return path.join(forgeHome(), "native", "windows-owner.key");
+}
+
+function windowsPowerShellPath() {
+  const systemRoot = process.env.SystemRoot?.trim();
+  if (!systemRoot || !path.win32.isAbsolute(systemRoot)) {
+    throw new Error(
+      "Forge could not resolve the trusted Windows PowerShell executable."
+    );
+  }
+  return path.win32.join(
+    systemRoot,
+    "System32",
+    "WindowsPowerShell",
+    "v1.0",
+    "powershell.exe"
+  );
+}
+
+function runWindowsPowerShell(script, args, timeoutMs = 10_000) {
+  const result = spawnSync(
+    windowsPowerShellPath(),
+    ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script, ...args],
+    {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: timeoutMs
+    }
+  );
+  if (result.error || result.status !== 0) {
+    throw new Error(
+      `Forge could not enforce Windows owner-only access controls (PowerShell exit ${result.status ?? "unknown"}).`
+    );
+  }
+}
+
+function lockWindowsPathForCurrentOwner(target) {
+  const script = [
+    "$ErrorActionPreference='Stop'",
+    "$target=[IO.Path]::GetFullPath($args[0])",
+    "$item=Get-Item -LiteralPath $target -Force",
+    "if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'reparse point refused' }",
+    "$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User",
+    "if ($item.PSIsContainer) {",
+    "  $acl=New-Object Security.AccessControl.DirectorySecurity",
+    "  $rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,'FullControl','ContainerInherit,ObjectInherit','None','Allow')",
+    "} else {",
+    "  $acl=New-Object Security.AccessControl.FileSecurity",
+    "  $rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,'FullControl','Allow')",
+    "}",
+    "$acl.SetOwner($sid)",
+    "$acl.SetAccessRuleProtection($true,$false)",
+    "$acl.AddAccessRule($rule)",
+    "Set-Acl -LiteralPath $target -AclObject $acl"
+  ].join("; ");
+  runWindowsPowerShell(script, [target]);
+}
+
+function windowsPathIsCurrentOwnerOnly(target) {
+  try {
+    const script = [
+      "$ErrorActionPreference='Stop'",
+      "$target=[IO.Path]::GetFullPath($args[0])",
+      "$item=Get-Item -LiteralPath $target -Force",
+      "if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { exit 10 }",
+      "$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
+      "$acl=Get-Acl -LiteralPath $target",
+      "$owner=([Security.Principal.NTAccount]$acl.Owner).Translate([Security.Principal.SecurityIdentifier]).Value",
+      "if ($owner -ne $sid -or -not $acl.AreAccessRulesProtected) { exit 11 }",
+      "$bad=$acl.Access | Where-Object {",
+      "  $_.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow -or",
+      "  $_.IsInherited -or",
+      "  $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value -ne $sid",
+      "}",
+      "if ($null -ne $bad) { exit 12 }",
+      "exit 0"
+    ].join("; ");
+    runWindowsPowerShell(script, [target], 5_000);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function inspectWindowsOwnerKey() {
+  try {
+    const descriptorPath = windowsOwnerDescriptorPath();
+    const keyPath = windowsOwnerKeyPath();
+    const nativeDirectory = path.dirname(keyPath);
+    if (
+      !windowsPathIsCurrentOwnerOnly(nativeDirectory) ||
+      !windowsPathIsCurrentOwnerOnly(descriptorPath) ||
+      !windowsPathIsCurrentOwnerOnly(keyPath)
+    ) {
+      return null;
+    }
+    const descriptor = JSON.parse(fs.readFileSync(descriptorPath, "utf8"));
+    if (
+      descriptor?.schemaVersion !== 1 ||
+      descriptor.keyPath !== keyPath ||
+      typeof descriptor.keySha256 !== "string" ||
+      !/^[0-9a-f]{64}$/.test(descriptor.keySha256)
+    ) {
+      return null;
+    }
+    const keyBody = fs.readFileSync(keyPath);
+    const encoded = keyBody.toString("utf8").trim();
+    if (
+      keyBody.byteLength < 43 ||
+      keyBody.byteLength > 128 ||
+      !/^[A-Za-z0-9_-]{43}$/.test(encoded) ||
+      Buffer.from(encoded, "base64url").byteLength !== 32 ||
+      createHash("sha256").update(keyBody).digest("hex") !==
+        descriptor.keySha256
+    ) {
+      return null;
+    }
+    return {
+      platformOwnerKeyPath: keyPath,
+      platformOwnerKeySha256: descriptor.keySha256,
+      platformOwnerDescriptorPath: descriptorPath,
+      ownerKeyCreated: false
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function ensureWindowsLocalOwnerKey(flags = null) {
+  if (process.platform !== "win32") {
+    throw new Error(
+      "The Windows local-owner key can only be prepared on Windows."
+    );
+  }
+  const existing = inspectWindowsOwnerKey();
+  if (existing) return existing;
+  const descriptorPath = windowsOwnerDescriptorPath();
+  const keyPath = windowsOwnerKeyPath();
+  const nativeDirectory = path.dirname(keyPath);
+  if (flags?.dryRun === true) {
+    return {
+      platformOwnerKeyPath: keyPath,
+      platformOwnerKeySha256: "0".repeat(64),
+      platformOwnerDescriptorPath: descriptorPath,
+      ownerKeyCreated: false,
+      dryRun: true
+    };
+  }
+  await fsp.mkdir(nativeDirectory, { recursive: true });
+  lockWindowsPathForCurrentOwner(nativeDirectory);
+  if (fs.existsSync(keyPath)) {
+    throw new Error(
+      "Forge found an invalid Windows owner key and refused to overwrite it. Move the invalid ~/.forge/native/windows-owner.key aside, then rerun `npx forge-memory doctor --repair`."
+    );
+  }
+  const encoded = randomBytes(32).toString("base64url");
+  await fsp.writeFile(keyPath, `${encoded}\n`, {
+    encoding: "utf8",
+    flag: "wx"
+  });
+  lockWindowsPathForCurrentOwner(keyPath);
+  const keySha256 = createHash("sha256")
+    .update(await fsp.readFile(keyPath))
+    .digest("hex");
+  await fsp.writeFile(
+    descriptorPath,
+    `${JSON.stringify({
+      schemaVersion: 1,
+      keyPath,
+      keySha256,
+      updatedAt: new Date().toISOString()
+    })}\n`,
+    "utf8"
+  );
+  lockWindowsPathForCurrentOwner(descriptorPath);
+  const verified = inspectWindowsOwnerKey();
+  if (!verified) {
+    throw new Error(
+      "Forge could not verify the protected Windows owner key after installation."
+    );
+  }
+  return { ...verified, ownerKeyCreated: true };
 }
 
 function managedSkillsManifestPath() {
@@ -1013,6 +1202,20 @@ async function ensureForgePeerPrepared(config, flags = null) {
     throw new Error(
       "Forge peer sharing needs at least one transport. Enable Iroh with --enable-peer-iroh or configure a direct --peer-endpoint <ip:port>."
     );
+  }
+  if (process.platform === "win32") {
+    if (config.peerEnabled) {
+      throw new Error(
+        "Forge peer sharing is not yet available on Windows; disable peer sharing while the Windows transport is completed."
+      );
+    }
+    return {
+      ...(await ensureWindowsLocalOwnerKey(flags)),
+      enabled: false,
+      binaryPath: null,
+      ownerBrokerBinaryPath: null,
+      ownerBrokerBinarySha256: null
+    };
   }
 
   const pluginRoot =

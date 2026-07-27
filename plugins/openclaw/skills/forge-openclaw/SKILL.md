@@ -148,8 +148,10 @@ freeze the accepted user-facing target, choose exactly one lane, use batch CRUD 
 for catalog entities, use named tools or documented routes for specialized CRUD and
 action workflows, and verify an action workflow's selected operation against live
 onboarding `actionEntities.routeKeys`, `routeTools`, and `methodRoutes` before calling.
-For Movement, Life Events, Life Force, Workbench, or Artifact Store verify `routeKey`,
-method, path, and `pathParams` from live onboarding `methodRoutes` before calling.
+For every dedicated surface, including Movement, Life Events, Life Force, Workbench,
+Course and Concept, Wiki, Calendar Connection, Artifact Store, Attention, Entity
+Navigation, People, and bounded Peer reads, verify `routeKey`, route tool, method,
+path, and `pathParams` from live onboarding `methodRoutes` before calling.
 Never hide placeholders in `query` or `body`, and never guess a nearby path.
 
 - Batch CRUD is the default for normal stored entities, including `goal`, `project`,
@@ -435,7 +437,7 @@ Health rule:
   `forge_get_training_load_overview`, and `forge_get_weight_loss_overview`
   for health review and trend reading.
 - Use the dedicated nutrition tools for food/body work: `forge_search_foods`, `forge_search_nutrition_foods`,
-  `forge_lookup_nutrition_barcode`, `forge_log_food`,
+  `forge_lookup_nutrition_barcode`, `forge_log_food`, `forge_update_food_log`,
   `forge_parse_food_log_with_chatgpt`, `forge_log_body_checkin`,
   `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`,
   `forge_log_gut_checkin`, `forge_get_nutrition_patterns`,
@@ -447,6 +449,9 @@ Health rule:
   another reliable public nutrition source before logging it. Custom/no-`foodId`
   items must include at least calories plus protein, carbohydrate, and fat
   (`caloriesKcal`, `proteinG`, `carbsG`, `fatG`); never save a name-only food.
+  For a correction, read the weight-loss overview, resolve the exact existing
+  log, and call `forge_update_food_log` with its `foodLogId` plus only the
+  accepted changed fields.
   `forge_parse_food_log_with_chatgpt` must use Forge's configured `openai-codex`
   ChatGPT subscription connection, not a metered OpenAI Platform API path.
 - In `forge_get_agent_onboarding.entityRouteModel.readModelOnlySurfaces`, Today priority, operator,
@@ -558,6 +563,15 @@ Entity conversation rule:
 - For emotionally meaningful non-Psyche records such as goals, habits, and notes, reflect the meaning before you ask for structure.
 - When the user is vague, ask for one small concrete example, stake, or desired outcome before you ask them to name the record.
 - When the user is clear, say what the record seems to be becoming and ask only for the last missing detail.
+- Ground the reflection in one concrete detail from the user's own message. Do not
+  narrate intake discipline with phrases such as "without widening the request,"
+  "I will ask only," or "I will keep this bounded"; demonstrate that discipline by
+  asking one useful question.
+- Keep internal lane names, route keys, tool names, and field names out of the
+  user-facing turn unless the user asks for implementation detail. Paraphrase
+  labels such as `guided_design`, `read_only_review`, and `status_change` as natural
+  actions such as shaping the recurrence, reviewing without changing it, or changing
+  its status.
 - When the user wants to review, compare, inspect, or navigate an existing Forge
   record, ask what they are trying to understand first and look up the existing record
   before you reopen create or update intake.
@@ -911,7 +925,7 @@ Use the wiki tools for SQLite-backed memory work:
 `forge_call_wiki_route`, `forge_get_wiki_settings`, `forge_list_wiki_pages`, `forge_get_wiki_page`, `forge_search_wiki`, `forge_upsert_wiki_page`, `forge_get_wiki_health`, `forge_sync_wiki_vault`, `forge_reindex_wiki_embeddings`, `forge_ingest_wiki_source`
 
 Use the health tools for review, reflective enrichment, and nutrition evidence capture:
-`forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_get_weight_loss_overview`, `forge_update_sleep_session`, `forge_update_workout_session`, `forge_search_foods`, `forge_search_nutrition_foods`, `forge_lookup_nutrition_barcode`, `forge_log_food`, `forge_parse_food_log_with_chatgpt`, `forge_log_body_checkin`, `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`, `forge_log_gut_checkin`, `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, `forge_update_nutrition_experiment`
+`forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_get_weight_loss_overview`, `forge_update_sleep_session`, `forge_update_workout_session`, `forge_search_foods`, `forge_search_nutrition_foods`, `forge_lookup_nutrition_barcode`, `forge_log_food`, `forge_update_food_log`, `forge_parse_food_log_with_chatgpt`, `forge_log_body_checkin`, `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`, `forge_log_gut_checkin`, `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, `forge_update_nutrition_experiment`
 
 Use the dedicated domain routes for specialized surfaces that are not simple batch entities:
 
@@ -944,7 +958,7 @@ through `forge_create_entities` or `forge_update_entities`.
 - Life Events store important chronological events or periods as normal `life_event` records. They can last hours, days, weeks, or months, including stays, festivals, visits, retreats, vacations, work phases, health episodes, and custom periods. Use shared batch CRUD for create, update, search, soft delete, restore, and generic entity links. Use `/api/v1/life-events/timeline` for the chronology view, `/api/v1/life-events/:id` for one event, `/api/v1/life-events/:id/calendar-sync` when an event should find or create its matching calendar event, `/api/v1/life-events/from-calendar-event` when the user marks an existing calendar event as a Life Event, `/api/v1/life-events/import-ticket` when a trusted Artifact Store ticket should draft a travel event, and `/api/v1/life-events/:id/travel-status` for scheduled or provider-backed travel status. Ticket import starts from an `artifactId`, must keep artifact relationships as generic `entity_links`, and must not execute or autonomously open stored file bytes.
 - Life Force lives under `/api/v1/life-force*`. Use `GET /api/v1/life-force` for the current energy overview, `PATCH /api/v1/life-force/profile` for durable profile changes, `PUT /api/v1/life-force/templates/:weekday` for weekday curve edits, and `POST /api/v1/life-force/fatigue-signals` for real-time tired or recovered signals.
 - Workbench lives under `/api/v1/workbench/*`. Use those dedicated routes for flow catalog reads, flow CRUD, runs, saved-flow chat follow-ups, published outputs, node results, and latest-node-output reads instead of trying to force Workbench through the batch entity routes.
-- Course and Concept live under `/api/v1/courses*` and `/api/v1/concepts*`. Use `forge_call_course_route` for catalog/detail, learner-safe sessions, attempts, validated import/export, due concepts, and cross-course mastery. Use the learner-safe session for coaching, never expose hidden assessment fields, and never force Course or Concept through batch CRUD.
+- Course and Concept live under `/api/v1/courses*` and `/api/v1/concepts*`. Use `forge_call_course_route` for the exact `listCourses`, `courseDetail`, `learningSession`, `voiceLearningSession`, `submitAttempt`, `upgradeEnrollment`, `importCourse`, `exportCourse`, `listConcepts`, and `conceptDetail` lanes. Use learner-safe visual or voice sessions for coaching, read exact release state and obtain explicit learner acceptance before an enrollment upgrade, never expose hidden assessment fields, and never force Course or Concept through batch CRUD.
 - If you need the OpenClaw HTTP mirror instead of the raw Forge runtime path, the
   same specialized families are exposed under `/forge/v1/movement/*`,
   `/forge/v1/life-events/*`, `/forge/v1/life-force/*`, `/forge/v1/workbench/*`,
@@ -1112,7 +1126,7 @@ Use the health tools when the request is about sleep or sports review:
 - `forge_get_training_load_overview` to inspect cardiovascular load, HR zone balance, zone-time buckets, smart training modes, acute/chronic stress, high-intensity pressure, VO2max context, next-workout guidance, and training target fit
 - `forge_get_weight_loss_overview` to inspect calorie balance, protein/fiber targets, body trend, food quality, training fuel, subjective energy, gut comfort, aesthetic look, hypotheses, and experiments
 - `forge_parse_food_log_with_chatgpt` to convert rough meal text or a photo description into a candidate food log through the configured `openai-codex` ChatGPT subscription connection
-- `forge_log_food`, `forge_log_body_checkin`, `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`, and `forge_log_gut_checkin` to preserve the user's food, body-composition, visual-look, energy/craving/performance, and gut-health evidence. For `forge_log_food`, search first and reuse `item.foodId`; custom/no-`foodId` items require calories plus protein, carbohydrate, and fat, researched before logging when the user does not provide them.
+- `forge_log_food`, `forge_update_food_log`, `forge_log_body_checkin`, `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`, and `forge_log_gut_checkin` to preserve the user's food, body-composition, visual-look, energy/craving/performance, and gut-health evidence. For `forge_log_food`, search first and reuse `item.foodId`; custom/no-`foodId` items require calories plus protein, carbohydrate, and fat, researched before logging when the user does not provide them. For `forge_update_food_log`, read the overview first, identify the exact `foodLogId`, and patch only the accepted difference.
 - `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, and `forge_update_nutrition_experiment` to turn repeated food/body observations into testable N-of-1 hypotheses
 - `forge_update_sleep_session` to add sleep-quality notes, tags, or links back to Forge entities after review
 - `forge_update_workout_session` to add subjective effort, mood, meaning, tags, or links on one workout after review
@@ -1228,6 +1242,7 @@ When the user asks which Forge tools are available, list exactly these tools:
 `forge_search_foods`
 `forge_lookup_nutrition_barcode`
 `forge_log_food`
+`forge_update_food_log`
 `forge_parse_food_log_with_chatgpt`
 `forge_log_body_checkin`
 `forge_log_appearance_checkin`

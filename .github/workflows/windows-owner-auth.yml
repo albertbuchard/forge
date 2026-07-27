@@ -1,0 +1,180 @@
+name: Windows owner authentication
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/windows-owner-auth.yml"
+      - "packages/forge-memory/bin/forge-memory.mjs"
+      - "packages/forge-memory/lib/windows-owner-auth.mjs"
+      - "packages/forge-memory/tests/windows-owner-auth.test.mjs"
+      - "apps/api/src/security/application-security-runtime.ts"
+      - "apps/api/src/security/local-owner-session-coordinator.ts"
+      - "apps/web/src/openclaw/local-owner-client.ts"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/windows-owner-auth.yml"
+      - "packages/forge-memory/bin/forge-memory.mjs"
+      - "packages/forge-memory/lib/windows-owner-auth.mjs"
+      - "packages/forge-memory/tests/windows-owner-auth.test.mjs"
+      - "apps/api/src/security/application-security-runtime.ts"
+      - "apps/api/src/security/local-owner-session-coordinator.ts"
+      - "apps/web/src/openclaw/local-owner-client.ts"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-owner-auth-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Windows ${{ matrix.windows }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.windows }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        windows:
+          - windows-2022
+          - windows-2025
+        node:
+          - "22.14.0"
+          - "24.18.0"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: packages/forge-memory/package-lock.json
+
+      - name: Install Forge Memory dependencies
+        working-directory: packages/forge-memory
+        run: npm ci --ignore-scripts
+
+      - name: Exercise Windows owner authentication and package behavior
+        working-directory: packages/forge-memory
+        run: npm test
+
+      - name: Prove another local account cannot read or decrypt owner material
+        shell: pwsh
+        env:
+          FORGE_WINDOWS_FIXTURE_ROOT: ${{ github.workspace }}\.windows-owner-cross-user-fixture
+          FORGE_WINDOWS_CREDENTIAL_PATH: ${{ github.workspace }}\.windows-owner-cross-user-fixture\forge-root\native\windows-owner.json
+        run: |
+          New-Item -ItemType Directory -Path $env:FORGE_WINDOWS_FIXTURE_ROOT | Out-Null
+          $controlPath = Join-Path $env:FORGE_WINDOWS_FIXTURE_ROOT "readable-control.txt"
+          Set-Content -LiteralPath $controlPath -Value "cross-user-control" -Encoding UTF8
+          $currentSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+          & icacls.exe $env:FORGE_WINDOWS_FIXTURE_ROOT /inheritance:r /grant:r "*${currentSid}:(OI)(CI)(F)" "*S-1-5-32-545:(OI)(CI)(RX)" | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            throw "Forge could not prepare a traversable synthetic fixture root"
+          }
+          node --input-type=module -e "import { ensureWindowsOwnerCredential } from './packages/forge-memory/lib/windows-owner-auth.mjs'; await ensureWindowsOwnerCredential({ credentialPath: process.env.FORGE_WINDOWS_CREDENTIAL_PATH });"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Forge could not prepare the synthetic Windows owner credential"
+          }
+
+          $testUser = "forge-ci-" + ([Guid]::NewGuid().ToString("N").Substring(0, 8))
+          $passwordText = "F0rge!" + [Guid]::NewGuid().ToString("N") + "aA1"
+          $securePassword = ConvertTo-SecureString $passwordText -AsPlainText -Force
+          $credential = [PSCredential]::new(".\$testUser", $securePassword)
+          $helperPath = Join-Path $env:GITHUB_WORKSPACE ".windows-owner-cross-user-check.ps1"
+          $publicCopy = Join-Path $env:GITHUB_WORKSPACE ".windows-owner-public-copy.json"
+          @'
+          param(
+            [Parameter(Mandatory = $true)][string]$CredentialPath,
+            [Parameter(Mandatory = $true)][string]$ControlPath,
+            [Parameter(Mandatory = $true)][string]$PublicCopy
+          )
+          $ErrorActionPreference = "Stop"
+          if ((Get-Content -LiteralPath $ControlPath -Raw).Trim() -ne "cross-user-control") {
+            exit 42
+          }
+          $readWasDenied = $false
+          try {
+            [void](Get-Content -LiteralPath $CredentialPath -Raw)
+          } catch [System.UnauthorizedAccessException] {
+            $readWasDenied = $true
+          }
+          if (-not $readWasDenied) {
+            exit 40
+          }
+          $record = Get-Content -LiteralPath $PublicCopy -Raw | ConvertFrom-Json
+          $protected = [Convert]::FromBase64String($record.protectedKey)
+          $entropy = [Text.Encoding]::UTF8.GetBytes("forge/windows-owner-auth/v2")
+          try {
+            [void][Security.Cryptography.ProtectedData]::Unprotect(
+              $protected,
+              $entropy,
+              [Security.Cryptography.DataProtectionScope]::CurrentUser
+            )
+            exit 41
+          } catch [Security.Cryptography.CryptographicException] {
+            exit 0
+          }
+          '@ | Set-Content -LiteralPath $helperPath -Encoding UTF8
+
+          New-LocalUser -Name $testUser -Password $securePassword -PasswordNeverExpires | Out-Null
+          try {
+            Copy-Item -LiteralPath $env:FORGE_WINDOWS_CREDENTIAL_PATH -Destination $publicCopy
+            & icacls.exe $publicCopy /inheritance:r /grant "*S-1-5-32-545:(R)" | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+              throw "Forge could not prepare the synthetic public ciphertext copy"
+            }
+            $powershell = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+            $process = Start-Process `
+              -FilePath $powershell `
+              -ArgumentList @(
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                $helperPath,
+                $env:FORGE_WINDOWS_CREDENTIAL_PATH,
+                $controlPath,
+                $publicCopy
+              ) `
+              -Credential $credential `
+              -LoadUserProfile `
+              -Wait `
+              -PassThru
+            if ($process.ExitCode -ne 0) {
+              throw "Cross-user Windows owner isolation failed with exit $($process.ExitCode)"
+            }
+          } finally {
+            Remove-LocalUser -Name $testUser -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $helperPath, $publicCopy -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $env:FORGE_WINDOWS_FIXTURE_ROOT -Recurse -Force -ErrorAction SilentlyContinue
+            $passwordText = $null
+            $securePassword = $null
+            $credential = $null
+          }
+
+      - name: Verify the publication package contains the Windows owner module
+        working-directory: packages/forge-memory
+        shell: pwsh
+        run: |
+          $pack = npm pack --dry-run --json | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) {
+            throw "npm pack --dry-run failed"
+          }
+          $paths = @($pack[0].files | ForEach-Object { $_.path })
+          if ($paths -notcontains "lib/windows-owner-auth.mjs") {
+            throw "The forge-memory package omitted lib/windows-owner-auth.mjs"
+          }
+          if ($paths | Where-Object { $_ -match '(^|/)windows-owner\.(key|credential|json)$' }) {
+            throw "The forge-memory package contains generated owner credential material"
+          }

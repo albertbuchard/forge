@@ -1,11 +1,43 @@
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { buildServer } from "../../../../apps/api/src/app";
 import { buildOpenApiDocument } from "../../../../apps/api/src/openapi";
+import { createAgentToken } from "../../../../apps/api/src/repositories/settings";
+import { createAgentTokenSchema } from "../../../../apps/api/src/types";
 import {
+  collectPublishedOnboardingApiRouteKeys,
+  collectRequiredMirroredOnboardingApiRouteKeys,
   collectSupportedPluginApiRouteKeys,
   FORGE_SUPPORTED_PLUGIN_API_ROUTES,
   type ApiRouteKey
 } from "./parity";
 import { buildRouteParityReport, collectMirroredApiRouteKeys } from "./routes";
+import { courseRouteSpecs } from "./tools";
+
+function readHermesCourseRouteSpecs() {
+  const source = readFileSync(
+    path.resolve(
+      import.meta.dirname,
+      "../../../../plugins/hermes/forge_hermes/catalog.py"
+    ),
+    "utf8"
+  );
+  const start = source.indexOf("COURSE_ROUTE_SPECS:");
+  const end = source.indexOf("COURSE_ROUTE_EXAMPLES:", start);
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  return Object.fromEntries(
+    [
+      ...source
+        .slice(start, end)
+        .matchAll(
+          /"([^"]+)":\s*\{\s*"method":\s*"([A-Z]+)",\s*"path":\s*"([^"]+)"/g
+        )
+    ].map((match) => [match[1], `${match[2]} ${match[3]}`])
+  );
+}
 
 describe("forge plugin route parity", () => {
   it("covers the curated plugin contract and nothing broader", () => {
@@ -147,7 +179,110 @@ describe("forge plugin route parity", () => {
     expect(report.mirrored).toContain("POST /api/v1/entities/restore");
     expect(report.mirrored).toContain("POST /api/v1/work-adjustments");
     expect(report.mirrored).toContain("POST /api/v1/insights");
+    expect(report.mirrored).toContain(
+      "POST /api/v1/courses/:courseId/voice-session"
+    );
+    expect(report.mirrored).toContain(
+      "POST /api/v1/courses/:courseId/upgrade"
+    );
   });
+
+  it(
+    "derives the complete live route contract and verifies actual server registration",
+    async () => {
+      const dataRoot = mkdtempSync(
+        path.join(os.tmpdir(), "forge-route-parity-")
+      );
+      const app = await buildServer({ dataRoot, taskRunWatchdog: false });
+      try {
+        const issued = createAgentToken(
+          createAgentTokenSchema.parse({
+            label: "Route parity test",
+            agentLabel: "Route parity test",
+            trustLevel: "trusted",
+            scopes: ["read"]
+          })
+        );
+        const response = await app.inject({
+          method: "GET",
+          url: "/api/v1/agents/onboarding",
+          headers: { authorization: `Bearer ${issued.token}` }
+        });
+        expect(response.statusCode).toBe(200);
+        const onboarding = response.json();
+      const courseMethodRoutes = onboarding.onboarding.entityRouteModel
+        .specializedDomainSurfaces.courses.methodRoutes as Record<
+        string,
+        string
+      >;
+      const openapi = buildOpenApiDocument();
+      const pathMap = (openapi.paths ?? {}) as Record<
+        string,
+        Record<string, unknown>
+      >;
+      const report = buildRouteParityReport(pathMap, onboarding);
+      const published = collectPublishedOnboardingApiRouteKeys(onboarding);
+      const requiredMirrors =
+        collectRequiredMirroredOnboardingApiRouteKeys(onboarding);
+
+      expect(report.missingPublishedFromOpenApi).toEqual([]);
+      expect(report.missingRequiredMirrors).toEqual([]);
+      expect(report.publishedByOnboarding).toEqual([...published].sort());
+      expect(report.requiredMirrorsFromOnboarding).toEqual(
+        [...requiredMirrors].sort()
+      );
+
+      const courseRoutes = report.publishedByOnboarding.filter(
+        (route) =>
+          route.includes("/api/v1/courses") ||
+          route.includes("/api/v1/concepts")
+      );
+      expect(courseRoutes).toEqual(
+        [
+          "GET /api/v1/concepts",
+          "GET /api/v1/concepts/:conceptId",
+          "GET /api/v1/courses",
+          "GET /api/v1/courses/:courseId",
+          "GET /api/v1/courses/:courseId/export",
+          "GET /api/v1/courses/:courseId/learn",
+          "POST /api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
+          "POST /api/v1/courses/:courseId/upgrade",
+          "POST /api/v1/courses/:courseId/voice-session",
+          "POST /api/v1/courses/import"
+        ].sort()
+      );
+      expect(
+        Object.fromEntries(
+          Object.entries(courseRouteSpecs).map(([routeKey, route]) => [
+            routeKey,
+            `${route.method} ${route.path}`
+          ])
+        )
+      ).toEqual(courseMethodRoutes);
+      expect(readHermesCourseRouteSpecs()).toEqual(courseMethodRoutes);
+
+      for (const route of published) {
+        const [method, url] = route.split(" ");
+        expect(
+          app.hasRoute({
+            method: method as
+              | "GET"
+              | "POST"
+              | "PUT"
+              | "PATCH"
+              | "DELETE",
+            url
+          }),
+          `${route} should be registered by Fastify`
+        ).toBe(true);
+      }
+      } finally {
+        await app.close();
+        rmSync(dataRoot, { recursive: true, force: true });
+      }
+    },
+    20_000
+  );
 
   it("publishes supported route keys for governance and diagnostics", () => {
     const supported = collectSupportedPluginApiRouteKeys();
@@ -210,6 +345,10 @@ describe("forge plugin route parity", () => {
     expect(supported.has("POST /api/v1/entities/search")).toBe(true);
     expect(supported.has("POST /api/v1/work-adjustments")).toBe(true);
     expect(supported.has("POST /api/v1/insights")).toBe(true);
+    expect(
+      supported.has("POST /api/v1/courses/:courseId/voice-session")
+    ).toBe(true);
+    expect(supported.has("POST /api/v1/courses/:courseId/upgrade")).toBe(true);
   });
 
   it("keeps specialized domain route families explicit in the plugin contract", () => {

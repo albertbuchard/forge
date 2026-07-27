@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -29,17 +30,7 @@ async function withServer(
   }
 }
 
-async function operatorCookie(app: Awaited<ReturnType<typeof buildServer>>) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host: "127.0.0.1:4317" }
-  });
-  assert.equal(response.statusCode, 200, response.body);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const operatorCookie = issueTestOperatorSessionCookie;
 
 function insertConnection(input: {
   id: string;
@@ -212,7 +203,8 @@ test("recurring provider occurrences require explicit scope and remain read-only
     );
     const stored = await app.inject({
       method: "GET",
-      url: `/api/v1/calendar/events/${event.id}`
+      url: `/api/v1/calendar/events/${event.id}`,
+      headers: { cookie }
     });
     assert.equal(
       (stored.json() as { event: { title: string } }).event.title,
@@ -260,7 +252,8 @@ test("provider projection failures preserve the local event and return a truthfu
 
     const stored = await app.inject({
       method: "GET",
-      url: `/api/v1/calendar/events/${body.event.id}`
+      url: `/api/v1/calendar/events/${body.event.id}`,
+      headers: { cookie }
     });
     assert.equal(stored.statusCode, 200, stored.body);
     assert.equal(

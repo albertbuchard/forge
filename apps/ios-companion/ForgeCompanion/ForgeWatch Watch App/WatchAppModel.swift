@@ -1,4 +1,5 @@
 import Combine
+import CryptoKit
 import Foundation
 import Security
 import SwiftUI
@@ -983,7 +984,14 @@ final class WatchAppModel: NSObject, ObservableObject {
         itemCount: Int
     ) async throws -> DirectPostResult<Response> {
         let url = try directURL(path: path, connection: connection)
-        let bodyData = try encoder.encode(body)
+        var bodyObject = try JSONSerialization.jsonObject(
+            with: encoder.encode(body)
+        ) as? [String: Any] ?? [:]
+        bodyObject.removeValue(forKey: "pairingToken")
+        let bodyData = try JSONSerialization.data(
+            withJSONObject: bodyObject,
+            options: [.sortedKeys]
+        )
         let startedAt = Date()
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -991,6 +999,53 @@ final class WatchAppModel: NSObject, ObservableObject {
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let issuedAt = ISO8601DateFormatter().string(from: Date())
+        let nonce = UUID().uuidString
+            .replacingOccurrences(of: "-", with: "")
+            .lowercased()
+        let bodySha256 = SHA256.hash(data: bodyData)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        let requestTarget = url.path + (url.query.map { "?\($0)" } ?? "")
+        let canonical = [
+            "FORGE-MOBILE-REQUEST/1",
+            "POST",
+            requestTarget,
+            connection.sessionId,
+            issuedAt,
+            nonce,
+            bodySha256
+        ].joined(separator: "\n")
+        let signature = HMAC<SHA256>.authenticationCode(
+            for: Data(canonical.utf8),
+            using: SymmetricKey(data: Data(connection.pairingToken.utf8))
+        )
+            .map { String(format: "%02x", $0) }
+            .joined()
+        request.setValue(
+            "forge-mobile-request/v1",
+            forHTTPHeaderField: "X-Forge-Mobile-Request-Protocol"
+        )
+        request.setValue(
+            connection.sessionId,
+            forHTTPHeaderField: "X-Forge-Mobile-Session-Id"
+        )
+        request.setValue(
+            issuedAt,
+            forHTTPHeaderField: "X-Forge-Mobile-Request-Issued-At"
+        )
+        request.setValue(
+            nonce,
+            forHTTPHeaderField: "X-Forge-Mobile-Request-Nonce"
+        )
+        request.setValue(
+            bodySha256,
+            forHTTPHeaderField: "X-Forge-Mobile-Body-SHA256"
+        )
+        request.setValue(
+            signature,
+            forHTTPHeaderField: "X-Forge-Mobile-Request-Signature"
+        )
         request.httpBody = bodyData
         let data: Data
         let response: URLResponse

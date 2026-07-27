@@ -6,7 +6,7 @@ import {
   waitFor
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { WorkBlockFlowDialog } from "@/components/calendar/work-block-flow-dialog";
@@ -761,6 +761,95 @@ describe("Life Force calendar flows", () => {
     fireEvent.change(customInput, { target: { value: "5.5" } });
     expect(await screen.findByText("5.5 AP/h")).toBeInTheDocument();
     expect(screen.getByText("5.5 AP")).toBeInTheDocument();
+  });
+
+  it("keeps the event dialog open while pointer-selecting multiple linked entities", async () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      () =>
+        ({
+          x: 24,
+          y: 140,
+          width: 320,
+          height: 48,
+          top: 140,
+          right: 344,
+          bottom: 188,
+          left: 24,
+          toJSON: () => ({})
+        }) as DOMRect
+    );
+
+    function Example() {
+      const [open, setOpen] = useState(true);
+      return (
+        <CalendarEventFlowDialog
+          open={open}
+          onOpenChange={setOpen}
+          writableCalendars={[]}
+          linkOptions={[
+            {
+              entityType: "goal",
+              entityId: "goal_family",
+              label: "Build a beautiful family",
+              subtitle: "Goal · Albert"
+            },
+            {
+              entityType: "project",
+              entityId: "project_forge",
+              label: "Repair Forge",
+              subtitle: "Project · Albert"
+            }
+          ]}
+          seed={{
+            title: "Linked event",
+            startAt: "2026-04-14T13:00:00.000Z",
+            endAt: "2026-04-14T14:00:00.000Z",
+            timezone: "Europe/Zurich",
+            availability: "busy",
+            categories: [],
+            links: []
+          }}
+          onSubmit={vi.fn(async () => {})}
+        />
+      );
+    }
+
+    renderWithProviders(<Example />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByText("Connect the event to Forge entities");
+
+    const input = screen.getByRole("combobox", {
+      name: /search strategies, goals, projects/i
+    });
+    fireEvent.focus(input);
+    const familyOption = screen.getByRole("option", {
+      name: /build a beautiful family/i
+    });
+    fireEvent.pointerDown(familyOption);
+    fireEvent.click(familyOption);
+
+    expect(
+      screen.getByRole("button", {
+        name: "Remove Build a beautiful family"
+      })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Create calendar event" })
+    ).toBeInTheDocument();
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(
+      screen.getByRole("dialog", { name: "Create calendar event" })
+    ).toBeInTheDocument();
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(
+      screen.queryByRole("dialog", { name: "Create calendar event" })
+    ).toBeNull();
   });
 
   it("submits date-line wall times as instants in the selected timezone", async () => {

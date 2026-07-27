@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -8,19 +9,7 @@ import { closeDatabase, getDatabase } from "./db.js";
 import { createNote } from "./repositories/notes.js";
 import { createNoteSchema } from "./types.js";
 
-async function issueOperatorSessionCookie(
-  app: Awaited<ReturnType<typeof buildServer>>
-) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host: "127.0.0.1:4317" }
-  });
-  assert.equal(response.statusCode, 200);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const issueOperatorSessionCookie = issueTestOperatorSessionCookie;
 
 async function issueToken(
   app: Awaited<ReturnType<typeof buildServer>>,
@@ -273,7 +262,7 @@ test("batch Notes preserve Psyche authorization and indexed search parity", asyn
       }
     ).results[0];
     assert.equal(foreignResult?.ok, false);
-    assert.match(foreignResult?.error?.code ?? "", /note_not_found/);
+    assert.equal(foreignResult?.error?.code, "not_found");
     assert.doesNotMatch(foreignMutation.body, /psyche|value_foreign/i);
 
     for (const route of [
@@ -305,7 +294,7 @@ test("batch Notes preserve Psyche authorization and indexed search parity", asyn
             results: Array<{ ok: boolean; error?: { code: string } }>;
           }
         ).results[0]?.error?.code,
-        "note_not_found"
+        "not_found"
       );
       assert.doesNotMatch(response.body, /foreign-ordinary-note-sentinel/);
     }
@@ -337,7 +326,7 @@ test("batch Notes preserve Psyche authorization and indexed search parity", asyn
           results: Array<{ error?: { code: string } }>;
         }
       ).results[0]?.error?.code,
-      "note_not_found"
+      "not_found"
     );
 
     const implicitOwnerCreate = await app.inject({
@@ -842,7 +831,8 @@ test("batch Notes preserve Psyche authorization and indexed search parity", asyn
 
     const openApiResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/openapi.json"
+      url: "/api/v1/openapi.json",
+      headers: { cookie }
     });
     assert.equal(openApiResponse.statusCode, 200, openApiResponse.body);
     const paths = (

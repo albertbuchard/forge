@@ -37,6 +37,7 @@ provides_tools:
   - forge_search_nutrition_foods
   - forge_lookup_nutrition_barcode
   - forge_log_food
+  - forge_update_food_log
   - forge_parse_food_log_with_chatgpt
   - forge_log_body_checkin
   - forge_log_appearance_checkin

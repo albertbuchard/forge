@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
@@ -15,19 +16,7 @@ function getArtifactStoragePath(artifactId: string): string {
   return row.storage_path;
 }
 
-async function issueOperatorSessionCookie(
-  app: Awaited<ReturnType<typeof buildServer>>
-) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host: "127.0.0.1:4317" }
-  });
-  assert.equal(response.statusCode, 200);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const issueOperatorSessionCookie = issueTestOperatorSessionCookie;
 
 async function createAgentToken(input: {
   app: Awaited<ReturnType<typeof buildServer>>;
@@ -194,7 +183,11 @@ test("artifact store uses trusted upload, static scan, generic links, and human-
       url: `/api/v1/artifacts/${uploadBody.artifact.id}/download`,
       headers: { authorization: `Bearer ${trustedToken}` }
     });
-    assert.equal(tokenDownload.statusCode, 401);
+    assert.equal(tokenDownload.statusCode, 403);
+    assert.equal(
+      (tokenDownload.json() as { code: string }).code,
+      "gateway_scope_forbidden"
+    );
 
     const humanDownload = await app.inject({
       method: "GET",
@@ -419,7 +412,11 @@ test("artifact store supports human password encryption without exposing passwor
       headers: { authorization: `Bearer ${trustedToken}` },
       payload: { password }
     });
-    assert.equal(tokenPasswordDownload.statusCode, 401);
+    assert.equal(tokenPasswordDownload.statusCode, 403);
+    assert.equal(
+      (tokenPasswordDownload.json() as { code: string }).code,
+      "gateway_scope_forbidden"
+    );
 
     const getDownload = await app.inject({
       method: "GET",

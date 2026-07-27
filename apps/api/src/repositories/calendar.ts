@@ -469,9 +469,23 @@ function mapConnection(row: CalendarConnectionRow): CalendarConnectionRecord {
     createdAt: row.created_at,
     updatedAt: row.updated_at
   });
+  const legacyMacOSPermissionError =
+    base.provider === "macos_local" &&
+    base.status === "error" &&
+    base.lastSyncError
+      ? /^(?:invalidRequest|unavailable)\("([\s\S]*)"\)$/.exec(
+          base.lastSyncError.trim()
+        )
+      : null;
 
   return {
     ...base,
+    ...(legacyMacOSPermissionError?.[1]
+      ? {
+          status: "needs_attention" as const,
+          lastSyncError: legacyMacOSPermissionError[1]
+        }
+      : {}),
     credentialsSecretId: row.credentials_secret_id
   };
 }
@@ -1169,13 +1183,18 @@ export function getCalendarById(calendarId: string) {
 function getDefaultWritableCalendar() {
   const row = getDatabase()
     .prepare(
-      `SELECT id, connection_id, remote_id, title, description, color, timezone, is_primary, can_write, selected_for_sync, forge_managed,
-              source_id, source_title, source_type, calendar_type, host_calendar_id, canonical_key,
-              last_synced_at, created_at, updated_at
-       FROM calendar_calendars
-       WHERE can_write = 1
-         AND (selected_for_sync = 1 OR forge_managed = 1)
-       ORDER BY forge_managed DESC, is_primary DESC, title ASC
+      `SELECT calendars.id, calendars.connection_id, calendars.remote_id, calendars.title, calendars.description,
+              calendars.color, calendars.timezone, calendars.is_primary, calendars.can_write,
+              calendars.selected_for_sync, calendars.forge_managed, calendars.source_id, calendars.source_title,
+              calendars.source_type, calendars.calendar_type, calendars.host_calendar_id, calendars.canonical_key,
+              calendars.last_synced_at, calendars.created_at, calendars.updated_at
+       FROM calendar_calendars AS calendars
+       INNER JOIN calendar_connections AS connections
+         ON connections.id = calendars.connection_id
+       WHERE calendars.can_write = 1
+         AND connections.status = 'connected'
+         AND (calendars.selected_for_sync = 1 OR calendars.forge_managed = 1)
+       ORDER BY calendars.forge_managed DESC, calendars.is_primary DESC, calendars.title ASC
        LIMIT 1`
     )
     .get() as CalendarRow | undefined;

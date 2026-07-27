@@ -9,6 +9,7 @@ import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase } from "./db.js";
 import { storeDevrageReport } from "./services/devrage.js";
 import { createTriggerReport } from "./repositories/psyche.js";
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 
 interface PsycheMetricsOpenApiContract {
   paths: Record<
@@ -147,6 +148,7 @@ test("psyche metrics API returns stored devrage daily metrics", async () => {
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
+    const cookie = issueTestOperatorSessionCookie(app);
     storeDevrageReport(reportFixture(), {
       fullSync: true,
       syncedDateKey: null
@@ -172,7 +174,8 @@ test("psyche metrics API returns stored devrage daily metrics", async () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/v1/psyche/metrics"
+      url: "/api/v1/psyche/metrics",
+      headers: { cookie }
     });
 
     assert.equal(response.statusCode, 200);
@@ -273,7 +276,8 @@ test("psyche metrics API returns stored devrage daily metrics", async () => {
 
     const scopedResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/psyche/metrics?userIds=user_operator&timeZone=UTC"
+      url: "/api/v1/psyche/metrics?userIds=user_operator&timeZone=UTC",
+      headers: { cookie }
     });
     assert.equal(scopedResponse.statusCode, 200);
     const scoped = (scopedResponse.json() as { metrics: PsycheMetricsViewData })
@@ -316,13 +320,15 @@ test("psyche metrics API returns stored devrage daily metrics", async () => {
 
     const invalidTimeZoneResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/psyche/metrics?userIds=user_operator&timeZone=Mars%2FOlympus"
+      url: "/api/v1/psyche/metrics?userIds=user_operator&timeZone=Mars%2FOlympus",
+      headers: { cookie }
     });
     assert.equal(invalidTimeZoneResponse.statusCode, 400);
 
     const openApiResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/openapi.json"
+      url: "/api/v1/openapi.json",
+      headers: { cookie }
     });
     assert.equal(openApiResponse.statusCode, 200);
     const document = openApiResponse.json() as PsycheMetricsOpenApiContract;

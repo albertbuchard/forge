@@ -564,6 +564,17 @@ export function QuestionFlowDialog<TValue>({
         <Dialog.Overlay className="surface-overlay fixed inset-0 z-40 backdrop-blur-xl" />
         <Dialog.Content
           data-testid="question-flow-dialog"
+          onEscapeKeyDown={(event) => {
+            const target = event.target;
+            if (
+              target instanceof HTMLElement &&
+              target
+                .closest('[data-forge-escape-scope="entity-link-multiselect"]')
+                ?.querySelector('[role="combobox"][aria-expanded="true"]')
+            ) {
+              event.preventDefault();
+            }
+          }}
           className={cn(
             "surface-modal-panel fixed z-50 flex flex-col overflow-hidden border",
             isMobile

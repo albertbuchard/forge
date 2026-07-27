@@ -29,6 +29,19 @@ export type ForgeSupportedPluginApiRoute = {
     | "questionnaires";
 };
 
+type UnknownRecord = Record<string, unknown>;
+
+const REQUIRED_MIRRORED_SPECIALIZED_DOMAIN_SURFACES = new Set([
+  "attention",
+  "entityNavigation",
+  "lifeEvents",
+  "movement",
+  "lifeForce",
+  "life_force",
+  "workbench",
+  "courses"
+]);
+
 export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
   [
     { method: "GET", path: "/api/v1/health", purpose: "diagnostics" },
@@ -244,7 +257,17 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
     },
     {
       method: "POST",
+      path: "/api/v1/courses/:courseId/voice-session",
+      purpose: "courses"
+    },
+    {
+      method: "POST",
       path: "/api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
+      purpose: "courses"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/courses/:courseId/upgrade",
       purpose: "courses"
     },
     { method: "GET", path: "/api/v1/concepts", purpose: "courses" },
@@ -551,6 +574,112 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
 export function makeApiRouteKey(method: string, path: string): ApiRouteKey {
   const normalizedPath = path.replaceAll(/\{([^}]+)\}/g, ":$1");
   return `${method.toUpperCase()} ${normalizedPath}` as ApiRouteKey;
+}
+
+function asRecord(value: unknown): UnknownRecord | null {
+  return typeof value === "object" && value !== null
+    ? (value as UnknownRecord)
+    : null;
+}
+
+function getOnboardingRouteModel(payload: unknown): UnknownRecord | null {
+  const payloadRecord = asRecord(payload);
+  const onboarding = asRecord(payloadRecord?.onboarding) ?? payloadRecord;
+  return asRecord(onboarding?.entityRouteModel);
+}
+
+function addMethodRoute(target: Set<ApiRouteKey>, value: unknown) {
+  if (typeof value === "string") {
+    const match = /^([A-Za-z]+)\s+(.+)$/.exec(value.trim());
+    if (match) {
+      target.add(makeApiRouteKey(match[1], match[2]));
+    }
+    return;
+  }
+
+  const route = asRecord(value);
+  if (typeof route?.method === "string" && typeof route.path === "string") {
+    target.add(makeApiRouteKey(route.method, route.path));
+  }
+}
+
+function addEntityMethodRoutes(
+  target: Set<ApiRouteKey>,
+  entityMap: unknown,
+  includedNames?: Set<string>
+) {
+  const entities = asRecord(entityMap);
+  if (!entities) {
+    return;
+  }
+
+  for (const [name, value] of Object.entries(entities)) {
+    if (includedNames && !includedNames.has(name)) {
+      continue;
+    }
+    const methodRoutes = asRecord(asRecord(value)?.methodRoutes);
+    if (!methodRoutes) {
+      continue;
+    }
+    for (const methodRoute of Object.values(methodRoutes)) {
+      addMethodRoute(target, methodRoute);
+    }
+  }
+}
+
+function addBatchRoutes(target: Set<ApiRouteKey>, routeModel: UnknownRecord) {
+  const batchRoutes = asRecord(routeModel.batchRoutes);
+  if (!batchRoutes) {
+    return;
+  }
+  for (const path of Object.values(batchRoutes)) {
+    if (typeof path === "string") {
+      target.add(makeApiRouteKey("POST", path));
+    }
+  }
+}
+
+export function collectPublishedOnboardingApiRouteKeys(payload: unknown) {
+  const routes = new Set<ApiRouteKey>();
+  const routeModel = getOnboardingRouteModel(payload);
+  if (!routeModel) {
+    return routes;
+  }
+
+  addBatchRoutes(routes, routeModel);
+  addEntityMethodRoutes(routes, routeModel.specializedCrudEntities);
+  addEntityMethodRoutes(routes, routeModel.actionEntities);
+  addEntityMethodRoutes(routes, routeModel.specializedDomainSurfaces);
+
+  const readModels = asRecord(routeModel.readModelOnlySurfaces);
+  if (readModels) {
+    for (const path of Object.values(readModels)) {
+      if (typeof path === "string") {
+        routes.add(makeApiRouteKey("GET", path));
+      }
+    }
+  }
+
+  return routes;
+}
+
+export function collectRequiredMirroredOnboardingApiRouteKeys(
+  payload: unknown
+) {
+  const routes = new Set<ApiRouteKey>();
+  const routeModel = getOnboardingRouteModel(payload);
+  if (!routeModel) {
+    return routes;
+  }
+
+  addBatchRoutes(routes, routeModel);
+  addEntityMethodRoutes(routes, routeModel.actionEntities);
+  addEntityMethodRoutes(
+    routes,
+    routeModel.specializedDomainSurfaces,
+    REQUIRED_MIRRORED_SPECIALIZED_DOMAIN_SURFACES
+  );
+  return routes;
 }
 
 export function collectSupportedPluginApiRouteKeys() {

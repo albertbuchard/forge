@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase } from "./db.js";
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 
 type Schema = {
   additionalProperties?: boolean;
@@ -40,9 +41,11 @@ test("OpenAPI publishes exact Artifact upload retry and queue bounds", async () 
   const app = await buildServer({ dataRoot, seedDemoData: false });
 
   try {
+    const cookie = issueTestOperatorSessionCookie(app);
     const response = await app.inject({
       method: "GET",
-      url: "/api/v1/openapi.json"
+      url: "/api/v1/openapi.json",
+      headers: { cookie }
     });
     assert.equal(response.statusCode, 200);
     const document = response.json() as {

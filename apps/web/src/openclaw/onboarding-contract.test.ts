@@ -1,11 +1,16 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildServer } from "../../../../apps/api/src/app";
 import { buildOpenApiDocument } from "../../../../apps/api/src/openapi";
+import { createAgentToken } from "../../../../apps/api/src/repositories/settings";
+import { createAgentTokenSchema } from "../../../../apps/api/src/types";
 
 const tempRoots: string[] = [];
+const ONBOARDING_CONTRACT_TEST_TIMEOUT_MS = 20_000;
+
+vi.setConfig({ testTimeout: ONBOARDING_CONTRACT_TEST_TIMEOUT_MS });
 
 afterEach(() => {
   while (tempRoots.length > 0) {
@@ -20,9 +25,18 @@ async function loadOnboardingPayload() {
   const dataRoot = mkdtempSync(path.join(os.tmpdir(), "forge-onboarding-"));
   tempRoots.push(dataRoot);
   const app = await buildServer({ dataRoot, taskRunWatchdog: false });
+  const issued = createAgentToken(
+    createAgentTokenSchema.parse({
+      label: "Onboarding contract test",
+      agentLabel: "Onboarding contract test",
+      trustLevel: "trusted",
+      scopes: ["read"]
+    })
+  );
   const response = await app.inject({
     method: "GET",
-    url: "/api/v1/agents/onboarding"
+    url: "/api/v1/agents/onboarding",
+    headers: { authorization: `Bearer ${issued.token}` }
   });
 
   expect(response.statusCode).toBe(200);
@@ -378,11 +392,12 @@ describe("forge onboarding contract", () => {
       if (catalogEntry.classification === "action_workflow_entity") {
         if (catalogEntry.entityType === "self_observation") {
           expect(flow.questionStyle).toBe("psyche_adjacent_active_listening");
-          expect(flow.readinessCheck).toMatch(/note-backed observation/i);
-          expect(flow.readinessCheck).toMatch(/stronger Psyche container/i);
-          expect(flow.readinessCheck).toMatch(/at least one meaningful/i);
+          expect(flow.readinessCheck).toMatch(/Self Observation lane/i);
+          expect(flow.readinessCheck).toMatch(/support[\s\S]*never requires a save/i);
+          expect(flow.readinessCheck).toMatch(/exact backing note/i);
+          expect(flow.readinessCheck).toMatch(/note batch CRUD/i);
           expect(flow.readinessCheck).toMatch(
-            /accepted or corrected by the user/i
+            /lightweight capture never depend on reclassification/i
           );
         } else {
           expect(flow.questionStyle).toBe("operational_fast_path");
@@ -1092,7 +1107,9 @@ describe("forge onboarding contract", () => {
           "listCourses",
           "courseDetail",
           "learningSession",
+          "voiceLearningSession",
           "submitAttempt",
+          "upgradeEnrollment",
           "importCourse",
           "exportCourse",
           "listConcepts",
@@ -1102,8 +1119,11 @@ describe("forge onboarding contract", () => {
           listCourses: "GET /api/v1/courses",
           courseDetail: "GET /api/v1/courses/:courseId",
           learningSession: "GET /api/v1/courses/:courseId/learn",
+          voiceLearningSession:
+            "POST /api/v1/courses/:courseId/voice-session",
           submitAttempt:
             "POST /api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
+          upgradeEnrollment: "POST /api/v1/courses/:courseId/upgrade",
           importCourse: "POST /api/v1/courses/import",
           exportCourse: "GET /api/v1/courses/:courseId/export",
           listConcepts: "GET /api/v1/concepts",
@@ -1118,6 +1138,9 @@ describe("forge onboarding contract", () => {
         writeRoutes: {
           submitAttempt:
             "/api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
+          voiceLearningSession:
+            "/api/v1/courses/:courseId/voice-session",
+          upgradeEnrollment: "/api/v1/courses/:courseId/upgrade",
           importCourse: "/api/v1/courses/import"
         }
       })
@@ -1412,7 +1435,7 @@ describe("forge onboarding contract", () => {
       expect.objectContaining({
         classification: "specialized_domain_surface",
         preferredMutationPath: expect.stringMatching(
-          /dedicated Course route family[\s\S]*learner-safe lesson sessions[\s\S]*validated package import[\s\S]*Do not use shared batch CRUD/i
+          /dedicated Course route family[\s\S]*learner-safe visual or voice lesson sessions[\s\S]*validated package import[\s\S]*Do not use shared batch CRUD/i
         ),
         preferredReadPath: expect.stringMatching(
           /\/api\/v1\/courses[\s\S]*\/api\/v1\/courses\/:courseId[\s\S]*\/api\/v1\/courses\/:courseId\/learn[\s\S]*\/api\/v1\/courses\/:courseId\/export/
@@ -2285,8 +2308,30 @@ describe("forge onboarding contract", () => {
     expect(playbookByFocus.get("task_run")?.askSequence.join(" ")).toMatch(
       /dedicated task-run tool/i
     );
-    expect(onboarding.conversationRules.join(" ")).toMatch(
-      /task_run, work_adjustment, questionnaire_run, preference_judgment, preference_signal, and self_observation[\s\S]*do not downgrade[\s\S]*generic batch CRUD/i
+    const preferenceCatalogItemFlow = playbookByFocus.get(
+      "preference_catalog_item"
+    );
+    expect(preferenceCatalogItemFlow?.openingQuestion).toMatch(
+      /adding a named option[\s\S]*clarifying an ambiguous one[\s\S]*reviewing, removing, or restoring/i
+    );
+    expect(preferenceCatalogItemFlow?.askSequence.join(" ")).toMatch(
+      /direct capture[\s\S]*exact parent preference_catalog[\s\S]*linkedTo[\s\S]*requires only catalogId and label[\s\S]*do not ask why the option deserves inclusion[\s\S]*read-only review or narrow update[\s\S]*Catalog membership is immutable/i
+    );
+    expect(preferenceCatalogItemFlow?.askSequence.join(" ")).toMatch(
+      /preference_judgment or preference_signal action[\s\S]*Never convert that evidence into inferred featureWeights[\s\S]*reversible Settings Bin[\s\S]*exact id and parent-scoped search using includeDeleted: true[\s\S]*deleted marker and preserved snapshot/i
+    );
+    expect(preferenceCatalogItemFlow?.askSequence.join(" ")).toMatch(
+      /parent catalog lifecycle state[\s\S]*parent is archived[\s\S]*obtain acceptance to restore the parent first[\s\S]*restore and verify the parent[\s\S]*repeat the parent-scoped active-label conflict check[\s\S]*shared batch restore[\s\S]*exact active item again/i
+    );
+    const conversationRules = onboarding.conversationRules.join(" ");
+    expect(conversationRules).toMatch(
+      /guided work on reflection-sensitive non-Psyche records[\s\S]*only when the user has not already supplied usable direct wording or a narrow action[\s\S]*Self-observation direct capture is the explicit fast-path exception[\s\S]*missing observedAt[\s\S]*do not add a purpose question/i
+    );
+    expect(conversationRules).toMatch(
+      /Self_observation is the note-backed exception[\s\S]*bounded calendar read[\s\S]*underlying entityType note[\s\S]*frontmatter\.observedAt[\s\S]*never use entityType self_observation/i
+    );
+    expect(conversationRules).toMatch(
+      /explicitly documented underlying record such as the note that backs self_observation[\s\S]*create or update entityType note through batch CRUD[\s\S]*never call batch CRUD with entityType self_observation[\s\S]*never guess a nearby path/i
     );
     expect(onboarding.conversationRules.join(" ")).toMatch(
       /normal stored Preferences and questionnaire records[\s\S]*batch CRUD by default/i
@@ -2294,8 +2339,8 @@ describe("forge onboarding contract", () => {
     expect(onboarding.conversationRules.join(" ")).toMatch(
       /reflection-sensitive non-Psyche records[\s\S]*questionnaire_run[\s\S]*self_observation[\s\S]*wiki_page[\s\S]*sleep_session[\s\S]*workout_session/i
     );
-    expect(onboarding.conversationRules.join(" ")).toMatch(
-      /understand, decide, notice, remember, or change later[\s\S]*batch CRUD[\s\S]*questionnaire run actions[\s\S]*self-observation calendar reads[\s\S]*wiki routes/i
+    expect(conversationRules).toMatch(
+      /understand, decide, notice, remember, or change later only when[\s\S]*Self-observation direct capture[\s\S]*observed-note batch writes[\s\S]*wiki routes/i
     );
     expect(onboarding.conversationRules.join(" ")).toMatch(
       /review-first requests[\s\S]*correct read posture[\s\S]*shared batch search or read hints[\s\S]*wiki\/calendar dedicated reads[\s\S]*read-model routes[\s\S]*Movement, Life Events, Life Force, or Workbench dedicated reads/i
@@ -2355,16 +2400,18 @@ describe("forge onboarding contract", () => {
       /browse, search, read, create, update, delete, ingest, inspect wiki health, sync, or reindex[\s\S]*list, search, or read the existing page before asking authoring questions[\s\S]*near-duplicate topic[\s\S]*smallest change that is newly true[\s\S]*partial-failure[\s\S]*read current wiki health first[\s\S]*backlinks, citations, related pages, or history/i
     );
     expect(playbookByFocus.get("self_observation")?.openingQuestion).toMatch(
-      /what happened in the situation/i
+      /support with what you noticed[\s\S]*save it as-is[\s\S]*explore it together[\s\S]*review an existing observation/i
     );
     expect(
       playbookByFocus.get("self_observation")?.askSequence.join(" ")
     ).toMatch(
-      /situation[\s\S]*cue[\s\S]*emotion[\s\S]*thought[\s\S]*behavior[\s\S]*consequence/i
+      /immediate support[\s\S]*direct capture[\s\S]*guided reflection[\s\S]*exact-record review or narrow update/i
     );
     expect(
       playbookByFocus.get("self_observation")?.askSequence.join(" ")
-    ).toMatch(/Do not promote self-observation over functional analysis/i);
+    ).toMatch(
+      /optional[\s\S]*trigger_report[\s\S]*behavior_pattern[\s\S]*belief_entry[\s\S]*mode_guide_session[\s\S]*mode_profile[\s\S]*lightweight observation/i
+    );
 
     expect(playbookByFocus.get("preference_item")?.openingQuestion).toMatch(
       /adding a preference candidate, bringing in an existing Forge record, reviewing its evidence, or correcting how it is scored/i
@@ -3052,8 +3099,8 @@ describe("forge onboarding contract", () => {
     expect(onboarding.connectionGuides?.openclaw?.configNotes ?? []).toEqual(
       expect.arrayContaining([
         expect.stringMatching(/plugins\.load\.paths/i),
-        expect.stringMatching(/operator-session/i),
-        expect.stringMatching(/\/api\/v1\/settings\/tokens/i)
+        expect.stringMatching(/local-owner/i),
+        expect.stringMatching(/paired scoped client credential/i)
       ])
     );
     expect(

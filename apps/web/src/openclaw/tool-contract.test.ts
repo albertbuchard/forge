@@ -11,6 +11,7 @@ import {
   buildServer
 } from "../../../../apps/api/src/app";
 import { buildOpenApiDocument } from "../../../../apps/api/src/openapi";
+import { createAgentToken } from "../../../../apps/api/src/repositories/settings";
 import {
   enqueueEntityPreferenceItemSchema,
   mergePreferenceContextsSchema,
@@ -23,6 +24,7 @@ import {
   submitPairwiseJudgmentSchema,
   updatePreferenceScoreSchema
 } from "../../../../apps/api/src/preferences-types";
+import { createAgentTokenSchema } from "../../../../apps/api/src/types";
 import { collectSupportedPluginApiRouteKeys, makeApiRouteKey } from "./parity";
 import { collectMirroredApiRouteKeys } from "./routes";
 import { callConfiguredForgeApi } from "./api-client";
@@ -72,9 +74,18 @@ async function loadOnboardingRouteContracts() {
   const dataRoot = mkdtempSync(path.join(os.tmpdir(), "forge-tool-contract-"));
   tempRoots.push(dataRoot);
   const app = await buildServer({ dataRoot, taskRunWatchdog: false });
+  const issued = createAgentToken(
+    createAgentTokenSchema.parse({
+      label: "Tool contract test",
+      agentLabel: "Tool contract test",
+      trustLevel: "trusted",
+      scopes: ["read"]
+    })
+  );
   const response = await app.inject({
     method: "GET",
-    url: "/api/v1/agents/onboarding"
+    url: "/api/v1/agents/onboarding",
+    headers: { authorization: `Bearer ${issued.token}` }
   });
   expect(response.statusCode).toBe(200);
   await app.close();
@@ -1426,7 +1437,9 @@ describe("openclaw tool contracts", () => {
       "learningSession",
       "listConcepts",
       "listCourses",
-      "submitAttempt"
+      "submitAttempt",
+      "upgradeEnrollment",
+      "voiceLearningSession"
     ]);
     expect(artifactRouteKeys).toEqual([
       "audit",
@@ -1527,7 +1540,7 @@ describe("openclaw tool contracts", () => {
     expect(
       readPropertyDescription(courses.parameters ?? {}, "routeKey")
     ).toMatch(
-      /listCourses: GET \/api\/v1\/courses[\s\S]*learningSession: GET \/api\/v1\/courses\/:courseId\/learn[\s\S]*submitAttempt: POST \/api\/v1\/courses\/:courseId\/lessons\/:lessonId\/activities\/:activityId\/attempts[\s\S]*conceptDetail: GET \/api\/v1\/concepts\/:conceptId/
+      /listCourses: GET \/api\/v1\/courses[\s\S]*learningSession: GET \/api\/v1\/courses\/:courseId\/learn[\s\S]*voiceLearningSession: POST \/api\/v1\/courses\/:courseId\/voice-session[\s\S]*submitAttempt: POST \/api\/v1\/courses\/:courseId\/lessons\/:lessonId\/activities\/:activityId\/attempts[\s\S]*conceptDetail: GET \/api\/v1\/concepts\/:conceptId/
     );
     expect(
       readPropertyDescription(artifact.parameters ?? {}, "routeKey")

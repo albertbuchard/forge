@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -6,19 +7,7 @@ import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase } from "./db.js";
 
-async function issueOperatorSessionCookie(
-  app: Awaited<ReturnType<typeof buildServer>>
-) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host: "127.0.0.1:4317" }
-  });
-  assert.equal(response.statusCode, 200);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const issueOperatorSessionCookie = issueTestOperatorSessionCookie;
 
 test("nutrition experiment contract preserves agent fields across API surfaces", async () => {
   const rootDir = await mkdtemp(
@@ -30,7 +19,8 @@ test("nutrition experiment contract preserves agent fields across API surfaces",
     const operatorCookie = await issueOperatorSessionCookie(app);
     const openApiResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/openapi.json"
+      url: "/api/v1/openapi.json",
+      headers: { cookie: operatorCookie }
     });
     assert.equal(openApiResponse.statusCode, 200);
     const openApi = openApiResponse.json() as {
@@ -181,7 +171,8 @@ test("nutrition experiment contract preserves agent fields across API surfaces",
 
     const patternsResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/health/weight-loss/patterns?userIds=user_forge_bot"
+      url: "/api/v1/health/weight-loss/patterns?userIds=user_forge_bot",
+      headers: { cookie: operatorCookie }
     });
     assert.equal(patternsResponse.statusCode, 200);
     const patterns = patternsResponse.json() as {

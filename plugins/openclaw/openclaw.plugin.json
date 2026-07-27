@@ -105,6 +105,7 @@
       "forge_sync_calendar_connection",
       "forge_sync_wiki_vault",
       "forge_update_entities",
+      "forge_update_food_log",
       "forge_update_nutrition_experiment",
       "forge_update_preferences_score",
       "forge_update_questionnaire_run",
@@ -132,9 +133,15 @@
     },
     "apiToken": {
       "label": "Forge API Token",
-      "help": "Optional bearer token. Leave blank for one-step localhost or Tailscale operator-session bootstrap.",
+      "help": "Optional bearer token. Leave blank for automatic direct-localhost owner verification; remote and Tailscale clients must use a paired scoped credential.",
       "sensitive": true,
       "placeholder": "fg_live_..."
+    },
+    "remoteCredentialId": {
+      "label": "Forge Paired Credential",
+      "help": "Non-secret Keychain reference created automatically by forge-memory remote pairing. Do not paste a token here.",
+      "placeholder": "forge-client-...",
+      "advanced": true
     },
     "actorLabel": {
       "label": "Actor Label",
@@ -175,7 +182,12 @@
       "apiToken": {
         "type": "string",
         "default": "",
-        "description": "Optional bearer token for remote or explicit scoped access. Localhost and Tailscale Forge instances can bootstrap an operator session automatically."
+        "description": "Optional bearer token for paired remote or explicit scoped access. Direct localhost clients use the verified local-owner channel automatically; Tailscale reachability alone never authorizes access."
+      },
+      "remoteCredentialId": {
+        "type": "string",
+        "default": "",
+        "description": "Non-secret identifier for a renewable sender-constrained credential stored in the operating-system keychain."
       },
       "actorLabel": {
         "type": "string",

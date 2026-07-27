@@ -1807,8 +1807,6 @@ struct ForgeSyncClient {
         includeWorkoutImportExternalUids: Bool = true,
         includeWorkoutImportState: Bool = true
     ) async throws -> HealthSyncUploadSession {
-        let sessionId = Self.queryComponent(pairing.sessionId)
-        let pairingToken = Self.queryComponent(pairing.pairingToken)
         let includeReceivedChunkIdsQuery = includeReceivedChunkIds ? "true" : "false"
         let includeWorkoutImportExternalUidsQuery = includeWorkoutImportExternalUids ? "true" : "false"
         let includeWorkoutImportStateQuery = includeWorkoutImportState ? "true" : "false"
@@ -1817,11 +1815,12 @@ struct ForgeSyncClient {
             "refreshHealthSyncSessionStatus start uploadSession=\(uploadSession.syncSessionId) includeReceivedChunkIds=\(includeReceivedChunkIds) includeWorkoutImportExternalUids=\(includeWorkoutImportExternalUids) includeWorkoutImportState=\(includeWorkoutImportState)"
         )
         let envelope: HealthSyncSessionStartEnvelope = try await sendRequest(
-            path: "/mobile/healthkit/sync-sessions/\(uploadSession.syncSessionId)?sessionId=\(sessionId)&pairingToken=\(pairingToken)&includeReceivedChunkIds=\(includeReceivedChunkIdsQuery)&includeWorkoutImportExternalUids=\(includeWorkoutImportExternalUidsQuery)&includeWorkoutImportState=\(includeWorkoutImportStateQuery)",
+            path: "/mobile/healthkit/sync-sessions/\(uploadSession.syncSessionId)?includeReceivedChunkIds=\(includeReceivedChunkIdsQuery)&includeWorkoutImportExternalUids=\(includeWorkoutImportExternalUidsQuery)&includeWorkoutImportState=\(includeWorkoutImportStateQuery)",
             apiBaseUrl: pairing.apiBaseUrl,
             method: "GET",
             body: Optional<String>.none as String?,
-            transport: pairing.transport
+            transport: pairing.transport,
+            mobilePairing: pairing
         )
         var refreshedUpload = includeReceivedChunkIds
             ? envelope.upload
@@ -1898,6 +1897,7 @@ struct ForgeSyncClient {
                 expectedCounts: expectedCounts
             ),
             transport: pairing.transport,
+            mobilePairing: pairing,
             timeoutInterval: 60
         )
         companionDebugLog(
@@ -1914,7 +1914,8 @@ struct ForgeSyncClient {
                 apiBaseUrl: pairing.apiBaseUrl,
                 method: "DELETE",
                 body: Optional<String>.none as String?,
-                transport: pairing.transport
+                transport: pairing.transport,
+                mobilePairing: pairing
             )
         } catch {
             companionDebugLog(
@@ -3090,6 +3091,7 @@ struct ForgeSyncClient {
                     payloadJsonBase64: wirePayload.payloadJsonBase64
                 ),
                 transport: transport,
+                mobilePairing: pairing,
                 timeoutInterval: timeoutInterval,
                 useBackgroundUpload: useBackgroundUpload,
                 responseHeaderObserver: { response in
@@ -3867,6 +3869,7 @@ struct ForgeSyncClient {
         body: Body,
         session: URLSession? = nil,
         transport: PairingTransport? = nil,
+        mobilePairing: PairingPayload? = nil,
         timeoutInterval: TimeInterval = 20,
         useBackgroundUpload: Bool = false,
         responseHeaderObserver: ((HTTPURLResponse) -> Void)? = nil
@@ -3882,12 +3885,34 @@ struct ForgeSyncClient {
         var requestHeaders: [String: String] = [
             "Accept": "application/json"
         ]
-        let requestBody: Data?
+        var requestBody: Data?
         if method != "GET" {
             requestHeaders["Content-Type"] = "application/json"
             requestBody = try JSONEncoder().encode(body)
         } else {
             requestBody = nil
+        }
+        let embeddedPairing = try requestBody.flatMap(Self.mobilePairingMaterial)
+        let requestPairing = mobilePairing.map {
+            (sessionId: $0.sessionId, pairingToken: $0.pairingToken)
+        } ?? embeddedPairing?.credential
+        if let sanitizedBody = embeddedPairing?.sanitizedBody {
+            requestBody = sanitizedBody
+        }
+        if let requestPairing {
+            let requestTarget = apiRequestPath(
+                apiBaseUrl: apiBaseUrl,
+                endpointPath: path
+            )
+            requestHeaders.merge(
+                Self.mobileRequestHeaders(
+                    method: method,
+                    path: requestTarget,
+                    body: requestBody,
+                    sessionId: requestPairing.sessionId,
+                    pairingToken: requestPairing.pairingToken
+                )
+            ) { _, new in new }
         }
 
         let effectiveTransport = Self.effectiveIrohTransport(
@@ -4005,6 +4030,67 @@ struct ForgeSyncClient {
 
         companionDebugLog("ForgeSyncClient", "sendRequest decode success url=\(url.absoluteString)")
         return try JSONDecoder().decode(Response.self, from: data)
+    }
+
+    private static func mobilePairingMaterial(
+        _ body: Data
+    ) throws -> (
+        credential: (sessionId: String, pairingToken: String),
+        sanitizedBody: Data
+    )? {
+        guard
+            var object = try JSONSerialization.jsonObject(with: body) as? [String: Any],
+            let sessionId = object["sessionId"] as? String,
+            let pairingToken = object["pairingToken"] as? String
+        else {
+            return nil
+        }
+        object.removeValue(forKey: "pairingToken")
+        return (
+            credential: (sessionId: sessionId, pairingToken: pairingToken),
+            sanitizedBody: try JSONSerialization.data(
+                withJSONObject: object,
+                options: [.sortedKeys]
+            )
+        )
+    }
+
+    private static func mobileRequestHeaders(
+        method: String,
+        path: String,
+        body: Data?,
+        sessionId: String,
+        pairingToken: String
+    ) -> [String: String] {
+        let issuedAt = ISO8601DateFormatter().string(from: Date())
+        let nonce = UUID().uuidString
+            .replacingOccurrences(of: "-", with: "")
+            .lowercased()
+        let bodySha256 = sha256Hex(body ?? Data())
+        let canonical = [
+            "FORGE-MOBILE-REQUEST/1",
+            method.uppercased(),
+            path,
+            sessionId,
+            issuedAt,
+            nonce,
+            bodySha256
+        ].joined(separator: "\n")
+        let signature = HMAC<SHA256>.authenticationCode(
+            for: Data(canonical.utf8),
+            using: SymmetricKey(data: Data(pairingToken.utf8))
+        )
+        let signatureHex = signature
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return [
+            "X-Forge-Mobile-Request-Protocol": "forge-mobile-request/v1",
+            "X-Forge-Mobile-Session-Id": sessionId,
+            "X-Forge-Mobile-Request-Issued-At": issuedAt,
+            "X-Forge-Mobile-Request-Nonce": nonce,
+            "X-Forge-Mobile-Body-SHA256": bodySha256,
+            "X-Forge-Mobile-Request-Signature": signatureHex
+        ]
     }
 
     private static func healthSyncChunkTransportRoute(

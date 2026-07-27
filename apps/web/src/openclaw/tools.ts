@@ -320,16 +320,26 @@ const workbenchRouteSpecs = {
   }
 } as const satisfies Record<string, SpecializedRouteSpec>;
 
-const courseRouteSpecs = {
+export const courseRouteSpecs = {
   listCourses: { method: "GET", path: "/api/v1/courses" },
   courseDetail: { method: "GET", path: "/api/v1/courses/:courseId" },
   learningSession: {
     method: "GET",
     path: "/api/v1/courses/:courseId/learn"
   },
+  voiceLearningSession: {
+    method: "POST",
+    path: "/api/v1/courses/:courseId/voice-session",
+    requiresToken: true
+  },
   submitAttempt: {
     method: "POST",
     path: "/api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
+    requiresToken: true
+  },
+  upgradeEnrollment: {
+    method: "POST",
+    path: "/api/v1/courses/:courseId/upgrade",
     requiresToken: true
   },
   importCourse: {
@@ -1159,6 +1169,56 @@ const nutritionFoodLogSchema = () =>
     notes: optionalNullableString(),
     items: Type.Array(nutritionMealItemInputSchema(), { minItems: 1 })
   });
+const nutritionFoodLogPatchSchema = () =>
+  Type.Object(
+    {
+      foodLogId: Type.String({ minLength: 1 }),
+      userIds: nutritionUserScopeSchema(),
+      loggedAt: Type.Optional(Type.String({ format: "date-time" })),
+      dayKey: Type.Optional(
+        Type.Union([
+          Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" }),
+          Type.Null()
+        ])
+      ),
+      timeZone: optionalString(),
+      mealLabel: optionalString(),
+      source: Type.Optional(
+        Type.Union([
+          Type.Literal("manual"),
+          Type.Literal("search"),
+          Type.Literal("barcode"),
+          Type.Literal("chatgpt"),
+          Type.Literal("photo"),
+          Type.Literal("saved_meal")
+        ])
+      ),
+      confirmationState: Type.Optional(
+        Type.Union([
+          Type.Literal("candidate"),
+          Type.Literal("confirmed"),
+          Type.Literal("needs_review"),
+          Type.Literal("discarded")
+        ])
+      ),
+      notes: optionalString(),
+      placeId: optionalNullableString(),
+      stayId: optionalNullableString(),
+      workoutId: optionalNullableString(),
+      sleepId: optionalNullableString(),
+      imageRefs: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+      parserProvenance: Type.Optional(
+        Type.Record(Type.String(), Type.Unknown())
+      ),
+      links: Type.Optional(Type.Array(healthLinkInputSchema())),
+      items: Type.Optional(
+        Type.Array(nutritionMealItemInputSchema(), { minItems: 1 })
+      )
+    },
+    {
+      additionalProperties: false
+    }
+  );
 const noteInputSchema = () =>
   Type.Object({
     contentMarkdown: Type.String({ minLength: 1 }),
@@ -1758,7 +1818,7 @@ export function registerForgePluginTools(
     name: "forge_call_course_route",
     label: "Forge Course Route",
     description:
-      "Call one allowed dedicated Course or Concept route after the conversation has narrowed to installed-course discovery, progress or syllabus detail, a learner-safe lesson session, one activity attempt, validated package import/export, concept search, due review, or cross-course mastery evidence. Use the learner-safe session for coaching and do not use batch CRUD for Course or Concept.",
+      "Call one allowed dedicated Course or Concept route after the conversation has narrowed to installed-course discovery, progress or syllabus detail, a learner-safe visual or voice lesson session, one activity attempt, an explicit enrollment upgrade, validated package import/export, concept search, due review, or cross-course mastery evidence. For voice learning, start voiceLearningSession with the chosen week and day, teach its learner-safe blocks in source order one manageable block at a time, and use the exact returned course, lesson, and activity identifiers. Before submitAttempt, add punctuation and paragraph breaks without changing Albert's words. Show him every proposed deletion, replacement, uncertain mathematical symbol, or uncertain recognition and obtain explicit confirmation; then read the entire formatted answer back and obtain final explicit confirmation. Submit only answerMarkdown with deliveryMode voice, the current voiceSessionToken, voiceConfirmation true, and one stable idempotencyKey. Never send audio, recording metadata, or a separate voice transcript. Use returned feedback and progress to choose the next teaching block. Before upgradeEnrollment, read the exact course release state, explain what changes and which passed evidence can carry forward, and obtain the learner's explicit choice. Do not use batch CRUD for Course or Concept.",
     routeSpecs: courseRouteSpecs
   });
 
@@ -2258,6 +2318,34 @@ export function registerForgePluginTools(
           method: "POST",
           path: withUserIds(
             "/api/v1/health/weight-loss/food-logs",
+            typed.userIds as string[] | undefined
+          ),
+          body
+        })
+      );
+    }
+  });
+
+  api.registerTool({
+    name: "forge_update_food_log",
+    label: "Forge Update Food Log",
+    description:
+      "Edit one existing nutrition food log by its exact foodLogId. Read the weight-loss overview first to identify the intended log, then send only the fields that should change.",
+    parameters: nutritionFoodLogPatchSchema(),
+    async execute(_toolCallId, params) {
+      const typed = params as Record<string, unknown>;
+      const foodLogId = normalizeText(typed.foodLogId);
+      if (!foodLogId) {
+        throw new Error(
+          "forge_update_food_log requires a non-empty foodLogId."
+        );
+      }
+      const body = omitToolFields(typed, ["foodLogId", "userIds"]);
+      return jsonResult(
+        await runWrite(config, {
+          method: "PATCH",
+          path: withUserIds(
+            `/api/v1/health/weight-loss/food-logs/${encodeURIComponent(foodLogId)}`,
             typed.userIds as string[] | undefined
           ),
           body
@@ -3397,53 +3485,56 @@ export function registerForgePluginTools(
     label: "Forge Create Work Block",
     description:
       "Create a recurring work-block template such as Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or Custom. This is a planning helper; agents can also use forge_create_entities with entityType work_block_template.",
-    parameters: Type.Object({
-      title: Type.String({ minLength: 1 }),
-      kind: Type.Optional(
-        Type.Union([
-          Type.Literal("main_activity"),
-          Type.Literal("secondary_activity"),
-          Type.Literal("third_activity"),
-          Type.Literal("rest"),
-          Type.Literal("holiday"),
-          Type.Literal("custom")
-        ])
-      ),
-      color: Type.Optional(Type.String({ minLength: 1 })),
-      timezone: Type.Optional(Type.String({ minLength: 1 })),
-      weekDays: Type.Array(Type.Integer({ minimum: 0, maximum: 6 })),
-      startMinute: Type.Integer({ minimum: 0, maximum: 1440 }),
-      endMinute: Type.Integer({ minimum: 0, maximum: 1440 }),
-      startsOn: Type.Optional(
-        Type.Union([Type.String({ minLength: 1 }), Type.Null()])
-      ),
-      endsOn: Type.Optional(
-        Type.Union([Type.String({ minLength: 1 }), Type.Null()])
-      ),
-      exclusionDates: Type.Optional(
-        Type.Array(Type.String({ minLength: 1 }), { maxItems: 366 })
-      ),
-      blockingState: Type.Optional(
-        Type.Union([Type.Literal("allowed"), Type.Literal("blocked")])
-      ),
-      activityPresetKey: Type.Optional(
-        Type.Union([
-          Type.Literal("deep_work"),
-          Type.Literal("admin"),
-          Type.Literal("maintenance"),
-          Type.Literal("meeting"),
-          Type.Literal("recovery_break"),
-          Type.Literal("holiday_leisure"),
-          Type.Literal("light_context"),
-          Type.Literal("task_inherited"),
-          Type.Null()
-        ])
-      ),
-      customSustainRateApPerHour: Type.Optional(
-        Type.Union([Type.Number({ minimum: 0 }), Type.Null()])
-      ),
-      userId: optionalNullableString()
-    }, { additionalProperties: false }),
+    parameters: Type.Object(
+      {
+        title: Type.String({ minLength: 1 }),
+        kind: Type.Optional(
+          Type.Union([
+            Type.Literal("main_activity"),
+            Type.Literal("secondary_activity"),
+            Type.Literal("third_activity"),
+            Type.Literal("rest"),
+            Type.Literal("holiday"),
+            Type.Literal("custom")
+          ])
+        ),
+        color: Type.Optional(Type.String({ minLength: 1 })),
+        timezone: Type.Optional(Type.String({ minLength: 1 })),
+        weekDays: Type.Array(Type.Integer({ minimum: 0, maximum: 6 })),
+        startMinute: Type.Integer({ minimum: 0, maximum: 1440 }),
+        endMinute: Type.Integer({ minimum: 0, maximum: 1440 }),
+        startsOn: Type.Optional(
+          Type.Union([Type.String({ minLength: 1 }), Type.Null()])
+        ),
+        endsOn: Type.Optional(
+          Type.Union([Type.String({ minLength: 1 }), Type.Null()])
+        ),
+        exclusionDates: Type.Optional(
+          Type.Array(Type.String({ minLength: 1 }), { maxItems: 366 })
+        ),
+        blockingState: Type.Optional(
+          Type.Union([Type.Literal("allowed"), Type.Literal("blocked")])
+        ),
+        activityPresetKey: Type.Optional(
+          Type.Union([
+            Type.Literal("deep_work"),
+            Type.Literal("admin"),
+            Type.Literal("maintenance"),
+            Type.Literal("meeting"),
+            Type.Literal("recovery_break"),
+            Type.Literal("holiday_leisure"),
+            Type.Literal("light_context"),
+            Type.Literal("task_inherited"),
+            Type.Null()
+          ])
+        ),
+        customSustainRateApPerHour: Type.Optional(
+          Type.Union([Type.Number({ minimum: 0 }), Type.Null()])
+        ),
+        userId: optionalNullableString()
+      },
+      { additionalProperties: false }
+    ),
     method: "POST",
     path: "/api/v1/calendar/work-block-templates"
   });
@@ -3453,13 +3544,16 @@ export function registerForgePluginTools(
     label: "Forge Recommend Task Timeboxes",
     description:
       "Read up to 12 future task-timebox suggestions that fit the task owner, requested timezone, current calendar pressure, and scheduling rules.",
-    parameters: Type.Object({
-      taskId: Type.String({ minLength: 1 }),
-      from: optionalString(),
-      to: optionalString(),
-      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 12 })),
-      timezone: optionalString()
-    }, { additionalProperties: false }),
+    parameters: Type.Object(
+      {
+        taskId: Type.String({ minLength: 1 }),
+        from: optionalString(),
+        to: optionalString(),
+        limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 12 })),
+        timezone: optionalString()
+      },
+      { additionalProperties: false }
+    ),
     path: "/api/v1/calendar/timeboxes/recommend"
   });
 
@@ -3468,46 +3562,49 @@ export function registerForgePluginTools(
     label: "Forge Create Task Timebox",
     description:
       "Create a planned task timebox directly in Forge's calendar domain. This is a planning helper; agents can also use forge_create_entities with entityType task_timebox.",
-    parameters: Type.Object({
-      taskId: Type.String({ minLength: 1 }),
-      projectId: optionalNullableString(),
-      title: Type.String({ minLength: 1 }),
-      startsAt: Type.String({ minLength: 1 }),
-      endsAt: Type.String({ minLength: 1 }),
-      source: Type.Optional(
-        Type.Union([
-          Type.Literal("manual"),
-          Type.Literal("suggested"),
-          Type.Literal("live_run")
-        ])
-      ),
-      status: Type.Optional(
-        Type.Union([
-          Type.Literal("planned"),
-          Type.Literal("active"),
-          Type.Literal("completed"),
-          Type.Literal("cancelled")
-        ])
-      ),
-      overrideReason: optionalNullableString(),
-      activityPresetKey: Type.Optional(
-        Type.Union([
-          Type.Literal("deep_work"),
-          Type.Literal("admin"),
-          Type.Literal("maintenance"),
-          Type.Literal("meeting"),
-          Type.Literal("recovery_break"),
-          Type.Literal("holiday_leisure"),
-          Type.Literal("light_context"),
-          Type.Literal("task_inherited"),
-          Type.Null()
-        ])
-      ),
-      customSustainRateApPerHour: Type.Optional(
-        Type.Union([Type.Number({ minimum: 0 }), Type.Null()])
-      ),
-      userId: optionalNullableString()
-    }, { additionalProperties: false }),
+    parameters: Type.Object(
+      {
+        taskId: Type.String({ minLength: 1 }),
+        projectId: optionalNullableString(),
+        title: Type.String({ minLength: 1 }),
+        startsAt: Type.String({ minLength: 1 }),
+        endsAt: Type.String({ minLength: 1 }),
+        source: Type.Optional(
+          Type.Union([
+            Type.Literal("manual"),
+            Type.Literal("suggested"),
+            Type.Literal("live_run")
+          ])
+        ),
+        status: Type.Optional(
+          Type.Union([
+            Type.Literal("planned"),
+            Type.Literal("active"),
+            Type.Literal("completed"),
+            Type.Literal("cancelled")
+          ])
+        ),
+        overrideReason: optionalNullableString(),
+        activityPresetKey: Type.Optional(
+          Type.Union([
+            Type.Literal("deep_work"),
+            Type.Literal("admin"),
+            Type.Literal("maintenance"),
+            Type.Literal("meeting"),
+            Type.Literal("recovery_break"),
+            Type.Literal("holiday_leisure"),
+            Type.Literal("light_context"),
+            Type.Literal("task_inherited"),
+            Type.Null()
+          ])
+        ),
+        customSustainRateApPerHour: Type.Optional(
+          Type.Union([Type.Number({ minimum: 0 }), Type.Null()])
+        ),
+        userId: optionalNullableString()
+      },
+      { additionalProperties: false }
+    ),
     method: "POST",
     path: "/api/v1/calendar/timeboxes"
   });

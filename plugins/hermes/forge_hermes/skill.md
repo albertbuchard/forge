@@ -180,14 +180,23 @@ name the felt stake, protection, prediction, payoff, cost, or value conflict, an
 a functional loop or belief sentence is already visible, offer one tentative
 hypothesis plus one fit-or-correction question instead of another broad exploration.
 For logistical records, keep the reflection short and ask for the operational detail.
+Ground the reflection in one concrete detail from the user's own message. Do not
+narrate intake discipline with phrases such as "without widening the request,"
+"I will ask only," or "I will keep this bounded"; demonstrate that discipline by
+asking one useful question. Keep internal lane names, route keys, tool names, and
+field names out of the user-facing turn unless the user asks for implementation
+detail. Paraphrase labels such as `guided_design`, `read_only_review`, and
+`status_change` as natural actions.
 
 Use the route execution handoff before any read, write, run, repair, or publish call:
 freeze the accepted user-facing target, choose exactly one lane, use batch CRUD only
 for catalog entities, use named tools or documented routes for specialized CRUD and
 action workflows, and verify an action workflow's selected operation against live
 onboarding `actionEntities.routeKeys`, `routeTools`, and `methodRoutes` before calling.
-For Movement, Life Events, Life Force, Workbench, or Artifact Store verify `routeKey`,
-method, path, and `pathParams` from live onboarding `methodRoutes` before calling.
+For every dedicated surface, including Movement, Life Events, Life Force, Workbench,
+Course and Concept, Wiki, Calendar Connection, Artifact Store, Attention, Entity
+Navigation, People, and bounded Peer reads, verify `routeKey`, route tool, method,
+path, and `pathParams` from live onboarding `methodRoutes` before calling.
 Never hide placeholders in `query` or `body`, and never guess a nearby path.
 
 - Batch CRUD is the default for normal stored entities, including `goal`, `project`,
@@ -613,7 +622,7 @@ When Hermes is trying to find the right wiki record, use these search patterns:
    - After ingest or merge work, run `forge_sync_wiki_vault`, then use `forge_get_wiki_health`, search/list checks, and spot reads to verify created/updated pages, duplicate candidates, unresolved links, missing summaries, evidence links, and evidence reachability from canonical pages.
    - Report created pages, updated pages, merges, unresolved candidates, and how evidence is preserved. If the user wants reviewable candidates, hand off to the Forge UI ingest review instead of pretending the adapter can approve them inline.
 6. Use the health tools for sleep, sports, training load, weight loss, nutrition, gut, subjective-energy, and appearance review:
-   `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_get_weight_loss_overview`, `forge_update_sleep_session`, `forge_update_workout_session`, `forge_search_foods`, `forge_search_nutrition_foods`, `forge_lookup_nutrition_barcode`, `forge_log_food`, `forge_parse_food_log_with_chatgpt`, `forge_log_body_checkin`, `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`, `forge_log_gut_checkin`, `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, `forge_update_nutrition_experiment`.
+   `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_get_weight_loss_overview`, `forge_update_sleep_session`, `forge_update_workout_session`, `forge_search_foods`, `forge_search_nutrition_foods`, `forge_lookup_nutrition_barcode`, `forge_log_food`, `forge_update_food_log`, `forge_parse_food_log_with_chatgpt`, `forge_log_body_checkin`, `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`, `forge_log_gut_checkin`, `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, `forge_update_nutrition_experiment`.
    Food parsing must use Forge's configured `openai-codex` ChatGPT subscription connection, not a metered OpenAI Platform API path.
    For food logging, search Forge's nutrition catalog first and pass a matching
    result as `item.foodId` to `forge_log_food`. If no result matches and a custom
@@ -621,6 +630,9 @@ When Hermes is trying to find the right wiki record, use these search patterns:
    internet or another reliable public nutrition source before logging it.
    Custom/no-`foodId` items must include `caloriesKcal`, `proteinG`, `carbsG`,
    and `fatG`; do not save name-only custom foods.
+   For a correction, read the weight-loss overview, identify the exact
+   `foodLogId`, and use `forge_update_food_log` with only the fields the user
+   accepted changing.
 7. Movement, Life Events, Life Force, and Workbench are specialized Forge API surfaces rather than simple batch entities. When Hermes needs those domains, read `forge_get_agent_onboarding`, choose the route from `entityRouteModel.specializedDomainSurfaces`, and use `forge_call_movement_route`, `forge_call_life_event_route`, `forge_call_life_force_route`, or `forge_call_workbench_route` when the route-key tools are available.
 8. Treat narrow calendar helpers as convenience helpers, not the default architecture:
    `forge_create_work_block_template` and `forge_create_task_timebox` are fine, but Hermes should still prefer the generic batch entity routes when practical.
@@ -691,7 +703,7 @@ For wiki-specific recall:
 - Use the high-level batch routes for ordinary health-session CRUD too. `sleep_session` and `workout_session` should normally flow through `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`. Keep `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, and `forge_get_weight_loss_overview` for read models; use the dedicated nutrition tools for food/body/gut/appearance/subjective evidence; and keep `forge_update_sleep_session` and `forge_update_workout_session` for reflective enrichment on one already-existing record.
 - A direct manual `workout_session` needs only accepted `workoutType`, offset-bearing `startedAt`, and `endedAt`. Resolve local time only when it changes the instants, search nearby type-and-time duplicates, and do not force metrics or reflection. Read the exact workout before correction or deletion, preserve provider-backed or habit-generated timing, metrics, source, and provenance unless one field is explicitly corrected, and confirm immediate, non-restorable deletion because there is no restore lane.
 - Use the dedicated API families for Movement, Life Events, Life Force, and Workbench. Those routes are published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and are the preferred contract for movement stays, trips, time-in-place and travel-behavior queries, Life Events chronology/calendar/ticket/status, life-force state, and workbench execution/result work. Prefer `forge_call_movement_route`, `forge_call_life_event_route`, `forge_call_life_force_route`, or `forge_call_workbench_route` when those route-key tools are present.
-- Course and Concept use the dedicated `forge_call_course_route`, published under `specializedDomainSurfaces.courses`. Use it for installed-course discovery, progress/detail, learner-safe sessions, attempts, validated package import/export, due concepts, and cross-course mastery. Use the learner-safe session for coaching, never expose hidden assessment fields, and never send Course or Concept through batch CRUD.
+- Course and Concept use the dedicated `forge_call_course_route`, published under `specializedDomainSurfaces.courses`. Its exact lanes are `listCourses`, `courseDetail`, `learningSession`, `voiceLearningSession`, `submitAttempt`, `upgradeEnrollment`, `importCourse`, `exportCourse`, `listConcepts`, and `conceptDetail`. Use learner-safe visual or voice sessions for coaching, read exact release state and obtain explicit learner acceptance before an enrollment upgrade, never expose hidden assessment fields, and never send Course or Concept through batch CRUD.
 - Life Events use both paths deliberately: shared batch CRUD for normal `life_event` create, update, search, soft delete, restore, and generic `entity_links`; dedicated `/api/v1/life-events/*` routes for chronology reads, one-event reads, calendar sync, calendar-to-Life-Event conversion, ticket artifact import, and travel-status reads.
 - When that onboarding payload includes `routeSelectionQuestions`, use them before improvising follow-up questions for Movement, Life Events, Life Force, or Workbench.
 - After the lane is clear, talk in product nouns such as timeline, overlay, calendar match, ticket import, travel status, weekday

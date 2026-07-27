@@ -11345,6 +11345,93 @@ test("calendar connection metadata exposes Exchange Online as read only and macO
   }
 });
 
+test("macOS calendar discovery reports missing permission without a server error", async () => {
+  const previousMock = process.env.FORGE_MACOS_LOCAL_MOCK_JSON;
+  process.env.FORGE_MACOS_LOCAL_MOCK_JSON = JSON.stringify({
+    status: "not_determined",
+    granted: false,
+    sources: []
+  });
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-macos-local-permission-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const database = getDatabase();
+    database
+      .prepare(
+        `INSERT INTO stored_secrets (id, cipher_text, description, created_at, updated_at)
+         VALUES (?, ?, '', ?, ?)`
+      )
+      .run(
+        "secret_macos_permission",
+        "{}",
+        "2026-04-03T00:00:00.000Z",
+        "2026-04-03T00:00:00.000Z"
+      );
+    database
+      .prepare(
+        `INSERT INTO calendar_connections (
+           id, provider, label, account_label, status, config_json, credentials_secret_id,
+           forge_calendar_id, last_synced_at, last_sync_error, created_at, updated_at
+         )
+         VALUES (?, 'macos_local', ?, ?, 'error', '{}', ?, NULL, NULL, ?, ?, ?)`
+      )
+      .run(
+        "conn_macos_permission",
+        "Calendars On This Mac",
+        "Exchange",
+        "secret_macos_permission",
+        'unavailable("Forge needs Calendar full access before it can read calendars already configured on this Mac.")',
+        "2026-04-03T00:00:00.000Z",
+        "2026-04-03T00:00:00.000Z"
+      );
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/calendar/macos-local/discovery",
+      headers: { cookie: operatorCookie }
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json() as {
+      discovery: { status: string; sources: unknown[] };
+    };
+    assert.equal(body.discovery.status, "not_determined");
+    assert.deepEqual(body.discovery.sources, []);
+
+    const connectionsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/calendar/connections"
+    });
+    assert.equal(connectionsResponse.statusCode, 200);
+    const connection = (
+      connectionsResponse.json() as {
+        connections: Array<{
+          id: string;
+          status: string;
+          lastSyncError: string | null;
+        }>;
+      }
+    ).connections.find((entry) => entry.id === "conn_macos_permission");
+    assert.equal(connection?.status, "needs_attention");
+    assert.equal(
+      connection?.lastSyncError,
+      "Forge needs Calendar full access before it can read calendars already configured on this Mac."
+    );
+  } finally {
+    if (previousMock === undefined) {
+      delete process.env.FORGE_MACOS_LOCAL_MOCK_JSON;
+    } else {
+      process.env.FORGE_MACOS_LOCAL_MOCK_JSON = previousMock;
+    }
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("macOS local connection replacement rehomes Forge-owned references and blocks superseded sync", async () => {
   const previousMock = process.env.FORGE_MACOS_LOCAL_MOCK_JSON;
   process.env.FORGE_MACOS_LOCAL_MOCK_JSON = JSON.stringify({
@@ -11676,7 +11763,7 @@ test("macOS local connection replacement rehomes Forge-owned references and bloc
   }
 });
 
-test("new writable connections can reuse the existing shared Forge write target without creating another one", async () => {
+test("macOS connections reuse the shared write target and treat permission loss as recoverable", async () => {
   const previousMock = process.env.FORGE_MACOS_LOCAL_MOCK_JSON;
   process.env.FORGE_MACOS_LOCAL_MOCK_JSON = JSON.stringify({
     status: "full_access",
@@ -11816,6 +11903,36 @@ test("new writable connections can reuse the existing shared Forge write target 
       )
       .get(createdConnection.id) as { count: number };
     assert.equal(forgeManagedCalendars.count, 0);
+
+    process.env.FORGE_MACOS_LOCAL_MOCK_JSON = JSON.stringify({
+      status: "not_determined",
+      granted: false,
+      sources: []
+    });
+    const permissionLossResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/calendar/connections/${createdConnection.id}/sync`,
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      }
+    });
+    assert.equal(permissionLossResponse.statusCode, 500);
+    const permissionLossRow = database
+      .prepare(
+        `SELECT status, last_sync_error
+         FROM calendar_connections
+         WHERE id = ?`
+      )
+      .get(createdConnection.id) as {
+      status: string;
+      last_sync_error: string | null;
+    };
+    assert.equal(permissionLossRow.status, "needs_attention");
+    assert.equal(
+      permissionLossRow.last_sync_error,
+      "Forge needs Calendar full access before it can read calendars already configured on this Mac."
+    );
   } finally {
     if (previousMock === undefined) {
       delete process.env.FORGE_MACOS_LOCAL_MOCK_JSON;
@@ -20156,6 +20273,54 @@ test("calendar events omit preferredCalendarId to use the default writable calen
          VALUES (?, ?, ?, ?, ?)`
       )
       .run(
+        "secret_broken_write",
+        "{}",
+        "unhealthy writable calendar test secret",
+        "2026-04-03T00:00:00.000Z",
+        "2026-04-03T00:00:00.000Z"
+      );
+    database
+      .prepare(
+        `INSERT INTO calendar_connections (
+           id, provider, label, account_label, status, config_json, credentials_secret_id, forge_calendar_id, last_synced_at, last_sync_error, created_at, updated_at
+         )
+         VALUES (?, ?, ?, ?, 'error', ?, ?, NULL, NULL, ?, ?, ?)`
+      )
+      .run(
+        "calconn_broken_write",
+        "caldav",
+        "Broken write calendar",
+        "broken@example.com",
+        "{}",
+        "secret_broken_write",
+        "Provider unavailable",
+        "2026-04-03T00:00:00.000Z",
+        "2026-04-03T00:00:00.000Z"
+      );
+    database
+      .prepare(
+        `INSERT INTO calendar_calendars (
+           id, connection_id, remote_id, title, description, color, timezone, is_primary, can_write, forge_managed, selected_for_sync, last_synced_at, created_at, updated_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, 1, 1, NULL, ?, ?)`
+      )
+      .run(
+        "calendar_broken_write",
+        "calconn_broken_write",
+        "https://broken.example.com/calendars/forge/",
+        "A Broken Forge",
+        "Unhealthy Forge calendar",
+        "#ef4444",
+        "Europe/Zurich",
+        "2026-04-03T00:00:00.000Z",
+        "2026-04-03T00:00:00.000Z"
+      );
+    database
+      .prepare(
+        `INSERT INTO stored_secrets (id, cipher_text, description, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+      .run(
         "secret_default_write",
         "{}",
         "default writable calendar test secret",
@@ -21564,16 +21729,18 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(selfObservationConversationPlaybook);
     assert.match(
       selfObservationConversationPlaybook.openingQuestion,
-      /feel, think, or do next/i
+      /support with what you noticed[\s\S]*save it as-is[\s\S]*explore it together[\s\S]*review an existing observation/i
     );
     assert.ok(
       selfObservationConversationPlaybook.askSequence.some((step) =>
-        /observedAt date should anchor the note/i.test(step)
+        /preserve[\s\S]*supplied wording[\s\S]*observedAt only when it is missing[\s\S]*one accuracy or consent question/i.test(
+          step
+        )
       )
     );
     assert.ok(
       selfObservationConversationPlaybook.askSequence.some((step) =>
-        /Ask only one next question[\s\S]*does not require every link in the chain/i.test(
+        /guided reflection[\s\S]*one concrete moment[\s\S]*observable events separate[\s\S]*ask only one question[\s\S]*do not require every link/i.test(
           step
         )
       )
@@ -22450,6 +22617,7 @@ test("settings and local agent token management persist through the versioned AP
         "forge_search_nutrition_foods",
         "forge_lookup_nutrition_barcode",
         "forge_log_food",
+        "forge_update_food_log",
         "forge_parse_food_log_with_chatgpt",
         "forge_log_body_checkin",
         "forge_log_appearance_checkin",
@@ -22474,10 +22642,9 @@ test("settings and local agent token management persist through the versioned AP
         "forge_create_task_timebox"
       ]
     );
-    const workBlockToolGuide =
-      onboardingBody.onboarding.toolInputCatalog.find(
-        (guide) => guide.toolName === "forge_create_work_block_template"
-      );
+    const workBlockToolGuide = onboardingBody.onboarding.toolInputCatalog.find(
+      (guide) => guide.toolName === "forge_create_work_block_template"
+    );
     assert.ok(workBlockToolGuide);
     assert.deepEqual(workBlockToolGuide.requiredFields, [
       "title",
@@ -22491,7 +22658,10 @@ test("settings and local agent token management persist through the versioned AP
       );
     assert.ok(timeboxRecommendationToolGuide);
     assert.deepEqual(timeboxRecommendationToolGuide.requiredFields, ["taskId"]);
-    assert.match(timeboxRecommendationToolGuide.inputShape, /timezone\?: string/);
+    assert.match(
+      timeboxRecommendationToolGuide.inputShape,
+      /timezone\?: string/
+    );
     assert.deepEqual(
       onboardingBody.onboarding.recommendedPluginTools.workWorkflow,
       [
@@ -23657,7 +23827,7 @@ test("agent runtime sessions register, heartbeat, and expose reconnect history",
         }
       }
     });
-    assert.equal(actionResponse.statusCode, 201);
+    assert.equal(actionResponse.statusCode, 201, actionResponse.body);
 
     const listResponse = await app.inject({
       method: "GET",

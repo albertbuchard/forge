@@ -1,3 +1,4 @@
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -14,17 +15,7 @@ import { readArtifactDownload } from "./services/artifacts.js";
 
 type TestApp = Awaited<ReturnType<typeof buildServer>>;
 
-async function operatorCookie(app: TestApp) {
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/v1/auth/operator-session",
-    headers: { host: "127.0.0.1:4317" }
-  });
-  assert.equal(response.statusCode, 200, response.body);
-  const cookie = response.cookies[0];
-  assert.ok(cookie);
-  return `${cookie.name}=${cookie.value}`;
-}
+const operatorCookie = issueTestOperatorSessionCookie;
 
 async function artifactToken(
   app: TestApp,
@@ -580,7 +571,8 @@ test("Artifact routes and batch CRUD enforce exact project and tag links", async
         url: `/api/v1/artifacts/${id}/download`,
         headers
       });
-      assert.equal(download.statusCode, 401, download.body);
+      assert.equal(download.statusCode, 403, download.body);
+      assert.equal(download.json().code, "gateway_scope_forbidden");
     }
   } finally {
     await app.close();

@@ -529,13 +529,25 @@ do {
   var response = result
   response["ok"] = true
   emit(response)
+} catch HelperError.invalidRequest(let message) {
+  emit([
+    "ok": false,
+    "error": message
+  ])
+} catch HelperError.unavailable(let message) {
+  emit([
+    "ok": false,
+    "error": message
+  ])
 } catch {
   emit([
     "ok": false,
-    "error": String(describing: error)
+    "error": error.localizedDescription
   ])
 }
 `;
+
+const HELPER_BUNDLE_IDENTIFIER = "ai.openclaw.forge.macos-calendar-helper";
 
 const HELPER_INFO_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -548,7 +560,7 @@ const HELPER_INFO_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
   <key>CFBundleExecutable</key>
   <string>ForgeMacOSCalendarHelper</string>
   <key>CFBundleIdentifier</key>
-  <string>ai.openclaw.forge.macos-calendar-helper</string>
+  <string>${HELPER_BUNDLE_IDENTIFIER}</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
@@ -607,7 +619,9 @@ async function ensureHelperCompiled() {
   const binaryPath = helperBinaryPath();
   const infoPlistPath = helperInfoPlistPath();
   const sourceHash = createHash("sha256").update(HELPER_SOURCE).digest("hex");
-  const plistHash = createHash("sha256").update(HELPER_INFO_PLIST).digest("hex");
+  const plistHash = createHash("sha256")
+    .update(HELPER_INFO_PLIST)
+    .digest("hex");
 
   await mkdir(cacheDir, { recursive: true });
   await mkdir(helperMacOSPath(), { recursive: true });
@@ -662,8 +676,24 @@ async function ensureHelperCompiled() {
     "-o",
     binaryPath
   ]);
+  await execFile(
+    "codesign",
+    buildMacOSCalendarHelperSigningArgs(helperAppPath())
+  );
 
   return { binaryPath, sourceHash, plistHash };
+}
+
+export function buildMacOSCalendarHelperSigningArgs(appPath: string) {
+  return [
+    "--force",
+    "--deep",
+    "--sign",
+    "-",
+    "--identifier",
+    HELPER_BUNDLE_IDENTIFIER,
+    appPath
+  ];
 }
 
 export function buildMacOSCalendarHelperLaunchArgs(input: {
@@ -756,7 +786,9 @@ async function runHelperViaApp<T extends Record<string, unknown>>(
 ): Promise<T> {
   await ensureHelperCompiled();
   const appPath = helperAppPath();
-  const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
+  const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString(
+    "base64"
+  );
   const responsePath = path.join(
     helperCacheDir(),
     `response-${randomUUID()}.json`
@@ -807,7 +839,9 @@ async function runHelper<T extends Record<string, unknown>>(
         } as unknown as T;
       case "list_events": {
         const calendarIds = Array.isArray(payload.calendarIds)
-          ? payload.calendarIds.filter((value): value is string => typeof value === "string")
+          ? payload.calendarIds.filter(
+              (value): value is string => typeof value === "string"
+            )
           : [];
         return {
           events: (mock.events ?? []).filter((event) =>
@@ -823,13 +857,16 @@ async function runHelper<T extends Record<string, unknown>>(
             ?.find((source) => source.sourceId === sourceId)
             ?.calendars.find((calendar) => calendar.title === "Forge") ?? null;
         if (!forgeCalendar) {
-          throw new Error("Mock macOS local source is missing a Forge calendar.");
+          throw new Error(
+            "Mock macOS local source is missing a Forge calendar."
+          );
         }
         return { calendar: forgeCalendar } as unknown as T;
       }
       case "upsert_event": {
         const eventId =
-          typeof payload.eventId === "string" && payload.eventId.trim().length > 0
+          typeof payload.eventId === "string" &&
+          payload.eventId.trim().length > 0
             ? payload.eventId
             : "mock_macos_event";
         return {
@@ -842,7 +879,8 @@ async function runHelper<T extends Record<string, unknown>>(
             endAt: String(payload.endAt ?? ""),
             allDay: Boolean(payload.allDay),
             availability: "busy",
-            location: typeof payload.location === "string" ? payload.location : "",
+            location:
+              typeof payload.location === "string" ? payload.location : "",
             notes: typeof payload.notes === "string" ? payload.notes : "",
             occurrenceDate: null,
             lastModifiedAt: new Date().toISOString()
@@ -852,25 +890,34 @@ async function runHelper<T extends Record<string, unknown>>(
       case "delete_event":
         return { deleted: true } as unknown as T;
       default:
-        throw new Error(`Unknown mock macOS helper command ${String(payload.command)}`);
+        throw new Error(
+          `Unknown mock macOS helper command ${String(payload.command)}`
+        );
     }
   }
 
   return runHelperViaApp<T>(payload);
 }
 
-export function buildMacOSLocalCalendarUrl(sourceId: string, calendarId: string) {
+export function buildMacOSLocalCalendarUrl(
+  sourceId: string,
+  calendarId: string
+) {
   return `forge-macos-local://calendar/${encodeURIComponent(sourceId)}/${encodeURIComponent(calendarId)}/`;
 }
 
 export function parseMacOSLocalCalendarUrl(urlValue: string) {
   const url = new URL(urlValue);
   if (url.protocol !== "forge-macos-local:" || url.hostname !== "calendar") {
-    throw new Error(`Forge could not parse macOS local calendar URL ${urlValue}.`);
+    throw new Error(
+      `Forge could not parse macOS local calendar URL ${urlValue}.`
+    );
   }
   const parts = url.pathname.split("/").filter(Boolean);
   if (parts.length < 2) {
-    throw new Error(`Forge could not parse macOS local calendar URL ${urlValue}.`);
+    throw new Error(
+      `Forge could not parse macOS local calendar URL ${urlValue}.`
+    );
   }
   return {
     sourceId: decodeURIComponent(parts[0] ?? ""),
@@ -879,7 +926,10 @@ export function parseMacOSLocalCalendarUrl(urlValue: string) {
 }
 
 export async function getMacOSCalendarAuthStatus() {
-  if (process.platform !== "darwin") {
+  if (
+    process.platform !== "darwin" &&
+    !process.env.FORGE_MACOS_LOCAL_MOCK_JSON?.trim()
+  ) {
     return { status: "unavailable" as MacOSCalendarAccessStatus };
   }
   return runHelper<{ status: MacOSCalendarAccessStatus }>({
@@ -888,7 +938,10 @@ export async function getMacOSCalendarAuthStatus() {
 }
 
 export async function requestMacOSCalendarAccess() {
-  if (process.platform !== "darwin") {
+  if (
+    process.platform !== "darwin" &&
+    !process.env.FORGE_MACOS_LOCAL_MOCK_JSON?.trim()
+  ) {
     return {
       granted: false,
       status: "unavailable" as MacOSCalendarAccessStatus
@@ -917,6 +970,14 @@ export async function openMacOSCalendarPrivacySettings() {
 }
 
 export async function discoverMacOSLocalCalendars() {
+  const access = await getMacOSCalendarAuthStatus();
+  if (access.status !== "full_access") {
+    return {
+      status: access.status,
+      requestedAt: new Date().toISOString(),
+      sources: []
+    };
+  }
   const payload = await runHelper<{
     status: MacOSCalendarAccessStatus;
     sources: Array<{

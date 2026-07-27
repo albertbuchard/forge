@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildServer } from "../../../../apps/api/src/app";
+import type { ApplicationSecurityRuntime } from "../../../../apps/api/src/security/application-security-runtime";
 
 const repoRoot = path.resolve(import.meta.dirname, "../../../..");
 const tempRoots: string[] = [];
@@ -20,13 +21,47 @@ function readRepoFile(relativePath: string) {
   return readFileSync(path.join(repoRoot, relativePath), "utf8");
 }
 
+async function buildAuthenticatedServer(dataRoot: string) {
+  let security: ApplicationSecurityRuntime | undefined;
+  const app = await buildServer({
+    dataRoot,
+    taskRunWatchdog: false,
+    onSecurityRuntimeReady(runtime) {
+      security = runtime;
+    }
+  });
+  expect(security).toBeDefined();
+  const ownerEpoch = security!.store.readOwnerSecurityEpoch("user_operator");
+  expect(ownerEpoch).toBeDefined();
+  const session = security!.browserSessions.create({
+    kind: "operator_session",
+    subjectId: "user_operator",
+    ownerId: "user_operator",
+    clientId: null,
+    installationId: null,
+    audience: security!.audience,
+    scopes: ["*"],
+    profile: "operator",
+    ownerSecurityEpoch: ownerEpoch!,
+    clientSecurityEpoch: null,
+    authenticatedAt: new Date().toISOString()
+  });
+  return {
+    app,
+    operatorCookie: `forge_session=${encodeURIComponent(session.sessionToken)}`
+  };
+}
+
 async function loadOnboardingPayload() {
   const dataRoot = mkdtempSync(path.join(os.tmpdir(), "forge-question-flow-"));
   tempRoots.push(dataRoot);
-  const app = await buildServer({ dataRoot, taskRunWatchdog: false });
+  const { app, operatorCookie } = await buildAuthenticatedServer(dataRoot);
   const response = await app.inject({
     method: "GET",
-    url: "/api/v1/agents/onboarding"
+    url: "/api/v1/agents/onboarding",
+    headers: {
+      cookie: operatorCookie
+    }
   });
   expect(response.statusCode).toBe(200);
   await app.close();
@@ -72,15 +107,21 @@ async function loadOnboardingPayload() {
 async function loadAgentContractPayloads() {
   const dataRoot = mkdtempSync(path.join(os.tmpdir(), "forge-question-flow-"));
   tempRoots.push(dataRoot);
-  const app = await buildServer({ dataRoot, taskRunWatchdog: false });
+  const { app, operatorCookie } = await buildAuthenticatedServer(dataRoot);
   const [onboardingResponse, openApiResponse] = await Promise.all([
     app.inject({
       method: "GET",
-      url: "/api/v1/agents/onboarding"
+      url: "/api/v1/agents/onboarding",
+      headers: {
+        cookie: operatorCookie
+      }
     }),
     app.inject({
       method: "GET",
-      url: "/api/v1/openapi.json"
+      url: "/api/v1/openapi.json",
+      headers: {
+        cookie: operatorCookie
+      }
     })
   ]);
   expect(onboardingResponse.statusCode).toBe(200);
@@ -355,7 +396,7 @@ describe("question flow simulation cycles", () => {
       "Show me which causal-inference concept is due, then explain the evidence behind its current mastery estimate.",
     "Preference Catalog": "Create a comparison pool for places to work from.",
     "Preference Catalog Item":
-      "Add one cafe candidate without making later comparisons ambiguous.",
+      "Add Flat white to my cafe catalog; the name is already clear.",
     "Preference Context":
       "Merge my tired-work context into deep work without losing the comparisons that explain the ranking.",
     "Preference Item":
@@ -463,7 +504,13 @@ describe("question flow simulation cycles", () => {
     "Sleep Overview": ["review", "navigate", "interpret", "follow-up"],
     "Sports Overview": ["review", "navigate", "interpret", "follow-up"],
     "Training Load": ["review", "navigate", "interpret", "follow-up"],
-    "Weight Loss": ["review", "log", "experiment", "follow-up"],
+    "Weight Loss": [
+      "review",
+      "log",
+      "correct-food-log",
+      "experiment",
+      "follow-up"
+    ],
     "Calendar Overview": ["review", "navigate", "interpret", "follow-up"],
     "Calendar Connection": ["create", "read", "update", "sync"],
     "Preferences Workspace": ["review", "explain", "qualify", "follow-up"],
@@ -484,7 +531,14 @@ describe("question flow simulation cycles", () => {
     ],
     Concept: ["search", "due-review", "read-detail", "interpret-mastery"],
     "Preference Catalog": ["add", "update", "review", "browse"],
-    "Preference Catalog Item": ["add", "update", "review", "compare"],
+    "Preference Catalog Item": [
+      "add",
+      "guided-disambiguation",
+      "update",
+      "read-only-review",
+      "delete",
+      "restore"
+    ],
     "Preference Context": ["add", "update", "review", "merge"],
     "Preference Item": [
       "add",
@@ -899,8 +953,12 @@ describe("question flow simulation cycles", () => {
         "Read one course's syllabus and progress before asking review questions.",
       learningSession:
         "Open the learner-safe session for teaching, activity selection, or continuation.",
+      voiceLearningSession:
+        "Start one learner-safe spoken lesson for an exact week and day.",
       submitAttempt:
         "Submit one accepted learner answer to the exact activity.",
+      upgradeEnrollment:
+        "Read the installed and available releases, then upgrade only after the learner explicitly chooses the published update.",
       importCourse:
         "Install a trusted validated course package or accepted replacement.",
       exportCourse:
@@ -1397,17 +1455,84 @@ describe("question flow simulation cycles", () => {
     expect(selfObservationFlow?.questionStyle).toBe(
       "psyche_adjacent_active_listening"
     );
-    expect(selfObservationFlow?.readinessCheck).toMatch(
-      /observed situation[\s\S]*timestamp or observedAt date[\s\S]*at least one meaningful[\s\S]*cue[\s\S]*emotion or body signal[\s\S]*thought or meaning[\s\S]*behavior or urge[\s\S]*consequence/i
-    );
-    expect(selfObservationFlow?.readinessCheck).toMatch(
-      /stronger Psyche container[\s\S]*trigger_report[\s\S]*behavior_pattern[\s\S]*belief_entry[\s\S]*mode_profile[\s\S]*emotion_definition[\s\S]*accepted or corrected by the user/i
+    expect(selfObservationFlow?.openingQuestion).toMatch(
+      /support with what you noticed[\s\S]*save it as-is[\s\S]*explore it together[\s\S]*review an existing observation/i
     );
     expect(selfObservationFlow?.askSequence.join("\n")).toMatch(
-      /ask only one next question[\s\S]*does not require every link in the chain/i
+      /immediate support[\s\S]*direct capture[\s\S]*guided reflection[\s\S]*exact-record review or narrow update[\s\S]*skip this lane question/i
+    );
+    expect(selfObservationFlow?.askSequence.join("\n")).toMatch(
+      /support never depends on saving[\s\S]*preserve and reflect the user's supplied wording[\s\S]*observedAt only when it is missing[\s\S]*one accuracy or consent question[\s\S]*do not require a title, full functional chain, interpretation, link, or stronger container/i
+    );
+    expect(selfObservationFlow?.askSequence.join("\n")).toMatch(
+      /read the bounded calendar[\s\S]*exact backing note[\s\S]*preserve its accepted content, observedAt, frontmatter, and links[\s\S]*newly true or inaccurate[\s\S]*expectedRevisionHash/i
+    );
+    expect(selfObservationFlow?.askSequence.join("\n")).toMatch(
+      /observable events separate from the user's meaning[\s\S]*ask only one question[\s\S]*do not require every link[\s\S]*at most one tentative functional or emotional hypothesis[\s\S]*fits or needs correction/i
+    );
+    expect(selfObservationFlow?.askSequence.join("\n")).toMatch(
+      /only after the user is understood[\s\S]*optionally offer[\s\S]*may be saved without accepting a different container[\s\S]*shared note batch CRUD[\s\S]*never invent a standalone self_observation mutation route[\s\S]*read the exact note or bounded calendar result/i
+    );
+    expect(selfObservationFlow?.readinessCheck).toMatch(
+      /Immediate support[\s\S]*never requires a save[\s\S]*Direct capture[\s\S]*accepted note content[\s\S]*frontmatter\.observedAt[\s\S]*one accuracy or consent check[\s\S]*do not require a title, complete cue-to-consequence chain, interpretation, link, or stronger container/i
+    );
+    expect(selfObservationFlow?.readinessCheck).toMatch(
+      /Read-only review[\s\S]*bounded calendar and exact backing note[\s\S]*must not manufacture a write[\s\S]*Narrow update[\s\S]*accepted sparse content[\s\S]*expectedRevisionHash[\s\S]*Guided reflection[\s\S]*one concrete moment[\s\S]*one tentative hypothesis[\s\S]*fit-or-correction/i
+    );
+    expect(selfObservationFlow?.readinessCheck).toMatch(
+      /may be offered after the user is understood[\s\S]*support and lightweight capture never depend on reclassification[\s\S]*forge_get_self_observation_calendar[\s\S]*note batch CRUD[\s\S]*verify the exact saved note or calendar result/i
     );
     expect(selfObservationFlow?.apiAccessHint).toMatch(
       /frontmatter\.observedAt[\s\S]*forge_get_self_observation_calendar[\s\S]*forge_create_entities/i
+    );
+
+    const preferenceCatalogItem = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "preference_catalog_item"
+    );
+    const preferenceCatalogItemFlow = preferenceCatalogItem?.questionFlow;
+    expect(preferenceCatalogItem?.minimumCreateFields).toEqual([
+      "catalogId",
+      "label"
+    ]);
+    expect(
+      preferenceCatalogItem?.fieldGuide?.find(
+        (field) => field.name === "position"
+      )
+    ).toEqual(
+      expect.objectContaining({
+        type: "integer",
+        required: false
+      })
+    );
+    expect(preferenceCatalogItemFlow?.openingQuestion).toMatch(
+      /adding a named option[\s\S]*clarifying an ambiguous one[\s\S]*reviewing, removing, or restoring/i
+    );
+    expect(preferenceCatalogItemFlow?.askSequence.join("\n")).toMatch(
+      /direct capture[\s\S]*guided disambiguation[\s\S]*exact-record review or narrow update[\s\S]*soft delete or restore[\s\S]*skip this lane question/i
+    );
+    expect(preferenceCatalogItemFlow?.askSequence.join("\n")).toMatch(
+      /exact parent preference_catalog[\s\S]*linkedTo[\s\S]*preference_catalog[\s\S]*one accuracy or consent question[\s\S]*requires only catalogId and label[\s\S]*do not ask why the option deserves inclusion[\s\S]*description, tags, featureWeights, position, rationale, or comparison criteria/i
+    );
+    expect(preferenceCatalogItemFlow?.askSequence.join("\n")).toMatch(
+      /exact existing item and parent catalog[\s\S]*preserve accepted sparse label, description, tags, featureWeights, position, and catalog membership[\s\S]*Catalog membership is immutable/i
+    );
+    expect(preferenceCatalogItemFlow?.askSequence.join("\n")).toMatch(
+      /preference_judgment or preference_signal action[\s\S]*Never convert that evidence into inferred featureWeights or a batch score update[\s\S]*dedicated score-override action/i
+    );
+    expect(preferenceCatalogItemFlow?.askSequence.join("\n")).toMatch(
+      /reversible Settings Bin[\s\S]*shared batch delete[\s\S]*exact id and parent-scoped search using includeDeleted: true[\s\S]*deleted marker and preserved snapshot/i
+    );
+    expect(preferenceCatalogItemFlow?.askSequence.join("\n")).toMatch(
+      /same exact includeDeleted search[\s\S]*parent catalog lifecycle state[\s\S]*parent is archived[\s\S]*obtain acceptance to restore the parent first[\s\S]*restore and verify the parent[\s\S]*repeat the parent-scoped active-label conflict check[\s\S]*shared batch restore/i
+    );
+    expect(preferenceCatalogItemFlow?.askSequence.join("\n")).toMatch(
+      /After create or update[\s\S]*exact active item[\s\S]*After delete[\s\S]*exact deleted item with includeDeleted: true[\s\S]*After restore[\s\S]*exact active item again[\s\S]*verify catalog membership, label, preserved optional fields/i
+    );
+    expect(preferenceCatalogItemFlow?.readinessCheck).toMatch(
+      /Direct capture[\s\S]*exact active parent preference_catalog[\s\S]*linkedTo[\s\S]*requires only catalogId and label[\s\S]*omitted position appends[\s\S]*Read-only review[\s\S]*must not manufacture a write[\s\S]*Narrow update[\s\S]*catalogId is immutable[\s\S]*Guided disambiguation[\s\S]*Soft delete[\s\S]*includeDeleted: true[\s\S]*deleted marker plus preserved snapshot[\s\S]*Restore[\s\S]*parent lifecycle read[\s\S]*parent catalog is archived[\s\S]*restore and verify the parent first[\s\S]*active-label conflict[\s\S]*preference_judgment or preference_signal[\s\S]*score-override[\s\S]*shared batch CRUD[\s\S]*exact includeDeleted read[\s\S]*exact active read/i
+    );
+    expect(preferenceCatalogItemFlow?.apiAccessHint).toMatch(
+      /Route posture: batch_crud_entity[\s\S]*\/api\/v1\/entities\/create[\s\S]*\/api\/v1\/entities\/restore[\s\S]*forge_search_entities/i
     );
 
     const attentionFlow = onboarding.entityCatalog.find(
@@ -1519,10 +1644,13 @@ describe("question flow simulation cycles", () => {
     )?.questionFlow;
     expect(weightLossFlow?.questionStyle).toBe("read_model_practical_scope");
     expect(weightLossFlow?.readinessCheck).toMatch(
-      /practical food-body question[\s\S]*read before asking write-shaped follow-ups[\s\S]*dedicated nutrition action path[\s\S]*food log[\s\S]*body check-in[\s\S]*gut check-in[\s\S]*N-of-1 experiment/i
+      /practical food-body question[\s\S]*read before asking write-shaped follow-ups[\s\S]*dedicated nutrition action path[\s\S]*exact-record food-log correction[\s\S]*body check-in[\s\S]*gut check-in[\s\S]*N-of-1 experiment/i
+    );
+    expect(weightLossFlow?.readinessCheck).toMatch(
+      /correction[\s\S]*overview[\s\S]*exact foodLogId[\s\S]*smallest field-level change/i
     );
     expect(weightLossFlow?.apiAccessHint).toMatch(
-      /forge_get_weight_loss_overview[\s\S]*forge_log_food[\s\S]*forge_log_body_checkin[\s\S]*forge_log_gut_checkin[\s\S]*forge_start_nutrition_experiment/i
+      /forge_get_weight_loss_overview[\s\S]*forge_log_food[\s\S]*forge_update_food_log[\s\S]*forge_log_body_checkin[\s\S]*forge_log_gut_checkin[\s\S]*forge_start_nutrition_experiment/i
     );
 
     const strategyEntry = onboarding.entityCatalog.find(
@@ -3459,6 +3587,24 @@ describe("question flow simulation cycles", () => {
     );
   });
 
+  it("2026-07-25 cycle 1 retest: Course starts voice guidance before requiring its returned token", async () => {
+    const onboarding = await loadOnboardingPayload();
+    const flow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "course"
+    )?.questionFlow;
+    const coursePlaybook = getSectionSlice(entityPlaybook, "Course");
+
+    expect(flow?.readinessCheck).toMatch(
+      /Starting voiceLearningSession requires only the exact course, week, and day[\s\S]*call returns the lesson-scoped token[\s\S]*later voice attempt[\s\S]*current voice token/i
+    );
+    expect(coursePlaybook).toMatch(
+      /starting voice guidance has the exact course, week, and day/i
+    );
+    expect(coursePlaybook).toMatch(
+      /later voice attempt has the returned lesson-scoped token/i
+    );
+  });
+
   it("cycle 3: specialized route examples cover Movement, Life Events, Life Force, and Workbench without guessing", () => {
     const onboardingSource = readRepoFile("apps/api/src/app.ts");
     const typeSource = readRepoFile("apps/web/src/lib/types.ts");
@@ -3753,6 +3899,20 @@ describe("question flow simulation cycles", () => {
     expect(
       catalogByTool.get("forge_get_self_observation_calendar")?.notes.join(" ")
     ).toMatch(/note batch CRUD[\s\S]*no.*standalone self_observation/i);
+    expect(
+      onboarding.recommendedPluginTools.healthWorkflow
+    ).toContain("forge_update_food_log");
+    expect(
+      catalogByTool.get("forge_update_food_log")?.requiredFields
+    ).toEqual(["foodLogId"]);
+    expect(
+      catalogByTool.get("forge_update_food_log")?.notes.join(" ")
+    ).toMatch(
+      /read forge_get_weight_loss_overview first[\s\S]*exact existing log[\s\S]*only fields[\s\S]*complete desired item list[\s\S]*PATCH \/api\/v1\/health\/weight-loss\/food-logs\/:id/i
+    );
+    expect(
+      openApi.paths["/api/v1/health/weight-loss/food-logs/{id}"]?.patch
+    ).toBeDefined();
 
     for (const skillSource of [
       readRepoFile("plugins/openclaw/skills/forge-openclaw/SKILL.md"),

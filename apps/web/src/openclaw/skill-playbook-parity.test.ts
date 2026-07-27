@@ -575,6 +575,67 @@ describe("forge skill playbook parity", () => {
     );
   });
 
+  it("keeps internal lane vocabulary out of user-facing reflections", () => {
+    const skills = [
+      readRepoFile("plugins/openclaw/skills/forge-openclaw/SKILL.md"),
+      readRepoFile("plugins/hermes/skill.md"),
+      readRepoFile("plugins/hermes/forge_hermes/skill.md"),
+      readRepoFile("plugins/codex/skills/forge-codex/SKILL.md")
+    ];
+
+    for (const skill of skills) {
+      expect(skill).toMatch(
+        /Ground the reflection in one concrete detail from the user's own message/i
+      );
+      expect(skill).toMatch(/Do not\s+narrate intake discipline/i);
+      expect(skill).toMatch(
+        /Keep internal lane names, route keys, tool names, and\s+field names out of the\s+user-facing turn/i
+      );
+      expect(skill).toMatch(
+        /guided_design[\s\S]*read_only_review[\s\S]*status_change[\s\S]*natural\s+actions/i
+      );
+    }
+  });
+
+  it("requires exact live route selection for every dedicated surface", () => {
+    const skills = [
+      readRepoFile("plugins/openclaw/skills/forge-openclaw/SKILL.md"),
+      readRepoFile("plugins/hermes/skill.md"),
+      readRepoFile("plugins/hermes/forge_hermes/skill.md"),
+      readRepoFile("plugins/codex/skills/forge-codex/SKILL.md")
+    ];
+
+    for (const skill of skills) {
+      const start = skill.indexOf("For every dedicated surface");
+      const end = skill.indexOf("Never hide placeholders", start);
+      expect(start).toBeGreaterThanOrEqual(0);
+      expect(end).toBeGreaterThan(start);
+      const routeRule = skill.slice(start, end);
+      for (const surface of [
+        "Movement",
+        "Life Events",
+        "Life Force",
+        "Workbench",
+        "Course and Concept",
+        "Wiki",
+        "Calendar Connection",
+        "Artifact Store",
+        "Attention",
+        "Entity\nNavigation",
+        "People",
+        "bounded Peer reads"
+      ]) {
+        expect(routeRule).toContain(surface);
+      }
+      expect(routeRule).toMatch(
+        /verify `routeKey`, route tool, method,\s+path, and `pathParams` from live onboarding `methodRoutes`/i
+      );
+      expect(skill.slice(end, end + 160)).toMatch(
+        /never guess a nearby path/i
+      );
+    }
+  });
+
   it("keeps OpenClaw's exact tool list aligned with the current curated tool surface", () => {
     const openclawSkill = readRepoFile(
       "plugins/openclaw/skills/forge-openclaw/SKILL.md"

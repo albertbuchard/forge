@@ -114,8 +114,8 @@ describe("question flow quality coverage", () => {
       ],
       [
         "Self Observation",
-        /what happened in the situation/i,
-        /whichever parts are actually present/i
+        /support with what you noticed[\s\S]*save it as-is[\s\S]*explore it together[\s\S]*review an existing observation/i,
+        /support, directly capture, explore, or review one observed moment/i
       ],
       [
         "Sleep Session",
@@ -187,8 +187,8 @@ describe("question flow quality coverage", () => {
       ],
       [
         "Preference Catalog Item",
-        /meaningfully worth comparing/i,
-        /clear and fair/i
+        /adding a named option[\s\S]*clarifying an ambiguous one[\s\S]*reviewing,\s+removing, or restoring/i,
+        /preserve one comparable option[\s\S]*preference evidence/i
       ],
       [
         "Preference Context",
@@ -258,15 +258,18 @@ describe("question flow quality coverage", () => {
       /Psyche-adjacent note-backed workflow/i
     );
     expect(selfObservationSection).toMatch(
-      /observed `note` with\s+`frontmatter\.observedAt`/i
+      /observed\s+`note`[\s\S]*`frontmatter\.observedAt`/i
     );
-    expect(selfObservationSection).toMatch(/stronger Psyche container/i);
+    expect(selfObservationSection).toMatch(/stronger Psyche\s+container/i);
     const weightLossSection = getSectionSlice(entityPlaybook, "Weight Loss");
     expect(weightLossSection).toMatch(
       /overview, food log, body check-in,[\s\S]*gut check-in,[\s\S]*N-of-1 experiment path/i
     );
     expect(weightLossSection).toMatch(
       /searched `foodId`, barcode match,[\s\S]*researched calories, protein, carbohydrate, and fat/i
+    );
+    expect(weightLossSection).toMatch(
+      /correction[\s\S]*read the overview[\s\S]*exact existing log[\s\S]*forge_update_food_log[\s\S]*foodLogId[\s\S]*only the fields[\s\S]*complete desired item list/i
     );
     const calendarConnectionSection = getSectionSlice(
       entityPlaybook,
@@ -724,13 +727,16 @@ describe("question flow quality coverage", () => {
       /questionnaire_instrument[\s\S]*questionnaire_run[\s\S]*self_observation[\s\S]*sleep_session[\s\S]*workout_session/i
     );
     expect(entityPlaybook).toMatch(
-      /what the reflection should help the user understand, decide,\s+notice, remember, or change later/i
+      /For guided reflection[\s\S]*what the record should help the user understand, decide,\s+notice, remember, or change later only when they have not already supplied usable\s+direct wording or a narrow action/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Self-observation direct capture is the explicit fast-path exception[\s\S]*do not add a purpose question/i
     );
     expect(entityPlaybook).toMatch(
       /Do not turn answer collection into generic Psyche intake[\s\S]*belief, mode, trigger report, or behavior pattern clearly emerges/i
     );
     expect(entityPlaybook).toMatch(
-      /questionnaire_instrument[\s\S]*shared batch routes[\s\S]*questionnaire_run[\s\S]*questionnaire run actions[\s\S]*self_observation[\s\S]*note-backed[\s\S]*wiki_page[\s\S]*wiki routes/i
+      /questionnaire_instrument[\s\S]*shared batch routes[\s\S]*questionnaire_run[\s\S]*questionnaire run actions[\s\S]*self_observation[\s\S]*underlying `note` through batch CRUD[\s\S]*wiki_page[\s\S]*wiki routes/i
     );
     expect(entityPlaybook).toMatch(/## Name, Define, Connect/);
     expect(entityPlaybook).toMatch(
@@ -884,8 +890,21 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /what belongs[\s\S]*inside the boundary and what can stay out if the scope still[\s\S]*feels muddy/i
     );
+    const selfObservationSection = getSectionSlice(
+      entityPlaybook,
+      "Self Observation"
+    );
+    expect(selfObservationSection).toMatch(
+      /immediate support[\s\S]*direct capture[\s\S]*guided reflection[\s\S]*exact-record\s+review or narrow update/i
+    );
+    expect(selfObservationSection).toMatch(
+      /Support never depends on saving[\s\S]*Do not\s+require every link/i
+    );
     expect(entityPlaybook).toMatch(
-      /what happened in the situation[\s\S]*Reflect what seems most important[\s\S]*Ask one next question[\s\S]*Do not require every link/i
+      /Self-observation direct capture is the explicit fast-path exception[\s\S]*missing `observedAt`[\s\S]*do not add a purpose question/i
+    );
+    expect(entityPlaybook).toMatch(
+      /For `self_observation`, read the bounded calendar[\s\S]*underlying `entityType: note`[\s\S]*`frontmatter\.observedAt`[\s\S]*never send `entityType: self_observation` to batch CRUD/i
     );
     expect(entityPlaybook).toMatch(
       /Do not promote self-observation over functional analysis/i
@@ -986,6 +1005,9 @@ describe("question flow quality coverage", () => {
       /direct capture has an accepted label[\s\S]*without requiring a fresh episode/i
     );
     expect(entityPlaybook).toMatch(
+      /Use guided disambiguation only when the label is unclear, a near duplicate\s+exists, or the user asks for help[\s\S]*one observable distinction/i
+    );
+    expect(entityPlaybook).not.toMatch(
       /what would make the comparison confusing or unfair if the label stayed as-is/i
     );
     const questionnaireInstrumentSection = getSectionSlice(
@@ -1080,6 +1102,31 @@ describe("question flow quality coverage", () => {
     );
     expect(entityPlaybook).toMatch(
       /preference_catalog_item[\s\S]*normal stored Preferences CRUD/i
+    );
+    const preferenceCatalogItemSection = getSectionSlice(
+      entityPlaybook,
+      "Preference Catalog Item"
+    );
+    expect(preferenceCatalogItemSection).toMatch(
+      /direct capture[\s\S]*guided disambiguation[\s\S]*exact-record review or narrow update[\s\S]*soft delete or restore/i
+    );
+    expect(preferenceCatalogItemSection).toMatch(
+      /exact active parent[\s\S]*linkedTo[\s\S]*preference_catalog[\s\S]*requires only `catalogId` and `label`[\s\S]*Do not ask why the option deserves[\s\S]*description, tags, `featureWeights`, position, rationale,\s+or comparison criteria[\s\S]*Omit position to append/i
+    );
+    expect(preferenceCatalogItemSection).toMatch(
+      /read-only review or narrow update[\s\S]*exact existing item and parent[\s\S]*Preserve[\s\S]*label, description, tags, `featureWeights`, position, and catalog[\s\S]*smallest[\s\S]*accepted change[\s\S]*`catalogId` is immutable/i
+    );
+    expect(preferenceCatalogItemSection).toMatch(
+      /prefer, veto, favorite, bookmark, or want to compare[\s\S]*`preference_judgment` or[\s\S]*`preference_signal` action[\s\S]*Never infer `featureWeights` or a score[\s\S]*score-override action/i
+    );
+    expect(preferenceCatalogItemSection).toMatch(
+      /reversible Settings Bin[\s\S]*shared batch delete[\s\S]*exact item id inside its parent[\s\S]*`includeDeleted: true`[\s\S]*deleted marker and preserved snapshot/i
+    );
+    expect(preferenceCatalogItemSection).toMatch(
+      /parent\s+catalog lifecycle state[\s\S]*parent is archived[\s\S]*obtain acceptance to restore the parent first[\s\S]*restore and\s+verify the parent[\s\S]*repeat the parent-scoped active-label conflict check[\s\S]*shared batch restore/i
+    );
+    expect(preferenceCatalogItemSection).toMatch(
+      /Verify create and update with an exact active read[\s\S]*delete with the exact[\s\S]*`includeDeleted: true` read[\s\S]*restore with another exact active read[\s\S]*verify catalog membership, label, preserved optional fields/i
     );
     expect(entityPlaybook).toMatch(
       /preference_context[\s\S]*normal stored Preferences CRUD/i

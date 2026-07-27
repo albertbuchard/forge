@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildServer } from "../../../../apps/api/src/app";
+import type { ApplicationSecurityRuntime } from "../../../../apps/api/src/security/application-security-runtime";
 import { ROUTE_VIEW_IDS } from "../routes/route-view-catalog";
 
 const contractPath = [
@@ -52,11 +53,37 @@ async function loadOnboarding(): Promise<OnboardingContract> {
   const dataRoot = mkdtempSync(
     path.join(os.tmpdir(), "forge-user-story-contract-")
   );
-  const app = await buildServer({ dataRoot, taskRunWatchdog: false });
+  let security: ApplicationSecurityRuntime | undefined;
+  const app = await buildServer({
+    dataRoot,
+    taskRunWatchdog: false,
+    onSecurityRuntimeReady(runtime) {
+      security = runtime;
+    }
+  });
   try {
+    expect(security).toBeDefined();
+    const ownerEpoch = security!.store.readOwnerSecurityEpoch("user_operator");
+    expect(ownerEpoch).toBeDefined();
+    const session = security!.browserSessions.create({
+      kind: "operator_session",
+      subjectId: "user_operator",
+      ownerId: "user_operator",
+      clientId: null,
+      installationId: null,
+      audience: security!.audience,
+      scopes: ["*"],
+      profile: "operator",
+      ownerSecurityEpoch: ownerEpoch!,
+      clientSecurityEpoch: null,
+      authenticatedAt: new Date().toISOString()
+    });
     const response = await app.inject({
       method: "GET",
-      url: "/api/v1/agents/onboarding"
+      url: "/api/v1/agents/onboarding",
+      headers: {
+        cookie: `forge_session=${encodeURIComponent(session.sessionToken)}`
+      }
     });
     expect(response.statusCode).toBe(200);
     return response.json().onboarding as OnboardingContract;

@@ -6,6 +6,8 @@ import path from "node:path";
 import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase } from "./db.js";
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
+import { installTestMobilePairingAuthority } from "./security/test-mobile-authority.js";
 
 const LAST_SHIPPED_TESTFLIGHT_VERSION = "1.0.152";
 
@@ -16,20 +18,13 @@ test("the last shipped iOS companion contract remains accepted additively", asyn
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
-    const operatorResponse = await app.inject({
-      method: "GET",
-      url: "/api/v1/auth/operator-session",
-      headers: { host: "127.0.0.1:4317" }
-    });
-    assert.equal(operatorResponse.statusCode, 200, operatorResponse.body);
-    const operatorCookie = operatorResponse.cookies[0];
-    assert.ok(operatorCookie);
+    const operatorCookie = issueTestOperatorSessionCookie(app);
 
     const pairingResponse = await app.inject({
       method: "POST",
       url: "/api/v1/health/pairing-sessions",
       headers: {
-        cookie: `${operatorCookie.name}=${operatorCookie.value}`,
+        cookie: operatorCookie,
         host: "127.0.0.1:4317"
       },
       payload: {
@@ -45,6 +40,7 @@ test("the last shipped iOS companion contract remains accepted additively", asyn
         qrPayload: { sessionId: string; pairingToken: string };
       }
     ).qrPayload;
+    installTestMobilePairingAuthority(app, pairing);
     const device = {
       name: "Compatibility iPhone",
       platform: "ios",

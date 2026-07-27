@@ -11,6 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { buildServer } from "./app.js";
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import { closeDatabase, getDatabase } from "./db.js";
 import {
   expectedAuthenticatedEvidenceHash,
@@ -272,19 +273,12 @@ test("assembled Forge starts, persists, exposes, and stops the configured peer r
       }
     );
 
-    const session = await app.inject({
-      method: "GET",
-      url: "/api/v1/auth/operator-session",
-      headers: { host: "127.0.0.1:4317" }
-    });
-    assert.equal(session.statusCode, 200, session.body);
-    const cookie = session.cookies[0];
-    assert.ok(cookie);
+    const cookie = issueTestOperatorSessionCookie(app);
     const presence = await app.inject({
       method: "GET",
       url: "/api/v1/peers/human-presence",
       headers: browserStatusHeaders({
-        cookie: `${cookie.name}=${cookie.value}`
+        cookie
       })
     });
     assert.equal(presence.statusCode, 200, presence.body);
@@ -300,7 +294,7 @@ test("assembled Forge starts, persists, exposes, and stops the configured peer r
       method: "GET",
       url: "/api/v1/peers/human-presence",
       headers: browserStatusHeaders({
-        cookie: `${cookie.name}=${cookie.value}`,
+        cookie,
         referer: `${browserOrigin}/forge/people/person_test`,
         origin: browserOrigin
       })
@@ -324,7 +318,7 @@ test("assembled Forge starts, persists, exposes, and stops the configured peer r
       url: "/api/v1/peers/human-presence/options",
       headers: {
         ...browserStatusHeaders({
-          cookie: `${cookie.name}=${cookie.value}`,
+          cookie,
           referer: `${browserOrigin}/forge/people/person_test`,
           origin: browserOrigin
         }),
@@ -347,7 +341,7 @@ test("assembled Forge starts, persists, exposes, and stops the configured peer r
       method: "GET",
       url: "/api/v1/peers/human-presence",
       headers: browserStatusHeaders({
-        cookie: `${cookie.name}=${cookie.value}`,
+        cookie,
         referer: `${browserOrigin}/not-forge/people/person_test`,
         origin: browserOrigin
       })
@@ -359,7 +353,7 @@ test("assembled Forge starts, persists, exposes, and stops the configured peer r
       method: "GET",
       url: "/api/v1/peers/human-presence",
       headers: browserStatusHeaders({
-        cookie: `${cookie.name}=${cookie.value}`,
+        cookie,
         referer: "http://localhost:3027/forge/people/person_test",
         origin: "http://localhost:3027"
       })
@@ -379,22 +373,22 @@ test("assembled Forge starts, persists, exposes, and stops the configured peer r
       url: "/api/v1/peers/human-presence",
       remoteAddress: "100.64.0.42",
       headers: browserStatusHeaders({
-        cookie: `${cookie.name}=${cookie.value}`,
+        cookie,
         referer: `${browserOrigin}/forge/people/person_test`,
         origin: browserOrigin
       })
     });
-    assert.equal(nonLoopbackProxy.statusCode, 403, nonLoopbackProxy.body);
+    assert.equal(nonLoopbackProxy.statusCode, 426, nonLoopbackProxy.body);
     assert.equal(
       nonLoopbackProxy.json().code,
-      "peer_webauthn_origin_host_mismatch"
+      "gateway_secure_transport_required"
     );
 
     const crossSite = await app.inject({
       method: "GET",
       url: "/api/v1/peers/human-presence",
       headers: browserStatusHeaders({
-        cookie: `${cookie.name}=${cookie.value}`,
+        cookie,
         referer: "https://attacker.example/people",
         site: "cross-site"
       })
@@ -406,7 +400,7 @@ test("assembled Forge starts, persists, exposes, and stops the configured peer r
       method: "GET",
       url: "/api/v1/peers/human-presence",
       headers: browserStatusHeaders({
-        cookie: `${cookie.name}=${cookie.value}`,
+        cookie,
         referer: "https://attacker.example/people"
       })
     });
@@ -417,7 +411,7 @@ test("assembled Forge starts, persists, exposes, and stops the configured peer r
       method: "GET",
       url: "/api/v1/peers/human-presence",
       headers: browserStatusHeaders({
-        cookie: `${cookie.name}=${cookie.value}`,
+        cookie,
         origin: "https://attacker.example"
       })
     });
@@ -449,18 +443,12 @@ test("assembled Forge reports an explicitly disabled peer runtime without spawni
 
   try {
     await app.ready();
-    const session = await app.inject({
-      method: "GET",
-      url: "/api/v1/auth/operator-session",
-      headers: { host: "127.0.0.1:4317" }
-    });
-    const cookie = session.cookies[0];
-    assert.ok(cookie);
+    const cookie = issueTestOperatorSessionCookie(app);
     const presence = await app.inject({
       method: "GET",
       url: "/api/v1/peers/human-presence",
       headers: browserStatusHeaders({
-        cookie: `${cookie.name}=${cookie.value}`
+        cookie
       })
     });
     assert.equal(presence.statusCode, 200, presence.body);

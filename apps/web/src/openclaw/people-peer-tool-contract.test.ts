@@ -6,6 +6,7 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import { buildServer } from "../../../../apps/api/src/app";
 import { PEER_API_SCHEMAS } from "../../../../apps/api/src/peer-api-schemas";
 import { PEER_ROUTE_CONTRACTS } from "../../../../apps/api/src/peer-route-contract";
+import type { ApplicationSecurityRuntime } from "../../../../apps/api/src/security/application-security-runtime";
 import { callConfiguredForgeApi } from "./api-client";
 import {
   PEER_AGENT_ROUTE_SPECS,
@@ -356,14 +357,42 @@ describe("People and peer-sharing agent contract", () => {
       path.join(os.tmpdir(), "forge-person-catalog-")
     );
     temporaryRoots.push(dataRoot);
-    const app = await buildServer({ dataRoot, taskRunWatchdog: false });
+    let security: ApplicationSecurityRuntime | undefined;
+    const app = await buildServer({
+      dataRoot,
+      taskRunWatchdog: false,
+      onSecurityRuntimeReady(runtime) {
+        security = runtime;
+      }
+    });
+    expect(security).toBeDefined();
+    const ownerEpoch = security!.store.readOwnerSecurityEpoch("user_operator");
+    expect(ownerEpoch).toBeDefined();
+    const session = security!.browserSessions.create({
+      kind: "operator_session",
+      subjectId: "user_operator",
+      ownerId: "user_operator",
+      clientId: null,
+      installationId: null,
+      audience: security!.audience,
+      scopes: ["*"],
+      profile: "operator",
+      ownerSecurityEpoch: ownerEpoch!,
+      clientSecurityEpoch: null,
+      authenticatedAt: new Date().toISOString()
+    });
+    const headers = {
+      cookie: `forge_session=${encodeURIComponent(session.sessionToken)}`
+    };
     const response = await app.inject({
       method: "GET",
-      url: "/api/v1/agents/onboarding"
+      url: "/api/v1/agents/onboarding",
+      headers
     });
     const openApiResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/openapi.json"
+      url: "/api/v1/openapi.json",
+      headers
     });
     await app.close();
     expect(response.statusCode).toBe(200);

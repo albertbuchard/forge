@@ -15,6 +15,7 @@ import {
   getTaskRunById,
   releaseTaskRun
 } from "./repositories/task-runs.js";
+import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import {
   createTask,
   getTaskById,
@@ -495,9 +496,11 @@ test("PLAN-17 onboarding publishes rich completion and distinct release contract
   );
 
   await withIsolatedForge(async (app) => {
+    const cookie = issueTestOperatorSessionCookie(app);
     const response = await app.inject({
       method: "GET",
-      url: "/api/v1/agents/onboarding"
+      url: "/api/v1/agents/onboarding",
+      headers: { cookie }
     });
     assert.equal(response.statusCode, 200, response.body);
     const body = response.json() as {
