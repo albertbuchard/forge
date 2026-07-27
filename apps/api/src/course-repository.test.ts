@@ -216,7 +216,7 @@ test("imports a modular course and carries proof evidence into concept mastery",
       activity_content_hash: string;
       activity_snapshot_json: string;
     };
-    assert.equal(attemptSnapshot.course_version, "2.8.0");
+    assert.equal(attemptSnapshot.course_version, "2.9.0");
     assert.equal(attemptSnapshot.activity_revision, "2");
     assert.match(attemptSnapshot.activity_content_hash, /^[a-f0-9]{64}$/u);
     assert.equal(
@@ -597,7 +597,7 @@ test("imports a modular course and carries proof evidence into concept mastery",
       .digest("hex");
     const explicitConceptUpgrade = {
       ...researchExport,
-      course: { ...researchExport.course, version: "2.9.0" },
+      course: { ...researchExport.course, version: "3.0.0" },
       concepts: researchExport.concepts.map((concept) =>
         concept.id === upgradedProof.id ? upgradedProof : concept
       ),
@@ -631,7 +631,7 @@ test("imports a modular course and carries proof evidence into concept mastery",
       JSON.parse(revision.definition_json).exampleMarkdown,
       priorProof.exampleMarkdown
     );
-    assert.equal(revision.source_course_version, "2.9.0");
+    assert.equal(revision.source_course_version, "3.0.0");
     assert.equal(revision.replaced_by_content_hash, upgradedProofHash);
     assert.equal(
       revision.reason,
@@ -714,18 +714,18 @@ test("keeps an enrollment on its immutable release until an explicit audited upg
     const exported = exportCoursePackage(courseId);
     importCoursePackage({
       ...exported,
-      course: { ...exported.course, version: "2.9.0" },
+      course: { ...exported.course, version: "3.0.0" },
       provenance: {
         ...exported.provenance,
-        generatedAt: "2026-07-25T00:00:00.000Z",
+        generatedAt: "2026-07-28T00:00:00.000Z",
         contentHash: ""
       }
     });
 
     const beforeUpgrade = getCourseDetail(courseId, userId);
     assert.deepEqual(beforeUpgrade.release, {
-      enrolledVersion: "2.8.0",
-      latestVersion: "2.9.0",
+      enrolledVersion: "2.9.0",
+      latestVersion: "3.0.0",
       updateAvailable: true
     });
     assert.equal(
@@ -736,15 +736,15 @@ test("keeps an enrollment on its immutable release until an explicit audited upg
 
     const receipt = upgradeCourseEnrollment(courseId, userId);
     assert.equal(receipt.upgraded, true);
-    assert.equal(receipt.fromVersion, "2.8.0");
-    assert.equal(receipt.toVersion, "2.9.0");
+    assert.equal(receipt.fromVersion, "2.9.0");
+    assert.equal(receipt.toVersion, "3.0.0");
     assert.deepEqual(receipt.carriedActivityIds, [activityId]);
     assert.ok(receipt.remainingActivityIds.length > 0);
 
     const afterUpgrade = getCourseDetail(courseId, userId);
     assert.deepEqual(afterUpgrade.release, {
-      enrolledVersion: "2.9.0",
-      latestVersion: "2.9.0",
+      enrolledVersion: "3.0.0",
+      latestVersion: "3.0.0",
       updateAvailable: false
     });
     const upgradedSession = getLearningSession(courseId, userId, lessonId);

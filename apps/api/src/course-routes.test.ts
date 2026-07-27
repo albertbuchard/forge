@@ -46,8 +46,8 @@ test("course routes expose a learner-safe voice session and enforce the shared l
         .map((course) => [course.id, course.version])
         .sort((left, right) => left[0].localeCompare(right[0])),
       [
-        ["course.cpge-mathematics-concours-fluency", "1.6.0"],
-        ["course.polynomials-etale-triple-covers", "2.8.0"]
+        ["course.cpge-mathematics-concours-fluency", "1.7.0"],
+        ["course.polynomials-etale-triple-covers", "2.9.0"]
       ]
     );
 
