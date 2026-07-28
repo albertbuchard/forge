@@ -37,10 +37,11 @@ ORIGINAL_FORGE_MEMORY_PACKAGE_VERSION=""
 ORIGINAL_FORGE_MEMORY_PACKAGE_LOCK_VERSION=""
 RELEASE_TARGET_VERSION=""
 VERIFY_TESTS=(
-  "node --test scripts/release/check-openclaw-host-floor.test.mjs"
+  "node --test scripts/release/check-openclaw-host-floor.test.mjs scripts/release/release-forge-openclaw-plugin.test.mjs"
   "node --import tsx scripts/security/npm-audit-policy.ts --prefix plugins/openclaw --omit=dev --omit=peer"
   "npm --prefix packages/forge-memory ci"
   "npm --prefix packages/forge-memory audit --omit=dev"
+  "npm run build:openclaw-plugin"
   "npm run test:forge-memory"
   "npm exec -- vitest run apps/web/src/openclaw/parity.test.ts apps/web/src/openclaw/index.test.ts apps/web/src/openclaw/api-client.test.ts apps/web/src/openclaw/manifest.test.ts apps/web/src/openclaw/tool-contract.test.ts"
   "npm run check -- --pretty false"
@@ -49,7 +50,6 @@ VERIFY_TESTS=(
   "node --import tsx --test apps/api/src/data-management.test.ts apps/api/src/people-legacy-schema-repair.test.ts apps/api/src/people-routes.test.ts apps/api/src/peer-api-schemas.test.ts apps/api/src/peer-openapi-contract.test.ts apps/api/src/peer-route-contract.test.ts"
   "npm run test:people-sharing-release-fast"
   "npm run build"
-  "npm run build:openclaw-plugin"
   "npm run smoke:packed-openclaw-runtime"
 )
 FULL_VERIFY_TESTS=(
