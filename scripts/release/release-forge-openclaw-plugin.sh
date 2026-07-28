@@ -17,7 +17,7 @@ HERMES_PLUGIN_PACKAGE_VERSION="${FORGE_DIR}/plugins/hermes/forge_hermes/version.
 HERMES_PLUGIN_RUNTIME_PACKAGE_JSON="${FORGE_DIR}/plugins/hermes/forge_hermes/runtime/package.json"
 FORGE_MEMORY_PACKAGE_JSON="${FORGE_DIR}/packages/forge-memory/package.json"
 FORGE_MEMORY_PACKAGE_LOCK_JSON="${FORGE_DIR}/packages/forge-memory/package-lock.json"
-SAFE_OPENCLAW_HOST_RANGE="2026.6.9"
+SAFE_OPENCLAW_HOST_RANGE=">=2026.6.9"
 DEFAULT_FORGE_PORT=4317
 RELEASE_MODE="${FORGE_RELEASE_MODE:-full}"
 RELEASE_TEST_PROFILE="${FORGE_RELEASE_TEST_PROFILE:-fast}"
@@ -37,6 +37,7 @@ ORIGINAL_FORGE_MEMORY_PACKAGE_VERSION=""
 ORIGINAL_FORGE_MEMORY_PACKAGE_LOCK_VERSION=""
 RELEASE_TARGET_VERSION=""
 VERIFY_TESTS=(
+  "node --test scripts/release/check-openclaw-host-floor.test.mjs"
   "node --import tsx scripts/security/npm-audit-policy.ts --prefix plugins/openclaw --omit=dev --omit=peer"
   "npm --prefix packages/forge-memory ci"
   "npm --prefix packages/forge-memory audit --omit=dev"
@@ -421,23 +422,10 @@ NODE
 }
 
 verify_openclaw_host_floor() {
-  local actual
-  actual="$(node --input-type=module - "${FORGE_PACKAGE_JSON}" "${PLUGIN_PACKAGE_JSON}" <<'NODE'
-import fs from "node:fs";
-
-const [forgePath, pluginPath] = process.argv.slice(2);
-const forgePackage = JSON.parse(fs.readFileSync(forgePath, "utf8"));
-const pluginPackage = JSON.parse(fs.readFileSync(pluginPath, "utf8"));
-process.stdout.write(
-  JSON.stringify({
-    forgeDependency: forgePackage.dependencies?.openclaw ?? null,
-    pluginPeer: pluginPackage.peerDependencies?.openclaw ?? null
-  })
-);
-NODE
-)"
-  [[ "${actual}" == "{\"forgeDependency\":\"${SAFE_OPENCLAW_HOST_RANGE}\",\"pluginPeer\":\"${SAFE_OPENCLAW_HOST_RANGE}\"}" ]] \
-    || fail "openclaw host floor must stay pinned to ${SAFE_OPENCLAW_HOST_RANGE}: ${actual}"
+  node "${FORGE_DIR}/scripts/release/check-openclaw-host-floor.mjs" \
+    "${FORGE_PACKAGE_JSON}" \
+    "${PLUGIN_PACKAGE_JSON}" \
+    "${SAFE_OPENCLAW_HOST_RANGE}"
 }
 
 run_verification_suite() {
