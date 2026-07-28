@@ -19,6 +19,19 @@ const migrationMirrors = [
   "plugins/openclaw/dist/server/apps/api/migrations"
 ];
 
+const compiledDatabaseMirrors = [
+  "plugins/codex/runtime/dist/server/apps/api/src/db.js",
+  "plugins/hermes/forge_hermes/runtime/dist/server/apps/api/src/db.js",
+  "plugins/openclaw/dist/server/apps/api/src/db.js"
+];
+
+const compiledDatabaseCompatibilityMarkers = [
+  "120_security_pairing_metadata_compatibility.sql",
+  "function backfillLegacyPairingClientMetadata(database)",
+  "INSERT OR IGNORE INTO security_pairing_client_metadata",
+  "backfillLegacyPairingClientMetadata(database);"
+];
+
 const exactFileMirrors = [
   {
     canonicalRoot: "packages/companion-iroh",
@@ -67,11 +80,11 @@ export async function verifySecurityMirrorReceipts() {
   const migrationNames = (
     await readdir(path.join(repoRoot, canonicalMigrationRoot))
   )
-    .filter((name) => /^(?:10[7-9]|11[0-9])_.*\.sql$/u.test(name))
+    .filter((name) => /^(?:10[7-9]|11[0-9]|120)_.*\.sql$/u.test(name))
     .sort();
-  if (migrationNames.length !== 13) {
+  if (migrationNames.length !== 14) {
     throw new Error(
-      `Expected migrations 107 through 119; found ${migrationNames.join(", ")}`
+      `Expected migrations 107 through 120; found ${migrationNames.join(", ")}`
     );
   }
   for (const mirrorRoot of migrationMirrors) {
@@ -95,6 +108,25 @@ export async function verifySecurityMirrorReceipts() {
         );
       }
     }
+  }
+  const compiledDatabaseFiles = await Promise.all(
+    compiledDatabaseMirrors.map((filePath) =>
+      readFile(path.join(repoRoot, filePath))
+    )
+  );
+  for (const [index, compiledDatabase] of compiledDatabaseFiles.entries()) {
+    for (const marker of compiledDatabaseCompatibilityMarkers) {
+      if (!compiledDatabase.includes(Buffer.from(marker))) {
+        throw new Error(
+          `Generated database runtime omits migration 120 compatibility marker ${JSON.stringify(marker)}: ${compiledDatabaseMirrors[index]}`
+        );
+      }
+    }
+  }
+  for (const mirrorPath of compiledDatabaseMirrors.slice(1)) {
+    receipts.push(
+      await assertExactFile(compiledDatabaseMirrors[0], mirrorPath)
+    );
   }
   return receipts;
 }

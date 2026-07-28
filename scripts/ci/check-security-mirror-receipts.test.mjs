@@ -5,7 +5,7 @@ import { verifySecurityMirrorReceipts } from "./check-security-mirror-receipts.m
 
 test("security migrations and canonical runtime inputs have exact generated mirrors", async () => {
   const receipts = await verifySecurityMirrorReceipts();
-  assert.equal(receipts.length, 87);
+  assert.equal(receipts.length, 95);
   assert.ok(
     receipts.every((receipt) => /^[0-9a-f]{64}$/u.test(receipt.sha256))
   );

@@ -24,6 +24,8 @@ const migrationsDir = path.join(apiRoot, "migrations");
 const userSharedForgeDataRoot = path.join(os.homedir(), ".forge");
 const PEOPLE_LEGACY_SCHEMA_REPAIR_MIGRATION =
   "104_people_legacy_schema_repair.sql";
+const SECURITY_PAIRING_METADATA_COMPATIBILITY_MIGRATION =
+  "120_security_pairing_metadata_compatibility.sql";
 
 const PEOPLE_HARDENING_COLUMNS = [
   {
@@ -142,6 +144,22 @@ export async function repairLegacyPeopleSchema(database: DatabaseSync) {
   }
   database.exec(repairSchema);
   database.exec(PEOPLE_OWNER_PARTITION_INDEXES_SQL);
+}
+
+function backfillLegacyPairingClientMetadata(database: DatabaseSync) {
+  if (
+    !hasDatabaseColumn(database, "security_pairing_requests", "client_type")
+  ) {
+    return;
+  }
+  database.exec(`
+    INSERT OR IGNORE INTO security_pairing_client_metadata (
+      pairing_request_id,
+      client_type
+    )
+    SELECT id, client_type
+    FROM security_pairing_requests
+  `);
 }
 
 function findSourceProjectRoot(startDir: string): string | null {
@@ -681,6 +699,9 @@ export async function initializeDatabase(): Promise<void> {
         await repairLegacyPeopleSchema(database);
       }
       database.exec(sql);
+      if (file === SECURITY_PAIRING_METADATA_COMPATIBILITY_MIGRATION) {
+        backfillLegacyPairingClientMetadata(database);
+      }
       database
         .prepare("INSERT INTO migrations (id, applied_at) VALUES (?, ?)")
         .run(file, nowIso());
