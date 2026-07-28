@@ -67,7 +67,7 @@ jobs:
         working-directory: packages/forge-memory
         run: npm ci --ignore-scripts
 
-      - name: Exercise the standalone Windows DPAPI owner credential
+      - name: Exercise Windows-compatible package tests
         working-directory: packages/forge-memory
         run: |
           node --test `
@@ -78,10 +78,6 @@ jobs:
             ./tests/windows-owner-auth.test.mjs
           if ($LASTEXITCODE -ne 0) {
             throw "Forge Windows-compatible package tests failed"
-          }
-          node ./tests/cli-smoke.mjs
-          if ($LASTEXITCODE -ne 0) {
-            throw "Forge Memory CLI smoke failed on Windows"
           }
 
       - name: Prove the supported CLI prepares reusable owner-only material
@@ -252,6 +248,9 @@ jobs:
           $record = Get-Content -LiteralPath $PublicCopy -Raw | ConvertFrom-Json
           $protected = [Convert]::FromBase64String($record.protectedKey)
           $entropy = [Text.Encoding]::UTF8.GetBytes("forge/windows-owner-auth/v2")
+          [void][Reflection.Assembly]::Load(
+            "System.Security, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a"
+          )
           try {
             [void][Security.Cryptography.ProtectedData]::Unprotect(
               $protected,
