@@ -235,11 +235,20 @@ test(
         }
       );
       assert.equal(operatorSession.status, 200);
-      assert.equal(
-        ((await operatorSession.json()) as { session: { id: string } }).session
-          .id,
-        browserSession.session.id
-      );
+      const operatorAuthority = (await operatorSession.json()) as {
+        session: {
+          id: string;
+          actorLabel: string;
+          principalKind: string;
+          localOwner: boolean;
+          profile: string;
+        };
+      };
+      assert.equal(operatorAuthority.session.id, browserSession.session.id);
+      assert.equal(operatorAuthority.session.actorLabel, "Local Operator");
+      assert.equal(operatorAuthority.session.principalKind, "operator_session");
+      assert.equal(operatorAuthority.session.localOwner, true);
+      assert.equal(operatorAuthority.session.profile, "operator");
       const browserContext = await fetch(`${baseUrl}/api/v1/context`, {
         headers: { cookie: browserCookie! }
       });

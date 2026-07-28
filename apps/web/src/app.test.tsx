@@ -26,6 +26,12 @@ vi.mock("@/components/customization/surface-route-frame", () => ({
   )
 }));
 
+vi.mock("@/components/settings/settings-operator-gate", () => ({
+  SettingsOperatorGate: ({ children }: { children: ReactNode }) => (
+    <div data-testid="settings-operator-gate">{children}</div>
+  )
+}));
+
 function renderApp(initialEntry: string) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -179,6 +185,46 @@ vi.mock("@/pages/settings-data-page", () => ({
   SettingsDataPage: () => <div>Settings data route</div>
 }));
 
+vi.mock("@/pages/settings-users-page", () => ({
+  SettingsUsersPage: () => <div>Settings users route</div>
+}));
+
+vi.mock("@/pages/settings-calendar-page", () => ({
+  SettingsCalendarPage: () => <div>Settings calendar route</div>
+}));
+
+vi.mock("@/pages/settings-mobile-page", () => ({
+  SettingsMobilePage: () => <div>Settings mobile route</div>
+}));
+
+vi.mock("@/pages/companion-sync-lab-page", () => ({
+  CompanionSyncLabPage: () => <div>Settings mobile lab route</div>
+}));
+
+vi.mock("@/pages/settings-models-page", () => ({
+  SettingsModelsPage: () => <div>Settings models route</div>
+}));
+
+vi.mock("@/pages/settings-agents-page", () => ({
+  SettingsAgentsPage: () => <div>Settings agents route</div>
+}));
+
+vi.mock("@/pages/settings-rewards-page", () => ({
+  SettingsRewardsPage: () => <div>Settings rewards route</div>
+}));
+
+vi.mock("@/pages/settings-wiki-page", () => ({
+  SettingsWikiPage: () => <div>Settings wiki route</div>
+}));
+
+vi.mock("@/pages/settings-logs-page", () => ({
+  SettingsLogsPage: () => <div>Settings logs route</div>
+}));
+
+vi.mock("@/pages/settings-bin-page", () => ({
+  SettingsBinPage: () => <div>Settings bin route</div>
+}));
+
 vi.mock("@/pages/goal-detail-page", () => ({
   GoalDetailPage: () => <div>Goal detail route</div>
 }));
@@ -221,11 +267,35 @@ describe("App routing", () => {
     expect(await screen.findByText("Settings data route")).toBeInTheDocument();
   });
 
+  it.each([
+    "/settings",
+    "/settings/data",
+    "/settings/users",
+    "/settings/calendar",
+    "/settings/mobile",
+    "/settings/mobile/lab",
+    "/settings/models",
+    "/settings/agents",
+    "/settings/rewards",
+    "/settings/wiki",
+    "/settings/logs",
+    "/settings/bin"
+  ])("wraps %s in the local-owner settings gate", async (path) => {
+    renderApp(path);
+
+    expect(
+      await screen.findByTestId("settings-operator-gate")
+    ).toBeInTheDocument();
+  });
+
   it("renders the preferences route inside the shell", async () => {
     renderApp("/preferences");
 
     expect(await screen.findByText("Forge shell")).toBeInTheDocument();
     expect(await screen.findByText("Preferences route")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("settings-operator-gate")
+    ).not.toBeInTheDocument();
   });
 
   it("renders People collection and detail routes inside the shell", async () => {

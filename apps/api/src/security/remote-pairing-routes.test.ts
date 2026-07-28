@@ -1011,6 +1011,29 @@ test("remote browser pairing returns only an HttpOnly session and revocation clo
     assert.ok(refreshCookie);
     assert.ok(clientCookie);
 
+    const pairedBrowserSession = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/operator-session",
+      headers: { host: "127.0.0.1", cookie: browserCookie }
+    });
+    assert.equal(
+      pairedBrowserSession.statusCode,
+      200,
+      pairedBrowserSession.body
+    );
+    const pairedBrowserAuthority = pairedBrowserSession.json<{
+      session: {
+        actorLabel: string;
+        principalKind: string;
+        localOwner: boolean;
+        profile: string;
+      };
+    }>().session;
+    assert.equal(pairedBrowserAuthority.actorLabel, "Paired Browser");
+    assert.equal(pairedBrowserAuthority.principalKind, "paired_client");
+    assert.equal(pairedBrowserAuthority.localOwner, false);
+    assert.equal(pairedBrowserAuthority.profile, "viewer");
+
     const admitted = await app.inject({
       method: "GET",
       url: "/api/v1/context",

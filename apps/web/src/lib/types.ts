@@ -4589,6 +4589,8 @@ export interface OperatorContextPayload {
 export interface OperatorSession {
   id: string;
   actorLabel: string;
+  principalKind: "operator_session" | "paired_client";
+  localOwner: boolean;
   profile:
     | "viewer"
     | "trusted_personal_assistant"

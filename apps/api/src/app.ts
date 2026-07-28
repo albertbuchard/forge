@@ -14104,6 +14104,8 @@ export async function buildServer(
           authentication.principal.kind === "operator_session"
             ? "Local Operator"
             : "Paired Browser",
+        principalKind: authentication.principal.kind,
+        localOwner: authentication.principal.kind === "operator_session",
         profile: authentication.principal.profile,
         expiresAt: authentication.browserSession.absoluteExpiresAt
       }

@@ -1,6 +1,7 @@
 import { useEffect, type ReactElement } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AppShell } from "@/components/shell/app-shell";
+import { SettingsOperatorGate } from "@/components/settings/settings-operator-gate";
 import {
   createUiDiagnosticLogger,
   publishUiDiagnosticLog
@@ -158,6 +159,20 @@ export function App() {
     element: ReactElement
   ) {
     return <RouteView viewId={surfaceId}>{element}</RouteView>;
+  }
+
+  function operatorSettingsSurface(
+    surfaceId: RouteViewId,
+    title: string,
+    description: string,
+    element: ReactElement
+  ) {
+    return surface(
+      surfaceId,
+      title,
+      description,
+      <SettingsOperatorGate>{element}</SettingsOperatorGate>
+    );
   }
 
   return (
@@ -748,7 +763,7 @@ export function App() {
           />
           <Route
             path="settings"
-            element={surface(
+            element={operatorSettingsSurface(
               "settings-index",
               "Settings",
               "Operator settings and runtime configuration.",
@@ -757,7 +772,7 @@ export function App() {
           />
           <Route
             path="settings/data"
-            element={surface(
+            element={operatorSettingsSurface(
               "settings-data",
               "Settings data",
               "Runtime storage, backups, exports, and recovery.",
@@ -766,7 +781,7 @@ export function App() {
           />
           <Route
             path="settings/users"
-            element={surface(
+            element={operatorSettingsSurface(
               "settings-users",
               "Settings users",
               "User directory and ownership settings.",
@@ -775,7 +790,7 @@ export function App() {
           />
           <Route
             path="settings/calendar"
-            element={surface(
+            element={operatorSettingsSurface(
               "settings-calendar",
               "Settings calendar",
               "Calendar provider settings and sync.",
@@ -784,7 +799,7 @@ export function App() {
           />
           <Route
             path="settings/mobile"
-            element={surface(
+            element={operatorSettingsSurface(
               "settings-mobile",
               "Settings mobile",
               "Mobile companion settings and pairing.",
@@ -794,7 +809,7 @@ export function App() {
           {import.meta.env.DEV ? (
             <Route
               path="settings/mobile/lab"
-              element={surface(
+              element={operatorSettingsSurface(
                 "settings-mobile-lab",
                 "Companion sync lab",
                 "Dev-only fixtures for source-state and movement gap QA.",
@@ -804,7 +819,7 @@ export function App() {
           ) : null}
           <Route
             path="settings/models"
-            element={surface(
+            element={operatorSettingsSurface(
               "settings-models",
               "Settings models",
               "Model connections and defaults.",
@@ -813,7 +828,7 @@ export function App() {
           />
           <Route
             path="settings/agents"
-            element={surface(
+            element={operatorSettingsSurface(
               "settings-agents",
               "Settings agents",
               "Agent tokens and runtime access.",
@@ -822,7 +837,7 @@ export function App() {
           />
           <Route
             path="settings/rewards"
-            element={surface(
+            element={operatorSettingsSurface(
               "settings-rewards",
               "Settings rewards",
               "Rewards and XP rule settings.",
@@ -840,7 +855,7 @@ export function App() {
           />
           <Route
             path="settings/wiki"
-            element={surface(
+            element={operatorSettingsSurface(
               "settings-wiki",
               "KarpaWiki settings",
               "KarpaWiki ingestion and profile settings.",
@@ -849,7 +864,7 @@ export function App() {
           />
           <Route
             path="settings/logs"
-            element={surface(
+            element={operatorSettingsSurface(
               "settings-logs",
               "Settings logs",
               "Diagnostics and event logs.",
@@ -858,7 +873,7 @@ export function App() {
           />
           <Route
             path="settings/bin"
-            element={surface(
+            element={operatorSettingsSurface(
               "settings-bin",
               "Settings bin",
               "Deleted entity recovery.",
