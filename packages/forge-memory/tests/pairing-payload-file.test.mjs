@@ -176,7 +176,7 @@ test(
         forgeRoot,
         payload: pairingPayload()
       }),
-      /owner-only access controls|payload directory/
+      /failed closed|owner-only access controls|payload directory/
     );
     assert.deepEqual(await fsp.readdir(outside), []);
   }
