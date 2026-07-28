@@ -26,6 +26,7 @@ import {
   initializeDatabase
 } from "./db.js";
 import {
+  backupArchiveLimitsForTest,
   createDataBackup,
   exportData,
   listDataBackups,
@@ -86,6 +87,37 @@ function listTagIds() {
       id: string;
     }>
   ).map((row) => row.id);
+}
+
+function mutateCentralDirectoryEntry(
+  archiveBytes: Buffer,
+  entryName: string,
+  mutate: (bytes: Buffer, centralDirectoryOffset: number) => void
+) {
+  const mutated = Buffer.from(archiveBytes);
+  let offset = 0;
+  let matches = 0;
+  while (offset + 46 <= mutated.length) {
+    if (mutated.readUInt32LE(offset) !== 0x02014b50) {
+      offset += 1;
+      continue;
+    }
+    const fileNameLength = mutated.readUInt16LE(offset + 28);
+    const extraLength = mutated.readUInt16LE(offset + 30);
+    const commentLength = mutated.readUInt16LE(offset + 32);
+    const nameStart = offset + 46;
+    const nameEnd = nameStart + fileNameLength;
+    if (nameEnd > mutated.length) {
+      break;
+    }
+    if (mutated.subarray(nameStart, nameEnd).toString("utf8") === entryName) {
+      mutate(mutated, offset);
+      matches += 1;
+    }
+    offset = nameEnd + extraLength + commentLength;
+  }
+  assert.equal(matches, 1);
+  return mutated;
 }
 
 async function writeRuntimeArtifacts(dataRoot: string, suffix: string) {
@@ -305,7 +337,10 @@ test("credential-bearing data routes require a recently authenticated operator",
       | { outcome: string; reason: string; request_id: string | null }
       | undefined;
     assert.equal(restoreOutcome?.outcome, "denied");
-    assert.equal(restoreOutcome?.reason, "data_restore_failed_backup_not_found");
+    assert.equal(
+      restoreOutcome?.reason,
+      "data_restore_failed_backup_not_found"
+    );
     assert.ok(restoreOutcome?.request_id);
   } finally {
     await app.close();
@@ -384,6 +419,107 @@ test("createDataBackup captures the database, schema, ingest artifacts, and secr
   }
 });
 
+test("backup archive policy admits one live-size database entry without removing the total ceiling", () => {
+  const limits = backupArchiveLimitsForTest();
+  assert.ok(limits.maximumEntryBytes > 3_260_907_520);
+  assert.equal(limits.maximumEntryBytes, limits.maximumTotalBytes);
+  assert.equal(limits.maximumTotalBytes, 20 * 1024 * 1024 * 1024);
+});
+
+test("streaming backups emit ZIP64-compatible archives that an independent reader validates", async () => {
+  const dataRoot = await createRuntimeRoot("forge-data-backup-zip64-");
+  try {
+    await updateDataManagementSettings({
+      backupDirectory: path.join(dataRoot, "backups"),
+      autoRepairEnabled: true
+    });
+    const backup = await createDataBackup(
+      { note: "Forced ZIP64 fixture" },
+      { forceZip64FormatForTest: true }
+    );
+    const archiveBytes = await readFile(backup.archivePath);
+    assert.notEqual(
+      archiveBytes.indexOf(Buffer.from([0x50, 0x4b, 0x06, 0x06])),
+      -1
+    );
+    const independentArchive = new AdmZip(archiveBytes);
+    const databaseEntry = independentArchive
+      .getEntries()
+      .find((entry) => entry.entryName === "forge.sqlite");
+    assert.ok(databaseEntry);
+    assert.ok(databaseEntry.getData().byteLength > 0);
+    assert.ok(
+      independentArchive
+        .getEntries()
+        .some((entry) => entry.entryName === "schema.sql")
+    );
+    assert.ok(
+      independentArchive
+        .getEntries()
+        .some((entry) => entry.entryName === "snapshot-summary.json")
+    );
+  } finally {
+    await rm(dataRoot, { recursive: true, force: true });
+  }
+});
+
+test("streaming restore remains compatible with the prior AdmZip backup layout", async () => {
+  const dataRoot = await createRuntimeRoot("forge-data-backup-legacy-");
+  try {
+    insertTag("tag_legacy_backup", "Legacy backup");
+    await updateDataManagementSettings({
+      backupDirectory: path.join(dataRoot, "backups"),
+      autoRepairEnabled: true
+    });
+    const backup = await createDataBackup(
+      { note: "Legacy AdmZip fixture" },
+      {
+        archiveWriter: (archive, targetPath) => archive.writeZip(targetPath)
+      }
+    );
+    insertTag("tag_after_legacy_backup", "After legacy backup");
+    await restoreDataBackup(backup.id, { createSafetyBackup: false });
+    assert.ok(listTagIds().includes("tag_legacy_backup"));
+    assert.equal(listTagIds().includes("tag_after_legacy_backup"), false);
+  } finally {
+    await rm(dataRoot, { recursive: true, force: true });
+  }
+});
+
+test("backup manifest facts come from the immutable SQLite snapshot", async () => {
+  const dataRoot = await createRuntimeRoot("forge-data-backup-provenance-");
+  try {
+    insertTag("tag_snapshot_before", "Snapshot before");
+    await updateDataManagementSettings({
+      backupDirectory: path.join(dataRoot, "backups"),
+      autoRepairEnabled: true
+    });
+    const expectedTagCount = listTagIds().length;
+    const backup = await createDataBackup(
+      { note: "Snapshot provenance" },
+      {
+        archiveWriter: (archive, targetPath) => {
+          insertTag("tag_snapshot_after", "Snapshot after");
+          archive.writeZip(targetPath);
+        }
+      }
+    );
+    assert.equal(backup.counts.tags, expectedTagCount);
+    assert.equal(listTagIds().length, expectedTagCount + 1);
+    const archive = new AdmZip(backup.archivePath);
+    const summaryEntry = archive
+      .getEntries()
+      .find((entry) => entry.entryName === "snapshot-summary.json");
+    assert.ok(summaryEntry);
+    const summary = JSON.parse(summaryEntry.getData().toString("utf8")) as {
+      current: { counts: { tags: number } };
+    };
+    assert.equal(summary.current.counts.tags, expectedTagCount);
+  } finally {
+    await rm(dataRoot, { recursive: true, force: true });
+  }
+});
+
 test("createDataBackup removes staged and catalog artifacts after archive failure", async () => {
   const dataRoot = await createRuntimeRoot("forge-data-backup-failure-");
   const backupDirectory = path.join(dataRoot, "backups");
@@ -406,6 +542,157 @@ test("createDataBackup removes staged and catalog artifacts after archive failur
       /simulated archive failure/
     );
 
+    assert.deepEqual(await readdir(backupDirectory), []);
+    assert.deepEqual(await listDataBackups(), []);
+  } finally {
+    await rm(dataRoot, { recursive: true, force: true });
+  }
+});
+
+test("createDataBackup removes its credential-bearing SQLite snapshot after validation failure", async () => {
+  const dataRoot = await createRuntimeRoot(
+    "forge-data-backup-snapshot-failure-"
+  );
+  const backupDirectory = path.join(dataRoot, "backups");
+  let snapshotPath = "";
+  try {
+    await updateDataManagementSettings({
+      backupDirectory,
+      autoRepairEnabled: true
+    });
+    await assert.rejects(
+      createDataBackup(
+        { note: "Reject invalid snapshot" },
+        {
+          beforeSnapshotValidationForTest(input) {
+            snapshotPath = input.snapshotPath;
+            throw new Error("simulated snapshot validation failure");
+          }
+        }
+      ),
+      /simulated snapshot validation failure/u
+    );
+    assert.ok(snapshotPath);
+    assert.equal(existsSync(snapshotPath), false);
+    assert.equal(existsSync(path.dirname(snapshotPath)), false);
+    assert.deepEqual(await readdir(backupDirectory), []);
+  } finally {
+    await rm(dataRoot, { recursive: true, force: true });
+  }
+});
+
+test("streaming backup removes staged output after a raced source or destination failure", async () => {
+  const dataRoot = await createRuntimeRoot("forge-data-backup-stream-failure-");
+  const backupDirectory = path.join(dataRoot, "backups");
+  try {
+    await writeRuntimeArtifacts(dataRoot, "stream-failure");
+    await updateDataManagementSettings({
+      backupDirectory,
+      autoRepairEnabled: true
+    });
+    const ingestSource = path.join(dataRoot, "wiki-ingest", "source.txt");
+    const displacedSource = path.join(
+      dataRoot,
+      "wiki-ingest",
+      "source.original"
+    );
+    await assert.rejects(
+      createDataBackup(
+        { note: "Reject raced source" },
+        {
+          async beforeStreamingArchiveForTest() {
+            await rename(ingestSource, displacedSource);
+            await symlink(displacedSource, ingestSource);
+          }
+        }
+      ),
+      /symbolic link|ELOOP|changed after Forge verified/u
+    );
+    await rm(ingestSource);
+    await rename(displacedSource, ingestSource);
+    assert.deepEqual(await readdir(backupDirectory), []);
+
+    await assert.rejects(
+      createDataBackup(
+        { note: "Reject destination collision" },
+        {
+          async beforeStreamingArchiveForTest({ stagedArchivePath }) {
+            await mkdir(stagedArchivePath);
+          }
+        }
+      ),
+      /EEXIST/u
+    );
+    assert.deepEqual(await readdir(backupDirectory), []);
+    assert.deepEqual(await listDataBackups(), []);
+  } finally {
+    await rm(dataRoot, { recursive: true, force: true });
+  }
+});
+
+test("streaming backup rejects raced wiki roots and parent directories outside the verified source tree", async () => {
+  const dataRoot = await createRuntimeRoot("forge-data-backup-tree-race-");
+  const backupDirectory = path.join(dataRoot, "backups");
+  const wikiRoot = path.join(dataRoot, "wiki-ingest");
+  try {
+    await mkdir(path.join(wikiRoot, "nested"), { recursive: true });
+    await writeFile(
+      path.join(wikiRoot, "nested", "source.txt"),
+      "verified wiki source",
+      "utf8"
+    );
+    await updateDataManagementSettings({
+      backupDirectory,
+      autoRepairEnabled: true
+    });
+
+    const displacedRoot = path.join(dataRoot, "wiki-ingest.original");
+    const outsideRoot = path.join(dataRoot, "outside-wiki-root");
+    await mkdir(path.join(outsideRoot, "nested"), { recursive: true });
+    await writeFile(
+      path.join(outsideRoot, "nested", "source.txt"),
+      "outside root",
+      "utf8"
+    );
+    await assert.rejects(
+      createDataBackup(
+        { note: "Reject replaced wiki root" },
+        {
+          async beforeStreamingArchiveForTest() {
+            await rename(wikiRoot, displacedRoot);
+            await symlink(outsideRoot, wikiRoot);
+          }
+        }
+      ),
+      /changed after Forge verified its path|replaced/u
+    );
+    await rm(wikiRoot);
+    await rename(displacedRoot, wikiRoot);
+    assert.deepEqual(await readdir(backupDirectory), []);
+
+    const nestedRoot = path.join(wikiRoot, "nested");
+    const displacedNestedRoot = path.join(wikiRoot, "nested.original");
+    const outsideNestedRoot = path.join(dataRoot, "outside-wiki-parent");
+    await mkdir(outsideNestedRoot);
+    await writeFile(
+      path.join(outsideNestedRoot, "source.txt"),
+      "outside parent",
+      "utf8"
+    );
+    await assert.rejects(
+      createDataBackup(
+        { note: "Reject replaced wiki parent" },
+        {
+          async beforeStreamingArchiveForTest() {
+            await rename(nestedRoot, displacedNestedRoot);
+            await symlink(outsideNestedRoot, nestedRoot);
+          }
+        }
+      ),
+      /changed after Forge verified its path|changed while Forge opened/u
+    );
+    await rm(nestedRoot);
+    await rename(displacedNestedRoot, nestedRoot);
     assert.deepEqual(await readdir(backupDirectory), []);
     assert.deepEqual(await listDataBackups(), []);
   } finally {
@@ -522,10 +809,7 @@ test("restoreDataBackup rejects manifest path substitution, traversal entries, a
 
     const traversal = await createDataBackup({ note: "Traversal" });
     const traversalArchive = new AdmZip(traversal.archivePath);
-    traversalArchive.addFile(
-      "aa/escape",
-      Buffer.from("escape", "utf8")
-    );
+    traversalArchive.addFile("aa/escape", Buffer.from("escape", "utf8"));
     traversalArchive.writeZip(traversal.archivePath);
     const traversalBytes = await readFile(traversal.archivePath);
     const safeName = Buffer.from("aa/escape", "utf8");
@@ -547,7 +831,7 @@ test("restoreDataBackup rejects manifest path substitution, traversal entries, a
     await chmod(traversal.archivePath, 0o600);
     await assert.rejects(
       restoreDataBackup(traversal.id, { createSafetyBackup: false }),
-      /traversal path/u
+      /traversal path|invalid relative path/u
     );
     assert.equal(
       existsSync(path.join(path.dirname(dataRoot), "escape")),
@@ -561,6 +845,88 @@ test("restoreDataBackup rejects manifest path substitution, traversal entries, a
     await assert.rejects(
       restoreDataBackup(linked.id, { createSafetyBackup: false }),
       /not an owner-only regular path/u
+    );
+  } finally {
+    await rm(dataRoot, { recursive: true, force: true });
+  }
+});
+
+test("restoreDataBackup rejects encrypted, unsupported, corrupt, and truncated entries without changing live data", async () => {
+  const dataRoot = await createRuntimeRoot("forge-data-restore-malformed-");
+  try {
+    insertTag("tag_live_before_malformed", "Live before malformed");
+    const expectedTagIds = listTagIds();
+    await updateDataManagementSettings({
+      backupDirectory: path.join(dataRoot, "backups"),
+      autoRepairEnabled: true
+    });
+
+    const encrypted = await createDataBackup({ note: "Encrypted flag" });
+    const encryptedBytes = mutateCentralDirectoryEntry(
+      await readFile(encrypted.archivePath),
+      "forge.sqlite",
+      (bytes, offset) => {
+        bytes.writeUInt16LE(bytes.readUInt16LE(offset + 8) | 0x1, offset + 8);
+      }
+    );
+    await writeFile(encrypted.archivePath, encryptedBytes);
+    await chmod(encrypted.archivePath, 0o600);
+    await assert.rejects(
+      restoreDataBackup(encrypted.id, { createSafetyBackup: false }),
+      /does not restore encrypted/u
+    );
+
+    const unsupported = await createDataBackup({
+      note: "Unsupported compression"
+    });
+    const unsupportedBytes = mutateCentralDirectoryEntry(
+      await readFile(unsupported.archivePath),
+      "forge.sqlite",
+      (bytes, offset) => bytes.writeUInt16LE(99, offset + 10)
+    );
+    await writeFile(unsupported.archivePath, unsupportedBytes);
+    await chmod(unsupported.archivePath, 0o600);
+    await assert.rejects(
+      restoreDataBackup(unsupported.id, { createSafetyBackup: false }),
+      /unsupported compression method/u
+    );
+
+    const corrupt = await createDataBackup({ note: "CRC mismatch" });
+    const corruptBytes = mutateCentralDirectoryEntry(
+      await readFile(corrupt.archivePath),
+      "forge.sqlite",
+      (bytes, offset) => {
+        bytes.writeUInt32LE(
+          (bytes.readUInt32LE(offset + 16) ^ 0xffffffff) >>> 0,
+          offset + 16
+        );
+      }
+    );
+    await writeFile(corrupt.archivePath, corruptBytes);
+    await chmod(corrupt.archivePath, 0o600);
+    await assert.rejects(
+      restoreDataBackup(corrupt.id, { createSafetyBackup: false }),
+      /size or checksum verification/u
+    );
+
+    const truncated = await createDataBackup({ note: "Truncated archive" });
+    const completeBytes = await readFile(truncated.archivePath);
+    await writeFile(
+      truncated.archivePath,
+      completeBytes.subarray(0, completeBytes.length - 22)
+    );
+    await chmod(truncated.archivePath, 0o600);
+    await assert.rejects(
+      restoreDataBackup(truncated.id, { createSafetyBackup: false }),
+      /central directory|end of central directory|invalid zip/u
+    );
+
+    assert.deepEqual(listTagIds(), expectedTagIds);
+    assert.equal(
+      (await readdir(dataRoot)).some((entry) =>
+        entry.startsWith(".forge-restore-stage-")
+      ),
+      false
     );
   } finally {
     await rm(dataRoot, { recursive: true, force: true });
@@ -1025,9 +1391,7 @@ for (const failurePoint of ["persist", "sync"] as const) {
 }
 
 test("startup recovery rolls back an interrupted activated data-root switch", async () => {
-  const currentRoot = await createRuntimeRoot(
-    "forge-switch-recovery-current-"
-  );
+  const currentRoot = await createRuntimeRoot("forge-switch-recovery-current-");
   const targetParent = await mkdtemp(
     path.join(os.tmpdir(), "forge-switch-recovery-parent-")
   );

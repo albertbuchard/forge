@@ -32,6 +32,20 @@ const compiledDatabaseCompatibilityMarkers = [
   "backfillLegacyPairingClientMetadata(database);"
 ];
 
+const compiledDataManagementMirrors = [
+  "plugins/codex/runtime/dist/server/apps/api/src/services/data-management.js",
+  "plugins/hermes/forge_hermes/runtime/dist/server/apps/api/src/services/data-management.js",
+  "plugins/openclaw/dist/server/apps/api/src/services/data-management.js"
+];
+
+const compiledDataManagementSecurityMarkers = [
+  "addReadStreamLazy",
+  "fromFdPromise",
+  "openReadOnlyDescriptor",
+  "MAX_BACKUP_ARCHIVE_ENTRIES",
+  "MAX_BACKUP_ARCHIVE_TOTAL_BYTES"
+];
+
 const exactFileMirrors = [
   {
     canonicalRoot: "packages/companion-iroh",
@@ -126,6 +140,28 @@ export async function verifySecurityMirrorReceipts() {
   for (const mirrorPath of compiledDatabaseMirrors.slice(1)) {
     receipts.push(
       await assertExactFile(compiledDatabaseMirrors[0], mirrorPath)
+    );
+  }
+  const compiledDataManagementFiles = await Promise.all(
+    compiledDataManagementMirrors.map((filePath) =>
+      readFile(path.join(repoRoot, filePath))
+    )
+  );
+  for (const [
+    index,
+    compiledDataManagement
+  ] of compiledDataManagementFiles.entries()) {
+    for (const marker of compiledDataManagementSecurityMarkers) {
+      if (!compiledDataManagement.includes(Buffer.from(marker))) {
+        throw new Error(
+          `Generated data-management runtime omits streaming archive security marker ${JSON.stringify(marker)}: ${compiledDataManagementMirrors[index]}`
+        );
+      }
+    }
+  }
+  for (const mirrorPath of compiledDataManagementMirrors.slice(1)) {
+    receipts.push(
+      await assertExactFile(compiledDataManagementMirrors[0], mirrorPath)
     );
   }
   return receipts;

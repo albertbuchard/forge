@@ -1,5 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, readdirSync, type Dirent } from "node:fs";
+import {
+  close as closeFileDescriptor,
+  constants as fsConstants,
+  createWriteStream,
+  existsSync,
+  fstat as fstatFileDescriptor,
+  open as openFileDescriptor,
+  readdirSync,
+  type Dirent,
+  type Stats
+} from "node:fs";
 import {
   chmod,
   cp,
@@ -12,13 +22,21 @@ import {
   realpath,
   rename,
   rm,
-  stat,
-  writeFile
+  stat
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { Transform, type TransformCallback } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { crc32 } from "node:zlib";
 import AdmZip from "adm-zip";
+import { ZipFile } from "yazl";
+import {
+  fromFdPromise,
+  type Entry as YauzlEntry,
+  type ZipFile as YauzlZipFile
+} from "yauzl";
 import {
   closeDatabase,
   configureDatabase,
@@ -142,10 +160,28 @@ const SKIP_SCAN_DIRECTORIES = new Set([
 const PRIVATE_DIRECTORY_MODE = 0o700;
 const PRIVATE_FILE_MODE = 0o600;
 const MAX_BACKUP_ARCHIVE_ENTRIES = 100_000;
-const MAX_BACKUP_ARCHIVE_ENTRY_BYTES = 2 * 1024 * 1024 * 1024;
+const MAX_BACKUP_ARCHIVE_ENTRY_BYTES = 20 * 1024 * 1024 * 1024;
 const MAX_BACKUP_ARCHIVE_TOTAL_BYTES = 20 * 1024 * 1024 * 1024;
 const RESTORE_JOURNAL_FILE = ".forge-restore-journal.json";
 const SWITCH_ROOT_JOURNAL_FILE = ".forge-switch-root-journal.json";
+
+type BackupNodeIdentity = {
+  dev: number;
+  ino: number;
+  mode: number;
+  uid: number;
+  size: number;
+  mtimeMs: number;
+};
+
+type BackupArchiveSource = {
+  sourcePath: string;
+  archivePath: string;
+  rootPath: string;
+  canonicalRootPath: string;
+  rootIdentity: BackupNodeIdentity;
+  identity: BackupNodeIdentity;
+};
 
 type RestoreTargetName =
   | "forge.sqlite"
@@ -602,48 +638,13 @@ async function assertOwnerRegularFile(filePath: string) {
   }
 }
 
-async function assertBackupTreeHasNoLinks(rootPath: string) {
-  let visited = 0;
-  const visit = async (directoryPath: string): Promise<void> => {
-    for (const entry of await readdir(directoryPath, {
-      withFileTypes: true
-    })) {
-      visited += 1;
-      if (visited > MAX_BACKUP_ARCHIVE_ENTRIES) {
-        throw new HttpError(
-          400,
-          "backup_source_entry_limit",
-          "The backup source contains too many entries."
-        );
-      }
-      const entryPath = path.join(directoryPath, entry.name);
-      const entryStat = await lstat(entryPath);
-      if (entryStat.isSymbolicLink()) {
-        throw new HttpError(
-          400,
-          "backup_source_symlink_forbidden",
-          "Forge refuses to follow symbolic links into a credential-bearing backup."
-        );
-      }
-      if (entryStat.isDirectory()) {
-        await visit(entryPath);
-      } else if (!entryStat.isFile()) {
-        throw new HttpError(
-          400,
-          "backup_source_type_forbidden",
-          "Forge backups accept only regular files and directories."
-        );
-      }
-    }
-  };
-  await visit(rootPath);
-}
-
 function isPathInside(parentPath: string, candidatePath: string) {
   const relative = path.relative(parentPath, candidatePath);
   return (
     relative === "" ||
-    (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
+    (!relative.startsWith(`..${path.sep}`) &&
+      relative !== ".." &&
+      !path.isAbsolute(relative))
   );
 }
 
@@ -717,6 +718,492 @@ function safeArchiveEntryPath(entryName: string) {
   return normalized;
 }
 
+function captureFileIdentity(fileStat: Stats) {
+  return {
+    dev: fileStat.dev,
+    ino: fileStat.ino,
+    mode: fileStat.mode,
+    uid: fileStat.uid,
+    size: fileStat.size,
+    mtimeMs: fileStat.mtimeMs
+  };
+}
+
+function sameNodeIdentity(actual: Stats, expected: BackupNodeIdentity) {
+  return (
+    actual.dev === expected.dev &&
+    actual.ino === expected.ino &&
+    actual.mode === expected.mode &&
+    actual.uid === expected.uid &&
+    actual.size === expected.size &&
+    actual.mtimeMs === expected.mtimeMs
+  );
+}
+
+function sameFileIdentity(
+  actual: Stats,
+  expected: BackupArchiveSource["identity"]
+) {
+  return actual.isFile() && sameNodeIdentity(actual, expected);
+}
+
+function sameDirectoryIdentity(actual: Stats, expected: BackupNodeIdentity) {
+  return actual.isDirectory() && sameNodeIdentity(actual, expected);
+}
+
+async function collectBackupArchiveTree(rootPath: string, archiveRoot: string) {
+  const files: BackupArchiveSource[] = [];
+  const directories: string[] = [];
+  const expectedOwner = process.getuid?.();
+  const rootStat = await lstat(rootPath);
+  const canonicalRootPath = await realpath(rootPath);
+  if (
+    rootStat.isSymbolicLink() ||
+    !rootStat.isDirectory() ||
+    (expectedOwner !== undefined && rootStat.uid !== expectedOwner)
+  ) {
+    throw new HttpError(
+      400,
+      "backup_source_not_owner_controlled",
+      "Forge refuses to back up a symbolic-link or non-owner source directory."
+    );
+  }
+  const rootIdentity = captureFileIdentity(rootStat);
+  let visited = 0;
+  const visit = async (
+    directoryPath: string,
+    archiveDirectory: string
+  ): Promise<void> => {
+    const [directoryStat, canonicalDirectoryPath] = await Promise.all([
+      lstat(directoryPath),
+      realpath(directoryPath)
+    ]);
+    if (
+      directoryStat.isSymbolicLink() ||
+      !directoryStat.isDirectory() ||
+      !isPathInside(canonicalRootPath, canonicalDirectoryPath) ||
+      (expectedOwner !== undefined && directoryStat.uid !== expectedOwner)
+    ) {
+      throw new HttpError(
+        400,
+        "backup_source_not_owner_controlled",
+        "Forge refuses to follow a replaced or non-owner backup source directory."
+      );
+    }
+    const directoryIdentity = captureFileIdentity(directoryStat);
+    directories.push(archiveDirectory);
+    const entries = await readdir(directoryPath, {
+      withFileTypes: true
+    });
+    for (const entry of entries) {
+      visited += 1;
+      if (visited > MAX_BACKUP_ARCHIVE_ENTRIES) {
+        throw new HttpError(
+          400,
+          "backup_source_entry_limit",
+          "The backup source contains too many entries."
+        );
+      }
+      const entryPath = path.join(directoryPath, entry.name);
+      const archivePath = path.posix.join(archiveDirectory, entry.name);
+      const entryStat = await lstat(entryPath);
+      if (entryStat.isSymbolicLink()) {
+        throw new HttpError(
+          400,
+          "backup_source_symlink_forbidden",
+          "Forge refuses to follow symbolic links into a credential-bearing backup."
+        );
+      }
+      if (entryStat.isDirectory()) {
+        await visit(entryPath, archivePath);
+      } else if (entryStat.isFile()) {
+        files.push(
+          await verifiedBackupSource(
+            entryPath,
+            archivePath,
+            rootPath,
+            canonicalRootPath,
+            rootIdentity
+          )
+        );
+      } else {
+        throw new HttpError(
+          400,
+          "backup_source_type_forbidden",
+          "Forge backups accept only regular files and directories."
+        );
+      }
+    }
+    const [directoryStatAfter, canonicalDirectoryPathAfter] = await Promise.all(
+      [lstat(directoryPath), realpath(directoryPath)]
+    );
+    if (
+      canonicalDirectoryPathAfter !== canonicalDirectoryPath ||
+      !sameDirectoryIdentity(directoryStatAfter, directoryIdentity)
+    ) {
+      throw new HttpError(
+        400,
+        "backup_source_changed",
+        "A backup source directory changed while Forge enumerated it."
+      );
+    }
+  };
+  await visit(rootPath, archiveRoot);
+  const [rootStatAfter, canonicalRootPathAfter] = await Promise.all([
+    lstat(rootPath),
+    realpath(rootPath)
+  ]);
+  if (
+    canonicalRootPathAfter !== canonicalRootPath ||
+    !sameDirectoryIdentity(rootStatAfter, rootIdentity)
+  ) {
+    throw new HttpError(
+      400,
+      "backup_source_changed",
+      "The backup source root changed while Forge enumerated it."
+    );
+  }
+  return { files, directories };
+}
+
+async function verifiedBackupSource(
+  sourcePath: string,
+  archivePath: string,
+  rootPath = path.dirname(sourcePath),
+  knownCanonicalRootPath?: string,
+  knownRootIdentity?: BackupNodeIdentity
+): Promise<BackupArchiveSource> {
+  const [rootStat, sourceStat, canonicalRootPath, canonicalSourcePath] =
+    await Promise.all([
+      lstat(rootPath),
+      lstat(sourcePath),
+      knownCanonicalRootPath ?? realpath(rootPath),
+      realpath(sourcePath)
+    ]);
+  const expectedOwner = process.getuid?.();
+  if (
+    rootStat.isSymbolicLink() ||
+    !rootStat.isDirectory() ||
+    sourceStat.isSymbolicLink() ||
+    !sourceStat.isFile() ||
+    !isPathInside(canonicalRootPath, canonicalSourcePath) ||
+    (knownRootIdentity !== undefined &&
+      !sameDirectoryIdentity(rootStat, knownRootIdentity)) ||
+    (expectedOwner !== undefined &&
+      (rootStat.uid !== expectedOwner || sourceStat.uid !== expectedOwner))
+  ) {
+    throw new HttpError(
+      400,
+      "backup_source_not_owner_controlled",
+      "Forge refuses to back up a symbolic-link or non-owner source file."
+    );
+  }
+  return {
+    sourcePath,
+    archivePath,
+    rootPath,
+    canonicalRootPath,
+    rootIdentity: knownRootIdentity ?? captureFileIdentity(rootStat),
+    identity: captureFileIdentity(sourceStat)
+  };
+}
+
+function addVerifiedSourceToZip(
+  zip: ZipFile,
+  source: BackupArchiveSource,
+  forceZip64Format: boolean
+) {
+  zip.addReadStreamLazy(
+    source.archivePath,
+    {
+      size: source.identity.size,
+      mtime: new Date(source.identity.mtimeMs),
+      mode: source.identity.mode,
+      compress: true,
+      forceZip64Format
+    },
+    (callback) => {
+      void (async () => {
+        const [canonicalRootPath, canonicalSourcePath, rootStat, sourceStat] =
+          await Promise.all([
+            realpath(source.rootPath),
+            realpath(source.sourcePath),
+            lstat(source.rootPath),
+            lstat(source.sourcePath)
+          ]);
+        if (
+          canonicalRootPath !== source.canonicalRootPath ||
+          !isPathInside(source.canonicalRootPath, canonicalSourcePath) ||
+          !sameDirectoryIdentity(rootStat, source.rootIdentity) ||
+          !sameFileIdentity(sourceStat, source.identity)
+        ) {
+          throw new HttpError(
+            400,
+            "backup_source_changed",
+            "A backup source changed after Forge verified its path."
+          );
+        }
+        const handle = await open(
+          source.sourcePath,
+          fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0)
+        );
+        try {
+          const openedStat = await handle.stat();
+          if (!sameFileIdentity(openedStat, source.identity)) {
+            throw new HttpError(
+              400,
+              "backup_source_changed",
+              "A backup source changed after Forge verified it."
+            );
+          }
+          const [
+            canonicalRootPathAfter,
+            canonicalSourcePathAfter,
+            rootStatAfter,
+            sourceStatAfter
+          ] = await Promise.all([
+            realpath(source.rootPath),
+            realpath(source.sourcePath),
+            lstat(source.rootPath),
+            lstat(source.sourcePath)
+          ]);
+          if (
+            canonicalRootPathAfter !== source.canonicalRootPath ||
+            !isPathInside(source.canonicalRootPath, canonicalSourcePathAfter) ||
+            !sameDirectoryIdentity(rootStatAfter, source.rootIdentity) ||
+            !sameFileIdentity(sourceStatAfter, source.identity)
+          ) {
+            throw new HttpError(
+              400,
+              "backup_source_changed",
+              "A backup source changed while Forge opened it."
+            );
+          }
+          callback(
+            null,
+            handle.createReadStream({
+              autoClose: true
+            })
+          );
+        } catch (error) {
+          await handle.close();
+          throw error;
+        }
+      })().catch((error) => callback(error, null as never));
+    }
+  );
+}
+
+async function writeStreamingBackupArchive(input: {
+  targetPath: string;
+  sources: BackupArchiveSource[];
+  directories: string[];
+  buffers: Array<{ archivePath: string; body: Buffer }>;
+  forceZip64Format?: boolean;
+}) {
+  const zip = new ZipFile();
+  const output = zip.outputStream as NodeJS.ReadableStream & {
+    destroy(error?: Error): void;
+  };
+  zip.once("error", (error) => output.destroy(error));
+  for (const directory of input.directories) {
+    zip.addEmptyDirectory(directory, {
+      mode: 0o40700
+    });
+  }
+  for (const source of input.sources) {
+    addVerifiedSourceToZip(zip, source, input.forceZip64Format ?? false);
+  }
+  for (const entry of input.buffers) {
+    zip.addBuffer(entry.body, entry.archivePath, {
+      mode: 0o100600,
+      forceZip64Format: input.forceZip64Format ?? false
+    });
+  }
+  try {
+    const destinationStream = createWriteStream(input.targetPath, {
+      flags: "wx",
+      mode: PRIVATE_FILE_MODE
+    });
+    const completed = pipeline(output, destinationStream);
+    zip.end({
+      forceZip64Format: input.forceZip64Format ?? false,
+      comment: ""
+    });
+    await completed;
+    const completedArchive = await open(
+      input.targetPath,
+      fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0)
+    );
+    try {
+      await completedArchive.sync();
+    } finally {
+      await completedArchive.close();
+    }
+  } catch (error) {
+    await removeIfExists(input.targetPath);
+    throw error;
+  }
+}
+
+async function writePrivateFileDurably(filePath: string, body: string) {
+  const handle = await open(filePath, "wx", PRIVATE_FILE_MODE);
+  try {
+    await handle.writeFile(body, "utf8");
+    await handle.sync();
+  } catch (error) {
+    await removeIfExists(filePath);
+    throw error;
+  } finally {
+    await handle.close();
+  }
+}
+
+function openReadOnlyDescriptor(filePath: string) {
+  return new Promise<number>((resolve, reject) => {
+    openFileDescriptor(
+      filePath,
+      fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0),
+      (error, descriptor) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(descriptor);
+        }
+      }
+    );
+  });
+}
+
+function fstatDescriptor(descriptor: number) {
+  return new Promise<Stats>((resolve, reject) => {
+    fstatFileDescriptor(descriptor, (error, fileStat) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(fileStat);
+      }
+    });
+  });
+}
+
+function closeDescriptor(descriptor: number) {
+  return new Promise<void>((resolve, reject) => {
+    closeFileDescriptor(descriptor, (error) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+function closeYauzlArchive(archive: YauzlZipFile) {
+  if (!archive.isOpen) {
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    archive.once("close", resolve);
+    archive.close();
+  });
+}
+
+class BackupEntryIntegrityTransform extends Transform {
+  bytes = 0;
+  checksum = 0;
+
+  constructor(
+    private readonly entryLimit: number,
+    private readonly claimGlobalBytes: (bytes: number) => void
+  ) {
+    super();
+  }
+
+  override _transform(
+    chunk: Buffer,
+    _encoding: BufferEncoding,
+    callback: TransformCallback
+  ) {
+    try {
+      this.bytes += chunk.length;
+      if (this.bytes > this.entryLimit) {
+        throw new HttpError(
+          400,
+          "backup_archive_size_invalid",
+          "The backup archive contains an oversized entry."
+        );
+      }
+      this.claimGlobalBytes(chunk.length);
+      this.checksum = crc32(chunk, this.checksum);
+      callback(null, chunk);
+    } catch (error) {
+      callback(error as Error);
+    }
+  }
+}
+
+function validateBackupEntryMetadata(
+  entry: Pick<
+    YauzlEntry,
+    | "compressedSize"
+    | "compressionMethod"
+    | "externalFileAttributes"
+    | "fileName"
+    | "isEncrypted"
+    | "uncompressedSize"
+  >
+) {
+  const entryPath = safeArchiveEntryPath(entry.fileName);
+  const mode = (entry.externalFileAttributes >>> 16) & 0o170000;
+  if (mode === 0o120000) {
+    throw new HttpError(
+      400,
+      "backup_archive_symlink_forbidden",
+      "The backup archive contains a symbolic link."
+    );
+  }
+  if (entry.isEncrypted()) {
+    throw new HttpError(
+      400,
+      "backup_archive_encryption_forbidden",
+      "Forge does not restore encrypted backup archive entries."
+    );
+  }
+  if (![0, 8].includes(entry.compressionMethod)) {
+    throw new HttpError(
+      400,
+      "backup_archive_compression_invalid",
+      "The backup archive uses an unsupported compression method."
+    );
+  }
+  for (const size of [entry.compressedSize, entry.uncompressedSize]) {
+    if (!Number.isSafeInteger(size) || size < 0) {
+      throw new HttpError(
+        400,
+        "backup_archive_size_invalid",
+        "The backup archive contains invalid size metadata."
+      );
+    }
+  }
+  if (entry.uncompressedSize > MAX_BACKUP_ARCHIVE_ENTRY_BYTES) {
+    throw new HttpError(
+      400,
+      "backup_archive_size_invalid",
+      "The backup archive contains an oversized entry."
+    );
+  }
+  return entryPath;
+}
+
+export function backupArchiveLimitsForTest() {
+  return {
+    maximumEntries: MAX_BACKUP_ARCHIVE_ENTRIES,
+    maximumEntryBytes: MAX_BACKUP_ARCHIVE_ENTRY_BYTES,
+    maximumTotalBytes: MAX_BACKUP_ARCHIVE_TOTAL_BYTES
+  };
+}
+
 async function extractVerifiedBackupArchive(input: {
   backup: DataBackupEntry;
   backupDirectory: string;
@@ -732,7 +1219,8 @@ async function extractVerifiedBackupArchive(input: {
     baseName
   );
   if (
-    path.resolve(input.backup.archivePath) !== path.resolve(expectedArchivePath) ||
+    path.resolve(input.backup.archivePath) !==
+      path.resolve(expectedArchivePath) ||
     path.resolve(input.backup.manifestPath) !==
       path.resolve(expectedManifestPath)
   ) {
@@ -757,81 +1245,147 @@ async function extractVerifiedBackupArchive(input: {
     rootPath: input.backupDirectory,
     kind: "file"
   });
-
-  const archive = new AdmZip(await readFile(expectedArchivePath));
-  const entries = archive.getEntries();
-  if (entries.length === 0 || entries.length > MAX_BACKUP_ARCHIVE_ENTRIES) {
-    throw new HttpError(
-      400,
-      "backup_archive_size_invalid",
-      "The backup archive has an unsafe entry count."
-    );
-  }
-  let totalBytes = 0;
-  let hasDatabase = false;
-  for (const entry of entries) {
-    const zipEntry = entry as unknown as {
-      attr: number;
-      header: { size: number };
-    };
-    const entryPath = safeArchiveEntryPath(entry.entryName);
-    const mode = (zipEntry.attr >>> 16) & 0o170000;
-    if (mode === 0o120000) {
-      throw new HttpError(
-        400,
-        "backup_archive_symlink_forbidden",
-        "The backup archive contains a symbolic link."
-      );
-    }
-    const size = Number(zipEntry.header.size);
+  const archivePathStat = await lstat(expectedArchivePath);
+  let descriptor = await openReadOnlyDescriptor(expectedArchivePath);
+  let archive: YauzlZipFile | null = null;
+  try {
+    const openedStat = await fstatDescriptor(descriptor);
     if (
-      !Number.isSafeInteger(size) ||
-      size < 0 ||
-      size > MAX_BACKUP_ARCHIVE_ENTRY_BYTES
+      !sameFileIdentity(openedStat, captureFileIdentity(archivePathStat)) ||
+      (openedStat.mode & 0o077) !== 0
     ) {
       throw new HttpError(
         400,
-        "backup_archive_size_invalid",
-        "The backup archive contains an oversized entry."
+        "backup_path_not_owner_controlled",
+        "The backup artifact changed after Forge verified it."
       );
     }
-    totalBytes += size;
-    if (totalBytes > MAX_BACKUP_ARCHIVE_TOTAL_BYTES) {
+    archive = await fromFdPromise(descriptor, {
+      autoClose: false,
+      decodeStrings: true,
+      strictFileNames: true,
+      validateEntrySizes: true
+    });
+    const entries: Array<{ entry: YauzlEntry; entryPath: string }> = [];
+    const entryPaths = new Set<string>();
+    let declaredTotalBytes = 0;
+    let hasDatabase = false;
+    for await (const entry of archive.eachEntry()) {
+      if (entries.length >= MAX_BACKUP_ARCHIVE_ENTRIES) {
+        throw new HttpError(
+          400,
+          "backup_archive_size_invalid",
+          "The backup archive has an unsafe entry count."
+        );
+      }
+      const entryPath = validateBackupEntryMetadata(entry);
+      if (entryPaths.has(entryPath)) {
+        throw new HttpError(
+          400,
+          "backup_archive_entry_invalid",
+          "The backup archive contains duplicate paths."
+        );
+      }
+      entryPaths.add(entryPath);
+      declaredTotalBytes += entry.uncompressedSize;
+      if (declaredTotalBytes > MAX_BACKUP_ARCHIVE_TOTAL_BYTES) {
+        throw new HttpError(
+          400,
+          "backup_archive_size_invalid",
+          "The backup archive exceeds the restore size limit."
+        );
+      }
+      hasDatabase ||= entryPath === "forge.sqlite";
+      entries.push({ entry, entryPath });
+    }
+    if (entries.length === 0) {
       throw new HttpError(
         400,
         "backup_archive_size_invalid",
-        "The backup archive exceeds the restore size limit."
+        "The backup archive has an unsafe entry count."
       );
     }
-    if (entryPath === "forge.sqlite") {
-      hasDatabase = true;
+    if (!hasDatabase) {
+      throw new HttpError(
+        500,
+        "backup_missing_database",
+        "The selected backup archive does not contain a forge.sqlite snapshot."
+      );
     }
-  }
-  if (!hasDatabase) {
-    throw new HttpError(
-      500,
-      "backup_missing_database",
-      "The selected backup archive does not contain a forge.sqlite snapshot."
-    );
-  }
-  for (const entry of entries) {
-    const entryPath = safeArchiveEntryPath(entry.entryName);
-    const targetPath = path.join(input.targetDirectory, ...entryPath.split("/"));
-    if (entry.isDirectory) {
-      await mkdir(targetPath, {
+
+    let extractedTotalBytes = 0;
+    const claimGlobalBytes = (bytes: number) => {
+      extractedTotalBytes += bytes;
+      if (extractedTotalBytes > MAX_BACKUP_ARCHIVE_TOTAL_BYTES) {
+        throw new HttpError(
+          400,
+          "backup_archive_size_invalid",
+          "The backup archive exceeds the restore size limit."
+        );
+      }
+    };
+    for (const { entry, entryPath } of entries) {
+      const targetPath = path.join(
+        input.targetDirectory,
+        ...entryPath.split("/")
+      );
+      if (entry.fileName.endsWith("/")) {
+        await mkdir(targetPath, {
+          recursive: true,
+          mode: PRIVATE_DIRECTORY_MODE
+        });
+        continue;
+      }
+      await mkdir(path.dirname(targetPath), {
         recursive: true,
         mode: PRIVATE_DIRECTORY_MODE
       });
-      continue;
+      const entryIntegrity = new BackupEntryIntegrityTransform(
+        MAX_BACKUP_ARCHIVE_ENTRY_BYTES,
+        claimGlobalBytes
+      );
+      try {
+        const source = await archive.openReadStreamPromise(entry);
+        await pipeline(
+          source,
+          entryIntegrity,
+          createWriteStream(targetPath, {
+            flags: "wx",
+            mode: PRIVATE_FILE_MODE
+          })
+        );
+        if (
+          entryIntegrity.bytes !== entry.uncompressedSize ||
+          entryIntegrity.checksum >>> 0 !== entry.crc32 >>> 0
+        ) {
+          throw new HttpError(
+            400,
+            "backup_archive_integrity_invalid",
+            "The backup archive entry failed its size or checksum verification."
+          );
+        }
+        const extractedFile = await open(
+          targetPath,
+          fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0)
+        );
+        try {
+          await extractedFile.sync();
+        } finally {
+          await extractedFile.close();
+        }
+      } catch (error) {
+        await removeIfExists(targetPath);
+        throw error;
+      }
     }
-    await mkdir(path.dirname(targetPath), {
-      recursive: true,
-      mode: PRIVATE_DIRECTORY_MODE
-    });
-    await writeFile(targetPath, entry.getData(), {
-      flag: "wx",
-      mode: PRIVATE_FILE_MODE
-    });
+  } finally {
+    if (archive) {
+      await closeYauzlArchive(archive);
+      descriptor = -1;
+    }
+    if (descriptor >= 0) {
+      await closeDescriptor(descriptor);
+    }
   }
 }
 
@@ -902,12 +1456,18 @@ export async function createDataBackup(
   options: {
     mode?: DataBackupMode;
     archiveWriter?: (archive: AdmZip, targetPath: string) => void;
+    forceZip64FormatForTest?: boolean;
+    beforeStreamingArchiveForTest?: (input: {
+      stagedArchivePath: string;
+    }) => Promise<void> | void;
+    beforeSnapshotValidationForTest?: (input: {
+      snapshotPath: string;
+    }) => Promise<void> | void;
   } = {}
 ): Promise<DataBackupEntry> {
   const parsed = createDataBackupSchema.parse(input);
   const mode = dataBackupModeSchema.parse(options.mode ?? "manual");
   const settings = resolveCurrentDataManagementSettings();
-  const snapshot = await getCurrentDataRuntimeSnapshot();
   await ensurePrivateDirectory(settings.backupDirectory);
   const backupId = `bkp_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
   const createdAt = nowIso();
@@ -922,6 +1482,48 @@ export async function createDataBackup(
   );
   const database = getDatabase();
   const sqliteSnapshot = await createSqliteSnapshot(database);
+  const currentRoot = getEffectiveDataRoot();
+  const sourceDatabasePath = resolveDatabasePathForDataRoot(currentRoot);
+  let snapshotDatabase: DatabaseSync | null = null;
+  let snapshot: DataRuntimeSnapshot;
+  let schemaSql: string;
+  let schemaJson: ReturnType<typeof buildSchemaJson>;
+  try {
+    await options.beforeSnapshotValidationForTest?.({
+      snapshotPath: sqliteSnapshot.snapshotPath
+    });
+    snapshotDatabase = new DatabaseSync(sqliteSnapshot.snapshotPath, {
+      readOnly: true
+    });
+    const snapshotStat = await stat(sqliteSnapshot.snapshotPath);
+    const integrity = checkIntegrity(snapshotDatabase);
+    if (!integrity.integrityOk) {
+      throw new HttpError(
+        500,
+        "backup_database_integrity_failed",
+        "Forge could not verify the backup database snapshot."
+      );
+    }
+    snapshot = dataRuntimeSnapshotSchema.parse({
+      dataRoot: currentRoot,
+      databasePath: sourceDatabasePath,
+      layout: detectLayoutForDatabasePath(sourceDatabasePath),
+      databaseSizeBytes: snapshotStat.size,
+      databaseLastModifiedAt: snapshotStat.mtime.toISOString(),
+      integrityOk: integrity.integrityOk,
+      integrityMessage: integrity.integrityMessage,
+      counts: collectCountsFromDatabase(snapshotDatabase)
+    });
+    schemaSql = buildSchemaSql(snapshotDatabase);
+    schemaJson = buildSchemaJson(snapshotDatabase);
+  } catch (error) {
+    snapshotDatabase?.close();
+    snapshotDatabase = null;
+    await rm(sqliteSnapshot.tempDir, { recursive: true, force: true });
+    throw error;
+  } finally {
+    snapshotDatabase?.close();
+  }
   let stageDirectory: string | null = null;
   let archiveFinalized = false;
   let manifestFinalized = false;
@@ -935,52 +1537,84 @@ export async function createDataBackup(
       stageDirectory,
       `${baseName}.manifest.json`
     );
-    const zip = new AdmZip();
-    zip.addLocalFile(sqliteSnapshot.snapshotPath, "", "forge.sqlite");
-    zip.addFile("schema.sql", Buffer.from(buildSchemaSql(database), "utf8"));
-    zip.addFile(
-      "schema.json",
-      Buffer.from(JSON.stringify(buildSchemaJson(database), null, 2), "utf8")
-    );
-    zip.addFile(
-      "snapshot-summary.json",
-      Buffer.from(
-        JSON.stringify(
-          {
-            generatedAt: createdAt,
-            mode,
-            note: parsed.note,
-            current: snapshot,
-            sensitivity: {
-              classification: "credential-bearing-backup",
-              notice: CREDENTIAL_BACKUP_NOTICE
-            }
-          },
-          null,
-          2
-        ),
-        "utf8"
-      )
-    );
-    const currentRoot = getEffectiveDataRoot();
+    const archiveBuffers = [
+      {
+        archivePath: "schema.sql",
+        body: Buffer.from(schemaSql, "utf8")
+      },
+      {
+        archivePath: "schema.json",
+        body: Buffer.from(JSON.stringify(schemaJson, null, 2), "utf8")
+      },
+      {
+        archivePath: "snapshot-summary.json",
+        body: Buffer.from(
+          JSON.stringify(
+            {
+              generatedAt: createdAt,
+              mode,
+              note: parsed.note,
+              current: snapshot,
+              sensitivity: {
+                classification: "credential-bearing-backup",
+                notice: CREDENTIAL_BACKUP_NOTICE
+              }
+            },
+            null,
+            2
+          ),
+          "utf8"
+        )
+      },
+      {
+        archivePath: "BACKUP-SENSITIVITY.txt",
+        body: Buffer.from(`${CREDENTIAL_BACKUP_NOTICE}\n`, "utf8")
+      }
+    ];
+    const archiveSources = [
+      await verifiedBackupSource(sqliteSnapshot.snapshotPath, "forge.sqlite")
+    ];
+    const archiveDirectories: string[] = [];
     const wikiIngestPath = path.join(currentRoot, "wiki-ingest");
     if (existsSync(wikiIngestPath)) {
-      await assertBackupTreeHasNoLinks(wikiIngestPath);
-      zip.addLocalFolder(wikiIngestPath, "wiki-ingest");
+      const wikiTree = await collectBackupArchiveTree(
+        wikiIngestPath,
+        "wiki-ingest"
+      );
+      archiveSources.push(...wikiTree.files);
+      archiveDirectories.push(...wikiTree.directories);
     }
     const secretsKeyPath = path.join(currentRoot, ".forge-secrets.key");
     if (existsSync(secretsKeyPath)) {
       await assertOwnerRegularFile(secretsKeyPath);
-      zip.addLocalFile(secretsKeyPath, "", ".forge-secrets.key");
+      archiveSources.push(
+        await verifiedBackupSource(secretsKeyPath, ".forge-secrets.key")
+      );
     }
-    zip.addFile(
-      "BACKUP-SENSITIVITY.txt",
-      Buffer.from(`${CREDENTIAL_BACKUP_NOTICE}\n`, "utf8")
-    );
     if (options.archiveWriter) {
+      const zip = new AdmZip();
+      zip.addLocalFile(sqliteSnapshot.snapshotPath, "", "forge.sqlite");
+      for (const entry of archiveBuffers) {
+        zip.addFile(entry.archivePath, entry.body);
+      }
+      if (existsSync(wikiIngestPath)) {
+        zip.addLocalFolder(wikiIngestPath, "wiki-ingest");
+      }
+      if (existsSync(secretsKeyPath)) {
+        zip.addLocalFile(secretsKeyPath, "", ".forge-secrets.key");
+      }
       options.archiveWriter(zip, stagedArchivePath);
     } else {
-      zip.writeZip(stagedArchivePath);
+      await options.beforeStreamingArchiveForTest?.({
+        stagedArchivePath
+      });
+      await writeStreamingBackupArchive({
+        targetPath: stagedArchivePath,
+        sources: archiveSources,
+        directories: archiveDirectories,
+        buffers: archiveBuffers,
+        forceZip64Format: options.forceZip64FormatForTest
+      });
     }
     await chmod(stagedArchivePath, PRIVATE_FILE_MODE);
     const archiveStat = await stat(stagedArchivePath);
@@ -1007,17 +1641,18 @@ export async function createDataBackup(
         notice: CREDENTIAL_BACKUP_NOTICE
       }
     };
-    await writeFile(
+    await writePrivateFileDurably(
       stagedManifestPath,
-      `${JSON.stringify(manifest, null, 2)}\n`,
-      { encoding: "utf8", mode: PRIVATE_FILE_MODE }
+      `${JSON.stringify(manifest, null, 2)}\n`
     );
     await chmod(stagedManifestPath, PRIVATE_FILE_MODE);
+    await syncDirectory(stageDirectory);
 
     await rename(stagedArchivePath, archivePath);
     archiveFinalized = true;
     await rename(stagedManifestPath, manifestPath);
     manifestFinalized = true;
+    await syncDirectory(settings.backupDirectory);
     if (mode === "manual") {
       writeDataManagementSettingsRow({ last_manual_backup_at: createdAt });
     }
@@ -1259,10 +1894,7 @@ async function assertSecureDataRootTarget(
     if (!existsSync(component)) continue;
     const linkMetadata = await lstat(component);
     const isTarget = component === resolvedTarget;
-    if (
-      linkMetadata.isSymbolicLink() &&
-      (isTarget || linkMetadata.uid !== 0)
-    ) {
+    if (linkMetadata.isSymbolicLink() && (isTarget || linkMetadata.uid !== 0)) {
       throw new HttpError(
         400,
         "target_data_root_not_owner_controlled",
@@ -1426,10 +2058,7 @@ async function rollbackDataRootSwitch(
       await rm(journal.stagingDirectory, { recursive: true, force: true });
     }
   }
-  await removeSwitchRootJournals([
-    journal.currentRoot,
-    journal.targetRoot
-  ]);
+  await removeSwitchRootJournals([journal.currentRoot, journal.targetRoot]);
 }
 
 async function applyRuntimeRootSwitch(
@@ -1482,9 +2111,9 @@ async function readRestoreJournal(
     return null;
   }
   await assertOwnerRegularFile(journalPath);
-  const parsed = JSON.parse(await readFile(journalPath, "utf8")) as Partial<
-    RestoreJournal
-  >;
+  const parsed = JSON.parse(
+    await readFile(journalPath, "utf8")
+  ) as Partial<RestoreJournal>;
   const allowedTargets = new Set<RestoreTargetName>([
     "forge.sqlite",
     "forge.sqlite-wal",
@@ -1498,9 +2127,9 @@ async function readRestoreJournal(
     path.resolve(parsed.dataRoot ?? "") !== path.resolve(dataRoot) ||
     !parsed.installDirectory ||
     !isPathInside(dataRoot, parsed.installDirectory) ||
-    !path.basename(parsed.installDirectory).startsWith(
-      ".forge-restore-stage-"
-    ) ||
+    !path
+      .basename(parsed.installDirectory)
+      .startsWith(".forge-restore-stage-") ||
     !Array.isArray(parsed.operations) ||
     parsed.operations.some(
       (operation) =>
@@ -1661,7 +2290,9 @@ export async function switchDataRoot(
     journal = { ...journal, phase: "activated" };
     await writeSwitchRootJournal(journal, [currentRoot, targetDataRoot]);
     if (options.simulateInterruptionAfterPhase === "activated") {
-      throw new Error("simulated data-root switch interruption after activation");
+      throw new Error(
+        "simulated data-root switch interruption after activation"
+      );
     }
     await (options.persistPreferredDataRoot ?? writeMonorepoPreferredDataRoot)(
       targetDataRoot
@@ -1669,7 +2300,9 @@ export async function switchDataRoot(
     journal = { ...journal, phase: "persisted" };
     await writeSwitchRootJournal(journal, [currentRoot, targetDataRoot]);
     if (options.simulateInterruptionAfterPhase === "persisted") {
-      throw new Error("simulated data-root switch interruption after persistence");
+      throw new Error(
+        "simulated data-root switch interruption after persistence"
+      );
     }
     await (options.syncAdapterDataRoots ?? syncLocalAdapterDataRoots)(
       targetDataRoot
@@ -1815,9 +2448,7 @@ export async function restoreDataBackup(
       operations: targets.map((target) => ({
         name: target.name,
         originalExisted: existsSync(path.join(currentRoot, target.name)),
-        installIncoming: existsSync(
-          path.join(incomingDirectory, target.name)
-        )
+        installIncoming: existsSync(path.join(incomingDirectory, target.name))
       }))
     };
     await writeRestoreJournal(journal);
