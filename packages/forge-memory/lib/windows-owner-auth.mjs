@@ -135,25 +135,21 @@ function windowsPathChainHasNoReparsePoints(
     }
     const script = [
       "$ErrorActionPreference='Stop'",
-      "$root=[IO.Path]::GetFullPath($args[0])",
-      "$target=[IO.Path]::GetFullPath($args[$args.Count-1])",
-      "$prefix=$root + [IO.Path]::DirectorySeparatorChar",
-      "if ($target -ne $root -and -not $target.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase)) { exit 20 }",
-      "foreach ($candidate in @($args)) {",
-      "  $full=[IO.Path]::GetFullPath($candidate)",
-      "  if ($full -ne $root -and -not $full.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase)) { exit 20 }",
-      "  $item=Get-Item -LiteralPath $full -Force",
-      "  if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { exit 21 }",
-      "}",
-      "exit 0"
+      "$target=[IO.Path]::GetFullPath($args[0])",
+      "$item=Get-Item -LiteralPath $target -Force",
+      "if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { exit 21 }",
+      "[Console]::Out.Write($target)"
     ].join("\n");
-    runPowerShell({
-      script,
-      args: candidates,
-      timeoutMs: 5_000,
-      systemRoot,
-      spawnSyncImpl
-    });
+    for (const inspectedCandidate of candidates) {
+      const inspected = runPowerShell({
+        script,
+        args: [inspectedCandidate],
+        timeoutMs: 5_000,
+        systemRoot,
+        spawnSyncImpl
+      });
+      if (inspected !== inspectedCandidate) return false;
+    }
     return true;
   } catch {
     return false;
