@@ -83,6 +83,9 @@ describe("local owner broker descriptor", () => {
     );
     expect(verifier).toContain("WINDOWS_POWERSHELL_ARGUMENTS_ENV");
     expect(verifier).not.toContain('"-Command", script, target');
+    expect(verifier).toContain("[IO.Directory]::GetAccessControl");
+    expect(verifier).toContain("[IO.File]::GetAccessControl");
+    expect(verifier).not.toContain("Get-Acl -LiteralPath");
     expect(verifier).toContain("$rules.Count -lt 1");
     expect(verifier).toContain(
       "[Security.AccessControl.FileSystemRights]::FullControl"
