@@ -376,7 +376,7 @@ export function SettingsMobilePage() {
     <div className="mx-auto grid min-w-0 w-full max-w-[1220px] gap-5 pb-24 lg:pb-0">
       <PageHero
         title="Mobile companion"
-        description="Pair the native iPhone companion, sync Apple Health, and keep the bridge open for watch and location signals."
+        description="Pair the native iPhone companion once, then sync Apple Health, watch, and location signals securely."
         badge={overview.healthState.replaceAll("_", " ")}
       />
 
@@ -443,30 +443,18 @@ export function SettingsMobilePage() {
             <div>
               <div className={mobileEyebrowClass}>Pair iPhone</div>
               <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
-                Pair your iPhone privately
+                Pair a new iPhone
               </div>
               <div
                 className={`mt-2 max-w-3xl text-sm leading-6 ${mobileBodyClass}`}
               >
-                Forge uses its own Iroh/QUIC companion route by default. Scan
-                once from the iPhone app; manual HTTP stays as the advanced LAN
-                or Tailscale path.
+                Open Forge Companion and tap Pair this iPhone when it discovers
+                this Forge. A notification will appear here so you can enter the
+                phone’s short code once. If discovery is unavailable, create a
+                one-time QR below.
               </div>
             </div>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
-              <Button
-                variant="secondary"
-                className="w-full sm:w-auto"
-                onClick={handleManualHttpPairing}
-                pending={
-                  pairingMutation.isPending &&
-                  pairingMutation.variables === "manual-http"
-                }
-                pendingLabel="Generating"
-              >
-                <Cable className="size-4" />
-                Advanced HTTP
-              </Button>
               <Button
                 className="w-full sm:w-auto"
                 onClick={handleQrAction}
@@ -481,7 +469,7 @@ export function SettingsMobilePage() {
                   ? qrPanelOpen
                     ? "Hide QR"
                     : "Show QR"
-                  : "Generate Forge QR"}
+                  : "Pair a new iPhone"}
                 {latestPairing ? (
                   qrPanelOpen ? (
                     <ChevronUp className="size-4" />
@@ -490,6 +478,35 @@ export function SettingsMobilePage() {
                   )
                 ) : null}
               </Button>
+            </div>
+          </div>
+
+          <div className={`grid gap-3 ${mobileInsetPanelClass} p-4`}>
+            <div className="flex gap-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
+              <ScanLine
+                className={`mt-1 size-4 shrink-0 ${mobileFaintClass}`}
+              />
+              <span>
+                <strong className="text-[var(--ui-ink-strong)]">
+                  Preferred:
+                </strong>{" "}
+                open Forge Companion, choose Pair this iPhone, and select the
+                discovered Forge.
+              </span>
+            </div>
+            <div className="flex gap-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
+              <Check className={`mt-1 size-4 shrink-0 ${mobileFaintClass}`} />
+              <span>
+                Click the pairing notification in any unlocked local-owner Forge
+                screen, enter the matching code once, and approve.{" "}
+                <Link
+                  to="/settings/agents#pending-pairings"
+                  className="font-medium text-[var(--primary)] underline-offset-4 hover:underline"
+                >
+                  Open pending requests
+                </Link>
+                .
+              </span>
             </div>
           </div>
 
@@ -676,6 +693,34 @@ export function SettingsMobilePage() {
               code expires automatically and can be regenerated anytime.
             </div>
           )}
+
+          <details className={`${mobileInsetPanelClass} p-4`}>
+            <summary className="cursor-pointer text-sm font-medium text-[var(--ui-ink-strong)]">
+              Advanced network fallback
+            </summary>
+            <div
+              className={`mt-3 grid gap-3 text-sm leading-6 ${mobileBodyClass}`}
+            >
+              <p>
+                Use manual HTTP only for a deliberate LAN, Tailscale, or direct
+                TCP route when discovery and the verified QR transport are not
+                available.
+              </p>
+              <Button
+                variant="secondary"
+                className="w-full sm:w-fit"
+                onClick={handleManualHttpPairing}
+                pending={
+                  pairingMutation.isPending &&
+                  pairingMutation.variables === "manual-http"
+                }
+                pendingLabel="Generating"
+              >
+                <Cable className="size-4" />
+                Create manual HTTP pairing
+              </Button>
+            </div>
+          </details>
         </Card>
 
         <Card className="grid min-w-0 gap-4 overflow-hidden">
@@ -790,17 +835,20 @@ export function SettingsMobilePage() {
           <div className={`grid gap-3 ${mobileInsetPanelClass} p-4`}>
             <div className={mobileEyebrowClass}>Pairing path</div>
             <div className={`grid gap-2 text-sm ${mobileBodyClass}`}>
-              <div>1. Generate the Forge QR from this page.</div>
               <div>
-                2. Scan it in Forge Companion to pass the desktop node and
-                pairing token.
+                1. Open Forge Companion and tap Pair this iPhone on the
+                discovered Forge.
+              </div>
+              <div>
+                2. Open the Forge pairing notification and enter the displayed
+                short code once.
               </div>
               <div>
                 3. Approve Health access on iPhone, then run the first sync.
               </div>
               <div>
-                4. Use Advanced HTTP only for a local, Tailscale, or direct TCP
-                route.
+                4. If discovery fails, use the one-time QR or the advanced
+                network fallback above.
               </div>
             </div>
           </div>

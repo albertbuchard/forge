@@ -22,12 +22,14 @@ import {
   getSleepSessionRawDetail,
   getTodayPriorityDecision,
   getWeeklyReview,
+  listRemotePairingRequests,
   listActivity,
   listNotes,
   listWikiPages,
   patchTask,
   pollRemoteBrowserPairing,
   refreshPreferenceWorkspace,
+  requestForgeBrowserJson,
   retryLocalBrowserAuthorization,
   restoreEntities,
   submitPairwisePreferenceJudgment
@@ -191,9 +193,7 @@ describe("remote browser pairing client", () => {
     const [header] = pollBody.clientProof.split(".");
     const encodedHeader = header!.replaceAll("-", "+").replaceAll("_", "/");
     const protectedHeader = JSON.parse(
-      atob(
-        encodedHeader.padEnd(Math.ceil(encodedHeader.length / 4) * 4, "=")
-      )
+      atob(encodedHeader.padEnd(Math.ceil(encodedHeader.length / 4) * 4, "="))
     ) as { jwk: Record<string, unknown> };
     expect(protectedHeader.jwk).not.toHaveProperty("d");
 
@@ -220,6 +220,92 @@ describe("remote browser pairing client", () => {
       code: "browser_pairing_required"
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed when an embedded transport preserves the Forge error envelope but not the HTTP status", async () => {
+    vi.stubGlobal("window", {
+      location: {
+        origin: "forge-iroh://paired-forge",
+        protocol: "forge-iroh:",
+        hostname: "paired-forge"
+      }
+    });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      text: vi.fn().mockResolvedValue(
+        JSON.stringify({
+          code: "operator_browser_session_required",
+          error: "A paired Forge browser session is required.",
+          statusCode: 401
+        })
+      )
+    } as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(ensureOperatorSession()).rejects.toMatchObject({
+      code: "browser_pairing_required"
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects embedded 403 and 429 envelopes on shared reads and mutations", async () => {
+    vi.stubGlobal("window", {
+      location: {
+        origin: "forge-iroh://paired-forge",
+        protocol: "forge-iroh:",
+        hostname: "paired-forge"
+      }
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          text: vi.fn().mockResolvedValue(
+            JSON.stringify({
+              code: "pairing_owner_session_required",
+              error:
+                "Only the verified local owner can review pairing requests.",
+              statusCode: 403
+            })
+          )
+        } as unknown as Response
+      )
+      .mockResolvedValueOnce(
+        {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          text: vi.fn().mockResolvedValue(
+            JSON.stringify({
+              code: "pairing_admission_limited",
+              error:
+                "Forge cannot admit another pairing request in the current bounded window.",
+              statusCode: 429
+            })
+          )
+        } as unknown as Response
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listRemotePairingRequests()).rejects.toMatchObject({
+      status: 403,
+      code: "pairing_owner_session_required"
+    });
+    await expect(
+      requestForgeBrowserJson(
+        "/api/v1/auth/device/requests/pair_1234567890123456/deny",
+        { method: "POST", body: JSON.stringify({}) }
+      )
+    ).rejects.toMatchObject({
+      status: 429,
+      code: "pairing_admission_limited"
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("preserves the server retry window on pairing admission limits", async () => {
@@ -311,12 +397,10 @@ describe("remote browser pairing client", () => {
       expect.stringContaining("/api/v1/auth/browser/refresh"),
       expect.stringContaining("/api/v1/today/priority")
     ]);
-    expect(
-      (fetchMock.mock.calls[0]![1] as RequestInit).credentials
-    ).toBe("same-origin");
-    expect(localStorage.getItem("forge.browser.csrf")).toBe(
-      "fg_csrf_rotated"
+    expect((fetchMock.mock.calls[0]![1] as RequestInit).credentials).toBe(
+      "same-origin"
     );
+    expect(localStorage.getItem("forge.browser.csrf")).toBe("fg_csrf_rotated");
     expect(
       Number(localStorage.getItem("forge.browser.renewed-at"))
     ).toBeGreaterThan(Date.now() - 5_000);

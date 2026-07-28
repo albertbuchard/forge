@@ -624,11 +624,12 @@ private final class ForgeIrohWebViewAuthProbeSchemeHandler: NSObject, WKURLSchem
             )
         case "/api/v1/auth/operator-session":
             return ForgeIrohTransportResult(
-                data: Data(#"{"session":{"active":true}}"#.utf8),
-                statusCode: 200,
+                data: Data(
+                    #"{"code":"operator_browser_session_required","error":"A paired Forge browser session is required.","statusCode":401}"#.utf8
+                ),
+                statusCode: 401,
                 headers: [
-                    "content-type": "application/json; charset=utf-8",
-                    "set-cookie": "forge_operator_session=fg_session_cookie; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800"
+                    "content-type": "application/json; charset=utf-8"
                 ]
             )
         case "/api/v1/settings":
@@ -662,16 +663,19 @@ private final class ForgeIrohWebViewAuthProbeSchemeHandler: NSObject, WKURLSchem
         <div id="root">FORGE_BOOTING</div>
         <script>
           async function loadSettings() {
-            let response = await fetch('/api/v1/settings', { credentials: 'same-origin' });
-            if (response.status === 401) {
-              await fetch('/api/v1/auth/operator-session', { credentials: 'same-origin' });
-              response = await fetch('/api/v1/settings', { credentials: 'same-origin' });
-            }
-            if (!response.ok) {
-              document.body.textContent = 'FORGE_FAILED ' + response.status;
+            const response = await fetch('/api/v1/auth/operator-session', {
+              credentials: 'same-origin'
+            });
+            const body = await response.json();
+            if (
+              response.status === 401 ||
+              body.statusCode === 401 ||
+              body.code === 'operator_browser_session_required'
+            ) {
+              document.body.textContent = 'PAIRING_REQUIRED';
               return;
             }
-            document.body.textContent = 'FORGE_LOADED';
+            document.body.textContent = 'FORGE_FAILED_OPEN';
           }
           loadSettings().catch((error) => {
             document.body.textContent = 'FORGE_ERROR ' + error.message;
@@ -1198,7 +1202,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertNil(headers["Cookie"])
     }
 
-    func testForgeIrohWebViewCanBootstrapAuthAndRenderThroughCustomScheme() async throws {
+    func testForgeIrohWebViewCannotBootstrapLocalOwnerAuthThroughCustomScheme() async throws {
         let schemeHandler = ForgeIrohWebViewAuthProbeSchemeHandler()
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
@@ -1210,26 +1214,20 @@ final class ForgeCompanionTests: XCTestCase {
 
         let loaded = try await waitForWebViewText(
             webView,
-            expectedText: "FORGE_LOADED",
+            expectedText: "PAIRING_REQUIRED",
             timeout: 8
         )
         let observedRequests = await schemeHandler.observedRequests
 
-        XCTAssertTrue(loaded.contains("FORGE_LOADED"))
+        XCTAssertTrue(loaded.contains("PAIRING_REQUIRED"))
         XCTAssertEqual(
             observedRequests.map(\.path),
             [
                 "/forge/",
-                "/api/v1/settings",
-                "/api/v1/auth/operator-session",
-                "/api/v1/settings"
+                "/api/v1/auth/operator-session"
             ]
         )
         XCTAssertNil(observedRequests[1].cookieHeader)
-        XCTAssertEqual(
-            observedRequests[3].cookieHeader,
-            "forge_operator_session=fg_session_cookie"
-        )
     }
 
     private func waitForWebViewText(

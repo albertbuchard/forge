@@ -337,16 +337,28 @@ function readApiErrorCode(body: unknown) {
       : "request_failed";
 }
 
+function readApiStatus(response: Response, body: unknown) {
+  const statusCode = readResponseObject(body)?.statusCode;
+  return typeof statusCode === "number" &&
+    Number.isInteger(statusCode) &&
+    statusCode >= 100 &&
+    statusCode <= 599
+    ? statusCode
+    : response.status;
+}
+
+function isForgeFailure(response: Response, body: unknown) {
+  return !response.ok || readApiStatus(response, body) >= 400;
+}
+
 function isAuthRequiredResponse(response: Response, body: unknown) {
   return (
-    response.status === 401 &&
+    readApiStatus(response, body) === 401 &&
     [
       "auth_required",
       "gateway_authentication_required",
       "operator_browser_session_required"
-    ].includes(
-      readApiErrorCode(body)
-    )
+    ].includes(readApiErrorCode(body))
   );
 }
 
@@ -528,7 +540,7 @@ function createApiError(path: string, response: Response, body: unknown) {
       ? Number(retryAfterHeader)
       : null;
   return new ForgeApiError({
-    status: response.status,
+    status: readApiStatus(response, body),
     code: readApiErrorCode(body),
     message:
       typeof maybeBody?.error === "string"
@@ -559,18 +571,19 @@ function publishRequestFailure(
     return;
   }
   const maybeBody = readResponseObject(body);
+  const status = readApiStatus(response, body);
   const details = Array.isArray(maybeBody?.details)
     ? (maybeBody.details as ForgeValidationIssue[])
     : [];
   void publishUiDiagnosticLog({
-    level: response.status >= 500 ? "error" : "warning",
+    level: status >= 500 ? "error" : "warning",
     scope: "frontend_api",
     eventKey: "request_failed",
     message: `API request failed: ${path}`,
     route: path,
     functionName: "request",
     details: {
-      statusCode: response.status,
+      statusCode: status,
       code: readApiErrorCode(body),
       response:
         typeof body === "string"
@@ -589,6 +602,13 @@ async function sendApiRequest(
 ): Promise<ParsedApiResponse> {
   const response = await fetchApi(path, init);
   const body = await parseResponseBody(response);
+  if (
+    response.ok &&
+    readApiStatus(response, body) >= 400 &&
+    path !== DIAGNOSTICS_LOGS_PATH
+  ) {
+    noteBrowserSessionRejected();
+  }
   return { response, body };
 }
 
@@ -612,11 +632,7 @@ async function fetchApi(path: string, init?: RequestInit) {
       headers
     });
     if (path !== DIAGNOSTICS_LOGS_PATH) {
-      if (
-        response.ok &&
-        hadBrowserCsrf &&
-        responseProvesBrowserSession(path)
-      ) {
+      if (response.ok && hadBrowserCsrf && responseProvesBrowserSession(path)) {
         noteBrowserSessionUsable();
       } else if (response.status === 401 || response.status === 403) {
         noteBrowserSessionRejected();
@@ -659,9 +675,8 @@ type PreparedLocalBrowserAuthorization = {
 
 let browserSessionBootstrapPromise: Promise<void> | null = null;
 let remoteBrowserRenewalPromise: Promise<boolean> | null = null;
-let browserAuthorizationPreparationPromise:
-  | Promise<PreparedLocalBrowserAuthorization>
-  | null = null;
+let browserAuthorizationPreparationPromise: Promise<PreparedLocalBrowserAuthorization> | null =
+  null;
 let preparedLocalBrowserAuthorization: PreparedLocalBrowserAuthorization | null =
   null;
 let browserSessionBootstrapBlocked = false;
@@ -709,10 +724,7 @@ async function renewRemoteBrowserSession(force: boolean) {
       const locks = (
         globalThis.navigator as Navigator & {
           locks?: {
-            request<T>(
-              name: string,
-              callback: () => Promise<T>
-            ): Promise<T>;
+            request<T>(name: string, callback: () => Promise<T>): Promise<T>;
           };
         }
       )?.locks;
@@ -882,19 +894,16 @@ async function exchangePreparedLocalBrowserAuthorization() {
       proofPayload
     )
   );
-  const { response, body } = await sendApiRequest(
-    LOCAL_BROWSER_EXCHANGE_PATH,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        transactionId: prepared.transactionId,
-        browserOrigin: prepared.browserOrigin,
-        browserNonce: prepared.browserNonce,
-        browserProof
-      })
-    }
-  );
-  if (!response.ok) {
+  const { response, body } = await sendApiRequest(LOCAL_BROWSER_EXCHANGE_PATH, {
+    method: "POST",
+    body: JSON.stringify({
+      transactionId: prepared.transactionId,
+      browserOrigin: prepared.browserOrigin,
+      browserNonce: prepared.browserNonce,
+      browserProof
+    })
+  });
+  if (isForgeFailure(response, body)) {
     preparedLocalBrowserAuthorization = null;
     publishRequestFailure(LOCAL_BROWSER_EXCHANGE_PATH, response, body);
     throw createApiError(LOCAL_BROWSER_EXCHANGE_PATH, response, body);
@@ -1079,9 +1088,7 @@ export async function beginRemoteBrowserPairing() {
   return pairing;
 }
 
-export async function pollRemoteBrowserPairing(
-  pairing: RemoteBrowserPairing
-) {
+export async function pollRemoteBrowserPairing(pairing: RemoteBrowserPairing) {
   if (Date.now() >= pairing.expiresAt) {
     return { status: "expired_token" as const };
   }
@@ -1120,11 +1127,7 @@ export async function pollRemoteBrowserPairing(
         : pairing.intervalSeconds;
     return { status: body.status, intervalSeconds };
   }
-  throw createApiError(
-    REMOTE_DEVICE_TOKEN_PATH,
-    polled.response,
-    polled.body
-  );
+  throw createApiError(REMOTE_DEVICE_TOKEN_PATH, polled.response, polled.body);
 }
 
 export async function cancelRemoteBrowserPairing(
@@ -1207,6 +1210,45 @@ export type RemotePairingReview = {
   };
 };
 
+export type RemotePairingRequest = RemotePairingReview & {
+  status: "pending" | "approved";
+  approvedAt: string | null;
+  clientId: string | null;
+};
+
+export function listRemotePairingRequests() {
+  return request<{ requests: RemotePairingRequest[] }>(
+    "/api/v1/auth/device/requests"
+  );
+}
+
+export function approveRemotePairingRequest(
+  requestId: string,
+  userCode: string
+) {
+  return request<{
+    requestId: string;
+    clientId: string;
+    clientName: string;
+    audience: string;
+    scopes: string[];
+    profile: RemotePairingReview["requestedProfile"];
+  }>(`/api/v1/auth/device/requests/${encodeURIComponent(requestId)}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ userCode })
+  });
+}
+
+export function denyRemotePairingRequest(requestId: string) {
+  return request<{ denied: boolean }>(
+    `/api/v1/auth/device/requests/${encodeURIComponent(requestId)}/deny`,
+    {
+      method: "POST",
+      body: JSON.stringify({})
+    }
+  );
+}
+
 export function reviewRemotePairing(userCode: string) {
   return request<RemotePairingReview>("/api/v1/auth/device/review", {
     method: "POST",
@@ -1285,6 +1327,7 @@ export type RemoteClientRegistration = {
   scopes: string[];
   createdAt: string;
   revokedAt: string | null;
+  activationState: "awaiting_client" | "active" | "expired" | "revoked";
 };
 
 export function listRemoteClients() {
@@ -1360,7 +1403,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ({ response, body } = await sendApiRequest(path, init));
   }
 
-  if (!response.ok) {
+  if (isForgeFailure(response, body)) {
     publishRequestFailure(path, response, body);
     throw createApiError(path, response, body);
   }

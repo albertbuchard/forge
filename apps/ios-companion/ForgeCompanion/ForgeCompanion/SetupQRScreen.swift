@@ -24,17 +24,17 @@ struct SetupQRScreen: View {
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 22) {
-                    Text("Scan your Forge QR.")
+                    Text("Scan a Forge QR")
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundStyle(CompanionStyle.textPrimary)
 
-                    Text("This is the default private connection path. Forge Companion receives the desktop node and one-time token, then verifies the session before any sync starts.")
+                    Text("Use this fallback when automatic Forge discovery is unavailable. The one-time QR is verified before any sync starts.")
                         .font(.system(size: 15, weight: .medium, design: .rounded))
                         .foregroundStyle(CompanionStyle.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
 
                     VStack(alignment: .leading, spacing: 12) {
-                        step("1", "Run npx forge-memory and choose iOS pairing, or open Forge Settings -> Mobile.")
+                        step("1", "Run npx forge-memory pair-ios, or open Forge Settings → Mobile and choose Pair a new iPhone.")
                         step("2", "Scan the compact QR, or paste the saved payload if the camera cannot read it.")
                         step("3", "Approve Health access after pairing so Forge can start the first sync.")
                     }

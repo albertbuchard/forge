@@ -13,6 +13,7 @@ import {
 } from "jose";
 
 import { buildServer } from "../app.js";
+import { buildOpenApiDocument } from "../openapi.js";
 import type { ApplicationSecurityRuntime } from "./application-security-runtime.js";
 import type { ForgePrincipal } from "./contracts.js";
 
@@ -231,8 +232,9 @@ test("remote API client pairs once, renews with DPoP, and is denied after revoca
     });
     assert.equal(revoked.statusCode, 200, revoked.body);
     assert.equal(revoked.json<{ revoked: boolean }>().revoked, true);
-    const revokedEpoch =
-      runtime.store.readClient(issued.clientId)?.clientSecurityEpoch;
+    const revokedEpoch = runtime.store.readClient(
+      issued.clientId
+    )?.clientSecurityEpoch;
     const repeatedRevocation = await app.inject({
       method: "POST",
       url: `/api/v1/auth/clients/${issued.clientId}/revoke`,
@@ -243,10 +245,7 @@ test("remote API client pairs once, renews with DPoP, and is denied after revoca
       }
     });
     assert.equal(repeatedRevocation.statusCode, 200, repeatedRevocation.body);
-    assert.equal(
-      repeatedRevocation.json<{ revoked: boolean }>().revoked,
-      true
-    );
+    assert.equal(repeatedRevocation.json<{ revoked: boolean }>().revoked, true);
     assert.equal(
       runtime.store.readClient(issued.clientId)?.clientSecurityEpoch,
       revokedEpoch
@@ -268,6 +267,348 @@ test("remote API client pairs once, renews with DPoP, and is denied after revoca
       }
     });
     assert.equal(denied.statusCode, 401, denied.body);
+  } finally {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("local owner lists exact requests, approves one real client, and can clear an abandoned request", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "forge-exact-pairing-"));
+  let runtime!: ApplicationSecurityRuntime;
+  const app = await buildServer({
+    dataRoot: root,
+    seedDemoData: false,
+    taskRunWatchdog: false,
+    devrageMetricSync: false,
+    peerRuntime: false,
+    onSecurityRuntimeReady(value) {
+      runtime = value;
+    }
+  });
+  try {
+    const firstKey = await clientKey();
+    const secondKey = await clientKey();
+    const begin = async (
+      clientName: string,
+      thumbprint: string,
+      requestedScopes: string[] = ["read"]
+    ) => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/auth/device",
+        headers: { host: "127.0.0.1" },
+        payload: {
+          clientName,
+          clientType: "api",
+          clientKeyThumbprint: thumbprint,
+          requestedScopes,
+          requestedProfile: "viewer"
+        }
+      });
+      assert.equal(response.statusCode, 200, response.body);
+      return response.json<{
+        requestId: string;
+        deviceCode: string;
+        userCode: string;
+      }>();
+    };
+    const first = await begin("First exact client", firstKey.thumbprint);
+    const second = await begin("Lost-code client", secondKey.thumbprint);
+    const firstRequest = runtime.store.readPairingRequest(first.requestId);
+    assert.ok(firstRequest);
+    const ownerSession = runtime.browserSessions.create({
+      kind: "operator_session",
+      subjectId: "exact-owner-browser",
+      ownerId: firstRequest.ownerId,
+      clientId: null,
+      installationId: null,
+      audience: runtime.audience,
+      scopes: ["*"],
+      profile: "operator",
+      ownerSecurityEpoch: firstRequest.ownerSecurityEpoch,
+      clientSecurityEpoch: null,
+      authenticatedAt: new Date().toISOString()
+    });
+    const ownerHeaders = {
+      host: "127.0.0.1",
+      cookie: `forge_session=${encodeURIComponent(ownerSession.sessionToken)}`,
+      "x-forge-csrf": ownerSession.csrfToken
+    };
+
+    const anonymousList = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/device/requests",
+      headers: { host: "127.0.0.1" }
+    });
+    assert.equal(anonymousList.statusCode, 401, anonymousList.body);
+
+    const pairedBrowserClientId = "client_paired-browser-00000001";
+    runtime.store.registerClient({
+      id: pairedBrowserClientId,
+      ownerId: firstRequest.ownerId,
+      subjectId: "paired-browser",
+      installationId: runtime.installationId,
+      keyThumbprint: firstKey.thumbprint,
+      audience: runtime.audience,
+      profile: "viewer",
+      scopes: ["profile:viewer", "read"]
+    });
+    const pairedSession = runtime.browserSessions.create({
+      kind: "paired_client",
+      subjectId: "paired-browser",
+      ownerId: firstRequest.ownerId,
+      clientId: pairedBrowserClientId,
+      installationId: runtime.installationId,
+      audience: runtime.audience,
+      scopes: ["profile:viewer", "read"],
+      profile: "viewer",
+      ownerSecurityEpoch: firstRequest.ownerSecurityEpoch,
+      clientSecurityEpoch: 1,
+      authenticatedAt: new Date().toISOString()
+    });
+    const pairedList = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/device/requests",
+      headers: {
+        host: "127.0.0.1",
+        cookie: `forge_session=${encodeURIComponent(pairedSession.sessionToken)}`
+      }
+    });
+    assert.equal(pairedList.statusCode, 401, pairedList.body);
+
+    assert.throws(
+      () => runtime.store.ensureOwner("owner-other"),
+      /single-owner mode/
+    );
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/device/requests",
+      headers: ownerHeaders
+    });
+    assert.equal(listed.statusCode, 200, listed.body);
+    const listedBody = listed.json<{
+      requests: Array<{
+        requestId: string;
+        clientName: string;
+        status: string;
+        clientId: string | null;
+      }>;
+    }>();
+    assert.deepEqual(
+      new Set(listedBody.requests.map((request) => request.requestId)),
+      new Set([first.requestId, second.requestId])
+    );
+    assert.equal(
+      listedBody.requests.every((request) => request.status === "pending"),
+      true
+    );
+    assert.doesNotMatch(
+      listed.body,
+      /userCode|deviceCode|user_code|device_digest|clientProof|refreshToken/
+    );
+
+    const wrongRow = await app.inject({
+      method: "POST",
+      url: `/api/v1/auth/device/requests/${first.requestId}/approve`,
+      headers: ownerHeaders,
+      payload: { userCode: second.userCode }
+    });
+    assert.equal(wrongRow.statusCode, 403, wrongRow.body);
+    assert.equal(
+      runtime.store.readPairingRequest(first.requestId)?.status,
+      "pending"
+    );
+    assert.equal(runtime.store.readClientBySubjectId(first.requestId), null);
+
+    const approved = await app.inject({
+      method: "POST",
+      url: `/api/v1/auth/device/requests/${first.requestId}/approve`,
+      headers: ownerHeaders,
+      payload: { userCode: first.userCode }
+    });
+    assert.equal(approved.statusCode, 200, approved.body);
+    const approvedBody = approved.json<{
+      requestId: string;
+      clientId: string;
+      clientName: string;
+      audience: string;
+      scopes: string[];
+      profile: string;
+    }>();
+    assert.equal(approvedBody.requestId, first.requestId);
+    assert.match(approvedBody.clientId, /^client_[A-Za-z0-9-]{16,180}$/);
+    const approveSchema = (
+      buildOpenApiDocument() as {
+        paths: Record<
+          string,
+          {
+            post?: {
+              responses?: {
+                "200"?: {
+                  content?: {
+                    "application/json"?: {
+                      schema?: {
+                        required?: string[];
+                        properties?: Record<string, unknown>;
+                      };
+                    };
+                  };
+                };
+              };
+            };
+          }
+        >;
+      }
+    ).paths["/api/v1/auth/device/requests/{requestId}/approve"]?.post
+      ?.responses?.["200"]?.content?.["application/json"]?.schema;
+    assert.ok(approveSchema);
+    assert.deepEqual(
+      Object.keys(approvedBody).sort(),
+      Object.keys(approveSchema.properties ?? {}).sort()
+    );
+    assert.deepEqual(
+      [...(approveSchema.required ?? [])].sort(),
+      Object.keys(approvedBody).sort()
+    );
+    assert.equal(
+      runtime.store.readClientBySubjectId(first.requestId)?.id,
+      approvedBody.clientId
+    );
+
+    const awaiting = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/clients",
+      headers: ownerHeaders
+    });
+    assert.equal(awaiting.statusCode, 200, awaiting.body);
+    assert.equal(
+      awaiting
+        .json<{
+          clients: Array<{ id: string; activationState: string }>;
+        }>()
+        .clients.find((client) => client.id === approvedBody.clientId)
+        ?.activationState,
+      "awaiting_client"
+    );
+
+    const approvedRequest = runtime.store.readPairingRequest(first.requestId);
+    assert.ok(approvedRequest);
+    assert.equal(
+      runtime.store.updatePairingPoll({
+        id: approvedRequest.id,
+        expectedNextPollAt: approvedRequest.nextPollAt,
+        pollIntervalSeconds: approvedRequest.pollIntervalSeconds,
+        nextPollAt: new Date(Date.now() - 1_000).toISOString(),
+        now: new Date().toISOString()
+      }),
+      true
+    );
+    const exchanged = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/token",
+      headers: { host: "127.0.0.1" },
+      payload: {
+        grantType: "device_code",
+        deviceCode: first.deviceCode,
+        clientProof: await pairingProof({
+          privateKey: firstKey.privateKey,
+          publicJwk: firstKey.publicJwk,
+          requestId: first.requestId,
+          operation: "poll"
+        })
+      }
+    });
+    assert.equal(exchanged.statusCode, 200, exchanged.body);
+    assert.equal(
+      exchanged.json<{ clientId: string }>().clientId,
+      approvedBody.clientId
+    );
+    assert.equal(
+      runtime.store
+        .listClients(firstRequest.ownerId)
+        .filter((client) => client.subjectId === first.requestId).length,
+      1
+    );
+    assert.equal(
+      runtime.store.readPairingRequest(first.requestId)?.status,
+      "consumed"
+    );
+    assert.equal(
+      runtime.store
+        .listClients(firstRequest.ownerId)
+        .find((client) => client.id === approvedBody.clientId)?.activationState,
+      "active"
+    );
+
+    const denied = await app.inject({
+      method: "POST",
+      url: `/api/v1/auth/device/requests/${second.requestId}/deny`,
+      headers: ownerHeaders,
+      payload: {}
+    });
+    assert.equal(denied.statusCode, 200, denied.body);
+    assert.equal(
+      runtime.store.readPairingRequest(second.requestId)?.status,
+      "denied"
+    );
+
+    const thirdKey = await clientKey();
+    const third = await begin("Revoked before poll", thirdKey.thumbprint);
+    const thirdApproved = await app.inject({
+      method: "POST",
+      url: `/api/v1/auth/device/requests/${third.requestId}/approve`,
+      headers: ownerHeaders,
+      payload: { userCode: third.userCode }
+    });
+    assert.equal(thirdApproved.statusCode, 200, thirdApproved.body);
+    const thirdClientId = thirdApproved.json<{ clientId: string }>().clientId;
+    const revoked = await app.inject({
+      method: "POST",
+      url: `/api/v1/auth/clients/${thirdClientId}/revoke`,
+      headers: ownerHeaders
+    });
+    assert.equal(revoked.statusCode, 200, revoked.body);
+    assert.equal(
+      runtime.store.readPairingRequest(third.requestId)?.status,
+      "cancelled"
+    );
+    assert.ok(runtime.store.readClient(thirdClientId)?.revokedAt);
+
+    const boundaryKey = await clientKey();
+    const maximumRequestedScopes = Array.from(
+      { length: 32 },
+      (_, index) => `scope.boundary.${index.toString().padStart(2, "0")}`
+    );
+    const boundary = await begin(
+      "Maximum scope client",
+      boundaryKey.thumbprint,
+      maximumRequestedScopes
+    );
+    const boundaryApproved = await app.inject({
+      method: "POST",
+      url: `/api/v1/auth/device/requests/${boundary.requestId}/approve`,
+      headers: ownerHeaders,
+      payload: { userCode: boundary.userCode }
+    });
+    assert.equal(
+      boundaryApproved.statusCode,
+      200,
+      boundaryApproved.body
+    );
+    const boundaryApprovalBody = boundaryApproved.json<{
+      scopes: string[];
+    }>();
+    assert.equal(boundaryApprovalBody.scopes.length, 33);
+    assert.equal(
+      (
+        approveSchema.properties?.scopes as
+          | { maxItems?: number }
+          | undefined
+      )?.maxItems,
+      33
+    );
   } finally {
     await app.close();
     await rm(root, { recursive: true, force: true });
@@ -426,8 +767,7 @@ test("companion bootstrap grants one pairing invitation and no renewable API cre
     });
     assert.equal(unrelated.statusCode, 403, unrelated.body);
 
-    const invitationTarget =
-      `${canonicalOrigin}/api/v1/health/pairing-sessions`;
+    const invitationTarget = `${canonicalOrigin}/api/v1/health/pairing-sessions`;
     const created = await app.inject({
       method: "POST",
       url: "/api/v1/health/pairing-sessions",
@@ -469,8 +809,7 @@ test("companion bootstrap grants one pairing invitation and no renewable API cre
       invitation.qrPayload.capabilities
     );
     assert.ok(
-      Date.parse(invitation.qrPayload.expiresAt) - Date.now() <=
-        10 * 60 * 1_000
+      Date.parse(invitation.qrPayload.expiresAt) - Date.now() <= 10 * 60 * 1_000
     );
     assert.ok(runtime.store.readClient(issued.clientId)?.revokedAt);
 
@@ -659,16 +998,23 @@ test("remote pairing rejects unavailable machine scopes and requires owner step-
 });
 
 test("remote browser pairing reports a bounded retry window after unfinished requests fill the cap", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "forge-browser-pairing-cap-"));
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "forge-browser-pairing-cap-")
+  );
+  let runtime!: ApplicationSecurityRuntime;
   const app = await buildServer({
     dataRoot: root,
     seedDemoData: false,
     taskRunWatchdog: false,
     devrageMetricSync: false,
-    peerRuntime: false
+    peerRuntime: false,
+    onSecurityRuntimeReady(value) {
+      runtime = value;
+    }
   });
   try {
     const key = await clientKey();
+    const requests: Array<{ requestId: string }> = [];
     for (let index = 0; index < 3; index += 1) {
       const admitted = await app.inject({
         method: "POST",
@@ -684,6 +1030,7 @@ test("remote browser pairing reports a bounded retry window after unfinished req
       });
       assert.equal(admitted.statusCode, 200, admitted.body);
       assert.equal(admitted.json<{ expiresIn: number }>().expiresIn, 180);
+      requests.push(admitted.json<{ requestId: string }>());
     }
 
     const limited = await app.inject({
@@ -704,6 +1051,49 @@ test("remote browser pairing reports a bounded retry window after unfinished req
       limited.json<{ code: string }>().code,
       "pairing_admission_limited"
     );
+
+    const firstRequest = runtime.store.readPairingRequest(
+      requests[0]!.requestId
+    );
+    assert.ok(firstRequest);
+    const ownerSession = runtime.browserSessions.create({
+      kind: "operator_session",
+      subjectId: "pairing-cap-owner-browser",
+      ownerId: firstRequest.ownerId,
+      clientId: null,
+      installationId: null,
+      audience: runtime.audience,
+      scopes: ["*"],
+      profile: "operator",
+      ownerSecurityEpoch: firstRequest.ownerSecurityEpoch,
+      clientSecurityEpoch: null,
+      authenticatedAt: new Date().toISOString()
+    });
+    const denied = await app.inject({
+      method: "POST",
+      url: `/api/v1/auth/device/requests/${firstRequest.id}/deny`,
+      headers: {
+        host: "127.0.0.1",
+        cookie: `forge_session=${encodeURIComponent(ownerSession.sessionToken)}`,
+        "x-forge-csrf": ownerSession.csrfToken
+      },
+      payload: {}
+    });
+    assert.equal(denied.statusCode, 200, denied.body);
+
+    const admittedAfterDenial = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/device",
+      headers: { host: "127.0.0.1" },
+      payload: {
+        clientName: "Remote browser after denial",
+        clientType: "browser",
+        clientKeyThumbprint: key.thumbprint,
+        requestedScopes: ["read"],
+        requestedProfile: "viewer"
+      }
+    });
+    assert.equal(admittedAfterDenial.statusCode, 200, admittedAfterDenial.body);
   } finally {
     await app.close();
     await rm(root, { recursive: true, force: true });

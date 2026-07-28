@@ -32,25 +32,31 @@ final class ForgeCompanionUITests: XCTestCase {
     }
 
     @MainActor
-    func testPairingSetupFlowPrioritizesForgeQRAndManualFallback() throws {
+    func testPairingSetupFlowExplainsApprovalAndKeepsRecoveryPaths() throws {
         let app = makeApp()
         app.launchEnvironment["FORGE_SCREENSHOT_SCENARIO"] = "pairing"
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Set up sync"].waitForExistence(timeout: 8))
-        XCTAssertTrue(app.staticTexts["Choose your Forge connection."].exists)
+        XCTAssertTrue(app.staticTexts["Pair this iPhone"].waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            app.staticTexts[
+                "Choose your Forge. You will approve one short code on the unlocked owner screen."
+            ].exists
+        )
 
-        let scanButton = app.buttons["Scan Forge QR"]
-        XCTAssertTrue(scanButton.waitForExistence(timeout: 8))
-        XCTAssertTrue(scanButton.isHittable)
+        let pairButton = app.buttons["Pair this iPhone"].firstMatch
+        XCTAssertTrue(pairButton.waitForExistence(timeout: 8))
+        XCTAssertTrue(pairButton.isHittable)
+
+        let scanButton = app.buttons["Scan QR instead"]
+        XCTAssertTrue(scrollUntilHittable(scanButton, in: app))
 
         let manualButton = app.buttons["Manual connection"]
-        XCTAssertTrue(manualButton.waitForExistence(timeout: 2))
-        XCTAssertTrue(manualButton.isHittable)
+        XCTAssertTrue(scrollUntilHittable(manualButton, in: app))
 
         scanButton.tap()
 
-        XCTAssertTrue(app.staticTexts["Scan your Forge QR."].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Scan a Forge QR"].waitForExistence(timeout: 5))
         XCTAssertTrue(scrollUntilHittable(app.buttons["Open camera scanner"], in: app))
         XCTAssertTrue(scrollUntilHittable(app.buttons["Paste pairing payload"], in: app))
     }

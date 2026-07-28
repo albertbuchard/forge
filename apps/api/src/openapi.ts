@@ -3,6 +3,7 @@ import {
   buildPeerOpenApiPaths
 } from "./peer-openapi.js";
 import { buildCourseOpenApiPaths } from "./course-openapi.js";
+import { buildSecurityPairingOpenApiPaths } from "./security-pairing-openapi.js";
 import { TASK_CLOSEOUT_LIMITS } from "./types.js";
 
 function arrayOf(items: Record<string, unknown>) {
@@ -11373,6 +11374,7 @@ export function buildOpenApiDocument() {
     paths: {
       ...buildPeerOpenApiPaths(),
       ...buildCourseOpenApiPaths(),
+      ...buildSecurityPairingOpenApiPaths(),
       "/api/v1/artifacts": {
         get: {
           summary: "List artifact metadata",

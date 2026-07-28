@@ -81,6 +81,12 @@ export type PairingRepository = {
   findPairingByDeviceDigest(deviceDigest: string): PairingRequest | null;
   findPairingByUserCodeDigest(userCodeDigest: string): PairingRequest | null;
   readPairingRequest(id: string): PairingRequest | null;
+  listActivePairingRequests(input: {
+    ownerId: string;
+    ownerSecurityEpoch: number;
+    now: string;
+    limit: number;
+  }): PairingRequest[];
   claimPairingApprovalAttempt(input: {
     bucketKey: string;
     now: string;
@@ -103,6 +109,12 @@ export type PairingRepository = {
   }): boolean;
   approvePairingRequest(input: {
     id: string;
+    approval: NonNullable<PairingRequest["approval"]>;
+    now: string;
+  }): boolean;
+  approvePairingRequestAndRegisterClient(input: {
+    id: string;
+    clientId: string;
     approval: NonNullable<PairingRequest["approval"]>;
     now: string;
   }): boolean;
@@ -332,7 +344,10 @@ export class PairingService<ServerContext = unknown> {
     };
   }
 
-  approve(input: { authorization: PairingOwnerAuthorization }) {
+  approve(input: {
+    authorization: PairingOwnerAuthorization;
+    registerClient?: boolean;
+  }) {
     const now = this.clock.now().toISOString();
     const request = this.repository.readPairingRequest(
       input.authorization.requestId
@@ -382,17 +397,25 @@ export class PairingService<ServerContext = unknown> {
       profile: authorization.profile,
       approvedAt: now
     };
-    if (
-      !this.repository.approvePairingRequest({
-        id: request.id,
-        approval,
-        now
-      })
-    ) {
+    const clientId = input.registerClient ? `client_${randomUUID()}` : null;
+    const approved = clientId
+      ? this.repository.approvePairingRequestAndRegisterClient({
+          id: request.id,
+          clientId,
+          approval,
+          now
+        })
+      : this.repository.approvePairingRequest({
+          id: request.id,
+          approval,
+          now
+        });
+    if (!approved) {
       throw new Error("Forge pairing approval lost a concurrent state change.");
     }
     return {
       requestId: request.id,
+      ...(clientId ? { clientId } : {}),
       clientName: request.clientName,
       audience: request.audience,
       scopes: approval.scopes,

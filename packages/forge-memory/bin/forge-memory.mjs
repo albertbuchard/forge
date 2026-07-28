@@ -20,6 +20,7 @@ import {
   pairRemoteForgeClient,
   readMacosRemoteCredential
 } from "../lib/remote-pairing.mjs";
+import { executePairingDecision } from "../lib/pairing-command.mjs";
 import YAML from "yaml";
 import qrcode from "qrcode-terminal";
 import open from "open";
@@ -3515,8 +3516,7 @@ async function finalizeStartedRuntimeAttempt(
   { config, peerPreparation, state, publicHealth },
   dependencies = {}
 ) {
-  const stopChildren =
-    dependencies.stopChildren ?? stopRecordedRuntimeChildren;
+  const stopChildren = dependencies.stopChildren ?? stopRecordedRuntimeChildren;
   const readState = dependencies.readState ?? readRuntimeState;
   const writeState =
     dependencies.writeState ??
@@ -4657,6 +4657,176 @@ class PairingTransportUnavailableError extends Error {
   }
 }
 
+async function loadAuthenticatedLocalForgeClient(config, command) {
+  if (!process.env.FORGE_API_TOKEN?.trim()) {
+    const nativePreparation = await ensureForgePeerPrepared(config);
+    if (!hasVerifiedLocalOwnerPreparation(nativePreparation)) {
+      const error = new Error(
+        "Forge local-owner authentication has no verified owner channel."
+      );
+      error.code = "pairing_owner_channel_unavailable";
+      error.guidance = [
+        "Run npx forge-memory doctor --repair to restore the verified local-owner helper.",
+        `Then rerun npx forge-memory ${command}.`
+      ];
+      throw error;
+    }
+    applyLocalOwnerProcessEnvironment(nativePreparation);
+  }
+  const toolRuntime = await loadForgeToolRuntime(config);
+  if (!toolRuntime?.callConfiguredForgeApi) {
+    const error = new Error(
+      "Forge could not load its authenticated local client runtime."
+    );
+    error.code = "pairing_local_client_unavailable";
+    error.guidance = [
+      "Run npx forge-memory doctor --repair.",
+      `Then rerun npx forge-memory ${command}.`
+    ];
+    throw error;
+  }
+  return toolRuntime;
+}
+
+function printPairingRequest(request, index) {
+  console.log(
+    `${color.cyan(`${index}.`)} ${color.bold(request.clientName)} ${color.dim(`(${request.clientType})`)}`
+  );
+  console.log(
+    color.dim(
+      `   profile ${request.requestedProfile} · scopes ${request.requestedScopes.join(", ")}`
+    )
+  );
+  console.log(
+    color.dim(
+      `   endpoint ${request.endpoint?.origin ?? "local runtime"} · expires ${new Date(request.expiresAt).toLocaleTimeString()}`
+    )
+  );
+}
+
+async function runPairing(parsed) {
+  const config = await readConfig();
+  const toolRuntime = await loadAuthenticatedLocalForgeClient(
+    config,
+    "pairing"
+  );
+  const response = await toolRuntime.callConfiguredForgeApi(
+    toolRuntime.forgeConfig,
+    {
+      method: "GET",
+      path: "/api/v1/auth/device/requests"
+    }
+  );
+  if (response.status >= 400) {
+    const error = new Error(
+      `Forge returned HTTP ${response.status} while listing pairing requests.`
+    );
+    error.code = "pairing_list_failed";
+    error.guidance = [
+      "Run npx forge-memory doctor --repair to verify the local owner channel and Forge runtime.",
+      "Open Forge Settings → Agents if the browser owner session needs attention.",
+      "Then rerun npx forge-memory pairing."
+    ];
+    throw error;
+  }
+  const allRequests = Array.isArray(response.body?.requests)
+    ? response.body.requests
+    : [];
+  if (parsed.flags.json) {
+    console.log(JSON.stringify({ requests: allRequests }, null, 2));
+    return;
+  }
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    const error = new Error(
+      "Pairing decisions require an interactive terminal. Use `npx forge-memory pairing --json` only to list requests."
+    );
+    error.code = "pairing_interactive_terminal_required";
+    error.guidance = [
+      "Rerun npx forge-memory pairing in an interactive terminal.",
+      "Use npx forge-memory pairing --json for read-only automation."
+    ];
+    throw error;
+  }
+  const pendingRequests = allRequests.filter(
+    (request) => request.status === "pending"
+  );
+  console.log(color.bold("Forge pairing requests"));
+  if (pendingRequests.length === 0) {
+    console.log("No device is waiting for approval.");
+    console.log(
+      color.dim(
+        "Start pairing on the remote browser, iPhone, Codex, Hermes, or OpenClaw, then rerun this command."
+      )
+    );
+    return;
+  }
+  pendingRequests.forEach((request, index) =>
+    printPairingRequest(request, index + 1)
+  );
+  const selection = Number(
+    await promptLine(
+      pendingRequests.length === 1
+        ? "Select request"
+        : `Select request 1-${pendingRequests.length}`,
+      "1"
+    )
+  );
+  const selected = pendingRequests[selection - 1];
+  if (!selected) {
+    throw new Error("Select one of the numbered pairing requests.");
+  }
+  console.log("");
+  console.log(color.bold(`Review ${selected.clientName}`));
+  console.log(`Profile: ${selected.requestedProfile}`);
+  console.log(`Scopes: ${selected.requestedScopes.join(", ")}`);
+  console.log(
+    `Resource boundary: ${selected.boundaries?.resources?.enforcement ?? "profile, scopes, and route policy"}`
+  );
+  console.log(
+    `Network egress: ${
+      selected.boundaries?.egress?.requestedScopes?.length
+        ? selected.boundaries.egress.requestedScopes.join(", ")
+        : "none requested"
+    }`
+  );
+  const decision = (
+    await promptLine("Choose approve, deny, or cancel", "approve")
+  ).toLowerCase();
+  const agentsUrl = new URL(
+    "settings/agents#pending-pairings",
+    webUrl(config)
+  ).toString();
+  const result = await executePairingDecision({
+    selected,
+    decision,
+    promptCode: () =>
+      promptLine(`Enter the code shown on ${selected.clientName}`, ""),
+    callApi: (request) =>
+      toolRuntime.callConfiguredForgeApi(toolRuntime.forgeConfig, request),
+    openAgents: open,
+    agentsUrl
+  });
+  if (result.status === "cancelled") {
+    console.log("No pairing request was changed.");
+    return;
+  }
+  if (result.status === "denied") {
+    console.log(color.green(`${selected.clientName} was denied.`));
+    return;
+  }
+  if (result.status === "opened_step_up") {
+    console.log(
+      "This elevated grant needs your owner passkey. Forge opened the exact pending-request list."
+    );
+    return;
+  }
+  console.log(
+    color.green(
+      `${selected.clientName} is approved and waiting for the device to finish securely.`
+    )
+  );
+}
+
 async function createPairing(config, options = {}) {
   const transportMode = options.transportMode ?? "iroh";
   const publicUrl = validatePairingOptions({
@@ -5222,12 +5392,7 @@ function peerRuntimeConfigChanged(left, right) {
 }
 
 async function applyRuntimeConfigTransaction(
-  {
-    lockConfig,
-    resolveConfig,
-    dryRun = false,
-    runtimeMutation = null
-  },
+  { lockConfig, resolveConfig, dryRun = false, runtimeMutation = null },
   dependencies = {}
 ) {
   const readCurrentConfig = dependencies.readConfig ?? readConfig;
@@ -5395,9 +5560,7 @@ async function runInstall(parsed, command) {
       resolveConfig: async () => config,
       dryRun: parsed.flags.dryRun,
       runtimeMutation:
-        !config.remoteTarget &&
-        !parsed.flags.noStart &&
-        !parsed.flags.dryRun
+        !config.remoteTarget && !parsed.flags.noStart && !parsed.flags.dryRun
           ? async ({
               previousConfig,
               config: nextConfig,
@@ -5425,14 +5588,10 @@ async function runInstall(parsed, command) {
     },
     {
       writeConfig: (nextConfig) =>
-        withProgress(
-          "Saving Forge settings",
-          configPath(),
-          parsed.flags,
-          () =>
-            writeConfig(nextConfig, {
-              dryRun: parsed.flags.dryRun
-            })
+        withProgress("Saving Forge settings", configPath(), parsed.flags, () =>
+          writeConfig(nextConfig, {
+            dryRun: parsed.flags.dryRun
+          })
         )
     }
   );
@@ -5479,44 +5638,42 @@ async function runInstall(parsed, command) {
       new URL(pairingOptions.publicUrl).origin
     );
     if (config.canonicalExternalOrigin !== canonicalExternalOrigin) {
-      const canonicalOriginTransaction =
-        await applyRuntimeConfigTransaction(
-          {
-            lockConfig: config,
-            resolveConfig: async (latestConfig) => ({
-              ...latestConfig,
-              canonicalExternalOrigin
-            }),
-            runtimeMutation:
-              runtimeResult?.ok
-                ? async ({
-                    previousConfig,
-                    config: nextConfig,
-                    runtimeMutationLockHeld
-                  }) =>
-                    withProgress(
-                      "Restarting Forge with sender-bound HTTPS",
-                      `managed runtime only; data is preserved; logs: ${logPath()}`,
-                      parsed.flags,
-                      () =>
-                        restartRuntime(nextConfig, {
-                          stopConfig: previousConfig,
-                          peerPreparation,
-                          runtimeMutationLockHeld
-                        })
-                    )
-                : null
-          },
-          {
-            writeConfig: (nextConfig) =>
-              withProgress(
-                "Binding Forge to its Tailscale HTTPS origin",
-                canonicalExternalOrigin,
-                parsed.flags,
-                () => writeConfig(nextConfig, { dryRun: false })
-              )
-          }
-        );
+      const canonicalOriginTransaction = await applyRuntimeConfigTransaction(
+        {
+          lockConfig: config,
+          resolveConfig: async (latestConfig) => ({
+            ...latestConfig,
+            canonicalExternalOrigin
+          }),
+          runtimeMutation: runtimeResult?.ok
+            ? async ({
+                previousConfig,
+                config: nextConfig,
+                runtimeMutationLockHeld
+              }) =>
+                withProgress(
+                  "Restarting Forge with sender-bound HTTPS",
+                  `managed runtime only; data is preserved; logs: ${logPath()}`,
+                  parsed.flags,
+                  () =>
+                    restartRuntime(nextConfig, {
+                      stopConfig: previousConfig,
+                      peerPreparation,
+                      runtimeMutationLockHeld
+                    })
+                )
+            : null
+        },
+        {
+          writeConfig: (nextConfig) =>
+            withProgress(
+              "Binding Forge to its Tailscale HTTPS origin",
+              canonicalExternalOrigin,
+              parsed.flags,
+              () => writeConfig(nextConfig, { dryRun: false })
+            )
+        }
+      );
       config = canonicalOriginTransaction.config;
       canonicalOriginWriteResult = canonicalOriginTransaction.writeResult;
       if (canonicalOriginTransaction.runtimeResult) {
@@ -6260,43 +6417,42 @@ async function runPairIos(parsed) {
       new URL(pairingOptions.publicUrl).origin
     );
     if (config.canonicalExternalOrigin !== canonicalExternalOrigin) {
-      const canonicalOriginTransaction =
-        await applyRuntimeConfigTransaction(
-          {
-            lockConfig: config,
-            resolveConfig: async (latestConfig) => ({
-              ...latestConfig,
-              canonicalExternalOrigin
-            }),
-            runtimeMutation:
-              !parsed.flags.noStart && runtimeResult?.ok
-                ? async ({
-                    previousConfig,
-                    config: nextConfig,
-                    runtimeMutationLockHeld
-                  }) =>
-                    withProgress(
-                      "Restarting Forge with sender-bound HTTPS",
-                      `managed runtime only; data is preserved; logs: ${logPath()}`,
-                      parsed.flags,
-                      () =>
-                        restartRuntime(nextConfig, {
-                          stopConfig: previousConfig,
-                          runtimeMutationLockHeld
-                        })
-                    )
-                : null
-          },
-          {
-            writeConfig: (nextConfig) =>
-              withProgress(
-                "Binding Forge to its Tailscale HTTPS origin",
-                canonicalExternalOrigin,
-                parsed.flags,
-                () => writeConfig(nextConfig, { dryRun: false })
-              )
-          }
-        );
+      const canonicalOriginTransaction = await applyRuntimeConfigTransaction(
+        {
+          lockConfig: config,
+          resolveConfig: async (latestConfig) => ({
+            ...latestConfig,
+            canonicalExternalOrigin
+          }),
+          runtimeMutation:
+            !parsed.flags.noStart && runtimeResult?.ok
+              ? async ({
+                  previousConfig,
+                  config: nextConfig,
+                  runtimeMutationLockHeld
+                }) =>
+                  withProgress(
+                    "Restarting Forge with sender-bound HTTPS",
+                    `managed runtime only; data is preserved; logs: ${logPath()}`,
+                    parsed.flags,
+                    () =>
+                      restartRuntime(nextConfig, {
+                        stopConfig: previousConfig,
+                        runtimeMutationLockHeld
+                      })
+                  )
+              : null
+        },
+        {
+          writeConfig: (nextConfig) =>
+            withProgress(
+              "Binding Forge to its Tailscale HTTPS origin",
+              canonicalExternalOrigin,
+              parsed.flags,
+              () => writeConfig(nextConfig, { dryRun: false })
+            )
+        }
+      );
       config = canonicalOriginTransaction.config;
       if (canonicalOriginTransaction.runtimeResult) {
         runtimeResult = canonicalOriginTransaction.runtimeResult;
@@ -6898,6 +7054,7 @@ Usage:
   npx forge-memory stop
   npx forge-memory export
   npx forge-memory uninstall
+  npx forge-memory pairing
   npx forge-memory pair-ios
 
 Options:
@@ -6991,6 +7148,9 @@ async function main() {
       break;
     case "pair-ios":
       await runPairIos(parsed);
+      break;
+    case "pairing":
+      await runPairing(parsed);
       break;
     case "logs":
       await runLogs();

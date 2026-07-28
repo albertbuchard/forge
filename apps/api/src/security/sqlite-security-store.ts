@@ -239,6 +239,8 @@ type ClientRow = {
 type ClientListRow = ClientRow & {
   client_name: string | null;
   client_type: "api" | "browser" | null;
+  pairing_status: PairingStatus | null;
+  pairing_expires_at: string | null;
 };
 
 function mapClient(row: ClientRow) {
@@ -520,6 +522,28 @@ export class SqliteSecurityStore
     return row ? mapClient(row) : null;
   }
 
+  readClientBySubjectId(subjectId: string) {
+    const row = this.database
+      .prepare(
+        `SELECT client.id, client.owner_id, client.subject_id,
+                client.installation_id, client.key_thumbprint,
+                client.audience, client.profile,
+                client.scopes_json, client.client_epoch,
+                owner.security_epoch AS owner_epoch,
+                client.created_at, client.revoked_at,
+                metadata.client_type
+         FROM security_clients client
+         JOIN security_owners owner ON owner.owner_id = client.owner_id
+         LEFT JOIN security_pairing_client_metadata metadata
+           ON metadata.pairing_request_id = client.subject_id
+         WHERE client.subject_id = ?
+         ORDER BY client.created_at DESC, client.id ASC
+         LIMIT 1`
+      )
+      .get(subjectId) as ClientRow | undefined;
+    return row ? mapClient(row) : null;
+  }
+
   listClients(ownerId: string) {
     const rows = this.database
       .prepare(
@@ -530,7 +554,9 @@ export class SqliteSecurityStore
                 owner.security_epoch AS owner_epoch,
                 client.created_at, client.revoked_at,
                 request.client_name,
-                metadata.client_type
+                metadata.client_type,
+                request.status AS pairing_status,
+                request.expires_at AS pairing_expires_at
          FROM security_clients client
          JOIN security_owners owner ON owner.owner_id = client.owner_id
          LEFT JOIN security_pairing_requests request
@@ -541,11 +567,25 @@ export class SqliteSecurityStore
          ORDER BY client.created_at DESC, client.id ASC`
       )
       .all(ownerId) as ClientListRow[];
-    return rows.map((row) => ({
-      ...mapClient(row),
-      clientName: row.client_name ?? "Registered Forge client",
-      clientType: row.client_type ?? "api"
-    }));
+    const nowMs = this.clock.now().getTime();
+    return rows.map((row) => {
+      const activationState =
+        row.revoked_at || row.pairing_status === "cancelled"
+          ? "revoked"
+          : row.pairing_status === "approved" &&
+              row.pairing_expires_at &&
+              Date.parse(row.pairing_expires_at) > nowMs
+            ? "awaiting_client"
+            : row.pairing_status === "consumed" || !row.pairing_status
+              ? "active"
+              : "expired";
+      return {
+        ...mapClient(row),
+        clientName: row.client_name ?? "Registered Forge client",
+        clientType: row.client_type ?? "api",
+        activationState
+      };
+    });
   }
 
   revokeClient(clientId: string, reason: string) {
@@ -569,6 +609,15 @@ export class SqliteSecurityStore
            WHERE client_id = ?`
         )
         .run(now, reason, clientId);
+      this.database
+        .prepare(
+          `UPDATE security_pairing_requests
+           SET status = 'cancelled', updated_at = ?
+           WHERE id = (
+             SELECT subject_id FROM security_clients WHERE id = ?
+           ) AND status = 'approved'`
+        )
+        .run(now, clientId);
       return Number(result.changes) > 0;
     });
   }
@@ -969,6 +1018,42 @@ export class SqliteSecurityStore
     return this.findPairing("id", id);
   }
 
+  listActivePairingRequests(input: {
+    ownerId: string;
+    ownerSecurityEpoch: number;
+    now: string;
+    limit: number;
+  }) {
+    const rows = this.database
+      .prepare(
+        `SELECT request.id, request.owner_id, request.owner_epoch,
+                request.installation_id, request.client_name,
+                COALESCE(metadata.client_type, 'api') AS client_type,
+                request.client_key_thumbprint, request.audience,
+                requested_scopes_json, requested_profile,
+                device_digest, user_code_digest, status, poll_interval_seconds,
+                next_poll_at, expires_at, approval_json, created_at, updated_at
+         FROM security_pairing_requests request
+         LEFT JOIN security_pairing_client_metadata metadata
+           ON metadata.pairing_request_id = request.id
+         WHERE request.owner_id = ? AND request.owner_epoch = ?
+           AND request.status IN ('pending', 'approved')
+           AND request.expires_at > ?
+         ORDER BY
+           CASE request.status WHEN 'pending' THEN 0 ELSE 1 END,
+           request.created_at DESC,
+           request.id ASC
+         LIMIT ?`
+      )
+      .all(
+        input.ownerId,
+        input.ownerSecurityEpoch,
+        input.now,
+        Math.max(1, Math.min(25, input.limit))
+      ) as PairingRow[];
+    return rows.map(mapPairing);
+  }
+
   claimPairingApprovalAttempt(input: {
     bucketKey: string;
     now: string;
@@ -1045,6 +1130,67 @@ export class SqliteSecurityStore
     );
   }
 
+  approvePairingRequestAndRegisterClient(input: {
+    id: string;
+    clientId: string;
+    approval: NonNullable<PairingRequest["approval"]>;
+    now: string;
+  }) {
+    this.ensureOwner(input.approval.ownerId);
+    return this.transaction(() => {
+      const currentEpoch = this.readOwnerSecurityEpoch(input.approval.ownerId);
+      if (currentEpoch !== input.approval.ownerSecurityEpoch) {
+        return false;
+      }
+      const updated = this.database
+        .prepare(
+          `UPDATE security_pairing_requests
+           SET status = 'approved', approval_json = ?, updated_at = ?
+           WHERE id = ? AND owner_id = ? AND owner_epoch = ?
+             AND status = 'pending' AND expires_at > ?`
+        )
+        .run(
+          JSON.stringify(input.approval),
+          input.now,
+          input.id,
+          input.approval.ownerId,
+          input.approval.ownerSecurityEpoch,
+          input.now
+        );
+      if (Number(updated.changes) !== 1) {
+        return false;
+      }
+      const inserted = this.database
+        .prepare(
+          `INSERT INTO security_clients (
+             id, owner_id, subject_id, installation_id, key_thumbprint,
+             audience, profile, scopes_json, client_epoch, created_at,
+             revoked_at, revocation_reason
+           )
+           SELECT ?, owner_id, id, installation_id, client_key_thumbprint,
+                  audience, ?, ?, 1, ?, NULL, NULL
+           FROM security_pairing_requests
+           WHERE id = ? AND owner_id = ? AND owner_epoch = ?
+             AND status = 'approved'`
+        )
+        .run(
+          input.clientId,
+          input.approval.profile,
+          JSON.stringify([...new Set(input.approval.scopes)].sort()),
+          input.now,
+          input.id,
+          input.approval.ownerId,
+          input.approval.ownerSecurityEpoch
+        );
+      if (Number(inserted.changes) !== 1) {
+        throw new Error(
+          "Forge could not atomically register the approved pairing client."
+        );
+      }
+      return true;
+    });
+  }
+
   transitionPairingRequest(input: {
     id: string;
     fromStatuses: readonly PairingStatus[];
@@ -1055,16 +1201,36 @@ export class SqliteSecurityStore
       return false;
     }
     const placeholders = input.fromStatuses.map(() => "?").join(", ");
-    return (
-      this.database
-        .prepare(
-          `UPDATE security_pairing_requests
-           SET status = ?, updated_at = ?
-           WHERE id = ? AND status IN (${placeholders})`
-        )
-        .run(input.toStatus, input.now, input.id, ...input.fromStatuses)
-        .changes === 1
-    );
+    return this.transaction(() => {
+      const changed =
+        this.database
+          .prepare(
+            `UPDATE security_pairing_requests
+             SET status = ?, updated_at = ?
+             WHERE id = ? AND status IN (${placeholders})`
+          )
+          .run(input.toStatus, input.now, input.id, ...input.fromStatuses)
+          .changes === 1;
+      if (
+        changed &&
+        ["cancelled", "expired", "denied"].includes(input.toStatus)
+      ) {
+        this.database
+          .prepare(
+            `UPDATE security_clients
+             SET revoked_at = COALESCE(revoked_at, ?),
+                 revocation_reason = COALESCE(
+                   revocation_reason,
+                   'pairing_request_' || ?
+                 ),
+                 client_epoch = client_epoch
+                   + CASE WHEN revoked_at IS NULL THEN 1 ELSE 0 END
+             WHERE subject_id = ?`
+          )
+          .run(input.now, input.toStatus, input.id);
+      }
+      return changed;
+    });
   }
 
   updatePairingPoll(input: {

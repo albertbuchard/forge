@@ -48,6 +48,7 @@ npx forge-memory restart
 npx forge-memory stop
 npx forge-memory export
 npx forge-memory uninstall
+npx forge-memory pairing
 npx forge-memory pair-ios
 ```
 
@@ -87,6 +88,20 @@ the same curated Forge tool registry as the other Forge adapters, including
 the wiki tools (`forge_search_wiki`, `forge_get_wiki_page`, and maintenance
 tools). It also exposes `forge_memory_mcp_diagnostics` so adapter startup issues
 show up as a tool result instead of a closed MCP transport.
+
+When a remote browser, iPhone, Codex, Hermes, or OpenClaw asks to pair, every unlocked
+local-owner Forge UI shows a notification that opens the complete pending-request
+list. You can approve the matching request there with its short code, or use:
+
+```bash
+npx forge-memory pairing
+```
+
+The terminal command uses the verified local-owner helper, shows the exact client,
+profile, scopes, and network boundary, and accepts the short code once. Denial does
+not require a code that may have been lost with an abandoned requester. Elevated
+grants still open Forge for the owner passkey check. `npx forge-memory pairing --json`
+is a read-only request list for diagnostics; it cannot approve or deny anything.
 
 `pair-ios` prefers Tailscale when it is installed, running, authenticated, and Forge
 is reachable through the Mac's MagicDNS HTTPS URL. That gives the iPhone a normal

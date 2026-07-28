@@ -16,7 +16,7 @@ struct PairingAuthorizationPromptCard: View {
                 .foregroundStyle(CompanionStyle.accentStrong)
                 .accessibilityLabel("Pairing code \(prompt.userCode)")
 
-            Text("In an already authorized Forge browser, open Settings → Agents, enter this code, review “Forge Companion on iPhone,” and approve. This screen will continue automatically.")
+            Text("A pairing notification now appears in every unlocked local-owner Forge screen. Open it, find “Forge Companion on iPhone,” enter this code once, and tap Approve. You can also run npx forge-memory pairing. This screen continues automatically.")
                 .font(.system(size: 13, weight: .medium, design: .rounded))
                 .foregroundStyle(CompanionStyle.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -75,7 +75,7 @@ struct SetupManualScreen: View {
                         .font(.system(size: 15, weight: .medium, design: .rounded))
                         .foregroundStyle(CompanionStyle.textSecondary)
 
-                    Text("The normal setup is the Forge QR. Manual connection stays here for deliberate fallback and debugging.")
+                    Text("Automatic discovery is the normal setup. Manual connection stays here for deliberate fallback and debugging.")
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundStyle(CompanionStyle.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -114,7 +114,7 @@ struct SetupManualScreen: View {
                                         ProgressView()
                                             .tint(Color(red: 13 / 255, green: 20 / 255, blue: 37 / 255))
                                     }
-                                    Text(isResolvingHost ? "Connecting..." : "Connect known host")
+                                    Text(isResolvingHost ? "Creating secure request..." : "Pair this iPhone")
                                 }
                             }
                             .buttonStyle(CompanionFilledButtonStyle())

@@ -1,30 +1,33 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   startAuthentication,
   startRegistration
 } from "@simplewebauthn/browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck, ShieldX } from "lucide-react";
+import { Clock3, ShieldCheck, ShieldX } from "lucide-react";
 
+import {
+  REMOTE_PAIRING_REQUESTS_QUERY_KEY,
+  useRemotePairingRequests
+} from "@/components/security/pairing-request-notification";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
-  approveRemotePairing,
+  approveRemotePairingRequest,
   beginPrivilegedPairingStepUp,
   completePrivilegedPairingStepUp,
-  denyRemotePairing,
+  denyRemotePairingRequest,
   listRemoteClients,
-  reviewRemotePairing,
   revokeRemoteClient,
-  type RemotePairingReview
+  type RemotePairingRequest
 } from "@/lib/api";
 
-function requiresOwnerStepUp(review: RemotePairingReview) {
+const REMOTE_CLIENTS_QUERY_KEY = ["forge-security-clients"] as const;
+
+function requiresOwnerStepUp(review: RemotePairingRequest) {
   return (
-    ["executor", "operator", "custom"].includes(
-      review.requestedProfile
-    ) ||
+    ["executor", "operator", "custom"].includes(review.requestedProfile) ||
     review.requestedScopes.some(
       (scope) =>
         scope === "*" ||
@@ -35,227 +38,311 @@ function requiresOwnerStepUp(review: RemotePairingReview) {
   );
 }
 
+function PairingReviewDetails({ request }: { request: RemotePairingRequest }) {
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <strong className="text-[var(--ui-ink-strong)]">
+          {request.clientName}
+        </strong>
+        <Badge>{request.clientType}</Badge>
+        <Badge>{request.requestedProfile.replaceAll("_", " ")}</Badge>
+        <Badge>{request.status}</Badge>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {request.requestedScopes.map((scope) => (
+          <Badge key={scope}>{scope}</Badge>
+        ))}
+      </div>
+      <p className="text-xs leading-5 text-[var(--ui-ink-muted)]">
+        Expires {new Date(request.expiresAt).toLocaleTimeString()} · audience{" "}
+        {request.audience}
+      </p>
+      <dl className="grid gap-2 rounded-[14px] border border-[var(--ui-border-subtle)] p-3 text-xs leading-5 text-[var(--ui-ink-muted)]">
+        <div>
+          <dt className="font-medium text-[var(--ui-ink-strong)]">
+            Forge installation
+          </dt>
+          <dd className="break-all font-mono">
+            {request.installationFingerprint}
+          </dd>
+        </div>
+        <div>
+          <dt className="font-medium text-[var(--ui-ink-strong)]">
+            Secured endpoint
+          </dt>
+          <dd className="break-all">
+            {request.endpoint.origin ?? "Local runtime only"} ·{" "}
+            <span className="font-mono">{request.endpoint.fingerprint}</span>
+          </dd>
+        </div>
+        <div>
+          <dt className="font-medium text-[var(--ui-ink-strong)]">
+            Resource boundary
+          </dt>
+          <dd>
+            Limited to this profile, these scopes, and each route’s
+            authorization policy.
+          </dd>
+        </div>
+        <div>
+          <dt className="font-medium text-[var(--ui-ink-strong)]">
+            Network egress boundary
+          </dt>
+          <dd>
+            Denied unless an approved capability permits it and the destination
+            passes validation.
+            {request.boundaries.egress.requestedScopes.length
+              ? ` Egress-capable scopes: ${request.boundaries.egress.requestedScopes.join(", ")}.`
+              : " No egress-capable scope is requested."}
+          </dd>
+        </div>
+      </dl>
+    </>
+  );
+}
+
 export function RemotePairingApprovalCard() {
   const queryClient = useQueryClient();
-  const [userCode, setUserCode] = useState("");
-  const [review, setReview] = useState<RemotePairingReview | null>(null);
-  const [pending, setPending] = useState<
-    "review" | "approve" | "deny" | null
-  >(null);
+  const requestsQuery = useRemotePairingRequests(true);
+  const [codes, setCodes] = useState<Record<string, string>>({});
+  const [pending, setPending] = useState<{
+    requestId: string;
+    action: "approve" | "deny";
+  } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const clientsQuery = useQuery({
-    queryKey: ["forge-security-clients"],
-    queryFn: listRemoteClients
+    queryKey: REMOTE_CLIENTS_QUERY_KEY,
+    queryFn: listRemoteClients,
+    refetchInterval: (state) =>
+      typeof document !== "undefined" &&
+      document.visibilityState === "visible" &&
+      state.state.data?.clients.some(
+        (client) => client.activationState === "awaiting_client"
+      )
+        ? 3_000
+        : false,
+    refetchIntervalInBackground: false
   });
   const revokeMutation = useMutation({
     mutationFn: revokeRemoteClient,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["forge-security-clients"]
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: REMOTE_PAIRING_REQUESTS_QUERY_KEY
+        }),
+        queryClient.invalidateQueries({ queryKey: REMOTE_CLIENTS_QUERY_KEY })
+      ]);
     }
   });
 
-  const normalizedCode = userCode.trim().toUpperCase();
-  const reset = (nextMessage: string) => {
-    setReview(null);
-    setUserCode("");
-    setMessage(nextMessage);
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      window.location.hash !== "#pending-pairings"
+    ) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById("pending-pairings");
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      target?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  const refreshPairingState = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: REMOTE_PAIRING_REQUESTS_QUERY_KEY
+      }),
+      queryClient.invalidateQueries({ queryKey: REMOTE_CLIENTS_QUERY_KEY })
+    ]);
   };
 
+  const approve = async (request: RemotePairingRequest) => {
+    const userCode = (codes[request.requestId] ?? "").trim().toUpperCase();
+    if (userCode.length < 8) return;
+    setPending({ requestId: request.requestId, action: "approve" });
+    setMessage(null);
+    try {
+      if (requiresOwnerStepUp(request)) {
+        const ceremony = await beginPrivilegedPairingStepUp(userCode);
+        if (ceremony.review.requestId !== request.requestId) {
+          throw new Error(
+            "The pairing code does not match the selected request."
+          );
+        }
+        const response =
+          ceremony.ceremony === "register"
+            ? await startRegistration({
+                optionsJSON: ceremony.options as Parameters<
+                  typeof startRegistration
+                >[0]["optionsJSON"]
+              })
+            : await startAuthentication({
+                optionsJSON: ceremony.options as Parameters<
+                  typeof startAuthentication
+                >[0]["optionsJSON"]
+              });
+        await completePrivilegedPairingStepUp({
+          userCode,
+          review: request,
+          challengeId: ceremony.challengeId,
+          response
+        });
+      } else {
+        await approveRemotePairingRequest(request.requestId, userCode);
+      }
+      setCodes((current) => {
+        const next = { ...current };
+        delete next[request.requestId];
+        return next;
+      });
+      await refreshPairingState();
+      setMessage(
+        `${request.clientName} is approved and waiting for the device to finish.`
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Forge could not approve this pairing."
+      );
+    } finally {
+      setPending(null);
+    }
+  };
+
+  const deny = async (request: RemotePairingRequest) => {
+    setPending({ requestId: request.requestId, action: "deny" });
+    setMessage(null);
+    try {
+      await denyRemotePairingRequest(request.requestId);
+      await refreshPairingState();
+      setMessage(`${request.clientName} was denied.`);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Forge could not deny this pairing."
+      );
+    } finally {
+      setPending(null);
+    }
+  };
+
+  const requests = requestsQuery.data?.requests ?? [];
+
   return (
-    <Card>
+    <Card
+      id="pending-pairings"
+      tabIndex={-1}
+      className="scroll-mt-5 outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+    >
       <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
-        Remote device pairing
+        Pairing requests
       </div>
       <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-muted)]">
-        Enter the short code shown by the remote browser or integration.
-        Review the exact client, profile, and scopes before approving it.
+        Match the short code shown on the device, enter it once on that request,
+        and approve. The details below are the full review.
       </p>
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-        <input
-          value={userCode}
-          onChange={(event) => {
-            setUserCode(event.target.value);
-            setReview(null);
-            setMessage(null);
-          }}
-          placeholder="ABCD-EFGH"
-          autoComplete="off"
-          spellCheck={false}
-          className="min-h-11 flex-1 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 font-mono uppercase tracking-[0.12em] text-[var(--ui-ink-strong)] outline-none focus:border-[var(--ui-border-strong)]"
-        />
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={normalizedCode.length < 8}
-          pending={pending === "review"}
-          pendingLabel="Reviewing"
-          onClick={async () => {
-            setPending("review");
-            setMessage(null);
-            try {
-              setReview(await reviewRemotePairing(normalizedCode));
-            } catch (error) {
-              setMessage(
-                error instanceof Error
-                  ? error.message
-                  : "Forge could not review that pairing code."
-              );
-            } finally {
-              setPending(null);
-            }
-          }}
-        >
-          Review request
-        </Button>
-      </div>
 
-      {review ? (
-        <div className="mt-4 grid gap-3 rounded-[18px] bg-[var(--ui-surface-2)] p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <strong className="text-[var(--ui-ink-strong)]">
-              {review.clientName}
-            </strong>
-            <Badge>{review.clientType}</Badge>
-            <Badge>{review.requestedProfile.replaceAll("_", " ")}</Badge>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {review.requestedScopes.map((scope) => (
-              <Badge key={scope}>{scope}</Badge>
-            ))}
-          </div>
-          <p className="text-xs leading-5 text-[var(--ui-ink-muted)]">
-            Audience {review.audience} · expires{" "}
-            {new Date(review.expiresAt).toLocaleTimeString()}
+      <div className="mt-4 grid gap-3">
+        {requestsQuery.isLoading ? (
+          <p className="text-sm text-[var(--ui-ink-muted)]">
+            Checking for pairing requests…
           </p>
-          <dl className="grid gap-2 rounded-[14px] border border-[var(--ui-border-subtle)] p-3 text-xs leading-5 text-[var(--ui-ink-muted)]">
-            <div>
-              <dt className="font-medium text-[var(--ui-ink-strong)]">
-                Forge installation
-              </dt>
-              <dd className="break-all font-mono">
-                {review.installationFingerprint}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium text-[var(--ui-ink-strong)]">
-                Secured endpoint
-              </dt>
-              <dd className="break-all">
-                {review.endpoint.origin ?? "Local runtime only"} ·{" "}
-                <span className="font-mono">
-                  {review.endpoint.fingerprint}
-                </span>
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium text-[var(--ui-ink-strong)]">
-                Resource boundary
-              </dt>
-              <dd>
-                Limited to the reviewed profile, scopes, and each route’s
-                authorization policy.
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium text-[var(--ui-ink-strong)]">
-                Network egress boundary
-              </dt>
-              <dd>
-                Denied unless an approved capability explicitly permits it
-                and its destination passes validation.
-                {review.boundaries.egress.requestedScopes.length
-                  ? ` Egress-capable scopes: ${review.boundaries.egress.requestedScopes.join(", ")}.`
-                  : " No egress-capable scope is requested."}
-              </dd>
-            </div>
-          </dl>
-          <div className="flex flex-wrap gap-3">
+        ) : requestsQuery.isError ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm text-[var(--danger)]">
+              Pairing requests could not be loaded.
+            </p>
             <Button
               type="button"
-              pending={pending === "approve"}
-              pendingLabel="Approving"
-              onClick={async () => {
-                setPending("approve");
-                setMessage(null);
-                try {
-                  if (requiresOwnerStepUp(review)) {
-                    const ceremony =
-                      await beginPrivilegedPairingStepUp(normalizedCode);
-                    if (ceremony.review.requestId !== review.requestId) {
-                      throw new Error(
-                        "The pairing request changed before owner verification."
-                      );
-                    }
-                    const response =
-                      ceremony.ceremony === "register"
-                        ? await startRegistration({
-                            optionsJSON:
-                              ceremony.options as Parameters<
-                                typeof startRegistration
-                              >[0]["optionsJSON"]
-                          })
-                        : await startAuthentication({
-                            optionsJSON:
-                              ceremony.options as Parameters<
-                                typeof startAuthentication
-                              >[0]["optionsJSON"]
-                          });
-                    await completePrivilegedPairingStepUp({
-                      userCode: normalizedCode,
-                      review,
-                      challengeId: ceremony.challengeId,
-                      response
-                    });
-                  } else {
-                    await approveRemotePairing(normalizedCode, review);
-                  }
-                  reset("Pairing approved with exactly the reviewed grant.");
-                } catch (error) {
-                  setMessage(
-                    error instanceof Error
-                      ? error.message
-                      : "Forge could not approve this pairing."
-                  );
-                } finally {
-                  setPending(null);
-                }
-              }}
-            >
-              <ShieldCheck className="mr-2 size-4" />
-              {requiresOwnerStepUp(review)
-                ? "Verify and approve"
-                : "Approve exact grant"}
-            </Button>
-            <Button
-              type="button"
+              size="sm"
               variant="secondary"
-              pending={pending === "deny"}
-              pendingLabel="Denying"
-              onClick={async () => {
-                setPending("deny");
-                setMessage(null);
-                try {
-                  await denyRemotePairing(normalizedCode);
-                  reset("Pairing denied. The remote client cannot continue.");
-                } catch (error) {
-                  setMessage(
-                    error instanceof Error
-                      ? error.message
-                      : "Forge could not deny this pairing."
-                  );
-                } finally {
-                  setPending(null);
-                }
-              }}
+              onClick={() => void requestsQuery.refetch()}
             >
-              <ShieldX className="mr-2 size-4" />
-              Deny
+              Retry
             </Button>
           </div>
-        </div>
-      ) : null}
+        ) : requests.length ? (
+          requests.map((request) => {
+            const normalizedCode = (codes[request.requestId] ?? "")
+              .trim()
+              .toUpperCase();
+            const approving =
+              pending?.requestId === request.requestId &&
+              pending.action === "approve";
+            const denying =
+              pending?.requestId === request.requestId &&
+              pending.action === "deny";
+            return (
+              <section
+                key={request.requestId}
+                className="grid gap-3 rounded-[18px] bg-[var(--ui-surface-2)] p-4"
+                aria-label={`Pairing request from ${request.clientName}`}
+              >
+                <PairingReviewDetails request={request} />
+                {request.status === "approved" ? (
+                  <div className="flex items-center gap-2 rounded-[14px] bg-[var(--ui-success-soft)] px-3 py-2 text-sm text-[var(--success)]">
+                    <Clock3 className="size-4" aria-hidden="true" />
+                    Approved — waiting for the device to finish securely.
+                  </div>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
+                    <label className="grid gap-1.5 text-sm text-[var(--ui-ink-medium)]">
+                      Short code shown on {request.clientName}
+                      <input
+                        value={codes[request.requestId] ?? ""}
+                        onChange={(event) => {
+                          setCodes((current) => ({
+                            ...current,
+                            [request.requestId]: event.target.value
+                          }));
+                          setMessage(null);
+                        }}
+                        placeholder="ABCD-EFGH"
+                        autoComplete="off"
+                        spellCheck={false}
+                        className="min-h-11 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 font-mono uppercase tracking-[0.12em] text-[var(--ui-ink-strong)] outline-none focus:border-[var(--ui-border-strong)]"
+                      />
+                    </label>
+                    <Button
+                      type="button"
+                      disabled={normalizedCode.length < 8 || denying}
+                      pending={approving}
+                      pendingLabel="Approving"
+                      onClick={() => void approve(request)}
+                    >
+                      <ShieldCheck className="mr-2 size-4" aria-hidden="true" />
+                      {requiresOwnerStepUp(request)
+                        ? "Verify and approve"
+                        : "Approve"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={approving}
+                      pending={denying}
+                      pendingLabel="Denying"
+                      onClick={() => void deny(request)}
+                    >
+                      <ShieldX className="mr-2 size-4" aria-hidden="true" />
+                      Deny
+                    </Button>
+                  </div>
+                )}
+              </section>
+            );
+          })
+        ) : (
+          <p className="text-sm text-[var(--ui-ink-muted)]">
+            No device is waiting for approval.
+          </p>
+        )}
+      </div>
 
       {message ? (
         <p className="mt-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
@@ -299,7 +386,7 @@ export function RemotePairingApprovalCard() {
                     </strong>
                     <Badge>{client.clientType}</Badge>
                     <Badge>{client.profile.replaceAll("_", " ")}</Badge>
-                    <Badge>{client.revokedAt ? "revoked" : "active"}</Badge>
+                    <Badge>{client.activationState.replaceAll("_", " ")}</Badge>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {client.scopes.map((scope) => (
@@ -311,7 +398,7 @@ export function RemotePairingApprovalCard() {
                     {new Date(client.createdAt).toLocaleString()}
                   </p>
                 </div>
-                {!client.revokedAt ? (
+                {!client.revokedAt && client.activationState !== "revoked" ? (
                   <Button
                     type="button"
                     size="sm"

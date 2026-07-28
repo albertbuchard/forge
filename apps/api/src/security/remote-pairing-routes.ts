@@ -12,9 +12,7 @@ import {
 import { PairingAdmissionError } from "./pairing-service.js";
 import type { SqliteSecurityStore } from "./sqlite-security-store.js";
 
-const clientKeyThumbprintSchema = z
-  .string()
-  .regex(/^[A-Za-z0-9_-]{43,128}$/);
+const clientKeyThumbprintSchema = z.string().regex(/^[A-Za-z0-9_-]{43,128}$/);
 const profileSchema = z.enum([
   "viewer",
   "trusted_personal_assistant",
@@ -25,10 +23,11 @@ const profileSchema = z.enum([
 const scopeSchema = z.string().regex(/^[a-z0-9.*_:-]{1,128}$/);
 const deviceCodeSchema = z.string().regex(/^fg_device_[A-Za-z0-9_-]{43,128}$/);
 const pairingProofSchema = z.string().min(64).max(8_192);
-const refreshTokenSchema = z.string().regex(/^fg_refresh_[A-Za-z0-9_-]{43,128}$/);
-const browserClientIdSchema = z
+const refreshTokenSchema = z
   .string()
-  .regex(/^client_[A-Za-z0-9-]{16,180}$/);
+  .regex(/^fg_refresh_[A-Za-z0-9_-]{43,128}$/);
+const pairingRequestIdSchema = z.string().regex(/^pair_[A-Za-z0-9-]{16,160}$/);
+const browserClientIdSchema = z.string().regex(/^client_[A-Za-z0-9-]{16,180}$/);
 const BROWSER_SESSION_COOKIE = "forge_session";
 const BROWSER_REFRESH_COOKIE = "forge_browser_refresh";
 const BROWSER_CLIENT_COOKIE = "forge_browser_client";
@@ -240,8 +239,11 @@ export function registerRemotePairingRoutes(
     const refreshToken = cookieValue(request, BROWSER_REFRESH_COOKIE);
     const clientIdValue = cookieValue(request, BROWSER_CLIENT_COOKIE);
     const parsedClientId = browserClientIdSchema.safeParse(clientIdValue);
-    if (!refreshToken || !refreshTokenSchema.safeParse(refreshToken).success ||
-        !parsedClientId.success) {
+    if (
+      !refreshToken ||
+      !refreshTokenSchema.safeParse(refreshToken).success ||
+      !parsedClientId.success
+    ) {
       throw new HttpError(
         401,
         "browser_refresh_required",
@@ -362,9 +364,7 @@ export function registerRemotePairingRoutes(
       });
     } catch (error) {
       const retryAfterSeconds =
-        error instanceof PairingAdmissionError
-          ? error.retryAfterSeconds
-          : 60;
+        error instanceof PairingAdmissionError ? error.retryAfterSeconds : 60;
       reply.header("retry-after", String(retryAfterSeconds));
       if (error instanceof PairingAdmissionError) {
         throw new HttpError(
@@ -402,6 +402,95 @@ export function registerRemotePairingRoutes(
         message: "Forge rejected the pairing client proof."
       });
     }
+  });
+
+  app.get("/api/v1/auth/device/requests", async (request) => {
+    const reviews = runtime.pairingOwnerAuthorizations.listActiveRequests({
+      session: ownerBrowserSession(request),
+      limit: 25
+    });
+    return {
+      requests: reviews.map((review) => ({
+        ...review,
+        clientId:
+          review.status === "approved"
+            ? (runtime.store.readClientBySubjectId(review.requestId)?.id ??
+              null)
+            : null
+      }))
+    };
+  });
+
+  app.post(
+    "/api/v1/auth/device/requests/:requestId/approve",
+    async (request) => {
+      const { requestId } = z
+        .object({ requestId: pairingRequestIdSchema })
+        .parse(request.params);
+      const body = z
+        .object({ userCode: z.string().trim().min(8).max(64) })
+        .strict()
+        .parse(request.body ?? {});
+      const session = ownerBrowserSession(request);
+      const pending = runtime.store.readPairingRequest(requestId);
+      if (!pending) {
+        throw new HttpError(
+          404,
+          "pairing_request_not_found",
+          "Forge found no active pairing request with that identifier."
+        );
+      }
+      requireAvailableRemoteMachineScopes(
+        pending.requestedScopes,
+        remoteMachineScopesAvailable
+      );
+      try {
+        return runtime.pairing.approve({
+          authorization: runtime.pairingOwnerAuthorizations.authorizeApproval({
+            session,
+            userCode: body.userCode,
+            requestId,
+            networkPartition: runtime.pairingNetworkPartitions.observe(request),
+            scopes: pending.requestedScopes,
+            profile: pending.requestedProfile
+          }),
+          registerClient: true
+        });
+      } catch (error) {
+        pairingProtocolFailure(error, {
+          statusCode: 403,
+          code: "pairing_approval_rejected",
+          message:
+            "Forge rejected this approval because the code, selected request, owner session, or required step-up did not match."
+        });
+      }
+    }
+  );
+
+  app.post("/api/v1/auth/device/requests/:requestId/deny", async (request) => {
+    const { requestId } = z
+      .object({ requestId: pairingRequestIdSchema })
+      .parse(request.params);
+    z.object({})
+      .strict()
+      .parse(request.body ?? {});
+    try {
+      runtime.pairing.deny({
+        authorization:
+          runtime.pairingOwnerAuthorizations.authorizeDenialByRequestId({
+            session: ownerBrowserSession(request),
+            requestId
+          })
+      });
+    } catch (error) {
+      pairingProtocolFailure(error, {
+        statusCode: 404,
+        code: "pairing_denial_unavailable",
+        message:
+          "Forge found no active pairing request with that identifier for this owner."
+      });
+    }
+    return { denied: true };
   });
 
   app.post("/api/v1/auth/device/approve", async (request) => {
@@ -478,9 +567,7 @@ export function registerRemotePairingRoutes(
         remoteMachineScopesAvailable
       );
       if (
-        !["executor", "operator", "custom"].includes(
-          review.requestedProfile
-        ) &&
+        !["executor", "operator", "custom"].includes(review.requestedProfile) &&
         !review.requestedScopes.some(
           (scope) =>
             scope === "*" ||
@@ -540,9 +627,7 @@ export function registerRemotePairingRoutes(
           (scope, index) => scope !== [...body.scopes].sort()[index]
         )
       ) {
-        throw new Error(
-          "Forge privileged pairing request changed or expired."
-        );
+        throw new Error("Forge privileged pairing request changed or expired.");
       }
       const review = runtime.pairingReview(pending);
       const privilegedAuthorization =
@@ -555,16 +640,16 @@ export function registerRemotePairingRoutes(
           credentialLabel: body.credentialLabel
         });
       return runtime.pairing.approve({
-        authorization:
-          runtime.pairingOwnerAuthorizations.authorizeApproval({
-            session,
-            userCode: body.userCode,
-            networkPartition:
-              runtime.pairingNetworkPartitions.observe(request),
-            scopes: body.scopes,
-            profile: body.profile,
-            privilegedAuthorization
-          })
+        authorization: runtime.pairingOwnerAuthorizations.authorizeApproval({
+          session,
+          userCode: body.userCode,
+          requestId: body.requestId,
+          networkPartition: runtime.pairingNetworkPartitions.observe(request),
+          scopes: body.scopes,
+          profile: body.profile,
+          privilegedAuthorization
+        }),
+        registerClient: true
       });
     } catch (error) {
       pairingProtocolFailure(error, {
@@ -715,23 +800,44 @@ export function registerRemotePairingRoutes(
       }
       return polled;
     }
-    const clientId = `client_${randomUUID()}`;
-    runtime.store.registerClient({
-      id: clientId,
-      ownerId: polled.grant.ownerId,
-      subjectId: polled.grant.requestId,
-      installationId: runtime.installationId,
-      keyThumbprint: polled.grant.clientKeyThumbprint,
-      audience: runtime.audience,
-      profile: polled.grant.profile as ForgePrincipal["profile"],
-      scopes: polled.grant.scopes,
-      clientSecurityEpoch: 1
-    });
+    const existingClient = runtime.store.readClientBySubjectId(
+      polled.grant.requestId
+    );
+    const clientId = existingClient?.id ?? `client_${randomUUID()}`;
+    if (!existingClient) {
+      runtime.store.registerClient({
+        id: clientId,
+        ownerId: polled.grant.ownerId,
+        subjectId: polled.grant.requestId,
+        installationId: runtime.installationId,
+        keyThumbprint: polled.grant.clientKeyThumbprint,
+        audience: runtime.audience,
+        profile: polled.grant.profile as ForgePrincipal["profile"],
+        scopes: polled.grant.scopes,
+        clientSecurityEpoch: 1
+      });
+    }
     const client = requireActiveClient(
       runtime,
       clientId,
       polled.grant.clientKeyThumbprint
     );
+    if (
+      client.ownerId !== polled.grant.ownerId ||
+      client.subjectId !== polled.grant.requestId ||
+      client.ownerSecurityEpoch !== polled.grant.ownerSecurityEpoch ||
+      client.profile !== polled.grant.profile ||
+      client.scopes.length !== polled.grant.scopes.length ||
+      client.scopes.some(
+        (scope, index) => scope !== [...polled.grant.scopes].sort()[index]
+      )
+    ) {
+      throw new HttpError(
+        401,
+        "pairing_client_grant_mismatch",
+        "The registered Forge client does not match this approved pairing grant."
+      );
+    }
     const principal = pairedPrincipal(client);
     if (polled.grant.clientType === "browser") {
       const session = runtime.browserSessions.create(principal);

@@ -98,6 +98,7 @@ export class PairingOwnerAuthorizationService<ServerContext = unknown> {
     session: VerifiedBrowserSession;
     userCode: string;
     networkPartition: VerifiedNetworkPartition;
+    requestId?: string;
     scopes: readonly string[];
     profile: string;
     privilegedAuthorization?: PrivilegedPairingAuthorization;
@@ -108,6 +109,11 @@ export class PairingOwnerAuthorizationService<ServerContext = unknown> {
       input.userCode,
       input.networkPartition
     );
+    if (input.requestId && request.id !== input.requestId) {
+      throw new Error(
+        "Forge pairing code does not match the selected request."
+      );
+    }
     this.requireRequestOwner(request, sessionPrincipal.ownerId);
     const requested = new Set(request.requestedScopes);
     if (input.scopes.some((scope) => !requested.has(scope))) {
@@ -166,6 +172,33 @@ export class PairingOwnerAuthorizationService<ServerContext = unknown> {
     return this.createReview(request);
   }
 
+  listActiveRequests(input: {
+    session: VerifiedBrowserSession;
+    limit?: number;
+  }) {
+    const sessionPrincipal =
+      this.browserSessions.consumeAuthenticatedOwnerSession(input.session);
+    const currentEpoch = this.repository.readOwnerSecurityEpoch(
+      sessionPrincipal.ownerId
+    );
+    if (!currentEpoch || currentEpoch !== sessionPrincipal.ownerSecurityEpoch) {
+      throw new Error("Forge pairing owner session is stale.");
+    }
+    const now = this.clock.now().toISOString();
+    return this.repository
+      .listActivePairingRequests({
+        ownerId: sessionPrincipal.ownerId,
+        ownerSecurityEpoch: currentEpoch,
+        now,
+        limit: input.limit ?? 25
+      })
+      .map((request) => ({
+        ...this.createReview(request),
+        status: request.status as "pending" | "approved",
+        approvedAt: request.approval?.approvedAt ?? null
+      }));
+  }
+
   authorizeDenial(input: {
     session: VerifiedBrowserSession;
     userCode: string;
@@ -177,6 +210,30 @@ export class PairingOwnerAuthorizationService<ServerContext = unknown> {
       input.userCode,
       input.networkPartition
     );
+    this.requireRequestOwner(request, sessionPrincipal.ownerId);
+    return this.issue({
+      decision: "deny",
+      request,
+      scopes: [],
+      profile: request.requestedProfile,
+      sessionId: input.session.sessionId
+    });
+  }
+
+  authorizeDenialByRequestId(input: {
+    session: VerifiedBrowserSession;
+    requestId: string;
+  }) {
+    const sessionPrincipal =
+      this.browserSessions.consumeAuthenticatedOwnerSession(input.session);
+    const request = this.repository.readPairingRequest(input.requestId);
+    if (
+      !request ||
+      request.status !== "pending" ||
+      Date.parse(request.expiresAt) <= this.clock.now().getTime()
+    ) {
+      throw new Error("Forge pairing request is unavailable.");
+    }
     this.requireRequestOwner(request, sessionPrincipal.ownerId);
     return this.issue({
       decision: "deny",

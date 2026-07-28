@@ -98,6 +98,7 @@ import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { RemoteBrowserPairing } from "@/components/security/remote-browser-pairing";
+import { PairingRequestNotification } from "@/components/security/pairing-request-notification";
 import { useLiveEvents } from "@/hooks/use-live-events";
 import {
   claimTaskRun,
@@ -1632,9 +1633,7 @@ export function AppShell() {
       ].includes(operatorSessionQuery.error.code) &&
       typeof window !== "undefined" &&
       window.location.protocol === "https:" &&
-      !["localhost", "127.0.0.1", "[::1]"].includes(
-        window.location.hostname
-      );
+      !["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
     if (remotePairingRequired) {
       return (
         <div className="grid min-h-screen place-items-center p-6">
@@ -1793,6 +1792,14 @@ export function AppShell() {
           ) : (
             <>
               <GamificationAssetSetupDialog />
+              <PairingRequestNotification
+                enabled={
+                  operatorSessionQuery.data?.session.localOwner === true &&
+                  operatorSessionQuery.data?.session.principalKind ===
+                    "operator_session" &&
+                  operatorSessionQuery.data?.session.profile === "operator"
+                }
+              />
               <ShellFrame
                 routeLocation={visibleLocation}
                 onRouteIntent={handleRouteIntent}

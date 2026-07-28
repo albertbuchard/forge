@@ -252,7 +252,7 @@ describe("SettingsMobilePage", () => {
     renderPage();
 
     fireEvent.click(
-      await screen.findByRole("button", { name: /Generate Forge QR/i })
+      await screen.findByRole("button", { name: /Pair a new iPhone/i })
     );
 
     await waitFor(() => {
@@ -270,7 +270,10 @@ describe("SettingsMobilePage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Show payload/i }));
     expect(screen.getByText(/fakednodeid/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Advanced HTTP/i }));
+    fireEvent.click(screen.getByText("Advanced network fallback"));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Create manual HTTP pairing/i })
+    );
 
     await waitFor(() => {
       expect(createCompanionPairingSessionMock).toHaveBeenLastCalledWith({
@@ -353,7 +356,7 @@ describe("SettingsMobilePage", () => {
 
     renderPage();
     fireEvent.click(
-      await screen.findByRole("button", { name: /Generate Forge QR/i })
+      await screen.findByRole("button", { name: /Pair a new iPhone/i })
     );
 
     expect(
@@ -387,7 +390,7 @@ describe("SettingsMobilePage", () => {
 
     renderPage();
     fireEvent.click(
-      await screen.findByRole("button", { name: /Generate Forge QR/i })
+      await screen.findByRole("button", { name: /Pair a new iPhone/i })
     );
 
     expect(

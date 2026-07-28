@@ -47,11 +47,11 @@ struct SetupDiscoveryScreen: View {
     private var header: some View {
             HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Set up sync")
+                Text("Pair this iPhone")
                     .font(.system(size: 30, weight: .bold, design: .rounded))
                     .foregroundStyle(CompanionStyle.textPrimary)
 
-                Text("Choose your Forge connection.")
+                Text("Choose your Forge. You will approve one short code on the unlocked owner screen.")
                     .font(.system(size: 15, weight: .medium, design: .rounded))
                     .foregroundStyle(CompanionStyle.textSecondary)
             }
@@ -99,11 +99,11 @@ struct SetupDiscoveryScreen: View {
                     if appModel.discoveredServers.isEmpty && !appModel.discoveryInFlight {
                         CompanionSectionCard {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("No Forge runtime found.")
+                                Text("No reachable Forge found yet.")
                                     .font(.system(size: 16, weight: .semibold, design: .rounded))
                                     .foregroundStyle(CompanionStyle.textPrimary)
 
-                                Text("Keep Forge running, then scan again. The QR path works best when automatic discovery is not available.")
+                                Text("Keep Forge open on your Mac and tap Rescan. If discovery is unavailable, scan the Forge QR instead.")
                                     .font(.system(size: 14, weight: .medium, design: .rounded))
                                     .foregroundStyle(CompanionStyle.textSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -142,11 +142,19 @@ struct SetupDiscoveryScreen: View {
 
     private var footer: some View {
         VStack(spacing: 12) {
-            Button("Scan Forge QR") {
-                companionDebugLog("SetupDiscoveryScreen", "tap Scan QR")
-                openQR()
+            if appModel.discoveredServers.isEmpty {
+                Button("Scan Forge QR") {
+                    companionDebugLog("SetupDiscoveryScreen", "tap Scan QR")
+                    openQR()
+                }
+                .buttonStyle(CompanionFilledButtonStyle())
+            } else {
+                Button("Scan QR instead") {
+                    companionDebugLog("SetupDiscoveryScreen", "tap Scan QR fallback")
+                    openQR()
+                }
+                .buttonStyle(CompanionGhostButtonStyle())
             }
-            .buttonStyle(CompanionFilledButtonStyle())
 
             Button("Manual connection") {
                 companionDebugLog("SetupDiscoveryScreen", "tap Manual connection")
@@ -203,7 +211,7 @@ struct SetupDiscoveryScreen: View {
                         .background(Color.white.opacity(0.08), in: Capsule())
                 }
 
-                Button(server.canBootstrapPairing ? "Pair" : "Use QR") {
+                Button(server.canBootstrapPairing ? "Pair this iPhone" : "Use Forge QR") {
                     companionDebugLog(
                         "SetupDiscoveryScreen",
                         "tap server action id=\(server.id) canBootstrap=\(server.canBootstrapPairing)"
