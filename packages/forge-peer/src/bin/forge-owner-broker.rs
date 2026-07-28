@@ -203,57 +203,10 @@ fn parse_browser_handler_url(value: &str) -> Result<BrowserHandlerRequest, Strin
     })
 }
 
-async fn read_browser_challenge(
+fn parse_browser_challenge_response(
     input: &BrowserHandlerRequest,
+    response: &[u8],
 ) -> Result<BrowserChallengeBroker, String> {
-    let port = input
-        .api_origin
-        .port_or_known_default()
-        .ok_or("browser API origin has no port")?;
-    let addresses = input
-        .api_origin
-        .socket_addrs(|| None)
-        .map_err(|error| format!("resolving browser API origin: {error}"))?;
-    let address = addresses
-        .into_iter()
-        .find(|candidate| candidate.ip().is_loopback() && candidate.port() == port)
-        .ok_or("browser API origin did not resolve to loopback")?;
-    let mut stream = tokio::net::TcpStream::connect(address)
-        .await
-        .map_err(|error| format!("connecting to Forge browser challenge: {error}"))?;
-    let body = serde_json::to_vec(&serde_json::json!({
-        "transactionId": input.transaction_id,
-        "browserOrigin": input.browser_origin,
-        "browserNonce": input.browser_nonce
-    }))
-    .map_err(|error| format!("encoding browser challenge request: {error}"))?;
-    let host = input
-        .api_origin
-        .host_str()
-        .ok_or("browser API origin has no host")?;
-    let host_header = if host.contains(':') {
-        format!("[{host}]:{port}")
-    } else {
-        format!("{host}:{port}")
-    };
-    let request = format!(
-        "POST /api/v1/auth/local/browser/challenge HTTP/1.1\r\nHost: {host_header}\r\nAccept: application/json\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        body.len()
-    );
-    stream
-        .write_all(request.as_bytes())
-        .await
-        .map_err(|error| format!("writing browser challenge request: {error}"))?;
-    stream
-        .write_all(&body)
-        .await
-        .map_err(|error| format!("writing browser challenge body: {error}"))?;
-    let mut response = Vec::new();
-    stream
-        .take(MAX_BROWSER_CHALLENGE_BYTES + 1)
-        .read_to_end(&mut response)
-        .await
-        .map_err(|error| format!("reading browser challenge response: {error}"))?;
     if response.len() as u64 > MAX_BROWSER_CHALLENGE_BYTES {
         return Err("browser challenge response is oversized".into());
     }
@@ -309,6 +262,60 @@ async fn read_browser_challenge(
         return Err("browser broker request is bound to another transaction".into());
     }
     Ok(response.broker)
+}
+
+async fn read_browser_challenge(
+    input: &BrowserHandlerRequest,
+) -> Result<BrowserChallengeBroker, String> {
+    let port = input
+        .api_origin
+        .port_or_known_default()
+        .ok_or("browser API origin has no port")?;
+    let addresses = input
+        .api_origin
+        .socket_addrs(|| None)
+        .map_err(|error| format!("resolving browser API origin: {error}"))?;
+    let address = addresses
+        .into_iter()
+        .find(|candidate| candidate.ip().is_loopback() && candidate.port() == port)
+        .ok_or("browser API origin did not resolve to loopback")?;
+    let mut stream = tokio::net::TcpStream::connect(address)
+        .await
+        .map_err(|error| format!("connecting to Forge browser challenge: {error}"))?;
+    let body = serde_json::to_vec(&serde_json::json!({
+        "transactionId": input.transaction_id,
+        "browserOrigin": input.browser_origin,
+        "browserNonce": input.browser_nonce
+    }))
+    .map_err(|error| format!("encoding browser challenge request: {error}"))?;
+    let host = input
+        .api_origin
+        .host_str()
+        .ok_or("browser API origin has no host")?;
+    let host_header = if host.contains(':') {
+        format!("[{host}]:{port}")
+    } else {
+        format!("{host}:{port}")
+    };
+    let request = format!(
+        "POST /api/v1/auth/local/browser/challenge HTTP/1.1\r\nHost: {host_header}\r\nAccept: application/json\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    stream
+        .write_all(request.as_bytes())
+        .await
+        .map_err(|error| format!("writing browser challenge request: {error}"))?;
+    stream
+        .write_all(&body)
+        .await
+        .map_err(|error| format!("writing browser challenge body: {error}"))?;
+    let mut response = Vec::new();
+    stream
+        .take(MAX_BROWSER_CHALLENGE_BYTES + 1)
+        .read_to_end(&mut response)
+        .await
+        .map_err(|error| format!("reading browser challenge response: {error}"))?;
+    parse_browser_challenge_response(input, &response)
 }
 
 #[tokio::main]
@@ -367,17 +374,17 @@ mod tests {
     use super::parse_browser_handler_url;
 
     #[test]
-    fn browser_handler_accepts_only_public_loopback_transaction_material() {
+    fn browser_handler_accepts_only_public_loopback_transaction_material() -> Result<(), String> {
         let parsed = parse_browser_handler_url(
             "forge://local-auth?apiOrigin=http%3A%2F%2F127.0.0.1%3A4317&browserOrigin=http%3A%2F%2F127.0.0.1%3A3027&transactionId=local_1234567890abcdef&browserNonce=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-        )
-        .expect("valid public handler URL");
+        )?;
         assert_eq!(
             parsed.api_origin.origin().ascii_serialization(),
             "http://127.0.0.1:4317"
         );
         assert_eq!(parsed.browser_origin, "http://127.0.0.1:3027");
         assert_eq!(parsed.transaction_id, "local_1234567890abcdef");
+        Ok(())
     }
 
     #[test]
