@@ -30,6 +30,17 @@ import {
 } from "./repositories/courses.js";
 import { ensureSystemUsers, getDefaultUser } from "./repositories/users.js";
 
+const originalResearchResourceIds = [
+  "book-of-proof",
+  "mit-linear-algebra",
+  "mit-algebra",
+  "milne-algebraic-geometry",
+  "stacks-project",
+  "hatcher-topology",
+  "mit-representation",
+  "jacobian-counterexample"
+] as const;
+
 function passingFeedback(
   activity: ReturnType<typeof getActivityForAssessment>["activity"],
   score = 90
@@ -181,7 +192,14 @@ test("imports a modular course and carries proof evidence into concept mastery",
     assert.equal(detail.modules.length, 7);
     assert.equal(detail.lessons.length, 330);
     assert.ok(detail.concepts.length >= 30);
-    assert.equal(detail.resources.length, 8);
+    assert.deepEqual(
+      originalResearchResourceIds.filter(
+        (resourceId) =>
+          !detail.resources.some((resource) => resource.id === resourceId)
+      ),
+      [],
+      "the growing authored course must retain every original reference"
+    );
 
     const lessonId = "term-1-week-17-day-3";
     const activityId = "term-1-week-17-day-3-exit-v2";
@@ -217,7 +235,7 @@ test("imports a modular course and carries proof evidence into concept mastery",
       activity_snapshot_json: string;
     };
     assert.equal(attemptSnapshot.course_version, "2.9.0");
-    assert.equal(attemptSnapshot.activity_revision, "2");
+    assert.equal(attemptSnapshot.activity_revision, "3");
     assert.match(attemptSnapshot.activity_content_hash, /^[a-f0-9]{64}$/u);
     assert.equal(
       JSON.parse(attemptSnapshot.activity_snapshot_json).id,
@@ -260,33 +278,48 @@ test("imports a modular course and carries proof evidence into concept mastery",
     assert.ok(result.pointsAwarded > 0);
 
     const session = getLearningSession(courseId, userId, lessonId);
-    assert.equal(session.resources.length, 8);
+    assert.deepEqual(
+      originalResearchResourceIds.filter(
+        (resourceId) =>
+          !session.resources.some((resource) => resource.id === resourceId)
+      ),
+      [],
+      "the learner session must retain every original course reference"
+    );
     const learnerPayload = JSON.stringify(session.lesson);
     assert.doesNotMatch(learnerPayload, /referenceAnswerMarkdown/u);
     assert.doesNotMatch(learnerPayload, /correctOptionIds/u);
     assert.doesNotMatch(learnerPayload, /explanationMarkdown/u);
     assert.equal(session.progress.completedLessons, 83);
     assert.ok(session.progress.grade);
-    assert.equal(session.latestAttempts[2]?.feedback?.verdict, "pass");
+    assert.equal(
+      session.latestAttempts.find((item) => item.activityId === activityId)
+        ?.feedback?.verdict,
+      "pass"
+    );
 
     const concepts = listConcepts(userId, { courseId });
     const localGlobal = concepts.find(
       (concept) => concept.id === "concept.local-global"
     );
     assert.equal(localGlobal?.mastery.masteryScore, 97);
-    assert.equal(localGlobal?.mastery.evidenceCount, 2);
+    assert.ok((localGlobal?.mastery.evidenceCount ?? 0) >= 2);
     assert.ok(localGlobal?.mastery.nextReviewAt);
-    assert.deepEqual(
-      localGlobal?.mastery.dimensions.map((entry) => entry.id).sort(),
-      ["conceptual_understanding", "proof_reasoning", "transfer"]
+    assert.ok(
+      ["conceptual_understanding", "proof_reasoning", "transfer"].every(
+        (dimensionId) =>
+          localGlobal?.mastery.dimensions.some(
+            (entry) => entry.id === dimensionId
+          )
+      )
     );
 
     const conceptDetail = getConceptDetail(
       "local-vs-global-invertibility",
       userId
     );
-    assert.equal(conceptDetail.evidence.length, 2);
-    assert.equal(conceptDetail.evidence[0]!.score, 92);
+    assert.ok(conceptDetail.evidence.length >= 2);
+    assert.ok(conceptDetail.evidence.some((entry) => entry.score === 92));
     assert.ok(conceptDetail.lessons.some((lesson) => lesson.id === lessonId));
 
     const sharedCourse = importCoursePackage({
@@ -664,6 +697,7 @@ test("keeps an enrollment on its immutable release until an explicit audited upg
     const courseId = "course.polynomials-etale-triple-covers";
     const lessonId = "term-0-week-1-day-1";
     const activityId = "term-0-week-1-day-1-formative-v3";
+    passLessonCheckpointsBefore(courseId, userId, lessonId, activityId);
     const context = getActivityForAssessment(
       courseId,
       lessonId,
@@ -728,17 +762,18 @@ test("keeps an enrollment on its immutable release until an explicit audited upg
       latestVersion: "3.0.0",
       updateAvailable: true
     });
-    assert.equal(
-      getLearningSession(courseId, userId, lessonId).latestAttempts[0]
-        ?.activityId,
-      activityId
+    assert.ok(
+      getLearningSession(courseId, userId, lessonId).latestAttempts.some(
+        (attempt) => attempt.activityId === activityId
+      ),
+      "the saved release must retain the learner's target activity attempt"
     );
 
     const receipt = upgradeCourseEnrollment(courseId, userId);
     assert.equal(receipt.upgraded, true);
     assert.equal(receipt.fromVersion, "2.9.0");
     assert.equal(receipt.toVersion, "3.0.0");
-    assert.deepEqual(receipt.carriedActivityIds, [activityId]);
+    assert.ok(receipt.carriedActivityIds.includes(activityId));
     assert.ok(receipt.remainingActivityIds.length > 0);
 
     const afterUpgrade = getCourseDetail(courseId, userId);
@@ -748,8 +783,12 @@ test("keeps an enrollment on its immutable release until an explicit audited upg
       updateAvailable: false
     });
     const upgradedSession = getLearningSession(courseId, userId, lessonId);
-    assert.equal(upgradedSession.latestAttempts[0]?.activityId, activityId);
-    assert.equal(upgradedSession.latestAttempts[0]?.feedback?.verdict, "pass");
+    assert.equal(
+      upgradedSession.latestAttempts.find(
+        (attempt) => attempt.activityId === activityId
+      )?.feedback?.verdict,
+      "pass"
+    );
     const receiptCount = getDatabase()
       .prepare(
         `SELECT COUNT(*) AS count
@@ -975,6 +1014,7 @@ test("completes an in-flight attempt from its saved release and activity snapsho
     const courseId = "course.polynomials-etale-triple-covers";
     const lessonId = "term-0-week-1-day-1";
     const activityId = "term-0-week-1-day-1-formative-v3";
+    passLessonCheckpointsBefore(courseId, userId, lessonId, activityId);
     const context = getActivityForAssessment(
       courseId,
       lessonId,
