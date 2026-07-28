@@ -162,10 +162,16 @@ function windowsPathChainHasNoReparsePoints(
     }
     const script = [
       "$ErrorActionPreference='Stop'",
-      "if ($forgeArgs.Count -ne 1 -or [String]::IsNullOrWhiteSpace([String]$forgeArgs[0])) { exit 22 }",
+      "if ($forgeArgs.Count -ne 1 -or [String]::IsNullOrWhiteSpace([String]$forgeArgs[0])) {",
+      "  [Console]::Error.Write(('forge-owner-args count={0} type={1}' -f $forgeArgs.Count,$forgeArgs.GetType().FullName))",
+      "  exit 22",
+      "}",
       "$inputTarget=[String]$forgeArgs[0]",
       "$target=[IO.Path]::GetFullPath($inputTarget)",
       "if (-not [StringComparer]::Ordinal.Equals($target,$inputTarget)) {",
+      "  $inputDebug=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($inputTarget))",
+      "  $targetDebug=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($target))",
+      "  [Console]::Error.Write(('forge-owner-path input={0} target={1}' -f $inputDebug,$targetDebug))",
       "  if ([StringComparer]::OrdinalIgnoreCase.Equals($target,$inputTarget)) { exit 23 }",
       "  exit 24",
       "}",
