@@ -1,11 +1,14 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
+  rmSync,
   writeFileSync
 } from "node:fs";
 import os from "node:os";
@@ -22,8 +25,28 @@ import {
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 const pluginRoot = path.join(repoRoot, "plugins/openclaw");
+const smokeRoot = path.join(os.homedir(), ".forge-packed-runtime-smoke");
+mkdirSync(smokeRoot, { recursive: true, mode: 0o700 });
+let smokeRootMetadata = lstatSync(smokeRoot);
+if (
+  !smokeRootMetadata.isDirectory() ||
+  smokeRootMetadata.isSymbolicLink() ||
+  (typeof process.getuid === "function" &&
+    smokeRootMetadata.uid !== process.getuid())
+) {
+  throw new Error(
+    `packed runtime smoke root is not an owner-only directory: ${smokeRoot}`
+  );
+}
+chmodSync(smokeRoot, 0o700);
+smokeRootMetadata = lstatSync(smokeRoot);
+if ((smokeRootMetadata.mode & 0o077) !== 0) {
+  throw new Error(
+    `packed runtime smoke root permissions are not owner-only: ${smokeRoot}`
+  );
+}
 const tempRoot = realpathSync(
-  mkdtempSync(path.join(os.tmpdir(), "forge-packed-runtime-"))
+  mkdtempSync(path.join(smokeRoot, "forge-packed-runtime-"))
 );
 const installRoot = path.join(tempRoot, "install");
 const dataRoot = path.join(tempRoot, "data");
@@ -61,6 +84,7 @@ const requireSignedSource =
   process.env.FORGE_REQUIRE_SIGNED_NATIVE_SOURCE === "1" ||
   ["full", "publish-from-tag"].includes(releaseMode);
 let child = null;
+let smokeSucceeded = false;
 const previousOwnerBrokerBinary = process.env.FORGE_OWNER_BROKER_BIN;
 const previousOwnerBrokerSha256 = process.env.FORGE_OWNER_BROKER_SHA256;
 let ownerBrokerEnvironmentChanged = false;
@@ -627,6 +651,7 @@ try {
     await verifyPackedPairingRequiresOperator(requestForge);
     await verifyPackedPeopleApi(requestForge);
   }
+  smokeSucceeded = true;
   console.log("packed openclaw runtime smoke passed");
 } finally {
   if (child && child.exitCode === null) {
@@ -652,5 +677,10 @@ try {
       process.env.FORGE_OWNER_BROKER_SHA256 = previousOwnerBrokerSha256;
     }
   }
-  console.log(`packed runtime evidence preserved at ${tempRoot}`);
+  if (smokeSucceeded) {
+    rmSync(tempRoot, { recursive: true, force: true });
+    console.log("packed runtime smoke evidence cleaned after success");
+  } else {
+    console.log(`packed runtime evidence preserved at ${tempRoot}`);
+  }
 }

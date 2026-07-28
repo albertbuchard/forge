@@ -2803,6 +2803,16 @@ function captureProcessIdentity(pid) {
       return null;
     }
   } else {
+    const stateResult = spawnSync("ps", ["-p", String(pid), "-o", "stat="], {
+      encoding: "utf8"
+    });
+    const processState =
+      stateResult.status === 0 && typeof stateResult.stdout === "string"
+        ? stateResult.stdout.trim()
+        : "";
+    if (!processState || processState.startsWith("Z")) {
+      return null;
+    }
     result = spawnSync(
       "ps",
       ["-p", String(pid), "-o", "lstart=", "-o", "comm="],
@@ -2880,6 +2890,34 @@ function signalDetachedProcessGroup(pid, signal = "SIGTERM") {
   }
 }
 
+function processGroupHasLiveMembers(processGroupId) {
+  if (
+    process.platform === "win32" ||
+    !Number.isInteger(processGroupId) ||
+    processGroupId <= 0
+  ) {
+    return false;
+  }
+  const result = spawnSync("ps", ["-Ao", "pgid=", "-o", "stat="], {
+    encoding: "utf8"
+  });
+  if (result.status !== 0 || typeof result.stdout !== "string") {
+    try {
+      process.kill(-processGroupId, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return result.stdout.split(/\r?\n/).some((line) => {
+    const match = line.trim().match(/^(\d+)\s+(\S+)/);
+    return (
+      Number(match?.[1]) === processGroupId &&
+      !String(match?.[2] ?? "").startsWith("Z")
+    );
+  });
+}
+
 async function waitForProcessExit(pid, timeoutMs = 1_500) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -2889,19 +2927,31 @@ async function waitForProcessExit(pid, timeoutMs = 1_500) {
   return !processExists(pid);
 }
 
+async function waitForProcessGroupExit(processGroupId, timeoutMs = 1_500) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!processGroupHasLiveMembers(processGroupId)) return true;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return !processGroupHasLiveMembers(processGroupId);
+}
+
 async function stopRecordedRuntimeProcess(recorded) {
   if (!recordedProcessIdentityMatches(recorded)) return false;
   const pid = recorded.pid;
-  const signaled =
-    signalDetachedProcessGroup(pid, "SIGTERM") || signalProcess(pid, "SIGTERM");
-  if (!signaled) return false;
+  const signaledGroup = signalDetachedProcessGroup(pid, "SIGTERM");
+  if (signaledGroup) {
+    if (await waitForProcessGroupExit(pid)) return true;
+    signalDetachedProcessGroup(pid, "SIGKILL");
+    await waitForProcessGroupExit(pid, 500);
+    return !processGroupHasLiveMembers(pid);
+  }
+  if (!signalProcess(pid, "SIGTERM")) return false;
   if (await waitForProcessExit(pid)) return true;
   if (!recordedProcessIdentityMatches(recorded)) {
     return true;
   }
-  if (!signalDetachedProcessGroup(pid, "SIGKILL")) {
-    signalProcess(pid, "SIGKILL");
-  }
+  signalProcess(pid, "SIGKILL");
   await waitForProcessExit(pid, 500);
   return !recordedProcessIdentityMatches(recorded);
 }

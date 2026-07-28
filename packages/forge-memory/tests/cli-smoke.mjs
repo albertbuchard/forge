@@ -49,11 +49,7 @@ if (
     "Forge Memory dev Vite must proxy to the configured API port"
   );
 }
-if (
-  !cliSource.includes(
-    "environment.FORGE_CANONICAL_EXTERNAL_ORIGIN ="
-  )
-) {
+if (!cliSource.includes("environment.FORGE_CANONICAL_EXTERNAL_ORIGIN =")) {
   throw new Error(
     "Forge Memory must pass its persisted canonical HTTPS origin only to the managed runtime"
   );
@@ -448,14 +444,19 @@ async function waitForPidExit(pid, label) {
   throw new Error(`${label} (${pid}) did not exit`);
 }
 
-async function startDetachedRecordedRuntimeGroup() {
+async function startDetachedRecordedRuntimeGroup({
+  childIgnoresSigterm = false
+} = {}) {
+  const childProgram = childIgnoresSigterm
+    ? 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'
+    : "setInterval(() => {}, 1000)";
   const child = spawn(
     process.execPath,
     [
       "-e",
       `
 const { spawn } = require("node:child_process");
-const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+const child = spawn(process.execPath, ["-e", ${JSON.stringify(childProgram)}], {
   stdio: "ignore"
 });
 console.log(JSON.stringify({ parentPid: process.pid, childPid: child.pid }));
@@ -1414,15 +1415,9 @@ await withFakeForgeServer(
       );
     }
     const persisted = JSON.parse(
-      fs.readFileSync(
-        path.join(tempHome, ".forge", "config.json"),
-        "utf8"
-      )
+      fs.readFileSync(path.join(tempHome, ".forge", "config.json"), "utf8")
     );
-    if (
-      persisted.canonicalExternalOrigin !==
-      "https://mac.tailnet.ts.net"
-    ) {
+    if (persisted.canonicalExternalOrigin !== "https://mac.tailnet.ts.net") {
       throw new Error(
         `Expected the verified Tailscale origin to persist for DPoP, got ${persisted.canonicalExternalOrigin}`
       );
@@ -1835,7 +1830,9 @@ await withFakeForgeServer(
 );
 if (process.platform !== "win32") {
   await withPlainServer(async ({ port }) => {
-    const recordedRuntime = await startDetachedRecordedRuntimeGroup();
+    const recordedRuntime = await startDetachedRecordedRuntimeGroup({
+      childIgnoresSigterm: true
+    });
     try {
       writeSmokeConfig({ mode: "dev", port, dataRoot, adapters: [] });
       const runtimeStatePath = path.join(
@@ -1905,6 +1902,11 @@ if (process.platform !== "win32") {
         );
       }
       await waitForPidExit(recordedRuntime.childPid, "recorded runtime child");
+      if (fs.existsSync(runtimeStatePath)) {
+        throw new Error(
+          "Expected stop to remove runtime state only after the complete recorded process group exited"
+        );
+      }
     } finally {
       if (pidExists(recordedRuntime.parentPid)) {
         try {
