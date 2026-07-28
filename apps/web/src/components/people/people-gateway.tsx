@@ -1,5 +1,7 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { z, ZodError } from "zod";
+import { ForgeApiError } from "@/lib/api-error";
+import { requestForgeBrowserJson } from "@/lib/api";
 import { resolveForgePath } from "@/lib/runtime-paths";
 import type {
   PairingInvitation,
@@ -2426,7 +2428,7 @@ function nestedPersonChanged(
 export function createHttpPeopleGateway(
   options: PeopleGatewayOptions = {}
 ): PeopleGateway {
-  const request = options.request ?? ((input, init) => fetch(input, init));
+  const injectedRequest = options.request;
   const now = options.now ?? (() => new Date());
   const makeIdempotencyKey = options.idempotencyKey ?? defaultIdempotencyKey;
   const performHumanPresence =
@@ -2488,13 +2490,36 @@ export function createHttpPeopleGateway(
   let runtimeDiscovery: Promise<void> | null = null;
 
   async function requestJson(path: string, init?: RequestInit) {
+    if (!injectedRequest) {
+      try {
+        return await requestForgeBrowserJson(path, init);
+      } catch (error) {
+        if (error instanceof ForgeApiError) {
+          throw new PeopleGatewayError(error.message, {
+            code: error.code,
+            status: error.status,
+            retryable:
+              error.status >= 500 ||
+              error.status === 408 ||
+              error.status === 429
+          });
+        }
+        throw new PeopleGatewayError(
+          error instanceof Error
+            ? error.message
+            : "Forge is unreachable from this browser.",
+          { code: "people_offline", retryable: true }
+        );
+      }
+    }
+
     let response: Response;
     try {
       const headers = new Headers(init?.headers);
       if (init?.body !== undefined && !headers.has("content-type")) {
         headers.set("content-type", "application/json");
       }
-      response = await request(resolveForgePath(path), {
+      response = await injectedRequest(resolveForgePath(path), {
         ...init,
         credentials: "same-origin",
         headers
@@ -2533,7 +2558,15 @@ export function createHttpPeopleGateway(
   async function readPresenceStatus() {
     return parseContract(
       presenceStatusResponseSchema,
-      await requestJson(ROUTES.humanPresenceStatus),
+      await requestJson(
+        ROUTES.humanPresenceStatus,
+        injectedRequest || typeof window === "undefined"
+          ? undefined
+          : {
+              referrer: window.location.href,
+              referrerPolicy: "same-origin"
+            }
+      ),
       "Peer human-presence status response"
     );
   }

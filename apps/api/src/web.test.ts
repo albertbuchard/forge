@@ -318,6 +318,65 @@ test("an anonymous Vite rejection falls back to the public built shell", async (
   }
 });
 
+test("missing frontend output during asset resolution returns the controlled 503", async () => {
+  const app = fastify();
+  await registerWebRoutes(app, {
+    devWebRuntime: {
+      ensureReady: async () => null,
+      stop: async () => {}
+    },
+    resolveWebAssetLocation: async () => {
+      throw new Error("frontend build was replaced during resolution");
+    }
+  });
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/forge/"
+    });
+
+    assert.equal(response.statusCode, 503);
+    assert.deepEqual(response.json(), {
+      code: "frontend_not_built",
+      error:
+        "Forge frontend build output is missing. Run the Vite build before serving the modern web client.",
+      statusCode: 503
+    });
+  } finally {
+    await app.close();
+  }
+});
+
+test("missing sprite during asset resolution remains a 404", async () => {
+  const app = fastify();
+  await registerWebRoutes(app, {
+    devWebRuntime: {
+      ensureReady: async () => {
+        throw new Error("sprite requests must not contact Vite");
+      },
+      stop: async () => {}
+    },
+    resolveWebAssetLocation: async () => {
+      throw new Error("sprite not installed");
+    }
+  });
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/forge/gamification/sprites/themes/missing/sprite.webp"
+    });
+
+    assert.equal(response.statusCode, 404);
+    assert.deepEqual(response.json(), {
+      error: "Asset not found"
+    });
+  } finally {
+    await app.close();
+  }
+});
+
 test("dev asset proxy forces the HTML entrypoint to no-store", async () => {
   const upstream = createServer((_request, response) => {
     response.setHeader("Content-Type", "text/html; charset=utf-8");

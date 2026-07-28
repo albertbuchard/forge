@@ -247,6 +247,7 @@ type WebRouteOptions = {
   devWebRuntime?: DevWebRuntime;
   fetchImpl?: typeof fetch;
   devAssetProxy?: DevAssetProxy;
+  resolveWebAssetLocation?: typeof resolveWebAssetLocation;
   issueDevProxyAssertion?: (
     request: FastifyRequest,
     target: string
@@ -724,6 +725,7 @@ async function serveAsset(
     devWebRuntime: DevWebRuntime;
     devAssetProxy: DevAssetProxy;
     request: FastifyRequest;
+    resolveWebAssetLocation: typeof resolveWebAssetLocation;
     issueDevProxyAssertion?: WebRouteOptions["issueDevProxyAssertion"];
   }
 ) {
@@ -768,9 +770,26 @@ async function serveAsset(
     }
   }
 
-  const { assetPath, clientDir } = await resolveWebAssetLocation(
-    normalizedRequestPath
-  );
+  let assetLocation: WebAssetLocation;
+  try {
+    assetLocation = await options.resolveWebAssetLocation(
+      normalizedRequestPath
+    );
+  } catch {
+    if (handlesLocalGamificationSprite) {
+      reply.code(404);
+      return { error: "Asset not found" };
+    }
+
+    reply.code(503);
+    return {
+      code: "frontend_not_built",
+      error:
+        "Forge frontend build output is missing. Run the Vite build before serving the modern web client.",
+      statusCode: 503
+    };
+  }
+  const { assetPath, clientDir } = assetLocation;
   const ext = path.extname(assetPath);
 
   try {
@@ -885,6 +904,8 @@ export async function registerWebRoutes(
       devWebRuntime,
       devAssetProxy,
       request,
+      resolveWebAssetLocation:
+        options.resolveWebAssetLocation ?? resolveWebAssetLocation,
       issueDevProxyAssertion: options.issueDevProxyAssertion
     });
   });
@@ -896,6 +917,8 @@ export async function registerWebRoutes(
       devWebRuntime,
       devAssetProxy,
       request,
+      resolveWebAssetLocation:
+        options.resolveWebAssetLocation ?? resolveWebAssetLocation,
       issueDevProxyAssertion: options.issueDevProxyAssertion
     })
   );
@@ -904,6 +927,8 @@ export async function registerWebRoutes(
       devWebRuntime,
       devAssetProxy,
       request,
+      resolveWebAssetLocation:
+        options.resolveWebAssetLocation ?? resolveWebAssetLocation,
       issueDevProxyAssertion: options.issueDevProxyAssertion
     })
   );

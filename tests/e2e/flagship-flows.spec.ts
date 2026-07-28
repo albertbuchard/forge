@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { installE2eStorageGuards, waitForForge } from "./helpers";
 
-test.beforeEach(async ({ page }) => {
-  await installE2eStorageGuards(page);
+test.beforeEach(async ({ page }, testInfo) => {
+  await installE2eStorageGuards(page, testInfo.testId);
 });
 
 test("overview exposes momentum, rewards, and next actions", async ({

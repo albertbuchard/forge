@@ -58,8 +58,8 @@ function expectPainted(metrics: PaintMetrics, surface: string) {
   );
 }
 
-test.beforeEach(async ({ page }) => {
-  await installE2eStorageGuards(page);
+test.beforeEach(async ({ page }, testInfo) => {
+  await installE2eStorageGuards(page, testInfo.testId);
 });
 
 for (const reducedMotion of ["no-preference", "reduce"] as const) {

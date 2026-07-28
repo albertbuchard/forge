@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { installE2eStorageGuards, waitForForge } from "./helpers";
+import {
+  e2eMutationHeaders,
+  installE2eStorageGuards,
+  waitForForge
+} from "./helpers";
 
 const workoutTypes = [
   "running",
@@ -12,8 +16,8 @@ const workoutTypes = [
   "core_training"
 ];
 
-test.beforeEach(async ({ page }) => {
-  await installE2eStorageGuards(page);
+test.beforeEach(async ({ page }, testInfo) => {
+  await installE2eStorageGuards(page, testInfo.testId);
 });
 
 test("sports comparison and type search stay inside the viewport", async ({
@@ -23,6 +27,7 @@ test("sports comparison and type search stay inside the viewport", async ({
   await waitForForge(page);
 
   const createResponse = await page.request.post("/api/v1/entities/create", {
+    headers: await e2eMutationHeaders(page),
     data: {
       atomic: true,
       operations: workoutTypes.map((workoutType, index) => {

@@ -1,3 +1,7 @@
+import {
+  canPublishBrowserDiagnostics,
+  forgeBrowserRequestHeaders
+} from "./browser-request-security";
 import { resolveForgePath } from "./runtime-paths";
 import type { DiagnosticLogLevel, DiagnosticLogSource } from "./types";
 
@@ -68,15 +72,18 @@ function sanitizeDetails(
 export async function publishUiDiagnosticLog(
   input: PublishDiagnosticLogInput
 ) {
+  if (!canPublishBrowserDiagnostics()) {
+    return;
+  }
   try {
     await fetch(resolveForgePath("/api/v1/diagnostics/logs"), {
       method: "POST",
       credentials: "same-origin",
       keepalive: true,
-      headers: {
+      headers: forgeBrowserRequestHeaders({
         "content-type": "application/json",
         "x-forge-source": "ui"
-      },
+      }),
       body: JSON.stringify({
         ...input,
         source: input.source ?? "ui",

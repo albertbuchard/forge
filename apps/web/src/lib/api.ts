@@ -245,6 +245,16 @@ import {
   dedupeCalendarDiscoveryPayload,
   dedupeCalendarOverviewPayload
 } from "./calendar-name-deduper";
+import {
+  BROWSER_CSRF_STORAGE_KEY,
+  forgeBrowserRequestHeaders,
+  noteBrowserSessionRejected,
+  noteBrowserSessionUsable,
+  readBrowserCsrfToken,
+  responseProvesBrowserSession,
+  UI_SOURCE_HEADER,
+  UI_SOURCE_VALUE
+} from "./browser-request-security";
 import { publishUiDiagnosticLog } from "./diagnostics";
 import { resolveForgePath } from "./runtime-paths";
 import { normalizeForgeSnapshot } from "./snapshot-normalizer";
@@ -304,11 +314,8 @@ const REMOTE_DEVICE_BEGIN_PATH = "/api/v1/auth/device";
 const REMOTE_DEVICE_TOKEN_PATH = "/api/v1/auth/token";
 const REMOTE_DEVICE_CANCEL_PATH = "/api/v1/auth/device/cancel";
 const REMOTE_BROWSER_REFRESH_PATH = "/api/v1/auth/browser/refresh";
-const BROWSER_CSRF_STORAGE_KEY = "forge.browser.csrf";
 const REMOTE_BROWSER_RENEWED_AT_KEY = "forge.browser.renewed-at";
 const REMOTE_BROWSER_RENEWAL_INTERVAL_MS = 12 * 60 * 60 * 1_000;
-const UI_SOURCE_HEADER = "x-forge-source";
-const UI_SOURCE_VALUE = "ui";
 
 type ParsedApiResponse = {
   response: Response;
@@ -341,14 +348,6 @@ function isAuthRequiredResponse(response: Response, body: unknown) {
       readApiErrorCode(body)
     )
   );
-}
-
-function readBrowserCsrfToken() {
-  try {
-    return globalThis.localStorage?.getItem(BROWSER_CSRF_STORAGE_KEY) ?? null;
-  } catch {
-    return null;
-  }
 }
 
 function rememberBrowserCsrfToken(value: string) {
@@ -594,12 +593,8 @@ async function sendApiRequest(
 }
 
 async function fetchApi(path: string, init?: RequestInit) {
-  const headers = new Headers(init?.headers);
-  headers.set(UI_SOURCE_HEADER, UI_SOURCE_VALUE);
-  const csrfToken = readBrowserCsrfToken();
-  if (csrfToken && !headers.has("x-forge-csrf")) {
-    headers.set("x-forge-csrf", csrfToken);
-  }
+  const hadBrowserCsrf = readBrowserCsrfToken() !== null;
+  const headers = forgeBrowserRequestHeaders(init?.headers);
 
   if (
     init?.body !== undefined &&
@@ -616,6 +611,17 @@ async function fetchApi(path: string, init?: RequestInit) {
       credentials: "same-origin",
       headers
     });
+    if (path !== DIAGNOSTICS_LOGS_PATH) {
+      if (
+        response.ok &&
+        hadBrowserCsrf &&
+        responseProvesBrowserSession(path)
+      ) {
+        noteBrowserSessionUsable();
+      } else if (response.status === 401 || response.status === 403) {
+        noteBrowserSessionRejected();
+      }
+    }
   } catch (error) {
     if (!isDiagnosticsLogPath(path)) {
       void publishUiDiagnosticLog({
@@ -1360,6 +1366,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return body as T;
+}
+
+export function requestForgeBrowserJson(
+  path: string,
+  init?: RequestInit
+): Promise<unknown> {
+  return request<unknown>(path, init);
 }
 
 async function requestBlob(

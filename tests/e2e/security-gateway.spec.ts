@@ -24,10 +24,17 @@ test("network reachability and spoofed transport identity never grant API access
         "X-Forge-Local": "true"
       }
     });
+    const deniedStatus = spoofedTransportIdentity.status();
     expect(
-      [401, 426],
+      [401, 426, 429],
       `${path}: spoofed transport identity must be denied before route data`
-    ).toContain(spoofedTransportIdentity.status());
+    ).toContain(deniedStatus);
+    if (deniedStatus === 429) {
+      await expect(spoofedTransportIdentity.json()).resolves.toMatchObject({
+        code: "security_rate_limit_exceeded",
+        statusCode: 429
+      });
+    }
   }
 });
 

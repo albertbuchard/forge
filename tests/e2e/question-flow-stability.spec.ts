@@ -1,5 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
-import { installE2eStorageGuards, waitForForge } from "./helpers";
+import {
+  e2eMutationHeaders,
+  installE2eStorageGuards,
+  waitForForge
+} from "./helpers";
 
 type TransitionSample = {
   elapsedMs: number;
@@ -77,8 +81,8 @@ async function samplePersonStepTransition(page: Page) {
   });
 }
 
-test.beforeEach(async ({ page }) => {
-  await installE2eStorageGuards(page);
+test.beforeEach(async ({ page }, testInfo) => {
+  await installE2eStorageGuards(page, testInfo.testId);
 });
 
 for (const reducedMotion of ["no-preference", "reduce"] as const) {
@@ -263,6 +267,7 @@ test("People pagination preserves loaded rows and waits for deliberate retry aft
   }));
   for (const batch of [operations.slice(0, 100), operations.slice(100)]) {
     const createResponse = await page.request.post("/api/v1/entities/create", {
+      headers: await e2eMutationHeaders(page),
       data: { atomic: true, operations: batch }
     });
     expect(createResponse.ok()).toBe(true);

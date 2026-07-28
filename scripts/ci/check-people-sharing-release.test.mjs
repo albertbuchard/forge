@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   readFileSync,
   realpathSync,
+  rmSync,
   symlinkSync,
   writeFileSync
 } from "node:fs";
@@ -20,6 +21,7 @@ import {
   assertProtectedReleaseStateUnchanged,
   assertReleaseWorktreePolicy,
   captureProtectedReleaseState,
+  deriveReleaseE2ePort,
   discoverPackedSurfaceArchives,
   initializeReleaseTestRoot,
   releaseGroupOrder,
@@ -30,7 +32,52 @@ import {
   validateReleaseTestRoot,
   writePackedSurfaceConfig
 } from "./check-people-sharing-release.mjs";
+import { acquireForgeWebBuildLock } from "./forge-web-build-lock.mjs";
 import { collectPeopleSharingTestFiles } from "./run-people-sharing-tests.mjs";
+
+test("release browser tests use a stable non-live loopback port", () => {
+  const port = deriveReleaseE2ePort("/tmp/forge-release-browser-root");
+  assert.equal(port, deriveReleaseE2ePort("/tmp/forge-release-browser-root"));
+  assert.ok(port >= 40_000 && port < 60_000);
+  assert.notEqual(port, 4317);
+});
+
+test("isolated browser runs serialize shared builds and artifacts", async () => {
+  const parent = mkdtempSync(path.join(os.tmpdir(), "forge-e2e-lock-test-"));
+  const repositoryRoot = path.join(parent, "repository");
+  mkdirSync(repositoryRoot, { mode: 0o700 });
+  try {
+    const first = await acquireForgeWebBuildLock({
+      repositoryRoot,
+      lockRoot: parent,
+      waitMilliseconds: 1_000,
+      pollMilliseconds: 5
+    });
+    if (process.platform !== "win32") {
+      assert.equal(lstatSync(first.lockPath).mode & 0o777, 0o600);
+    }
+
+    let secondAcquired = false;
+    const secondPromise = acquireForgeWebBuildLock({
+      repositoryRoot,
+      lockRoot: parent,
+      waitMilliseconds: 1_000,
+      pollMilliseconds: 5
+    }).then((lock) => {
+      secondAcquired = true;
+      return lock;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(secondAcquired, false);
+
+    first.release();
+    const second = await secondPromise;
+    assert.equal(secondAcquired, true);
+    second.release();
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
 
 test("release plan enforces generation, build, Rust, test, and archive order", () => {
   const plan = releasePlanEntries();
@@ -803,7 +850,7 @@ test("isolated roots require an exact marker and reject protected roots", () => 
   );
   if (process.platform !== "win32") {
     const symlinkRoot = path.join(parent, "symlink-marker-root");
-    mkdirSync(symlinkRoot);
+    mkdirSync(symlinkRoot, { mode: 0o700 });
     symlinkSync(
       path.join(canonicalRoot, ".forge-people-sharing-release-root.json"),
       path.join(symlinkRoot, ".forge-people-sharing-release-root.json")

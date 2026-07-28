@@ -352,7 +352,7 @@ test("gateway publishes bounded Retry-After for request, stream, MCP, AI, and ma
     }
     assert.deepEqual(buckets, [
       "request",
-      "stream",
+      "request",
       "mcp_tool",
       "ai_cost",
       "machine_execution"
@@ -360,6 +360,103 @@ test("gateway publishes bounded Retry-After for request, stream, MCP, AI, and ma
   } finally {
     await app.close();
   }
+});
+
+test("gateway bounds stream attempts by network before authentication and by session after authentication", async () => {
+  const app = Fastify({ logger: false });
+  const admissions: Array<{
+    bucket: string;
+    principalId: string | null;
+    networkId: string | null;
+  }> = [];
+  let handlerEntries = 0;
+  installAccessGateway(app, {
+    credentials: { authenticate: gatewayAuthentication },
+    rateLimiter: {
+      admit(request) {
+        admissions.push({
+          bucket: request.bucket,
+          principalId: request.principalId,
+          networkId: request.networkId
+        });
+        return { allowed: true, remaining: 100 };
+      }
+    }
+  });
+  app.get("/api/v1/events/stream", async () => {
+    handlerEntries += 1;
+    return "stream";
+  });
+  try {
+    const authenticated = await app.inject({
+      method: "GET",
+      url: "/api/v1/events/stream",
+      headers: { authorization: "Bearer paired" }
+    });
+    assert.equal(authenticated.statusCode, 200);
+    assert.deepEqual(admissions, [
+      {
+        bucket: "request",
+        principalId: null,
+        networkId: "127.0.0.1"
+      },
+      {
+        bucket: "stream",
+        principalId: "paired_client_subject",
+        networkId: null
+      }
+    ]);
+    assert.equal(handlerEntries, 1);
+
+    admissions.length = 0;
+    const anonymous = await app.inject({
+      method: "GET",
+      url: "/api/v1/events/stream"
+    });
+    assert.equal(anonymous.statusCode, 401);
+    assert.deepEqual(admissions, [
+      {
+        bucket: "request",
+        principalId: null,
+        networkId: "127.0.0.1"
+      }
+    ]);
+    assert.equal(handlerEntries, 1);
+  } finally {
+    await app.close();
+  }
+});
+
+test("the authenticated stream limiter remains capped at twenty by default", () => {
+  const limiter = new InMemorySecurityRateLimiter();
+  for (let index = 0; index < 20; index += 1) {
+    assert.equal(
+      limiter.admit({
+        bucket: "stream",
+        principalId: "default-stream-policy",
+        clientId: null,
+        installationId: null,
+        networkId: null,
+        action: "events.read",
+        cost: 1,
+        now: new Date("2026-07-28T00:00:00.000Z")
+      }).allowed,
+      true
+    );
+  }
+  assert.equal(
+    limiter.admit({
+      bucket: "stream",
+      principalId: "default-stream-policy",
+      clientId: null,
+      installationId: null,
+      networkId: null,
+      action: "events.read",
+      cost: 1,
+      now: new Date("2026-07-28T00:00:00.000Z")
+    }).allowed,
+    false
+  );
 });
 
 test("gateway admits only scoped credentials and enforces browser CSRF", async () => {

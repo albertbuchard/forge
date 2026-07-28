@@ -461,37 +461,41 @@ export class AccessGatewayController {
         "credentials" | "authorization" | "payloadReceiveTimeoutMilliseconds"
       >
     > &
-      Pick<InstallAccessGatewayOptions, "audit">
-      & Pick<InstallAccessGatewayOptions, "rateLimiter">
+      Pick<InstallAccessGatewayOptions, "audit"> &
+      Pick<InstallAccessGatewayOptions, "rateLimiter">
   ) {}
 
   private requireRateAdmission(
     request: FastifyRequest,
     contract: RouteSecurityContract,
-    authentication: GatewayAuthentication | null
+    authentication: GatewayAuthentication | null,
+    phase: "pre_authentication" | "authenticated"
   ) {
     if (!this.options.rateLimiter) return;
     const isPairingPoll =
       contract.routePath === "/api/v1/auth/token" ||
       contract.routePath === "/api/v1/auth/browser/refresh";
-    const isAuthProtocol =
-      contract.securityClass === "bounded_auth_protocol";
+    const isAuthProtocol = contract.securityClass === "bounded_auth_protocol";
+    const isStream =
+      contract.routePath.includes("/events/stream") ||
+      contract.routePath.includes("/ws");
     const bucket = isPairingPoll
       ? "pairing_poll"
       : isAuthProtocol
         ? "pairing_attempt"
-        : contract.routePath.includes("/mcp/") ||
-            contract.routePath.endsWith("/tools/call")
-          ? "mcp_tool"
-          : contract.routePath.includes("/events/stream") ||
-              contract.routePath.includes("/ws")
-            ? "stream"
-            : contract.routePath.includes("/ai/") ||
-                contract.routePath.includes("/workbench/")
-              ? "ai_cost"
-              : contract.action.includes("machine")
-                ? "machine_execution"
-                : "request";
+        : phase === "pre_authentication" && isStream
+          ? "request"
+          : contract.routePath.includes("/mcp/") ||
+              contract.routePath.endsWith("/tools/call")
+            ? "mcp_tool"
+            : isStream
+              ? "stream"
+              : contract.routePath.includes("/ai/") ||
+                  contract.routePath.includes("/workbench/")
+                ? "ai_cost"
+                : contract.action.includes("machine")
+                  ? "machine_execution"
+                  : "request";
     const decision = this.options.rateLimiter.admit({
       bucket,
       principalId: authentication?.principal.subjectId ?? null,
@@ -499,7 +503,7 @@ export class AccessGatewayController {
       installationId: authentication?.principal.installationId ?? null,
       networkId: authentication
         ? null
-        : request.raw.socket.remoteAddress ?? "unknown",
+        : (request.raw.socket.remoteAddress ?? "unknown"),
       action: contract.action,
       cost: bucket === "ai_cost" ? 1_000 : 1,
       now: new Date()
@@ -552,7 +556,7 @@ export class AccessGatewayController {
       | GatewayProtocolAuthentication["verifyBody"]
       | null = null;
     try {
-      this.requireRateAdmission(request, contract, null);
+      this.requireRateAdmission(request, contract, null, "pre_authentication");
       if (
         contract.securityClass !== "public_static_or_health" &&
         !usesSecureApplicationTransport(request)
@@ -626,7 +630,12 @@ export class AccessGatewayController {
         );
       }
       if (authentication) {
-        this.requireRateAdmission(request, contract, authentication);
+        this.requireRateAdmission(
+          request,
+          contract,
+          authentication,
+          "authenticated"
+        );
         await this.options.authorization.authorize({
           request,
           contract,
@@ -755,7 +764,10 @@ export function installAccessGateway(
       error.details &&
       typeof error.details.retryAfterSeconds === "number" &&
       Number.isFinite(error.details.retryAfterSeconds)
-        ? Math.max(1, Math.min(86_400, Math.ceil(error.details.retryAfterSeconds)))
+        ? Math.max(
+            1,
+            Math.min(86_400, Math.ceil(error.details.retryAfterSeconds))
+          )
         : null;
     if (retryAfterSeconds !== null && !reply.hasHeader("Retry-After")) {
       reply.header("Retry-After", String(retryAfterSeconds));

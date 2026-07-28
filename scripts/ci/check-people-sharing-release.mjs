@@ -769,6 +769,19 @@ export function validateReleaseTestRoot(candidate, environment = process.env) {
   if (!existsSync(resolved)) fail("Release test root does not exist.");
   const canonicalRoot = realpathSync(resolved);
   assertUnprotectedRoot(canonicalRoot, environment);
+  const rootMetadata = lstatSync(canonicalRoot);
+  const insecureUnixRoot =
+    process.platform !== "win32" &&
+    ((typeof process.getuid === "function" &&
+      rootMetadata.uid !== process.getuid()) ||
+      (rootMetadata.mode & 0o077) !== 0);
+  if (
+    !rootMetadata.isDirectory() ||
+    rootMetadata.isSymbolicLink() ||
+    insecureUnixRoot
+  ) {
+    fail("Release test root must be an owner-only real directory.");
+  }
   const markerPath = path.join(canonicalRoot, markerName);
   if (!existsSync(markerPath)) {
     fail(`Release test root is missing ${markerName}.`);
@@ -842,6 +855,13 @@ export function validateReleaseArtifactRoot(
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+export function deriveReleaseE2ePort(dataRoot) {
+  const digest = createHash("sha256")
+    .update(path.resolve(dataRoot))
+    .digest();
+  return 40_000 + (digest.readUInt16BE(0) % 20_000);
 }
 
 export function captureProtectedReleaseState(
@@ -1231,6 +1251,8 @@ async function main() {
     environment: {
       FORGE_DATA_ROOT: dataRoot,
       FORGE_E2E_DATA_ROOT: dataRoot,
+      FORGE_E2E_PORT: String(deriveReleaseE2ePort(dataRoot)),
+      FORGE_E2E_REUSE_EXISTING_SERVER: "0",
       FORGE_PEOPLE_RELEASE_DATA_ROOT: dataRoot,
       FORGE_PEOPLE_RELEASE_GATE_MODE: releaseMode,
       FORGE_PEER_BINARY_PATH: path.join(

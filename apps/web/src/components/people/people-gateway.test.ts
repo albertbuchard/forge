@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PEER_API_SCHEMAS } from "../../../../api/src/peer-api-schemas";
 import { PEER_ROUTE_CONTRACTS } from "../../../../api/src/peer-route-contract";
 import {
@@ -23,6 +23,11 @@ const PREVIEW_HASH = "a".repeat(64);
 const GRANT_HASH = "b".repeat(64);
 const TRANSCRIPT_HASH = "c".repeat(64);
 const INTERPRETATION_HASH = "d".repeat(64);
+
+afterEach(() => {
+  localStorage.clear();
+  vi.restoreAllMocks();
+});
 const WEBAUTHN_RESPONSE = { credential: "credential_response" };
 
 const serverPerson = {
@@ -1088,6 +1093,43 @@ describe("People gateway wire contract", () => {
       (updateQueue.calls[1].body as { operations: Array<{ patch: unknown }> })
         .operations[0]?.patch
     ).not.toHaveProperty("links");
+  });
+
+  it("uses the paired browser transport for default People mutations", async () => {
+    localStorage.setItem("forge.browser.csrf", "fg_csrf_people_default");
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          results: [
+            {
+              ok: false,
+              entityType: "person",
+              error: {
+                code: "person_duplicate",
+                message: "Person already exists."
+              }
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }
+      )
+    );
+    const gateway = createHttpPeopleGateway({ userId: "user_owner" });
+
+    await expect(gateway.savePerson(saveInput)).rejects.toMatchObject({
+      code: "person_duplicate",
+      status: 200
+    });
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [path, init] = fetchSpy.mock.calls[0]!;
+    expect(String(path)).toContain("/api/v1/entities/create");
+    const headers = new Headers(init?.headers);
+    expect(headers.get("x-forge-source")).toBe("ui");
+    expect(headers.get("x-forge-csrf")).toBe("fg_csrf_people_default");
   });
 
   it("preserves unseen links on scalar edits and replaces only a complete 101-link outgoing set", async () => {
