@@ -700,6 +700,44 @@ test("streaming backup rejects raced wiki roots and parent directories outside t
   }
 });
 
+test("streaming backup tolerates unrelated data-root entry churn without weakening source identity", async () => {
+  const dataRoot = await createRuntimeRoot("forge-data-backup-root-churn-");
+  const backupDirectory = path.join(dataRoot, "backups");
+  try {
+    await writeRuntimeArtifacts(dataRoot, "root-churn");
+    await updateDataManagementSettings({
+      backupDirectory,
+      autoRepairEnabled: true
+    });
+    const backup = await createDataBackup(
+      { note: "Allow unrelated root churn" },
+      {
+        async beforeStreamingArchiveForTest() {
+          await writeFile(
+            path.join(dataRoot, "unrelated-runtime-file"),
+            "unrelated",
+            "utf8"
+          );
+        }
+      }
+    );
+    const archive = new AdmZip(backup.archivePath);
+    assert.ok(
+      archive
+        .getEntries()
+        .some((entry) => entry.entryName === ".forge-secrets.key")
+    );
+    assert.equal(
+      archive
+        .getEntries()
+        .some((entry) => entry.entryName === "unrelated-runtime-file"),
+      false
+    );
+  } finally {
+    await rm(dataRoot, { recursive: true, force: true });
+  }
+});
+
 test("createDataBackup refuses symlinked destinations, secret keys, and ingest files", async () => {
   const dataRoot = await createRuntimeRoot("forge-data-backup-symlink-");
   try {

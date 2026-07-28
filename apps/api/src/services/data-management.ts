@@ -748,7 +748,13 @@ function sameFileIdentity(
 }
 
 function sameDirectoryIdentity(actual: Stats, expected: BackupNodeIdentity) {
-  return actual.isDirectory() && sameNodeIdentity(actual, expected);
+  return (
+    actual.isDirectory() &&
+    actual.dev === expected.dev &&
+    actual.ino === expected.ino &&
+    actual.mode === expected.mode &&
+    actual.uid === expected.uid
+  );
 }
 
 async function collectBackupArchiveTree(rootPath: string, archiveRoot: string) {
