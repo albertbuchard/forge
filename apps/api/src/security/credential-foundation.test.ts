@@ -91,6 +91,28 @@ function foundation() {
   return { clock, secrets, digester };
 }
 
+async function trustedTestMetadata(target: string) {
+  const metadata = await lstat(target);
+  return new Proxy(metadata, {
+    get(value, property) {
+      if (property === "mode") {
+        return value.mode & ~0o022;
+      }
+      if (property === "uid") {
+        return process.getuid?.() ?? value.uid;
+      }
+      const member = Reflect.get(value, property, value) as unknown;
+      return typeof member === "function" ? member.bind(value) : member;
+    }
+  });
+}
+
+function assertSingleLineDiagnostic(value: string) {
+  for (const control of ["\n", "\r", "\t", String.fromCharCode(27)]) {
+    assert.equal(value.includes(control), false);
+  }
+}
+
 function openStore(
   databasePath: string,
   context: ReturnType<typeof foundation>
@@ -423,6 +445,135 @@ test("native owner-channel evidence is kernel-backed, exact, opaque, and single-
     await assert.rejects(
       foreignOwnedBroker.authenticate(request, async () => undefined),
       /unsafe writable, untrusted-owner, or symlinked directory/
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("native owner-channel failures retain bounded broker diagnostics", async () => {
+  const root = await realpath(
+    await mkdtemp(path.join(os.tmpdir(), "forge-owner-diagnostic-"))
+  );
+  const binaryPath = path.join(root, "failing-owner-broker");
+  const socketPath = path.join(await realpath(root), "owner.sock");
+  const { clock } = foundation();
+  const request = {
+    protocol: NATIVE_OWNER_BROKER_PROTOCOL,
+    requestId: "request_native_owner_diagnostic",
+    transactionId: "local_native_transaction_diagnostic",
+    installId: "forge-local-install",
+    browserOrigin: "http://127.0.0.1:3027",
+    browserNonce: "A".repeat(43)
+  } as const;
+  try {
+    await writeFile(
+      binaryPath,
+      `#!/bin/sh
+printf 'diagnostic\\nsecond\\r\\t\\033[31m' >&2
+printf '%4096s' diagnostic | tr ' ' x >&2
+exit 42
+`
+    );
+    await chmod(binaryPath, 0o700);
+    const broker = new NativeOwnerBroker(
+      binaryPath,
+      socketPath,
+      clock,
+      15_000,
+      trustedTestMetadata
+    );
+    await assert.rejects(
+      broker.authenticate(request, async () => undefined),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /exited before verification \(code 42\)/);
+        assert.match(
+          error.message,
+          /Broker stderr: diagnostic\?second\?\?\?\[31mx+/
+        );
+        assertSingleLineDiagnostic(error.message);
+        assert.ok(error.message.length < 2_300);
+        return true;
+      }
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("native owner-channel diagnostics cover readiness timeout and invalid events", async () => {
+  const root = await realpath(
+    await mkdtemp(path.join(os.tmpdir(), "forge-owner-events-"))
+  );
+  const { clock } = foundation();
+  const request = {
+    protocol: NATIVE_OWNER_BROKER_PROTOCOL,
+    requestId: "request_native_owner_event_diagnostic",
+    transactionId: "local_native_transaction_event_diagnostic",
+    installId: "forge-local-install",
+    browserOrigin: "http://127.0.0.1:3027",
+    browserNonce: "A".repeat(43)
+  } as const;
+  try {
+    const timeoutBinary = path.join(root, "timeout-owner-broker");
+    await writeFile(
+      timeoutBinary,
+      `#!/bin/sh
+printf 'timeout\\ncontrol\\033[31m' >&2
+sleep 2
+`
+    );
+    await chmod(timeoutBinary, 0o700);
+    const timeoutBroker = new NativeOwnerBroker(
+      timeoutBinary,
+      path.join(await realpath(root), "timeout.sock"),
+      clock,
+      500,
+      trustedTestMetadata
+    );
+    await assert.rejects(
+      timeoutBroker.authenticate(request, async () => undefined),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /did not become ready/);
+        assert.match(error.message, /Broker stderr: timeout\?control\?\[31m/);
+        assertSingleLineDiagnostic(error.message);
+        return true;
+      }
+    );
+
+    const invalidEventBinary = path.join(root, "invalid-event-owner-broker");
+    await writeFile(
+      invalidEventBinary,
+      `#!/bin/sh
+printf 'invalid\\nevent' >&2
+sleep 0.1
+printf 'not-json\\n'
+sleep 0.1
+exit 43
+`
+    );
+    await chmod(invalidEventBinary, 0o700);
+    const invalidEventBroker = new NativeOwnerBroker(
+      invalidEventBinary,
+      path.join(await realpath(root), "invalid.sock"),
+      clock,
+      1_000,
+      trustedTestMetadata
+    );
+    await assert.rejects(
+      invalidEventBroker.authenticate(
+        { ...request, requestId: "request_native_owner_invalid_event" },
+        async () => undefined
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /emitted invalid JSON/);
+        assert.match(error.message, /Broker stderr: invalid\?event/);
+        assertSingleLineDiagnostic(error.message);
+        return true;
+      }
     );
   } finally {
     await rm(root, { recursive: true, force: true });

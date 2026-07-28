@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -22,6 +22,7 @@ import {
   validateNativeSourceManifest,
   verifyNativeSourceBundle
 } from "../../packages/forge-memory/lib/native-source-manifest.mjs";
+import { runPackedOwnerApproval } from "./packed-owner-approval.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 const pluginRoot = path.join(repoRoot, "plugins/openclaw");
@@ -368,6 +369,65 @@ async function verifyPackedPeerDaemon(installedPluginRoot, binaryPath) {
   return { health, identity };
 }
 
+async function verifyPackedOwnerBroker(installedPluginRoot, peerRuntime) {
+  if (process.platform === "win32") {
+    return;
+  }
+  const modulePath = path.join(
+    installedPluginRoot,
+    "dist",
+    "server",
+    "apps",
+    "api",
+    "src",
+    "security",
+    "owner-channel.js"
+  );
+  const { NATIVE_OWNER_BROKER_PROTOCOL, NativeOwnerBroker } = await import(
+    pathToFileURL(modulePath).href
+  );
+  const owner = process.getuid?.();
+  if (!Number.isSafeInteger(owner) || owner < 0) {
+    throw new Error("packed owner-broker preflight requires a valid owner uid");
+  }
+  const socketRoot = realpathSync(
+    mkdtempSync(path.join("/tmp", `fg-${owner}-packed-owner-`))
+  );
+  chmodSync(socketRoot, 0o700);
+  const socketPath = path.join(socketRoot, "owner.sock");
+  const request = {
+    protocol: NATIVE_OWNER_BROKER_PROTOCOL,
+    requestId: `owner_${randomUUID()}`,
+    transactionId: `transaction_${randomUUID()}`,
+    installId: "packed-openclaw-smoke",
+    browserOrigin: `http://127.0.0.1:${port}`,
+    browserNonce: randomBytes(32).toString("base64url")
+  };
+  const broker = new NativeOwnerBroker(
+    peerRuntime.ownerBrokerBinaryPath,
+    socketPath,
+    { now: () => new Date() },
+    15_000,
+    undefined,
+    peerRuntime.ownerBrokerSha256
+  );
+  try {
+    const receipt = await broker.authenticate(
+      request,
+      ({ binaryPath, socketPath: approvedSocketPath, request: approval }) =>
+        runPackedOwnerApproval(binaryPath, approvedSocketPath, approval, 15_000)
+    );
+    broker.consume(receipt, request.requestId, owner);
+  } catch (error) {
+    throw new Error(
+      `packed owner-broker preflight failed: ${error instanceof Error ? error.message : String(error)}`
+    );
+  } finally {
+    broker.close();
+    rmSync(socketRoot, { recursive: true, force: true });
+  }
+}
+
 async function verifyPackedCourseApi(requestForge) {
   const response = await requestForge({
     method: "GET",
@@ -559,6 +619,7 @@ try {
   const peerRuntime = await verifyPackedForgePeerSource(installedPluginRoot, {
     buildBinary: !runtimeOnly
   });
+  await verifyPackedOwnerBroker(installedPluginRoot, peerRuntime);
   process.env.FORGE_OWNER_BROKER_BIN = peerRuntime.ownerBrokerBinaryPath;
   process.env.FORGE_OWNER_BROKER_SHA256 = peerRuntime.ownerBrokerSha256;
   ownerBrokerEnvironmentChanged = true;

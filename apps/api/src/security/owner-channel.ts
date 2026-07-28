@@ -54,6 +54,31 @@ type BrokerEvent =
   | { event: "ready"; protocol: string }
   | { event: "verified"; requestId: string; peerUid: number };
 
+const MAXIMUM_BROKER_DIAGNOSTIC_CHARACTERS = 2_048;
+
+class BoundedBrokerDiagnostic {
+  private value = "";
+  private truncated = false;
+
+  append(chunk: string) {
+    const printable = chunk.replace(/[^\x20-\x7E]/g, "?");
+    const remaining = MAXIMUM_BROKER_DIAGNOSTIC_CHARACTERS - this.value.length;
+    if (remaining > 0) {
+      this.value += printable.slice(0, remaining);
+    }
+    if (printable.length > remaining) {
+      this.truncated = true;
+    }
+  }
+
+  suffix() {
+    const bounded = this.value.trim();
+    return bounded
+      ? ` Broker stderr: ${bounded}${this.truncated ? "…" : ""}`
+      : "";
+  }
+}
+
 function validateNativeOwnerRequest(request: NativeOwnerBrokerRequest) {
   const identifier = /^[A-Za-z0-9._-]+$/;
   if (
@@ -90,9 +115,17 @@ function validateNativeOwnerRequest(request: NativeOwnerBrokerRequest) {
   }
 }
 
-function within<T>(promise: Promise<T>, milliseconds: number, message: string) {
+function within<T>(
+  promise: Promise<T>,
+  milliseconds: number,
+  message: string | (() => string)
+) {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(message)), milliseconds);
+    const timer = setTimeout(
+      () =>
+        reject(new Error(typeof message === "function" ? message() : message)),
+      milliseconds
+    );
     timer.unref();
     promise.then(
       (value) => {
@@ -108,6 +141,11 @@ function within<T>(promise: Promise<T>, milliseconds: number, message: string) {
 }
 
 function brokerEvents(child: ChildProcessWithoutNullStreams) {
+  const diagnostic = new BoundedBrokerDiagnostic();
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk: string) => {
+    diagnostic.append(chunk);
+  });
   let readyResolve!: (event: BrokerEvent & { event: "ready" }) => void;
   let readyReject!: (error: Error) => void;
   let verifiedResolve!: (event: BrokerEvent & { event: "verified" }) => void;
@@ -126,6 +164,8 @@ function brokerEvents(child: ChildProcessWithoutNullStreams) {
   );
   let settledReady = false;
   let settledVerified = false;
+  const withDiagnostic = (error: Error) =>
+    new Error(`${error.message}${diagnostic.suffix()}`, { cause: error });
   const fail = (error: Error) => {
     if (!settledReady) {
       settledReady = true;
@@ -139,18 +179,30 @@ function brokerEvents(child: ChildProcessWithoutNullStreams) {
   const lines = createInterface({ input: child.stdout });
   lines.on("line", (line) => {
     if (line.length > 1_024) {
-      fail(new Error("Forge native owner broker emitted an oversized event."));
+      fail(
+        withDiagnostic(
+          new Error("Forge native owner broker emitted an oversized event.")
+        )
+      );
       return;
     }
     let event: unknown;
     try {
       event = JSON.parse(line);
     } catch {
-      fail(new Error("Forge native owner broker emitted invalid JSON."));
+      fail(
+        withDiagnostic(
+          new Error("Forge native owner broker emitted invalid JSON.")
+        )
+      );
       return;
     }
     if (typeof event !== "object" || event === null || !("event" in event)) {
-      fail(new Error("Forge native owner broker event is malformed."));
+      fail(
+        withDiagnostic(
+          new Error("Forge native owner broker event is malformed.")
+        )
+      );
       return;
     }
     if (
@@ -175,17 +227,32 @@ function brokerEvents(child: ChildProcessWithoutNullStreams) {
       verifiedResolve(event as BrokerEvent & { event: "verified" });
       return;
     }
-    fail(new Error("Forge native owner broker emitted an unexpected event."));
+    fail(
+      withDiagnostic(
+        new Error("Forge native owner broker emitted an unexpected event.")
+      )
+    );
   });
-  child.once("error", (error) => fail(error));
+  child.once("error", (error) => fail(withDiagnostic(error)));
   child.once("close", (code) => {
     if (code !== 0 || !settledVerified) {
-      fail(new Error("Forge native owner broker exited before verification."));
+      fail(
+        withDiagnostic(
+          new Error(
+            `Forge native owner broker exited before verification (${code === null ? "signal" : `code ${code}`}).`
+          )
+        )
+      );
     }
   });
   void ready.catch(() => undefined);
   void verified.catch(() => undefined);
-  return { ready, verified };
+  return {
+    ready,
+    verified,
+    diagnosticSuffix: () => diagnostic.suffix(),
+    withDiagnostic
+  };
 }
 
 export class NativeOwnerBroker {
@@ -225,21 +292,31 @@ export class NativeOwnerBroker {
       await within(
         events.ready,
         this.timeoutMilliseconds,
-        "Forge native owner broker did not become ready."
+        () =>
+          `Forge native owner broker did not become ready.${events.diagnosticSuffix()}`
       );
-      await within(
-        launchOwnerHelper({
-          binaryPath: this.binaryPath,
-          socketPath: this.socketPath,
-          request
-        }),
-        this.timeoutMilliseconds,
-        "Forge local owner helper did not complete."
-      );
+      try {
+        await within(
+          launchOwnerHelper({
+            binaryPath: this.binaryPath,
+            socketPath: this.socketPath,
+            request
+          }),
+          this.timeoutMilliseconds,
+          "Forge local owner helper did not complete."
+        );
+      } catch (error) {
+        throw events.withDiagnostic(
+          error instanceof Error
+            ? error
+            : new Error("Forge local owner helper failed.")
+        );
+      }
       const verified = await within(
         events.verified,
         this.timeoutMilliseconds,
-        "Forge native owner verification timed out."
+        () =>
+          `Forge native owner verification timed out.${events.diagnosticSuffix()}`
       );
       if (verified.requestId !== request.requestId) {
         throw new Error(

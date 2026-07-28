@@ -9,7 +9,7 @@ import test from "node:test";
 
 import { callConfiguredForgeApi } from "../../../web/src/openclaw/api-client.js";
 import { createLocalOwnerSession } from "../../../web/src/openclaw/local-owner-client.js";
-import { buildServer } from "../app.js";
+import { applicationSecurityRuntimeForTest, buildServer } from "../app.js";
 import { closeDatabase } from "../db.js";
 
 const ownerBrokerBinary = path.resolve(
@@ -375,6 +375,38 @@ test(
         exchanges.map((response) => response.status).sort(),
         [200, 401]
       );
+
+      const runtime = applicationSecurityRuntimeForTest(app);
+      assert.ok(runtime.localOwnerSessions);
+      const originalBegin = runtime.localOwnerSessions.begin.bind(
+        runtime.localOwnerSessions
+      );
+      const mutableCoordinator = runtime.localOwnerSessions as {
+        begin: typeof runtime.localOwnerSessions.begin;
+      };
+      const diagnosticSentinel = "forge_owner_broker_private_sentinel";
+      try {
+        mutableCoordinator.begin = async () => {
+          throw new Error(`${diagnosticSentinel}\nnot-client-visible`);
+        };
+        const opaqueFailure = await fetch(
+          `${baseUrl}/api/v1/auth/local/begin`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              browserOrigin: new URL(baseUrl).origin,
+              browserNonce: "E".repeat(43)
+            })
+          }
+        );
+        const opaqueBody = await opaqueFailure.text();
+        assert.equal(opaqueFailure.status, 500);
+        assert.equal(opaqueBody.includes(diagnosticSentinel), false);
+        assert.match(opaqueBody, /internal_error/);
+      } finally {
+        mutableCoordinator.begin = originalBegin;
+      }
     } finally {
       await app.close();
       closeDatabase();
