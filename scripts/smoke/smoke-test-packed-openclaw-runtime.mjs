@@ -474,20 +474,42 @@ async function verifyPackedCourseApi(requestForge) {
   }
 }
 
-async function verifyPackedPairingRequiresOperator(requestForge) {
+async function verifyPackedLocalOwnerPairing(requestForge) {
+  const anonymousResponse = await fetch(
+    `http://127.0.0.1:${port}/api/v1/health/pairing-sessions`,
+    {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ userId: null, transportMode: "iroh" })
+    }
+  );
+  const anonymousBody = await anonymousResponse.json().catch(() => null);
+  if (
+    anonymousResponse.status !== 401 ||
+    anonymousBody?.code !== "gateway_authentication_required"
+  ) {
+    throw new Error(
+      `packed runtime pairing did not reject an anonymous caller: HTTP ${anonymousResponse.status}: ${JSON.stringify(anonymousBody)}`
+    );
+  }
+
   const response = await requestForge({
     method: "POST",
     path: "/api/v1/health/pairing-sessions",
-    body: { userId: null, transportMode: "iroh" }
+    body: { userId: "user_untrusted", transportMode: "iroh" }
   });
   const body = response.body;
   if (
-    response.status !== 401 ||
-    body?.code !== "auth_required" ||
-    !String(body?.error ?? "").includes("operator session")
+    response.status !== 201 ||
+    body?.session?.userId !== ownerUserId ||
+    body?.qrPayload?.transportMode !== "iroh" ||
+    body?.qrPayload?.kind !== "forge-companion-pairing"
   ) {
     throw new Error(
-      `packed runtime allowed a local service to create a pairing session: HTTP ${response.status}: ${JSON.stringify(body)}`
+      `packed runtime did not admit the verified local owner pairing flow: HTTP ${response.status}: ${JSON.stringify(body)}`
     );
   }
 }
@@ -736,7 +758,7 @@ try {
   await verifyPackedCourseApi(requestForge);
   if (!runtimeOnly) {
     await verifyPackedPeerDaemon(installedPluginRoot, peerRuntime.binaryPath);
-    await verifyPackedPairingRequiresOperator(requestForge);
+    await verifyPackedLocalOwnerPairing(requestForge);
     await verifyPackedPeopleApi(requestForge);
   }
   smokeSucceeded = true;
