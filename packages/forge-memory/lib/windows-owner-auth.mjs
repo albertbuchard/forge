@@ -106,7 +106,11 @@ function windowsPathIsCurrentOwnerOnly(
       "$item=Get-Item -LiteralPath $target -Force",
       "if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { exit 10 }",
       "$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
-      "$acl=Get-Acl -LiteralPath $target",
+      "if ($item.PSIsContainer) {",
+      "  $acl=[IO.Directory]::GetAccessControl($target)",
+      "} else {",
+      "  $acl=[IO.File]::GetAccessControl($target)",
+      "}",
       "$owner=([Security.Principal.NTAccount]$acl.Owner).Translate([Security.Principal.SecurityIdentifier]).Value",
       "if ($owner -ne $sid -or -not $acl.AreAccessRulesProtected) { exit 11 }",
       "$rules=@($acl.Access)",
@@ -204,7 +208,11 @@ function lockWindowsPathForCurrentOwner(
     "$acl.SetOwner($sid)",
     "$acl.SetAccessRuleProtection($true,$false)",
     "$acl.AddAccessRule($rule)",
-    "Set-Acl -LiteralPath $target -AclObject $acl"
+    "if ($item.PSIsContainer) {",
+    "  [IO.Directory]::SetAccessControl($target,$acl)",
+    "} else {",
+    "  [IO.File]::SetAccessControl($target,$acl)",
+    "}"
   ].join("\n");
   runPowerShell({
     script,

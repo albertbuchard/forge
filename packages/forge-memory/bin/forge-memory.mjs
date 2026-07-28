@@ -214,16 +214,43 @@ function windowsPowerShellPath() {
   );
 }
 
-function runWindowsPowerShell(script, args, timeoutMs = 10_000) {
-  const result = spawnSync(
+function invokeWindowsPowerShell(script, args, timeoutMs = 10_000) {
+  const encodedArguments = Buffer.from(
+    JSON.stringify({ values: args }),
+    "utf8"
+  ).toString("base64");
+  const encodedCommand = Buffer.from(
+    [
+      "$forgeArgumentsJson=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:FORGE_WINDOWS_CLI_POWERSHELL_ARGUMENTS_B64))",
+      "$forgeArgumentEnvelope=ConvertFrom-Json -InputObject $forgeArgumentsJson",
+      "$forgeArgs=[Object[]]$forgeArgumentEnvelope.values",
+      script
+    ].join("\n"),
+    "utf16le"
+  ).toString("base64");
+  return spawnSync(
     windowsPowerShellPath(),
-    ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script, ...args],
+    [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-EncodedCommand",
+      encodedCommand
+    ],
     {
       encoding: "utf8",
+      env: {
+        ...process.env,
+        FORGE_WINDOWS_CLI_POWERSHELL_ARGUMENTS_B64: encodedArguments
+      },
       windowsHide: true,
       timeout: timeoutMs
     }
   );
+}
+
+function runWindowsPowerShell(script, args, timeoutMs = 10_000) {
+  const result = invokeWindowsPowerShell(script, args, timeoutMs);
   if (result.error || result.status !== 0) {
     throw new Error(
       `Forge could not enforce Windows owner-only access controls (PowerShell exit ${result.status ?? "unknown"}).`
@@ -234,7 +261,7 @@ function runWindowsPowerShell(script, args, timeoutMs = 10_000) {
 function lockWindowsPathForCurrentOwner(target) {
   const script = [
     "$ErrorActionPreference='Stop'",
-    "$target=[IO.Path]::GetFullPath($args[0])",
+    "$target=[IO.Path]::GetFullPath($forgeArgs[0])",
     "$item=Get-Item -LiteralPath $target -Force",
     "if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'reparse point refused' }",
     "$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User",
@@ -248,7 +275,11 @@ function lockWindowsPathForCurrentOwner(target) {
     "$acl.SetOwner($sid)",
     "$acl.SetAccessRuleProtection($true,$false)",
     "$acl.AddAccessRule($rule)",
-    "Set-Acl -LiteralPath $target -AclObject $acl"
+    "if ($item.PSIsContainer) {",
+    "  [IO.Directory]::SetAccessControl($target,$acl)",
+    "} else {",
+    "  [IO.File]::SetAccessControl($target,$acl)",
+    "}"
   ].join("; ");
   runWindowsPowerShell(script, [target]);
 }
@@ -257,11 +288,15 @@ function windowsPathIsCurrentOwnerOnly(target) {
   try {
     const script = [
       "$ErrorActionPreference='Stop'",
-      "$target=[IO.Path]::GetFullPath($args[0])",
+      "$target=[IO.Path]::GetFullPath($forgeArgs[0])",
       "$item=Get-Item -LiteralPath $target -Force",
       "if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { exit 10 }",
       "$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
-      "$acl=Get-Acl -LiteralPath $target",
+      "if ($item.PSIsContainer) {",
+      "  $acl=[IO.Directory]::GetAccessControl($target)",
+      "} else {",
+      "  $acl=[IO.File]::GetAccessControl($target)",
+      "}",
       "$owner=([Security.Principal.NTAccount]$acl.Owner).Translate([Security.Principal.SecurityIdentifier]).Value",
       "if ($owner -ne $sid -or -not $acl.AreAccessRulesProtected) { exit 11 }",
       "$bad=$acl.Access | Where-Object {",
@@ -2746,23 +2781,26 @@ function captureProcessIdentity(pid) {
   if (!Number.isInteger(pid) || pid <= 0 || !processExists(pid)) {
     return null;
   }
-  const result =
-    process.platform === "win32"
-      ? spawnSync(
-          "powershell.exe",
-          [
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "$p=Get-Process -Id ([int]$args[0]) -ErrorAction Stop; $path=''; try {$path=$p.Path} catch {}; Write-Output ($p.StartTime.ToUniversalTime().ToString('o') + '|' + $path)",
-            String(pid)
-          ],
-          { encoding: "utf8", windowsHide: true }
-        )
-      : spawnSync("ps", ["-p", String(pid), "-o", "lstart=", "-o", "comm="], {
-          encoding: "utf8"
-        });
+  let result;
+  if (process.platform === "win32") {
+    try {
+      result = invokeWindowsPowerShell(
+        "$p=Get-Process -Id ([int]$forgeArgs[0]) -ErrorAction Stop; $path=''; try {$path=$p.Path} catch {}; Write-Output ($p.StartTime.ToUniversalTime().ToString('o') + '|' + $path)",
+        [String(pid)],
+        5_000
+      );
+    } catch {
+      return null;
+    }
+  } else {
+    result = spawnSync(
+      "ps",
+      ["-p", String(pid), "-o", "lstart=", "-o", "comm="],
+      {
+        encoding: "utf8"
+      }
+    );
+  }
   const identityText =
     result.status === 0 && typeof result.stdout === "string"
       ? result.stdout.trim()
