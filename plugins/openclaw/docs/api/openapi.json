@@ -13213,7 +13213,8 @@
         "additionalProperties": true,
         "required": [
           "provider",
-          "label"
+          "label",
+          "selectedCalendarUrls"
         ],
         "properties": {
           "provider": {
@@ -13236,7 +13237,8 @@
             "type": "string"
           },
           "serverUrl": {
-            "type": "string"
+            "type": "string",
+            "format": "uri"
           },
           "authSessionId": {
             "type": "string"
@@ -13246,14 +13248,17 @@
           },
           "selectedCalendarUrls": {
             "type": "array",
+            "minItems": 1,
             "items": {
-              "type": "string"
+              "type": "string",
+              "format": "uri"
             }
           },
           "forgeCalendarUrl": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "format": "uri"
               },
               {
                 "type": "null"
@@ -13269,7 +13274,72 @@
               "type": "string"
             }
           }
-        }
+        },
+        "oneOf": [
+          {
+            "title": "Google Calendar connection",
+            "required": [
+              "provider",
+              "authSessionId"
+            ],
+            "properties": {
+              "provider": {
+                "const": "google"
+              }
+            }
+          },
+          {
+            "title": "Apple Calendar connection",
+            "required": [
+              "provider",
+              "username",
+              "password"
+            ],
+            "properties": {
+              "provider": {
+                "const": "apple"
+              }
+            }
+          },
+          {
+            "title": "CalDAV connection",
+            "required": [
+              "provider",
+              "serverUrl",
+              "username",
+              "password"
+            ],
+            "properties": {
+              "provider": {
+                "const": "caldav"
+              }
+            }
+          },
+          {
+            "title": "Microsoft Calendar connection",
+            "required": [
+              "provider",
+              "authSessionId"
+            ],
+            "properties": {
+              "provider": {
+                "const": "microsoft"
+              }
+            }
+          },
+          {
+            "title": "macOS local Calendar connection",
+            "required": [
+              "provider",
+              "sourceId"
+            ],
+            "properties": {
+              "provider": {
+                "const": "macos_local"
+              }
+            }
+          }
+        ]
       },
       "CalendarConnectionPatchInput": {
         "type": "object",
@@ -33597,11 +33667,13 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "name",
-          "quantity"
+          "name"
         ],
         "description": "Meal item input. Pass foodId from /foods/search or /foods/barcode when reusing a catalog food. If foodId is omitted, Forge treats the item as a custom food and requires calories, proteinGrams, carbohydrateGrams, and fatGrams.",
         "properties": {
+          "id": {
+            "type": "string"
+          },
           "foodId": {
             "anyOf": [
               {
@@ -33626,17 +33698,12 @@
             ]
           },
           "quantity": {
-            "type": "number"
+            "type": "number",
+            "exclusiveMinimum": 0
           },
           "unit": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "string",
+            "minLength": 1
           },
           "grams": {
             "anyOf": [
@@ -33658,7 +33725,27 @@
               }
             ]
           },
+          "caloriesKcal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "proteinGrams": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proteinG": {
             "anyOf": [
               {
                 "type": "number"
@@ -33678,7 +33765,27 @@
               }
             ]
           },
+          "carbsG": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "fatGrams": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fatG": {
             "anyOf": [
               {
                 "type": "number"
@@ -33698,7 +33805,27 @@
               }
             ]
           },
+          "fiberG": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "sugarGrams": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sugarG": {
             "anyOf": [
               {
                 "type": "number"
@@ -33748,16 +33875,32 @@
               }
             ]
           },
+          "alcoholG": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "tags": {
             "type": "array",
             "items": {
               "type": "string"
             }
           },
+          "nutrients": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "confidence": {
             "anyOf": [
               {
-                "type": "number"
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
               },
               {
                 "type": "null"
@@ -33782,14 +33925,7 @@
             "description": "IANA timezone used to derive the local dayKey when dayKey is omitted."
           },
           "mealLabel": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "string"
           },
           "source": {
             "type": "string",
@@ -33857,7 +33993,8 @@
           "dayKey": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
               },
               {
                 "type": "null"
@@ -33874,97 +34011,45 @@
             "type": "object",
             "additionalProperties": true
           },
-          "satietyScore": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "hungerBefore": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "hungerAfter": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "cravingScore": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "enjoymentScore": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "socialContext": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "locationContext": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "items": {
+          "links": {
             "type": "array",
             "items": {
               "type": "object",
               "additionalProperties": false,
               "required": [
-                "name",
-                "quantity"
+                "entityType",
+                "entityId"
+              ],
+              "properties": {
+                "entityType": {
+                  "type": "string"
+                },
+                "entityId": {
+                  "type": "string"
+                },
+                "relationshipType": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "notes": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name"
               ],
               "description": "Meal item input. Pass foodId from /foods/search or /foods/barcode when reusing a catalog food. If foodId is omitted, Forge treats the item as a custom food and requires calories, proteinGrams, carbohydrateGrams, and fatGrams.",
               "properties": {
+                "id": {
+                  "type": "string"
+                },
                 "foodId": {
                   "anyOf": [
                     {
@@ -33989,17 +34074,12 @@
                   ]
                 },
                 "quantity": {
-                  "type": "number"
+                  "type": "number",
+                  "exclusiveMinimum": 0
                 },
                 "unit": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
+                  "type": "string",
+                  "minLength": 1
                 },
                 "grams": {
                   "anyOf": [
@@ -34021,7 +34101,27 @@
                     }
                   ]
                 },
+                "caloriesKcal": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "proteinGrams": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "proteinG": {
                   "anyOf": [
                     {
                       "type": "number"
@@ -34041,7 +34141,27 @@
                     }
                   ]
                 },
+                "carbsG": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "fatGrams": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fatG": {
                   "anyOf": [
                     {
                       "type": "number"
@@ -34061,7 +34181,27 @@
                     }
                   ]
                 },
+                "fiberG": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "sugarGrams": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sugarG": {
                   "anyOf": [
                     {
                       "type": "number"
@@ -34111,16 +34251,405 @@
                     }
                   ]
                 },
+                "alcoholG": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "tags": {
                   "type": "array",
                   "items": {
                     "type": "string"
                   }
                 },
+                "nutrients": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
                 "confidence": {
                   "anyOf": [
                     {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "NutritionFoodLogPatchInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "loggedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timeZone": {
+            "type": "string",
+            "description": "IANA timezone used to derive the local dayKey when dayKey is omitted."
+          },
+          "mealLabel": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "search",
+              "barcode",
+              "chatgpt",
+              "photo",
+              "saved_meal"
+            ]
+          },
+          "confirmationState": {
+            "type": "string",
+            "enum": [
+              "candidate",
+              "confirmed",
+              "needs_review",
+              "discarded"
+            ]
+          },
+          "placeId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stayId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workoutId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sleepId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dayKey": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "imageRefs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "parserProvenance": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "entityType",
+                "entityId"
+              ],
+              "properties": {
+                "entityType": {
+                  "type": "string"
+                },
+                "entityId": {
+                  "type": "string"
+                },
+                "relationshipType": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "notes": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name"
+              ],
+              "description": "Meal item input. Pass foodId from /foods/search or /foods/barcode when reusing a catalog food. If foodId is omitted, Forge treats the item as a custom food and requires calories, proteinGrams, carbohydrateGrams, and fatGrams.",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "foodId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "brand": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "quantity": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "unit": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "grams": {
+                  "anyOf": [
+                    {
                       "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "calories": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "caloriesKcal": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "proteinGrams": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "proteinG": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "carbohydrateGrams": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "carbsG": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fatGrams": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fatG": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fiberGrams": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fiberG": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sugarGrams": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sugarG": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sodiumMg": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "potassiumMg": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "caffeineMg": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "alcoholGrams": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "alcoholG": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "nutrients": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "confidence": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
                     },
                     {
                       "type": "null"
@@ -34180,6 +34709,502 @@
               "type": "object",
               "additionalProperties": true
             }
+          }
+        }
+      },
+      "NutritionBodyCheckinInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "weightKg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "waistCm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hipCm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "neckCm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "chestCm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "armCm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "thighCm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bodyFatPercent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "clothingFitScore": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "NutritionAppearanceCheckinInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "photoRefs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "facePuffiness": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "leanness": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "muscularity": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "posture": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bloatingLook": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confidenceScore": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "NutritionSubjectiveCheckinInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "mealLogId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timeRelation": {
+            "type": "string",
+            "enum": [
+              "before_meal",
+              "with_meal",
+              "after_2h",
+              "end_of_day",
+              "unspecified"
+            ]
+          },
+          "hunger": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fullness": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cravings": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mood": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "energy": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "focus": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stress": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sleepiness": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "crashScore": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "NutritionGutCheckinInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "mealLogId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bristolStoolType": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 7
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stoolFrequency": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bloating": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gas": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reflux": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "abdominalPain": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "urgency": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "nausea": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "constipation": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "diarrhea": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "triggerTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "string"
           }
         }
       },
@@ -34955,6 +35980,130 @@
           "dataQuality": {
             "type": "object",
             "additionalProperties": true
+          }
+        }
+      },
+      "QuestionnaireAnswerInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "itemId"
+        ],
+        "properties": {
+          "itemId": {
+            "type": "string"
+          },
+          "optionKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "valueText": {
+            "type": "string"
+          },
+          "numericValue": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "answer": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "QuestionnaireRunStartInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "versionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "userId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "QuestionnaireRunUpdateInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "answers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "itemId"
+              ],
+              "properties": {
+                "itemId": {
+                  "type": "string"
+                },
+                "optionKey": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "valueText": {
+                  "type": "string"
+                },
+                "numericValue": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "answer": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "progressIndex": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -46252,6 +47401,15 @@
             "description": "Select exactly one Forge user for this mutation. A body userId must match this selection. Scoped tokens may select only an allowed user and default to their sole allowed user."
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NutritionFoodLogPatchInput"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Updated nutrition food log",
@@ -46493,6 +47651,15 @@
             "description": "Stable retry key for this check-in domain. An exact replay returns the original check-in with Idempotency-Replayed: true; reuse with a different payload returns 409."
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NutritionBodyCheckinInput"
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "Created body check-in",
@@ -46549,6 +47716,15 @@
             "description": "Stable retry key for this check-in domain. An exact replay returns the original check-in with Idempotency-Replayed: true; reuse with a different payload returns 409."
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NutritionAppearanceCheckinInput"
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "Created appearance check-in",
@@ -46605,6 +47781,15 @@
             "description": "Stable retry key for this check-in domain. An exact replay returns the original check-in with Idempotency-Replayed: true; reuse with a different payload returns 409."
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NutritionSubjectiveCheckinInput"
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "Created subjective check-in",
@@ -46661,6 +47846,15 @@
             "description": "Stable retry key for this check-in domain. An exact replay returns the original check-in with Idempotency-Replayed: true; reuse with a different payload returns 409."
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NutritionGutCheckinInput"
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "Created gut check-in",
@@ -52500,6 +53694,25 @@
     "/api/v1/psyche/questionnaires/{id}/runs": {
       "post": {
         "summary": "Start a questionnaire run for one user and instrument version",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionnaireRunStartInput"
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "Started questionnaire run",
@@ -52568,6 +53781,16 @@
     "/api/v1/psyche/questionnaire-runs/{id}": {
       "get": {
         "summary": "Get one questionnaire run with answers, scores, and version detail",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Questionnaire run detail",
@@ -52634,6 +53857,25 @@
       },
       "patch": {
         "summary": "Update an in-progress questionnaire run",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionnaireRunUpdateInput"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Updated questionnaire run",
@@ -52702,6 +53944,16 @@
     "/api/v1/psyche/questionnaire-runs/{id}/complete": {
       "post": {
         "summary": "Complete a questionnaire run and persist its final scores",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Completed questionnaire run",

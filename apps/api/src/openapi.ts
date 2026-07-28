@@ -1368,14 +1368,45 @@ export function buildOpenApiDocument() {
       label: { type: "string" },
       username: { type: "string" },
       password: { type: "string" },
-      serverUrl: { type: "string" },
+      serverUrl: { type: "string", format: "uri" },
       authSessionId: { type: "string" },
       sourceId: { type: "string" },
-      selectedCalendarUrls: arrayOf({ type: "string" }),
-      forgeCalendarUrl: nullable({ type: "string" }),
+      selectedCalendarUrls: {
+        type: "array",
+        minItems: 1,
+        items: { type: "string", format: "uri" }
+      },
+      forgeCalendarUrl: nullable({ type: "string", format: "uri" }),
       createForgeCalendar: { type: "boolean" },
       replaceConnectionIds: arrayOf({ type: "string" })
-    }
+    },
+    oneOf: [
+      {
+        title: "Google Calendar connection",
+        required: ["provider", "authSessionId"],
+        properties: { provider: { const: "google" } }
+      },
+      {
+        title: "Apple Calendar connection",
+        required: ["provider", "username", "password"],
+        properties: { provider: { const: "apple" } }
+      },
+      {
+        title: "CalDAV connection",
+        required: ["provider", "serverUrl", "username", "password"],
+        properties: { provider: { const: "caldav" } }
+      },
+      {
+        title: "Microsoft Calendar connection",
+        required: ["provider", "authSessionId"],
+        properties: { provider: { const: "microsoft" } }
+      },
+      {
+        title: "macOS local Calendar connection",
+        required: ["provider", "sourceId"],
+        properties: { provider: { const: "macos_local" } }
+      }
+    ]
   };
 
   const calendarConnectionPatchInput = {
@@ -8298,7 +8329,7 @@ export function buildOpenApiDocument() {
       name: { type: "string" },
       brand: nullable({ type: "string" }),
       quantity: { type: "number", exclusiveMinimum: 0 },
-      unit: nullable({ type: "string" }),
+      unit: { type: "string", minLength: 1 },
       grams: nullable({ type: "number" }),
       calories: nullable({ type: "number" }),
       caloriesKcal: nullable({ type: "number" }),
@@ -8345,7 +8376,7 @@ export function buildOpenApiDocument() {
         description:
           "IANA timezone used to derive the local dayKey when dayKey is omitted."
       },
-      mealLabel: nullable({ type: "string" }),
+      mealLabel: { type: "string" },
       source: {
         type: "string",
         enum: ["manual", "search", "barcode", "chatgpt", "photo", "saved_meal"]
@@ -8366,8 +8397,12 @@ export function buildOpenApiDocument() {
       imageRefs: arrayOf({ type: "string" }),
       parserProvenance: { type: "object", additionalProperties: true },
       links: arrayOf(nutritionLinkInput),
-      notes: nullable({ type: "string" }),
-      items: arrayOf(nutritionMealItemInput)
+      notes: { type: "string" },
+      items: {
+        type: "array",
+        minItems: 1,
+        items: nutritionMealItemInput
+      }
     }
   };
 
@@ -8378,8 +8413,14 @@ export function buildOpenApiDocument() {
   const nutritionFoodLogPatchInput = {
     ...nutritionFoodLogInput,
     required: [],
-    properties: nutritionFoodLogPatchProperties
+    properties: {
+      ...nutritionFoodLogPatchProperties,
+      items: arrayOf(nutritionMealItemInput)
+    }
   };
+
+  const nutritionScoreInput = () =>
+    nullable({ type: "integer", minimum: 0, maximum: 10 });
 
   const nutritionBodyCheckinInput = {
     type: "object",
@@ -8395,11 +8436,7 @@ export function buildOpenApiDocument() {
       armCm: nullable({ type: "number" }),
       thighCm: nullable({ type: "number" }),
       bodyFatPercent: nullable({ type: "number" }),
-      clothingFitScore: nullable({
-        type: "number",
-        minimum: 0,
-        maximum: 10
-      }),
+      clothingFitScore: nutritionScoreInput(),
       notes: { type: "string" }
     }
   };
@@ -8411,16 +8448,12 @@ export function buildOpenApiDocument() {
       userId: { type: "string" },
       checkedAt: { type: "string", format: "date-time" },
       photoRefs: arrayOf({ type: "string" }),
-      facePuffiness: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      leanness: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      muscularity: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      posture: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      bloatingLook: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      confidenceScore: nullable({
-        type: "number",
-        minimum: 0,
-        maximum: 10
-      }),
+      facePuffiness: nutritionScoreInput(),
+      leanness: nutritionScoreInput(),
+      muscularity: nutritionScoreInput(),
+      posture: nutritionScoreInput(),
+      bloatingLook: nutritionScoreInput(),
+      confidenceScore: nutritionScoreInput(),
       notes: { type: "string" }
     }
   };
@@ -8442,15 +8475,15 @@ export function buildOpenApiDocument() {
           "unspecified"
         ]
       },
-      hunger: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      fullness: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      cravings: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      mood: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      energy: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      focus: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      stress: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      sleepiness: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      crashScore: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      hunger: nutritionScoreInput(),
+      fullness: nutritionScoreInput(),
+      cravings: nutritionScoreInput(),
+      mood: nutritionScoreInput(),
+      energy: nutritionScoreInput(),
+      focus: nutritionScoreInput(),
+      stress: nutritionScoreInput(),
+      sleepiness: nutritionScoreInput(),
+      crashScore: nutritionScoreInput(),
       notes: { type: "string" }
     }
   };
@@ -8468,14 +8501,14 @@ export function buildOpenApiDocument() {
         maximum: 7
       }),
       stoolFrequency: nullable({ type: "number" }),
-      bloating: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      gas: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      reflux: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      abdominalPain: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      urgency: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      nausea: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      constipation: nullable({ type: "number", minimum: 0, maximum: 10 }),
-      diarrhea: nullable({ type: "number", minimum: 0, maximum: 10 }),
+      bloating: nutritionScoreInput(),
+      gas: nutritionScoreInput(),
+      reflux: nutritionScoreInput(),
+      abdominalPain: nutritionScoreInput(),
+      urgency: nutritionScoreInput(),
+      nausea: nutritionScoreInput(),
+      constipation: nutritionScoreInput(),
+      diarrhea: nutritionScoreInput(),
       triggerTags: arrayOf({ type: "string" }),
       notes: { type: "string" }
     }
@@ -16025,7 +16058,6 @@ export function buildOpenApiDocument() {
       },
       "/api/v1/psyche/questionnaires/{id}/runs": {
         post: {
-          tags: ["Psyche"],
           summary:
             "Start a questionnaire run for one user and instrument version",
           parameters: [
@@ -16092,7 +16124,6 @@ export function buildOpenApiDocument() {
       },
       "/api/v1/psyche/questionnaire-runs/{id}": {
         get: {
-          tags: ["Psyche"],
           summary:
             "Get one questionnaire run with answers, scores, and version detail",
           parameters: [
@@ -16148,7 +16179,6 @@ export function buildOpenApiDocument() {
           }
         },
         patch: {
-          tags: ["Psyche"],
           summary: "Update an in-progress questionnaire run",
           parameters: [
             {
@@ -16215,6 +16245,14 @@ export function buildOpenApiDocument() {
       "/api/v1/psyche/questionnaire-runs/{id}/complete": {
         post: {
           summary: "Complete a questionnaire run and persist its final scores",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {

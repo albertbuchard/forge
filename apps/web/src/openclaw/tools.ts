@@ -1085,13 +1085,16 @@ const calendarConnectionParametersSchema = Type.Object({
   label: Type.String({ minLength: 1 }),
   username: optionalString(),
   password: optionalString(),
-  serverUrl: optionalString(),
+  serverUrl: Type.Optional(Type.String({ format: "uri" })),
   authSessionId: optionalString(),
   sourceId: optionalString(),
-  selectedCalendarUrls: Type.Array(Type.String({ minLength: 1 }), {
-    minItems: 1
-  }),
-  forgeCalendarUrl: optionalString(),
+  selectedCalendarUrls: Type.Array(
+    Type.String({ minLength: 1, format: "uri" }),
+    {
+      minItems: 1
+    }
+  ),
+  forgeCalendarUrl: Type.Optional(Type.String({ format: "uri" })),
   createForgeCalendar: optionalBoolean(),
   replaceConnectionIds: Type.Optional(Type.Array(Type.String({ minLength: 1 })))
 });
@@ -1108,7 +1111,7 @@ const nutritionMealItemInputSchema = () =>
     name: Type.String({ minLength: 1 }),
     brand: optionalNullableString(),
     quantity: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
-    unit: optionalNullableString(),
+    unit: Type.Optional(Type.String({ minLength: 1 })),
     grams: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
     calories: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
     caloriesKcal: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
@@ -1135,6 +1138,10 @@ const nutritionMealItemInputSchema = () =>
   });
 const nutritionUserScopeSchema = () =>
   Type.Optional(Type.Array(Type.String({ minLength: 1 })));
+const nutritionScoreSchema = () =>
+  Type.Optional(
+    Type.Union([Type.Integer({ minimum: 0, maximum: 10 }), Type.Null()])
+  );
 const nutritionFoodLogSchema = () =>
   Type.Object({
     userIds: nutritionUserScopeSchema(),
@@ -1146,7 +1153,7 @@ const nutritionFoodLogSchema = () =>
       ])
     ),
     timeZone: optionalString(),
-    mealLabel: optionalNullableString(),
+    mealLabel: optionalString(),
     source: Type.Optional(
       Type.Union([
         Type.Literal("manual"),
@@ -1172,7 +1179,7 @@ const nutritionFoodLogSchema = () =>
     imageRefs: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
     parserProvenance: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
     links: Type.Optional(Type.Array(healthLinkInputSchema())),
-    notes: optionalNullableString(),
+    notes: optionalString(),
     items: Type.Array(nutritionMealItemInputSchema(), { minItems: 1 })
   });
 const nutritionFoodLogPatchSchema = () =>
@@ -2408,10 +2415,8 @@ export function registerForgePluginTools(
       armCm: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
       thighCm: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
       bodyFatPercent: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      clothingFitScore: Type.Optional(
-        Type.Union([Type.Number({ minimum: 0, maximum: 10 }), Type.Null()])
-      ),
-      notes: optionalNullableString()
+      clothingFitScore: nutritionScoreSchema(),
+      notes: optionalString()
     }),
     async execute(_toolCallId, params) {
       const typed = params as Record<string, unknown>;
@@ -2438,13 +2443,13 @@ export function registerForgePluginTools(
       userIds: nutritionUserScopeSchema(),
       checkedAt: optionalString(),
       photoRefs: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
-      facePuffiness: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      leanness: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      muscularity: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      posture: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      bloatingLook: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      confidenceScore: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      notes: optionalNullableString()
+      facePuffiness: nutritionScoreSchema(),
+      leanness: nutritionScoreSchema(),
+      muscularity: nutritionScoreSchema(),
+      posture: nutritionScoreSchema(),
+      bloatingLook: nutritionScoreSchema(),
+      confidenceScore: nutritionScoreSchema(),
+      notes: optionalString()
     }),
     async execute(_toolCallId, params) {
       const typed = params as Record<string, unknown>;
@@ -2480,16 +2485,16 @@ export function registerForgePluginTools(
           Type.Literal("unspecified")
         ])
       ),
-      hunger: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      fullness: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      cravings: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      mood: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      energy: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      focus: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      stress: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      sleepiness: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      crashScore: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      notes: optionalNullableString()
+      hunger: nutritionScoreSchema(),
+      fullness: nutritionScoreSchema(),
+      cravings: nutritionScoreSchema(),
+      mood: nutritionScoreSchema(),
+      energy: nutritionScoreSchema(),
+      focus: nutritionScoreSchema(),
+      stress: nutritionScoreSchema(),
+      sleepiness: nutritionScoreSchema(),
+      crashScore: nutritionScoreSchema(),
+      notes: optionalString()
     }),
     async execute(_toolCallId, params) {
       const typed = params as Record<string, unknown>;
@@ -2515,21 +2520,21 @@ export function registerForgePluginTools(
     parameters: Type.Object({
       userIds: nutritionUserScopeSchema(),
       checkedAt: optionalString(),
-      bloating: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      abdominalPain: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      gas: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      reflux: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      nausea: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      bloating: nutritionScoreSchema(),
+      abdominalPain: nutritionScoreSchema(),
+      gas: nutritionScoreSchema(),
+      reflux: nutritionScoreSchema(),
+      nausea: nutritionScoreSchema(),
       mealLogId: optionalNullableString(),
       bristolStoolType: Type.Optional(
         Type.Union([Type.Integer({ minimum: 1, maximum: 7 }), Type.Null()])
       ),
       stoolFrequency: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      urgency: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      constipation: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      diarrhea: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      urgency: nutritionScoreSchema(),
+      constipation: nutritionScoreSchema(),
+      diarrhea: nutritionScoreSchema(),
       triggerTags: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
-      notes: optionalNullableString()
+      notes: optionalString()
     }),
     async execute(_toolCallId, params) {
       const typed = params as Record<string, unknown>;

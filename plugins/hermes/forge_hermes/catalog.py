@@ -1308,7 +1308,11 @@ NUTRITION_MEAL_ITEM = object_schema(
         "name": {"type": "string", "minLength": 1},
         "brand": optional_nullable_string("Optional brand."),
         "quantity": {"type": "number", "exclusiveMinimum": 0},
-        "unit": optional_nullable_string("Serving unit."),
+        "unit": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Serving unit.",
+        },
         "grams": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "calories": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "caloriesKcal": {"anyOf": [{"type": "number"}, {"type": "null"}]},
@@ -1350,7 +1354,7 @@ NUTRITION_FOOD_LOG = object_schema(
             ]
         },
         "timeZone": optional_string("Optional IANA timezone."),
-        "mealLabel": optional_nullable_string("Optional meal label."),
+        "mealLabel": optional_string("Optional meal label."),
         "source": {
             "enum": ["manual", "search", "barcode", "chatgpt", "photo", "saved_meal"]
         },
@@ -1376,8 +1380,10 @@ NUTRITION_FOOD_LOG = object_schema(
             ),
             "Optional entity links.",
         ),
-        "notes": optional_nullable_string("Optional notes."),
-        "items": array_schema(NUTRITION_MEAL_ITEM, "Food items in the meal."),
+        "notes": optional_string("Optional notes."),
+        "items": array_schema(
+            NUTRITION_MEAL_ITEM, "Food items in the meal.", min_items=1
+        ),
     },
     required=["items"],
 )
@@ -1429,7 +1435,9 @@ NUTRITION_FOOD_LOG_PATCH = object_schema(
             "Replacement entity links.",
         ),
         "items": array_schema(
-            NUTRITION_MEAL_ITEM, "Replacement food items for the meal."
+            NUTRITION_MEAL_ITEM,
+            "Replacement food items for the meal.",
+            min_items=1,
         ),
     },
     required=["foodLogId"],
@@ -1439,9 +1447,15 @@ NUTRITION_SCORE_CHECKIN = object_schema(
     {
         "userIds": array_schema({"type": "string"}, "Optional user ownership scope."),
         "checkedAt": optional_string("Optional ISO checked-at timestamp."),
-        "notes": optional_nullable_string("Optional notes."),
+        "notes": optional_string("Optional notes."),
     }
 )
+NUTRITION_SCORE_VALUE = {
+    "anyOf": [
+        {"type": "integer", "minimum": 0, "maximum": 10},
+        {"type": "null"},
+    ]
+}
 
 
 SEARCH_ENTITY = object_schema(
@@ -2076,12 +2090,7 @@ TOOL_CATALOG: List[ToolSpec] = [
                 "armCm": {"anyOf": [{"type": "number"}, {"type": "null"}]},
                 "thighCm": {"anyOf": [{"type": "number"}, {"type": "null"}]},
                 "bodyFatPercent": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "clothingFitScore": {
-                    "anyOf": [
-                        {"type": "number", "minimum": 0, "maximum": 10},
-                        {"type": "null"},
-                    ]
-                },
+                "clothingFitScore": NUTRITION_SCORE_VALUE,
             }
         ),
         "method": "POST",
@@ -2098,12 +2107,12 @@ TOOL_CATALOG: List[ToolSpec] = [
                 "photoRefs": array_schema(
                     {"type": "string", "minLength": 1}, "Optional photo references."
                 ),
-                "facePuffiness": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "leanness": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "muscularity": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "posture": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "bloatingLook": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "confidenceScore": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "facePuffiness": NUTRITION_SCORE_VALUE,
+                "leanness": NUTRITION_SCORE_VALUE,
+                "muscularity": NUTRITION_SCORE_VALUE,
+                "posture": NUTRITION_SCORE_VALUE,
+                "bloatingLook": NUTRITION_SCORE_VALUE,
+                "confidenceScore": NUTRITION_SCORE_VALUE,
             }
         ),
         "method": "POST",
@@ -2117,15 +2126,15 @@ TOOL_CATALOG: List[ToolSpec] = [
         "parameters": object_schema(
             {
                 **NUTRITION_SCORE_CHECKIN["properties"],
-                "energy": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "mood": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "focus": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "hunger": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "fullness": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "cravings": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "stress": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "sleepiness": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "crashScore": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "energy": NUTRITION_SCORE_VALUE,
+                "mood": NUTRITION_SCORE_VALUE,
+                "focus": NUTRITION_SCORE_VALUE,
+                "hunger": NUTRITION_SCORE_VALUE,
+                "fullness": NUTRITION_SCORE_VALUE,
+                "cravings": NUTRITION_SCORE_VALUE,
+                "stress": NUTRITION_SCORE_VALUE,
+                "sleepiness": NUTRITION_SCORE_VALUE,
+                "crashScore": NUTRITION_SCORE_VALUE,
                 "timeRelation": {
                     "enum": [
                         "before_meal",
@@ -2149,11 +2158,11 @@ TOOL_CATALOG: List[ToolSpec] = [
         "parameters": object_schema(
             {
                 **NUTRITION_SCORE_CHECKIN["properties"],
-                "bloating": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "abdominalPain": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "gas": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "reflux": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "nausea": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "bloating": NUTRITION_SCORE_VALUE,
+                "abdominalPain": NUTRITION_SCORE_VALUE,
+                "gas": NUTRITION_SCORE_VALUE,
+                "reflux": NUTRITION_SCORE_VALUE,
+                "nausea": NUTRITION_SCORE_VALUE,
                 "mealLogId": optional_nullable_string("Optional linked food log id."),
                 "bristolStoolType": {
                     "anyOf": [
@@ -2162,9 +2171,9 @@ TOOL_CATALOG: List[ToolSpec] = [
                     ]
                 },
                 "stoolFrequency": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "urgency": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "constipation": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-                "diarrhea": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "urgency": NUTRITION_SCORE_VALUE,
+                "constipation": NUTRITION_SCORE_VALUE,
+                "diarrhea": NUTRITION_SCORE_VALUE,
                 "triggerTags": array_schema(
                     {"type": "string", "minLength": 1}, "Optional trigger tags."
                 ),
@@ -3006,7 +3015,11 @@ TOOL_CATALOG: List[ToolSpec] = [
                 "label": {"type": "string", "minLength": 1},
                 "username": optional_string("Optional username."),
                 "password": optional_string("Optional password or app password."),
-                "serverUrl": optional_string("Optional CalDAV server url."),
+                "serverUrl": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Optional CalDAV server url.",
+                },
                 "authSessionId": optional_string(
                     "Optional Google or Microsoft auth session id."
                 ),
@@ -3015,11 +3028,15 @@ TOOL_CATALOG: List[ToolSpec] = [
                 ),
                 "selectedCalendarUrls": {
                     "type": "array",
-                    "items": {"type": "string", "minLength": 1},
+                    "items": {"type": "string", "format": "uri", "minLength": 1},
                     "minItems": 1,
                     "description": "Selected calendar urls.",
                 },
-                "forgeCalendarUrl": optional_string("Optional writable Forge calendar url."),
+                "forgeCalendarUrl": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Optional writable Forge calendar url.",
+                },
                 "createForgeCalendar": {"type": "boolean"},
                 "replaceConnectionIds": array_schema(
                     {"type": "string", "minLength": 1},

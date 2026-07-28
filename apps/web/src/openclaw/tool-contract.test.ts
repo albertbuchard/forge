@@ -1110,6 +1110,169 @@ describe("openclaw tool contracts", () => {
         `${contract.toolName} must expose the same accepted property paths as OpenAPI`
       ).toEqual(apiPaths);
     }
+
+    const sharedSchemaProperty = (
+      toolName: string,
+      propertyName: string
+    ): Record<string, unknown>[] =>
+      [openClawByName.get(toolName), hermesByName[toolName]].map(
+        (schema) =>
+          (
+            schema?.properties as
+              | Record<string, Record<string, unknown>>
+              | undefined
+          )?.[propertyName] ?? {}
+      );
+    const nestedProperty = (
+      schema: Record<string, unknown>,
+      propertyName: string
+    ) =>
+      (
+        schema.properties as Record<string, Record<string, unknown>> | undefined
+      )?.[propertyName] ?? {};
+
+    for (const selectedCalendarUrls of sharedSchemaProperty(
+      "forge_connect_calendar_provider",
+      "selectedCalendarUrls"
+    )) {
+      expect(selectedCalendarUrls).toMatchObject({
+        type: "array",
+        minItems: 1,
+        items: { type: "string", format: "uri" }
+      });
+    }
+    for (const urlField of ["serverUrl", "forgeCalendarUrl"]) {
+      for (const urlSchema of sharedSchemaProperty(
+        "forge_connect_calendar_provider",
+        urlField
+      )) {
+        expect(urlSchema).toMatchObject({ type: "string", format: "uri" });
+      }
+    }
+
+    for (const foodLog of [
+      openClawByName.get("forge_log_food") ?? {},
+      hermesByName.forge_log_food ?? {}
+    ]) {
+      expect(nestedProperty(foodLog, "mealLabel")).toMatchObject({
+        type: "string"
+      });
+      expect(nestedProperty(foodLog, "notes")).toMatchObject({
+        type: "string"
+      });
+      expect(nestedProperty(foodLog, "items")).toMatchObject({
+        type: "array",
+        minItems: 1
+      });
+      const itemSchema = nestedProperty(foodLog, "items").items as
+        | Record<string, unknown>
+        | undefined;
+      expect(nestedProperty(itemSchema ?? {}, "unit")).toMatchObject({
+        type: "string",
+        minLength: 1
+      });
+    }
+
+    for (const foodLogPatch of [
+      openClawByName.get("forge_update_food_log") ?? {},
+      hermesByName.forge_update_food_log ?? {}
+    ]) {
+      expect(nestedProperty(foodLogPatch, "items")).toMatchObject({
+        type: "array",
+        minItems: 1
+      });
+    }
+
+    const scoreFieldsByTool = {
+      forge_log_body_checkin: ["clothingFitScore"],
+      forge_log_appearance_checkin: [
+        "facePuffiness",
+        "leanness",
+        "muscularity",
+        "posture",
+        "bloatingLook",
+        "confidenceScore"
+      ],
+      forge_log_subjective_food_effect: [
+        "hunger",
+        "fullness",
+        "cravings",
+        "mood",
+        "energy",
+        "focus",
+        "stress",
+        "sleepiness",
+        "crashScore"
+      ],
+      forge_log_gut_checkin: [
+        "bloating",
+        "abdominalPain",
+        "gas",
+        "reflux",
+        "nausea",
+        "urgency",
+        "constipation",
+        "diarrhea"
+      ]
+    } as const;
+    for (const [toolName, scoreNames] of Object.entries(scoreFieldsByTool)) {
+      for (const schema of [
+        openClawByName.get(toolName) ?? {},
+        hermesByName[toolName] ?? {}
+      ]) {
+        for (const scoreName of scoreNames) {
+          const scoreBranches = nestedProperty(schema, scoreName).anyOf as
+            | Array<Record<string, unknown>>
+            | undefined;
+          expect(
+            scoreBranches?.find((branch) => branch.type === "integer")
+          ).toMatchObject({
+            type: "integer",
+            minimum: 0,
+            maximum: 10
+          });
+          expect(scoreBranches?.some((branch) => branch.type === "null")).toBe(
+            true
+          );
+        }
+      }
+    }
+
+    for (const checkinToolName of [
+      "forge_log_body_checkin",
+      "forge_log_appearance_checkin",
+      "forge_log_subjective_food_effect",
+      "forge_log_gut_checkin"
+    ]) {
+      for (const notes of sharedSchemaProperty(checkinToolName, "notes")) {
+        expect(notes).toMatchObject({ type: "string" });
+        expect(notes).not.toHaveProperty("anyOf");
+      }
+    }
+
+    const calendarGuidance = AGENT_ONBOARDING_TOOL_INPUT_CATALOG.find(
+      (entry) => entry.toolName === "forge_connect_calendar_provider"
+    );
+    expect(calendarGuidance?.requiredFields).toEqual([
+      "provider",
+      "label",
+      "selectedCalendarUrls",
+      "provider-specific credentials"
+    ]);
+    expect(calendarGuidance?.inputShape).toMatch(
+      /selectedCalendarUrls: nonempty valid URL\[\]/
+    );
+    expect(calendarGuidance?.notes.join(" ")).toMatch(
+      /Google and Microsoft require authSessionId[\s\S]*Apple requires username and password[\s\S]*CalDAV requires serverUrl, username, and password[\s\S]*macos_local requires sourceId/
+    );
+
+    const appearanceGuidance = AGENT_ONBOARDING_TOOL_INPUT_CATALOG.find(
+      (entry) => entry.toolName === "forge_log_appearance_checkin"
+    );
+    expect(appearanceGuidance?.inputShape).toMatch(/integer 0\.\.10/);
+    expect(JSON.parse(appearanceGuidance?.example ?? "{}")).toMatchObject({
+      confidenceScore: 8
+    });
   });
 
   it("keeps the preference-context merge body aligned across server, OpenAPI, and plugins", () => {
