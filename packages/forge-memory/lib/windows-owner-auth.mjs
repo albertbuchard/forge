@@ -135,12 +135,12 @@ function windowsPathChainHasNoReparsePoints(
     }
     const script = [
       "$ErrorActionPreference='Stop'",
-      "$root=[IO.Path]::GetFullPath($args[0]).TrimEnd([IO.Path]::DirectorySeparatorChar)",
-      "$target=[IO.Path]::GetFullPath($args[$args.Count-1]).TrimEnd([IO.Path]::DirectorySeparatorChar)",
+      "$root=[IO.Path]::GetFullPath($args[0])",
+      "$target=[IO.Path]::GetFullPath($args[$args.Count-1])",
       "$prefix=$root + [IO.Path]::DirectorySeparatorChar",
       "if ($target -ne $root -and -not $target.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase)) { exit 20 }",
       "foreach ($candidate in @($args)) {",
-      "  $full=[IO.Path]::GetFullPath($candidate).TrimEnd([IO.Path]::DirectorySeparatorChar)",
+      "  $full=[IO.Path]::GetFullPath($candidate)",
       "  if ($full -ne $root -and -not $full.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase)) { exit 20 }",
       "  $item=Get-Item -LiteralPath $full -Force",
       "  if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { exit 21 }",
