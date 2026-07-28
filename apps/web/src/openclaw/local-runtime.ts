@@ -425,6 +425,17 @@ function resolveSourceRuntimeCandidate(paths: ReturnType<typeof buildLaunchPlanS
   return null;
 }
 
+function resolveForgeSourceCheckoutCandidate(
+  candidate: ForgeSourceRuntimeCandidate | null
+): ForgeSourceRuntimeCandidate | null {
+  const isCheckout =
+    candidate !== null &&
+    existsSync(path.join(candidate.root, ".git")) &&
+    existsSync(path.join(candidate.root, "package.json")) &&
+    existsSync(path.join(candidate.root, "plugins", "openclaw", "package.json"));
+  return isCheckout ? candidate : null;
+}
+
 function getRuntimeLogPath(config: ForgePluginConfig) {
   const origin = new URL(config.origin).hostname.toLowerCase().replace(/[^a-z0-9._-]+/g, "-");
   return path.join(homedir(), ".openclaw", "logs", FORGE_PLUGIN_ID, `${origin}-${config.port}.log`);
@@ -526,10 +537,13 @@ async function ensurePackagedRuntimeDependencies(plan: ForgeRuntimeLaunchPlan, c
   return installPromise;
 }
 
-function resolveLaunchPlan(): ForgeRuntimeLaunchPlan | null {
-  const moduleRoot = getCurrentModuleRoot();
+export function resolveLaunchPlan(
+  moduleRoot = getCurrentModuleRoot()
+): ForgeRuntimeLaunchPlan | null {
   const paths = buildLaunchPlanSearchPaths(moduleRoot);
   const sourceCandidate = resolveSourceRuntimeCandidate(paths);
+  const sourceCheckoutCandidate =
+    resolveForgeSourceCheckoutCandidate(sourceCandidate);
 
   if (isTruthyEnvFlag(process.env.FORGE_OPENCLAW_DEV)) {
     if (sourceCandidate) {
@@ -541,6 +555,18 @@ function resolveLaunchPlan(): ForgeRuntimeLaunchPlan | null {
       };
     }
     throw new Error(formatLaunchPlanFailure(moduleRoot));
+  }
+
+  // A linked development install contains both a generated package runtime and
+  // the current Forge checkout. Prefer the checkout so an integration cannot
+  // replace a freshly restarted source server with an older generated bundle.
+  if (sourceCheckoutCandidate) {
+    return {
+      packageRoot: sourceCheckoutCandidate.root,
+      entryFile: sourceCheckoutCandidate.tsxCli,
+      mode: "source",
+      sourceEntryFile: sourceCheckoutCandidate.entryFile
+    };
   }
 
   // Published or linked plugin package runtime.

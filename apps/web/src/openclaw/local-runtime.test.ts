@@ -1,4 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -505,6 +511,65 @@ describe("forge local runtime", () => {
       );
     } finally {
       rmSync(tempHome, { recursive: true, force: true });
+    }
+  });
+
+  it("prefers a linked Forge checkout while preserving published package launches", async () => {
+    const tempRoot = mkdtempSync(path.join(tmpdir(), "forge-launch-plan-"));
+    vi.stubEnv("FORGE_OPENCLAW_DEV", "");
+    try {
+      const checkoutRoot = path.join(tempRoot, "checkout");
+      const linkedPluginRoot = path.join(checkoutRoot, "plugins", "openclaw");
+      const sourceEntry = path.join(checkoutRoot, "apps", "api", "src", "index.ts");
+      const tsxEntry = path.join(
+        checkoutRoot,
+        "node_modules",
+        "tsx",
+        "dist",
+        "cli.mjs"
+      );
+      const generatedEntry = path.join(linkedPluginRoot, "server", "index.js");
+      const generatedMigrations = path.join(linkedPluginRoot, "server", "migrations");
+      for (const directory of [
+        path.join(checkoutRoot, ".git"),
+        path.dirname(sourceEntry),
+        path.dirname(tsxEntry),
+        path.dirname(generatedEntry),
+        generatedMigrations
+      ]) {
+        mkdirSync(directory, { recursive: true });
+      }
+      for (const file of [
+        path.join(checkoutRoot, "package.json"),
+        path.join(linkedPluginRoot, "package.json"),
+        sourceEntry,
+        tsxEntry,
+        generatedEntry
+      ]) {
+        writeFileSync(file, "{}\n");
+      }
+
+      const publishedRoot = path.join(tempRoot, "published-plugin");
+      const publishedEntry = path.join(publishedRoot, "server", "index.js");
+      const publishedMigrations = path.join(publishedRoot, "server", "migrations");
+      mkdirSync(path.dirname(publishedEntry), { recursive: true });
+      mkdirSync(publishedMigrations, { recursive: true });
+      writeFileSync(publishedEntry, "{}\n");
+
+      const { resolveLaunchPlan } = await import("./local-runtime");
+      expect(resolveLaunchPlan(linkedPluginRoot)).toEqual({
+        packageRoot: checkoutRoot,
+        entryFile: tsxEntry,
+        mode: "source",
+        sourceEntryFile: sourceEntry
+      });
+      expect(resolveLaunchPlan(publishedRoot)).toEqual({
+        packageRoot: publishedRoot,
+        entryFile: publishedEntry,
+        mode: "packaged"
+      });
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
     }
   });
 });
