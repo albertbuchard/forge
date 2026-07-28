@@ -37,6 +37,23 @@ function inspectPowerShellInvocation(args, options) {
   };
 }
 
+function spawnPowerShellWithFailureDiagnostics(command, args, options) {
+  const result = spawnSync(command, args, options);
+  if (result.error || result.status !== 0) {
+    console.error(
+      "Windows owner PowerShell diagnostic:",
+      JSON.stringify({
+        errorCode: result.error?.code ?? null,
+        status: result.status,
+        signal: result.signal,
+        stderr:
+          typeof result.stderr === "string" ? result.stderr.slice(0, 2_000) : ""
+      })
+    );
+  }
+  return result;
+}
+
 function challenge(overrides = {}) {
   return {
     protocol: WINDOWS_OWNER_PROOF_PROTOCOL,
@@ -135,6 +152,7 @@ test(
     );
     const created = await ensureWindowsOwnerCredential({
       credentialPath,
+      spawnSyncImpl: spawnPowerShellWithFailureDiagnostics,
       randomSource: () => Buffer.from(fixedKey),
       now: () => new Date("2026-07-26T12:00:00.000Z")
     });
