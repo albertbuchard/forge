@@ -228,6 +228,7 @@ function protectForCurrentWindowsUser(
 ) {
   const script = [
     "$ErrorActionPreference='Stop'",
+    "[void][Reflection.Assembly]::Load('System.Security, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a')",
     "$plain=[Convert]::FromBase64String([Console]::In.ReadToEnd().Trim())",
     `$entropy=[Text.Encoding]::UTF8.GetBytes('${WINDOWS_OWNER_ENTROPY}')`,
     "$protected=[Security.Cryptography.ProtectedData]::Protect($plain,$entropy,[Security.Cryptography.DataProtectionScope]::CurrentUser)",
@@ -248,6 +249,7 @@ function unprotectForCurrentWindowsUser(
 ) {
   const script = [
     "$ErrorActionPreference='Stop'",
+    "[void][Reflection.Assembly]::Load('System.Security, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a')",
     "$protected=[Convert]::FromBase64String([Console]::In.ReadToEnd().Trim())",
     `$entropy=[Text.Encoding]::UTF8.GetBytes('${WINDOWS_OWNER_ENTROPY}')`,
     "$plain=[Security.Cryptography.ProtectedData]::Unprotect($protected,$entropy,[Security.Cryptography.DataProtectionScope]::CurrentUser)",
