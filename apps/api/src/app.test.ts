@@ -57,7 +57,11 @@ import { resolveWebAssetLocation } from "./web.js";
 
 const testOperatorAuthority = new WeakMap<
   Awaited<ReturnType<typeof buildForgeServer>>,
-  { cookie: string; csrf: string }
+  {
+    cookie: string;
+    csrf: string;
+    createLocalOwner: () => { cookie: string; csrf: string };
+  }
 >();
 
 async function buildServer(
@@ -90,7 +94,34 @@ async function buildServer(
   });
   const authority = {
     cookie: `forge_session=${encodeURIComponent(issued.sessionToken)}`,
-    csrf: issued.csrfToken
+    csrf: issued.csrfToken,
+    createLocalOwner: () => {
+      const localOwnerIssued = security.browserSessions.create(
+        {
+          kind: "local_service",
+          subjectId: "user_operator",
+          ownerId: "user_operator",
+          clientId: null,
+          installationId: security.installationId,
+          audience: security.audience,
+          scopes: ["*"],
+          profile: "operator",
+          ownerSecurityEpoch: ownerEpoch,
+          clientSecurityEpoch: null,
+          authenticatedAt: new Date().toISOString()
+        },
+        {
+          idleLifetimeSeconds: 5 * 60,
+          absoluteLifetimeSeconds: 15 * 60
+        }
+      );
+      return {
+        cookie: `forge_session=${encodeURIComponent(
+          localOwnerIssued.sessionToken
+        )}`,
+        csrf: localOwnerIssued.csrfToken
+      };
+    }
   };
   testOperatorAuthority.set(app, authority);
   let latestMobilePairing:
@@ -215,6 +246,14 @@ async function issueOperatorSessionCookie(
   return authority.cookie;
 }
 
+async function issueLocalOwnerSession(
+  app: Awaited<ReturnType<typeof buildServer>>
+) {
+  const authority = testOperatorAuthority.get(app);
+  assert.ok(authority);
+  return authority.createLocalOwner();
+}
+
 type WikiIngestJobPollPayload = {
   job: { status: string };
   candidates: Array<{
@@ -318,6 +357,73 @@ test("companion pairing requires an authenticated operator session", async () =>
     assert.equal(response.statusCode, 401);
     const payload = response.json() as { code: string; route: string };
     assert.equal(payload.code, "gateway_authentication_required");
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("companion pairing accepts the verified direct-loopback local owner service", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-companion-local-owner-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const localOwner = await issueLocalOwnerSession(app);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: localOwner.cookie,
+        "x-forge-csrf": localOwner.csrf,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: null,
+        transportMode: "manual-http",
+        fallbackMode: "tailscale",
+        publicUrl: "https://forge.tailnet.example/forge/"
+      }
+    });
+    assert.equal(response.statusCode, 201);
+    const payload = response.json() as {
+      session: { userId: string };
+      qrPayload: { apiBaseUrl: string; uiBaseUrl: string };
+    };
+    assert.equal(payload.session.userId, "user_operator");
+    assert.equal(
+      payload.qrPayload.apiBaseUrl,
+      "https://forge.tailnet.example/api/v1"
+    );
+    assert.equal(
+      payload.qrPayload.uiBaseUrl,
+      "https://forge.tailnet.example/forge/"
+    );
+    const remoteLocalOwner = await issueLocalOwnerSession(app);
+    const remoteAttempt = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: remoteLocalOwner.cookie,
+        "x-forge-csrf": remoteLocalOwner.csrf,
+        host: "forge.tailnet.example",
+        "x-forwarded-for": "100.64.0.10",
+        "x-forwarded-proto": "https"
+      },
+      payload: {
+        userId: null,
+        transportMode: "manual-http",
+        fallbackMode: "tailscale",
+        publicUrl: "https://forge.tailnet.example/forge/"
+      }
+    });
+    assert.equal(remoteAttempt.statusCode, 401);
+    assert.equal(
+      remoteAttempt.json<{ code: string }>().code,
+      "gateway_local_session_transport_invalid"
+    );
   } finally {
     await app.close();
     closeDatabase();

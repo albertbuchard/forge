@@ -3,7 +3,10 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
 import { HttpError } from "../errors.js";
-import type { ApplicationSecurityRuntime } from "./application-security-runtime.js";
+import {
+  isDirectLocalTransport,
+  type ApplicationSecurityRuntime
+} from "./application-security-runtime.js";
 import type { ForgePrincipal } from "./contracts.js";
 import {
   isCompanionBootstrapGrant,
@@ -108,6 +111,28 @@ function requireSameTargetBrowserOrigin(
     );
   }
   return origin;
+}
+
+function ownerPairingSession(request: FastifyRequest) {
+  const authentication = request.forgeSecurity?.authentication;
+  const ownerPrincipal =
+    authentication?.mode === "browser_session" &&
+    authentication.browserSession &&
+    (authentication.principal.kind === "operator_session" ||
+      (authentication.principal.kind === "local_service" &&
+        isDirectLocalTransport(request)));
+  if (
+    !ownerPrincipal ||
+    authentication.mode !== "browser_session" ||
+    !authentication.browserSession
+  ) {
+    throw new HttpError(
+      401,
+      "pairing_owner_session_required",
+      "Forge pairing approval requires an authenticated local owner session."
+    );
+  }
+  return authentication.browserSession.verified;
 }
 
 function ownerBrowserSession(request: FastifyRequest) {
@@ -406,7 +431,7 @@ export function registerRemotePairingRoutes(
 
   app.get("/api/v1/auth/device/requests", async (request) => {
     const reviews = runtime.pairingOwnerAuthorizations.listActiveRequests({
-      session: ownerBrowserSession(request),
+      session: ownerPairingSession(request),
       limit: 25
     });
     return {
@@ -431,7 +456,7 @@ export function registerRemotePairingRoutes(
         .object({ userCode: z.string().trim().min(8).max(64) })
         .strict()
         .parse(request.body ?? {});
-      const session = ownerBrowserSession(request);
+      const session = ownerPairingSession(request);
       const pending = runtime.store.readPairingRequest(requestId);
       if (!pending) {
         throw new HttpError(
@@ -478,7 +503,7 @@ export function registerRemotePairingRoutes(
       runtime.pairing.deny({
         authorization:
           runtime.pairingOwnerAuthorizations.authorizeDenialByRequestId({
-            session: ownerBrowserSession(request),
+            session: ownerPairingSession(request),
             requestId
           })
       });

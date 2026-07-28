@@ -252,21 +252,42 @@ export class BrowserSessionService {
   }
 
   consumeAuthenticatedOwnerSession(session: VerifiedBrowserSession) {
+    return this.consumeAuthenticatedOwnerAuthority(session, false);
+  }
+
+  consumeAuthenticatedPairingOwnerSession(session: VerifiedBrowserSession) {
+    return this.consumeAuthenticatedOwnerAuthority(session, true);
+  }
+
+  private consumeAuthenticatedOwnerAuthority(
+    session: VerifiedBrowserSession,
+    allowLocalService: boolean
+  ) {
+    const principal = session.principal;
+    const isOwnerBrowser =
+      principal.kind === "operator_session" &&
+      principal.profile === "operator" &&
+      principal.clientId === null &&
+      principal.installationId === null &&
+      principal.clientSecurityEpoch === null;
+    const isLocalOwnerService =
+      allowLocalService &&
+      principal.kind === "local_service" &&
+      principal.profile === "operator" &&
+      principal.clientId === null &&
+      principal.installationId !== null &&
+      principal.clientSecurityEpoch === null;
     if (
       !this.unusedAuthentications.delete(session) ||
-      session.principal.kind !== "operator_session" ||
-      session.principal.profile !== "operator" ||
-      session.principal.clientId !== null ||
-      session.principal.installationId !== null ||
-      session.principal.clientSecurityEpoch !== null ||
-      this.ownerEpochs.readOwnerSecurityEpoch(session.principal.ownerId) !==
-        session.principal.ownerSecurityEpoch
+      (!isOwnerBrowser && !isLocalOwnerService) ||
+      this.ownerEpochs.readOwnerSecurityEpoch(principal.ownerId) !==
+        principal.ownerSecurityEpoch
     ) {
       throw new Error(
         "Forge browser-session authority is forged, replayed, or stale."
       );
     }
-    return session.principal;
+    return principal;
   }
 
   rotate(sessionToken: string) {

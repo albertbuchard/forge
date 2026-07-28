@@ -15620,6 +15620,12 @@ export async function buildServer(
   });
   app.post("/api/v1/health/pairing-sessions", async (request, reply) => {
     const authentication = request.forgeSecurity?.authentication;
+    const localOwnerPrincipal =
+      authentication?.mode === "browser_session" &&
+      authentication.principal.kind === "local_service" &&
+      isDirectLocalTransport(request)
+        ? authentication.principal
+        : null;
     const candidateBootstrapPrincipal =
       authentication?.mode === "access_credential" &&
       authentication.principal.kind === "paired_client" &&
@@ -15650,10 +15656,23 @@ export async function buildServer(
           capabilities: [...COMPANION_BOOTSTRAP_CAPABILITIES]
         })
       : (() => {
-          requireOperatorSession(request.headers as Record<string, unknown>, {
-            route: "/api/v1/health/pairing-sessions"
-          });
-          return createCompanionPairingSessionSchema.parse(request.body ?? {});
+          if (!localOwnerPrincipal) {
+            requireOperatorSession(
+              request.headers as Record<string, unknown>,
+              {
+                route: "/api/v1/health/pairing-sessions"
+              }
+            );
+          }
+          const parsedInput = createCompanionPairingSessionSchema.parse(
+            request.body ?? {}
+          );
+          return localOwnerPrincipal
+            ? {
+                ...parsedInput,
+                userId: localOwnerPrincipal.ownerId
+              }
+            : parsedInput;
         })();
     const requestApiBaseUrl = bootstrapPrincipal
       ? new URL(

@@ -98,12 +98,15 @@ test("a local-owner session is proof-bound and usable only once", () => {
     absoluteLifetimeSeconds: 60 * 60
   });
 
-  assert.ok(
-    service.authenticate({
-      sessionToken: session.sessionToken,
-      csrfToken: session.csrfToken,
-      unsafeMethod: false
-    })
+  const authenticated = service.authenticate({
+    sessionToken: session.sessionToken,
+    csrfToken: session.csrfToken,
+    unsafeMethod: false
+  });
+  assert.ok(authenticated);
+  assert.equal(
+    service.consumeAuthenticatedPairingOwnerSession(authenticated).kind,
+    "local_service"
   );
   assert.equal(
     service.authenticate({
@@ -112,6 +115,21 @@ test("a local-owner session is proof-bound and usable only once", () => {
       unsafeMethod: false
     }),
     null
+  );
+
+  const browserOnlyCheck = service.create(principal, {
+    idleLifetimeSeconds: 15 * 60,
+    absoluteLifetimeSeconds: 60 * 60
+  });
+  const browserOnlyAuthentication = service.authenticate({
+    sessionToken: browserOnlyCheck.sessionToken,
+    csrfToken: browserOnlyCheck.csrfToken,
+    unsafeMethod: false
+  });
+  assert.ok(browserOnlyAuthentication);
+  assert.throws(
+    () => service.consumeAuthenticatedOwnerSession(browserOnlyAuthentication),
+    /forged, replayed, or stale/
   );
 });
 

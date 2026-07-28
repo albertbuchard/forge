@@ -615,6 +615,152 @@ test("local owner lists exact requests, approves one real client, and can clear 
   }
 });
 
+test("verified loopback owner CLI can review and decide ordinary pairing without gaining remote or elevated authority", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "forge-cli-pairing-"));
+  let runtime!: ApplicationSecurityRuntime;
+  const app = await buildServer({
+    dataRoot: root,
+    seedDemoData: false,
+    taskRunWatchdog: false,
+    devrageMetricSync: false,
+    peerRuntime: false,
+    onSecurityRuntimeReady(value) {
+      runtime = value;
+    }
+  });
+  try {
+    const begin = async (
+      clientName: string,
+      requestedProfile: "viewer" | "executor"
+    ) => {
+      const key = await clientKey();
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/auth/device",
+        headers: { host: "127.0.0.1" },
+        payload: {
+          clientName,
+          clientType: "api",
+          clientKeyThumbprint: key.thumbprint,
+          requestedScopes: ["read"],
+          requestedProfile
+        }
+      });
+      assert.equal(response.statusCode, 200, response.body);
+      return response.json<{
+        requestId: string;
+        userCode: string;
+      }>();
+    };
+    const ordinary = await begin("CLI ordinary client", "viewer");
+    const elevated = await begin("CLI elevated client", "executor");
+    const ordinaryRecord = runtime.store.readPairingRequest(ordinary.requestId);
+    assert.ok(ordinaryRecord);
+
+    const localOwnerHeaders = () => {
+      const session = runtime.browserSessions.create(
+        {
+          kind: "local_service",
+          subjectId: ordinaryRecord.ownerId,
+          ownerId: ordinaryRecord.ownerId,
+          clientId: null,
+          installationId: runtime.installationId,
+          audience: runtime.audience,
+          scopes: ["*"],
+          profile: "operator",
+          ownerSecurityEpoch: ordinaryRecord.ownerSecurityEpoch,
+          clientSecurityEpoch: null,
+          authenticatedAt: new Date().toISOString()
+        },
+        {
+          idleLifetimeSeconds: 5 * 60,
+          absoluteLifetimeSeconds: 15 * 60
+        }
+      );
+      return {
+        host: "127.0.0.1",
+        cookie: `forge_session=${encodeURIComponent(session.sessionToken)}`,
+        "x-forge-csrf": session.csrfToken
+      };
+    };
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/device/requests",
+      headers: localOwnerHeaders()
+    });
+    assert.equal(listed.statusCode, 200, listed.body);
+    assert.deepEqual(
+      new Set(
+        listed
+          .json<{ requests: Array<{ requestId: string }> }>()
+          .requests.map((request) => request.requestId)
+      ),
+      new Set([ordinary.requestId, elevated.requestId])
+    );
+
+    const remoteHeaders = localOwnerHeaders();
+    const remoteList = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/device/requests",
+      headers: {
+        ...remoteHeaders,
+        host: "forge.tailnet.example",
+        "x-forwarded-for": "100.64.0.10",
+        "x-forwarded-proto": "https"
+      }
+    });
+    assert.equal(remoteList.statusCode, 401, remoteList.body);
+    assert.equal(
+      remoteList.json<{ code: string }>().code,
+      "gateway_local_session_transport_invalid"
+    );
+
+    const approved = await app.inject({
+      method: "POST",
+      url: `/api/v1/auth/device/requests/${ordinary.requestId}/approve`,
+      headers: localOwnerHeaders(),
+      payload: { userCode: ordinary.userCode }
+    });
+    assert.equal(approved.statusCode, 200, approved.body);
+    assert.ok(runtime.store.readClientBySubjectId(ordinary.requestId));
+
+    const elevatedAttempt = await app.inject({
+      method: "POST",
+      url: `/api/v1/auth/device/requests/${elevated.requestId}/approve`,
+      headers: localOwnerHeaders(),
+      payload: { userCode: elevated.userCode }
+    });
+    assert.equal(elevatedAttempt.statusCode, 403, elevatedAttempt.body);
+    assert.equal(
+      runtime.store.readPairingRequest(elevated.requestId)?.status,
+      "pending"
+    );
+
+    const denied = await app.inject({
+      method: "POST",
+      url: `/api/v1/auth/device/requests/${elevated.requestId}/deny`,
+      headers: localOwnerHeaders(),
+      payload: {}
+    });
+    assert.equal(denied.statusCode, 200, denied.body);
+    assert.equal(
+      runtime.store.readPairingRequest(elevated.requestId)?.status,
+      "denied"
+    );
+
+    const clientList = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/clients",
+      headers: localOwnerHeaders()
+    });
+    assert.equal(clientList.statusCode, 401, clientList.body);
+  } finally {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("companion bootstrap grants one pairing invitation and no renewable API credential", async () => {
   const root = await mkdtemp(
     path.join(os.tmpdir(), "forge-companion-bootstrap-")

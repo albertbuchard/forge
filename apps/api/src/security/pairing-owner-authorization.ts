@@ -104,7 +104,9 @@ export class PairingOwnerAuthorizationService<ServerContext = unknown> {
     privilegedAuthorization?: PrivilegedPairingAuthorization;
   }) {
     const sessionPrincipal =
-      this.browserSessions.consumeAuthenticatedOwnerSession(input.session);
+      this.browserSessions.consumeAuthenticatedPairingOwnerSession(
+        input.session
+      );
     const request = this.resolvePendingRequest(
       input.userCode,
       input.networkPartition
@@ -163,7 +165,9 @@ export class PairingOwnerAuthorizationService<ServerContext = unknown> {
     networkPartition: VerifiedNetworkPartition;
   }) {
     const sessionPrincipal =
-      this.browserSessions.consumeAuthenticatedOwnerSession(input.session);
+      this.browserSessions.consumeAuthenticatedPairingOwnerSession(
+        input.session
+      );
     const request = this.resolvePendingRequest(
       input.userCode,
       input.networkPartition
@@ -177,7 +181,9 @@ export class PairingOwnerAuthorizationService<ServerContext = unknown> {
     limit?: number;
   }) {
     const sessionPrincipal =
-      this.browserSessions.consumeAuthenticatedOwnerSession(input.session);
+      this.browserSessions.consumeAuthenticatedPairingOwnerSession(
+        input.session
+      );
     const currentEpoch = this.repository.readOwnerSecurityEpoch(
       sessionPrincipal.ownerId
     );
@@ -205,7 +211,9 @@ export class PairingOwnerAuthorizationService<ServerContext = unknown> {
     networkPartition: VerifiedNetworkPartition;
   }) {
     const sessionPrincipal =
-      this.browserSessions.consumeAuthenticatedOwnerSession(input.session);
+      this.browserSessions.consumeAuthenticatedPairingOwnerSession(
+        input.session
+      );
     const request = this.resolvePendingRequest(
       input.userCode,
       input.networkPartition
@@ -225,7 +233,9 @@ export class PairingOwnerAuthorizationService<ServerContext = unknown> {
     requestId: string;
   }) {
     const sessionPrincipal =
-      this.browserSessions.consumeAuthenticatedOwnerSession(input.session);
+      this.browserSessions.consumeAuthenticatedPairingOwnerSession(
+        input.session
+      );
     const request = this.repository.readPairingRequest(input.requestId);
     if (
       !request ||
