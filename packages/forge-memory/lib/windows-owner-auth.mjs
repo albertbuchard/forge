@@ -53,13 +53,15 @@ function runPowerShell({
   systemRoot,
   spawnSyncImpl = spawnSync
 }) {
-  const encodedArguments = Buffer.from(JSON.stringify(args), "utf8").toString(
-    "base64"
-  );
+  const encodedArguments = Buffer.from(
+    JSON.stringify({ values: args }),
+    "utf8"
+  ).toString("base64");
   const encodedCommand = Buffer.from(
     [
       "$forgeArgumentsJson=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:FORGE_WINDOWS_OWNER_POWERSHELL_ARGUMENTS_B64))",
-      "$forgeArgs=@(ConvertFrom-Json -InputObject $forgeArgumentsJson)",
+      "$forgeArgumentEnvelope=ConvertFrom-Json -InputObject $forgeArgumentsJson",
+      "$forgeArgs=[Object[]]$forgeArgumentEnvelope.values",
       script
     ].join("\n"),
     "utf16le"

@@ -27,29 +27,14 @@ function inspectPowerShellInvocation(args, options) {
   const encodedArguments = options.env?.[POWERSHELL_ARGUMENTS_ENV];
   assert.equal(typeof encodedCommand, "string");
   assert.equal(typeof encodedArguments, "string");
+  const argumentEnvelope = JSON.parse(
+    Buffer.from(encodedArguments, "base64").toString("utf8")
+  );
+  assert.ok(Array.isArray(argumentEnvelope.values));
   return {
     script: Buffer.from(encodedCommand, "base64").toString("utf16le"),
-    arguments: JSON.parse(
-      Buffer.from(encodedArguments, "base64").toString("utf8")
-    )
+    arguments: argumentEnvelope.values
   };
-}
-
-function spawnPowerShellWithFailureDiagnostics(command, args, options) {
-  const result = spawnSync(command, args, options);
-  if (result.error || result.status !== 0) {
-    console.error(
-      "Windows owner PowerShell diagnostic:",
-      JSON.stringify({
-        errorCode: result.error?.code ?? null,
-        status: result.status,
-        signal: result.signal,
-        stderr:
-          typeof result.stderr === "string" ? result.stderr.slice(0, 1_000) : ""
-      })
-    );
-  }
-  return result;
 }
 
 function challenge(overrides = {}) {
@@ -150,7 +135,6 @@ test(
     );
     const created = await ensureWindowsOwnerCredential({
       credentialPath,
-      spawnSyncImpl: spawnPowerShellWithFailureDiagnostics,
       randomSource: () => Buffer.from(fixedKey),
       now: () => new Date("2026-07-26T12:00:00.000Z")
     });
@@ -166,25 +150,19 @@ test(
     assert.equal(storedBody.includes(fixedKey.toString("hex")), false);
     assert.doesNotMatch(storedBody, /0011223344556677/);
 
-    const inspection = inspectWindowsOwnerCredential(credentialPath, {
-      spawnSyncImpl: spawnPowerShellWithFailureDiagnostics
-    });
+    const inspection = inspectWindowsOwnerCredential(credentialPath);
     assert.ok(inspection);
     assert.equal(inspection.ownerSid, created.ownerSid);
     assert.equal(inspection.created, false);
 
     const proof = createWindowsOwnerProofFromCredential({
       credentialPath,
-      challenge: challenge(),
-      spawnSyncImpl: spawnPowerShellWithFailureDiagnostics
+      challenge: challenge()
     });
     assert.match(proof, /^[0-9a-f]{64}$/);
     assert.equal(proof, createWindowsOwnerProof(fixedKey, challenge()));
 
-    const reused = await ensureWindowsOwnerCredential({
-      credentialPath,
-      spawnSyncImpl: spawnPowerShellWithFailureDiagnostics
-    });
+    const reused = await ensureWindowsOwnerCredential({ credentialPath });
     assert.equal(reused.created, false);
     assert.equal(reused.protectedKeySha256, created.protectedKeySha256);
   }
