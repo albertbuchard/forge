@@ -1293,6 +1293,75 @@ await withFakeForgeServer(
         "Expected pair-ios to save the full manual pairing payload"
       );
     }
+    if (process.platform !== "win32") {
+      const pairingDirectoryMode =
+        fs.statSync(path.dirname(savedPairingPath)).mode & 0o777;
+      const pairingPayloadMode = fs.statSync(savedPairingPath).mode & 0o777;
+      if (pairingDirectoryMode !== 0o700 || pairingPayloadMode !== 0o600) {
+        throw new Error(
+          `Expected owner-only pairing payload permissions, got directory ${pairingDirectoryMode.toString(8)} and file ${pairingPayloadMode.toString(8)}`
+        );
+      }
+    }
+    const repeatedPairing = await runAsyncFailure(["pair-ios", "--no-start"]);
+    if (
+      repeatedPairing.stdout.includes("pairing-token") ||
+      repeatedPairing.stderr.includes("pairing-token")
+    ) {
+      throw new Error(
+        "Expected pairing payload persistence failure not to print the raw secret"
+      );
+    }
+    const remainingPayloadFiles = fs
+      .readdirSync(path.dirname(savedPairingPath))
+      .filter((entry) => entry !== path.basename(savedPairingPath));
+    if (remainingPayloadFiles.length !== 0) {
+      throw new Error(
+        `Expected failed pairing payload publication to remove temporary files, got ${remainingPayloadFiles.join(", ")}`
+      );
+    }
+  }
+);
+await withFakeForgeServer(
+  async (request) => {
+    if (request.url === "/api/v1/health")
+      return { body: forgeHealthResponse() };
+    if (request.url === "/api/v1/health/pairing-sessions") {
+      return {
+        statusCode: 201,
+        body: {
+          qrPayload: {
+            kind: "forge_companion_pairing",
+            apiBaseUrl: "forge-iroh://fake-node/api/v1",
+            uiBaseUrl: "forge-iroh://fake-node/forge/",
+            transportMode: "iroh",
+            transport: { protocol: "iroh", provider: "forge-companion-iroh" },
+            sessionId: "a/../../../escaped",
+            pairingToken: "must-not-be-printed",
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+            capabilities: ["health-sync"]
+          }
+        }
+      };
+    }
+    return { statusCode: 404, body: { error: "not found" } };
+  },
+  async ({ port }) => {
+    writePairingSmokeConfig(port);
+    const failure = await runAsyncFailure(["pair-ios", "--no-start"]);
+    if (
+      failure.stdout.includes("must-not-be-printed") ||
+      failure.stderr.includes("must-not-be-printed")
+    ) {
+      throw new Error(
+        "Expected unsafe pairing response rejection not to print the raw secret"
+      );
+    }
+    if (!failure.stderr.includes("unsafe session identifier")) {
+      throw new Error(
+        `Expected unsafe pairing session rejection, got ${failure.stderr}`
+      );
+    }
   }
 );
 await withFakeForgeServer(

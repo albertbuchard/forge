@@ -8,7 +8,9 @@ on:
     paths:
       - ".github/workflows/windows-owner-auth.yml"
       - "packages/forge-memory/bin/forge-memory.mjs"
+      - "packages/forge-memory/lib/pairing-payload-file.mjs"
       - "packages/forge-memory/lib/windows-owner-auth.mjs"
+      - "packages/forge-memory/tests/pairing-payload-file.test.mjs"
       - "packages/forge-memory/tests/runtime-mutation.test.mjs"
       - "packages/forge-memory/tests/windows-owner-auth.test.mjs"
       - "apps/api/src/security/application-security-runtime.ts"
@@ -20,7 +22,9 @@ on:
     paths:
       - ".github/workflows/windows-owner-auth.yml"
       - "packages/forge-memory/bin/forge-memory.mjs"
+      - "packages/forge-memory/lib/pairing-payload-file.mjs"
       - "packages/forge-memory/lib/windows-owner-auth.mjs"
+      - "packages/forge-memory/tests/pairing-payload-file.test.mjs"
       - "packages/forge-memory/tests/runtime-mutation.test.mjs"
       - "packages/forge-memory/tests/windows-owner-auth.test.mjs"
       - "apps/api/src/security/application-security-runtime.ts"
@@ -76,6 +80,7 @@ jobs:
             ./tests/macos-browser-handler.test.mjs `
             ./tests/native-source-manifest.test.mjs `
             ./tests/native-source-signing-key.test.mjs `
+            ./tests/pairing-payload-file.test.mjs `
             ./tests/remote-pairing.test.mjs `
             ./tests/runtime-mutation.test.mjs `
             ./tests/windows-owner-auth.test.mjs

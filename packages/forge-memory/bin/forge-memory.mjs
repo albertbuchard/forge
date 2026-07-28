@@ -21,6 +21,7 @@ import {
   readMacosRemoteCredential
 } from "../lib/remote-pairing.mjs";
 import { executePairingDecision } from "../lib/pairing-command.mjs";
+import { writeCompanionPairingPayloadFile } from "../lib/pairing-payload-file.mjs";
 import YAML from "yaml";
 import qrcode from "qrcode-terminal";
 import open from "open";
@@ -4950,6 +4951,14 @@ async function createPairing(config, options = {}) {
   assertPairingTransportUsable(pairing, {
     requestedTransportMode: transportMode
   });
+  if (
+    typeof pairing?.qrPayload?.sessionId !== "string" ||
+    !/^pair_[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(pairing.qrPayload.sessionId)
+  ) {
+    throw new Error(
+      "Forge refused a Companion pairing response with an unsafe session identifier."
+    );
+  }
   return pairing;
 }
 
@@ -5338,18 +5347,10 @@ function compactObject(value) {
 }
 
 async function writePairingPayloadFile(payload) {
-  const pairingDir = path.join(forgeHome(), "pairing");
-  await fsp.mkdir(pairingDir, { recursive: true });
-  const filePath = path.join(
-    pairingDir,
-    `forge-companion-${payload.sessionId}.json`
-  );
-  await fsp.writeFile(
-    filePath,
-    `${JSON.stringify(payload, null, 2)}\n`,
-    "utf8"
-  );
-  return filePath;
+  return writeCompanionPairingPayloadFile({
+    forgeRoot: forgeHome(),
+    payload
+  });
 }
 
 function isLoopbackPairingUrl(value) {
@@ -5420,12 +5421,15 @@ async function printPairing(pairing) {
       )
     );
   } catch (error) {
-    console.log(
-      color.yellow(
-        `Could not save pairing payload file: ${error instanceof Error ? error.message : String(error)}`
-      )
+    throw new Error(
+      [
+        `Could not save the owner-only pairing payload file: ${error instanceof Error ? error.message : String(error)}`,
+        "Forge did not print the raw pairing secret.",
+        "Fix the local Forge directory permissions and rerun this command.",
+        "Use --json only when you explicitly intend to display the pairing payload in this terminal."
+      ].join(" "),
+      { cause: error }
     );
-    console.log(JSON.stringify(manualPayload));
   }
 }
 

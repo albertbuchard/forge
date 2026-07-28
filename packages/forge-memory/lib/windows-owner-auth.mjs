@@ -95,7 +95,7 @@ function runPowerShell({
   return result.stdout.trim();
 }
 
-function windowsPathIsCurrentOwnerOnly(
+export function windowsPathIsCurrentOwnerOnly(
   target,
   { systemRoot, spawnSyncImpl = spawnSync } = {}
 ) {
@@ -139,7 +139,7 @@ function windowsPathIsCurrentOwnerOnly(
   }
 }
 
-function windowsPathChainHasNoReparsePoints(
+export function windowsPathChainHasNoReparsePoints(
   expectedRoot,
   target,
   { systemRoot, spawnSyncImpl = spawnSync } = {}
@@ -188,7 +188,7 @@ function windowsPathChainHasNoReparsePoints(
   }
 }
 
-function lockWindowsPathForCurrentOwner(
+export function lockWindowsPathForCurrentOwner(
   target,
   { systemRoot, spawnSyncImpl = spawnSync } = {}
 ) {
