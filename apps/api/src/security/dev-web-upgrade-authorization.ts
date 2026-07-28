@@ -9,6 +9,6 @@ export function canUseDevWebUpgrade(
   return (
     principal?.kind === "paired_client" &&
     principal.clientType === "browser" &&
-    principal.profile === "operator"
+    ["operator", "trusted_personal_assistant"].includes(principal.profile)
   );
 }

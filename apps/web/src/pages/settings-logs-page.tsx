@@ -7,7 +7,7 @@ import {
   type ReactNode
 } from "react";
 import { createPortal } from "react-dom";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Search, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
@@ -17,6 +17,7 @@ import {
   SettingsSectionNav,
   SettingsStateFrame
 } from "@/components/settings/settings-section-nav";
+import { SettingsOwnerBoundary } from "@/components/settings/settings-owner-boundary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -24,7 +25,7 @@ import { EntityBadge } from "@/components/ui/entity-badge";
 import { ErrorState } from "@/components/ui/page-state";
 import { useAnchoredOverlayPosition } from "@/components/ui/use-anchored-overlay-position";
 import { Input } from "@/components/ui/input";
-import { listDiagnosticLogs } from "@/lib/api";
+import { ensureOperatorSession, listDiagnosticLogs } from "@/lib/api";
 import { type EntityKind, isEntityKind } from "@/lib/entity-visuals";
 import { cn } from "@/lib/utils";
 import type {
@@ -554,6 +555,12 @@ const DiagnosticLogRowCard = memo(function DiagnosticLogRowCard({
 });
 
 export function SettingsLogsPage() {
+  const operatorSessionQuery = useQuery({
+    queryKey: ["forge-operator-session"],
+    queryFn: ensureOperatorSession
+  });
+  const operatorReady =
+    operatorSessionQuery.data?.session.profile === "operator";
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = useMemo(() => {
     const legacyEntityType = searchParams.get("entityType")?.trim() || "";
@@ -643,7 +650,8 @@ export function SettingsLogsPage() {
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     placeholderData: (previousData) => previousData,
     retry: false,
-    refetchOnWindowFocus: false
+    refetchOnWindowFocus: false,
+    enabled: operatorReady
   });
 
   const setMultiFilter = (
@@ -852,7 +860,7 @@ export function SettingsLogsPage() {
     filters.entities.length +
     (searchInput.trim() ? 1 : 0);
 
-  if (logsQuery.isPending) {
+  if (operatorSessionQuery.isPending || (operatorReady && logsQuery.isPending)) {
     return (
       <SettingsStateFrame>
         <SurfaceSkeleton
@@ -863,6 +871,27 @@ export function SettingsLogsPage() {
           blocks={6}
         />
       </SettingsStateFrame>
+    );
+  }
+
+  if (operatorSessionQuery.isError) {
+    return (
+      <SettingsStateFrame>
+        <ErrorState
+          eyebrow="Settings"
+          error={operatorSessionQuery.error}
+          onRetry={() => void operatorSessionQuery.refetch()}
+        />
+      </SettingsStateFrame>
+    );
+  }
+
+  if (!operatorReady) {
+    return (
+      <SettingsOwnerBoundary
+        title="Diagnostic logs stay on the Forge host"
+        description="Runtime logs can contain sensitive operational details, so Forge does not send them to a remote paired browser."
+      />
     );
   }
 

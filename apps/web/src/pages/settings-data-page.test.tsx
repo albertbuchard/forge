@@ -308,7 +308,8 @@ describe("SettingsDataPage", () => {
 
     ensureOperatorSessionMock.mockResolvedValue({
       session: {
-        actorLabel: "Albert"
+        actorLabel: "Albert",
+        profile: "operator"
       }
     });
 
@@ -359,6 +360,22 @@ describe("SettingsDataPage", () => {
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(
       anchorClickMock
     );
+  });
+
+  it("shows the local-owner boundary without requesting data controls for a paired browser", async () => {
+    ensureOperatorSessionMock.mockResolvedValueOnce({
+      session: {
+        actorLabel: "Paired Browser",
+        profile: "trusted_personal_assistant"
+      }
+    });
+
+    renderPage();
+
+    expect(
+      await screen.findByText("Data administration stays on the Forge host")
+    ).toBeInTheDocument();
+    expect(getDataManagementStateMock).not.toHaveBeenCalled();
   });
 
   it("renders the live data view after the operator session resolves", async () => {

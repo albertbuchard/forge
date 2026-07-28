@@ -75,6 +75,18 @@ describe("settings form schema", () => {
     expect("security" in parsed).toBe(false);
   });
 
+  it("accepts the intentionally hidden operator email in a paired-browser response", () => {
+    const parsed = settingsFormSchema.parse({
+      ...publicSettingsResponse,
+      profile: {
+        ...publicSettingsResponse.profile,
+        operatorEmail: ""
+      }
+    });
+
+    expect(parsed.profile.operatorEmail).toBe("");
+  });
+
   it("keeps strict Google credential-pair validation on credential mutations", () => {
     const parsed = settingsMutationSchema.safeParse({
       ...publicSettingsResponse,

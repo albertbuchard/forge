@@ -5,6 +5,7 @@ import {
   SettingsSectionNav,
   SettingsStateFrame
 } from "@/components/settings/settings-section-nav";
+import { SettingsOwnerBoundary } from "@/components/settings/settings-owner-boundary";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { PageHero } from "@/components/shell/page-hero";
 import { Button } from "@/components/ui/button";
@@ -121,7 +122,8 @@ export function SettingsBinPage() {
     queryKey: ["forge-operator-session"],
     queryFn: ensureOperatorSession
   });
-  const operatorReady = operatorSessionQuery.isSuccess;
+  const operatorReady =
+    operatorSessionQuery.data?.session.profile === "operator";
 
   const binQuery = useQuery({
     queryKey: ["forge-settings-bin"],
@@ -284,7 +286,7 @@ export function SettingsBinPage() {
     bulkHardDeleteMutation.mutate(visibleRecords);
   }
 
-  if (operatorSessionQuery.isLoading || binQuery.isLoading) {
+  if (operatorSessionQuery.isLoading || (operatorReady && binQuery.isLoading)) {
     return (
       <SettingsStateFrame>
         <SurfaceSkeleton
@@ -307,6 +309,15 @@ export function SettingsBinPage() {
           onRetry={() => void operatorSessionQuery.refetch()}
         />
       </SettingsStateFrame>
+    );
+  }
+
+  if (!operatorReady) {
+    return (
+      <SettingsOwnerBoundary
+        title="Permanent deletion stays on the Forge host"
+        description="The bin can restore or permanently erase records, so a remote paired browser cannot open these controls."
+      />
     );
   }
 

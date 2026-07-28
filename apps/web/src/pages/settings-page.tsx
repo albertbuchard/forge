@@ -15,6 +15,7 @@ import {
   SettingsSectionNav,
   SettingsStateFrame
 } from "@/components/settings/settings-section-nav";
+import { SettingsOwnerBoundary } from "@/components/settings/settings-owner-boundary";
 import { PageHero } from "@/components/shell/page-hero";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { Button } from "@/components/ui/button";
@@ -404,26 +405,28 @@ export function SettingsPage() {
     queryKey: ["forge-operator-session"],
     queryFn: ensureOperatorSession
   });
-  const operatorReady = operatorSessionQuery.isSuccess;
+  const sessionReady = operatorSessionQuery.isSuccess;
+  const isOperatorSession =
+    operatorSessionQuery.data?.session.profile === "operator";
 
   const settingsQuery = useQuery({
     queryKey: ["forge-settings"],
     queryFn: getSettings,
-    enabled: operatorReady
+    enabled: sessionReady
   });
   const doctorQuery = useGetForgeDoctorQuery(undefined, {
-    skip: !operatorReady
+    skip: !isOperatorSession
   });
   const companionOverviewQuery = useQuery({
     queryKey: ["forge-companion-overview"],
     queryFn: async () => (await getCompanionOverview()).overview,
-    enabled: operatorReady,
+    enabled: isOperatorSession,
     staleTime: 30_000
   });
   const gamificationAssetsQuery = useQuery({
     queryKey: ["forge-gamification-assets"],
     queryFn: getGamificationAssetStatus,
-    enabled: operatorReady,
+    enabled: isOperatorSession,
     staleTime: 30_000
   });
 
@@ -655,6 +658,15 @@ export function SettingsPage() {
           onRetry={() => void settingsQuery.refetch()}
         />
       </SettingsStateFrame>
+    );
+  }
+
+  if (!isOperatorSession) {
+    return (
+      <SettingsOwnerBoundary
+        title="Global settings stay on the Forge host"
+        description="Your paired browser can use Forge normally, but runtime policy, appearance, language, downloads, and Doctor repairs affect every client. Change them from Forge on the host machine."
+      />
     );
   }
 

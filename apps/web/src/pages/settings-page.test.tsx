@@ -127,7 +127,10 @@ describe("SettingsPage theme persistence", () => {
     vi.clearAllMocks();
     ensureOperatorSessionMock.mockResolvedValue({
       session: {
-        actorLabel: "Master Architect"
+        id: "operator-session",
+        actorLabel: "Master Architect",
+        profile: "operator",
+        expiresAt: "2026-04-09T19:00:00.000Z"
       }
     });
     getSettingsMock.mockResolvedValue({
@@ -404,6 +407,59 @@ describe("SettingsPage theme persistence", () => {
     const submittedSettings = patchSettingsMock.mock.calls[0]?.[0];
     expect(submittedSettings).not.toHaveProperty("calendarProviders");
     expect(submittedSettings).not.toHaveProperty("modelSettings");
+    expect(screen.queryByText("Forge could not finish rendering")).toBeNull();
+  });
+
+  it("renders a paired-browser boundary without making operator-only requests", async () => {
+    ensureOperatorSessionMock.mockResolvedValueOnce({
+      session: {
+        id: "paired-browser-session",
+        actorLabel: "Paired Browser",
+        profile: "trusted_personal_assistant",
+        expiresAt: "2026-04-09T19:00:00.000Z"
+      }
+    });
+    getSettingsMock.mockResolvedValueOnce({
+      settings: {
+        profile: {
+          operatorName: "Albert",
+          operatorEmail: "",
+          operatorTitle: "Local-first operator"
+        },
+        notifications: {
+          goalDriftAlerts: true,
+          dailyQuestReminders: true,
+          achievementCelebrations: true
+        },
+        execution: {
+          maxActiveTasks: 2,
+          timeAccountingMode: "split"
+        },
+        themePreference: "obsidian",
+        gamificationTheme: "dramatic-smithie",
+        customTheme: null,
+        localePreference: "en",
+        security: {
+          integrityScore: 98,
+          storageMode: "local-first",
+          lastAuditAt: "2026-04-09T18:00:00.000Z"
+        }
+      }
+    });
+    renderSettingsPage();
+
+    expect(
+      await screen.findByText("Global settings stay on the Forge host")
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Email")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Save settings" })
+    ).not.toBeInTheDocument();
+    expect(getForgeDoctorMock).not.toHaveBeenCalled();
+    expect(getCompanionOverviewMock).not.toHaveBeenCalled();
+    expect(getGamificationAssetStatusMock).not.toHaveBeenCalled();
+    expect(installGamificationAssetStyleMock).not.toHaveBeenCalled();
+    expect(patchSettingsMock).not.toHaveBeenCalled();
     expect(screen.queryByText("Forge could not finish rendering")).toBeNull();
   });
 

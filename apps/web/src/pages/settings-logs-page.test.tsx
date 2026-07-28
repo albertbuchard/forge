@@ -10,11 +10,13 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsLogsPage } from "@/pages/settings-logs-page";
 
-const { listDiagnosticLogsMock } = vi.hoisted(() => ({
+const { ensureOperatorSessionMock, listDiagnosticLogsMock } = vi.hoisted(() => ({
+  ensureOperatorSessionMock: vi.fn(),
   listDiagnosticLogsMock: vi.fn()
 }));
 
 vi.mock("@/lib/api", () => ({
+  ensureOperatorSession: ensureOperatorSessionMock,
   listDiagnosticLogs: listDiagnosticLogsMock
 }));
 
@@ -82,6 +84,9 @@ function renderWithProviders(initialEntry = "/settings/logs") {
 describe("SettingsLogsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    ensureOperatorSessionMock.mockResolvedValue({
+      session: { actorLabel: "Operator", profile: "operator" }
+    });
     Object.defineProperty(HTMLElement.prototype, "scrollTo", {
       configurable: true,
       value: vi.fn()
@@ -89,6 +94,22 @@ describe("SettingsLogsPage", () => {
   });
 
   afterEach(cleanup);
+
+  it("shows the local-owner boundary without requesting logs for a paired browser", async () => {
+    ensureOperatorSessionMock.mockResolvedValueOnce({
+      session: {
+        actorLabel: "Paired Browser",
+        profile: "trusted_personal_assistant"
+      }
+    });
+
+    renderWithProviders();
+
+    expect(
+      await screen.findByText("Diagnostic logs stay on the Forge host")
+    ).toBeInTheDocument();
+    expect(listDiagnosticLogsMock).not.toHaveBeenCalled();
+  });
 
   it("survives the pending-to-loaded transition without hook-order crashes", async () => {
     let resolveLogs:
@@ -122,6 +143,9 @@ describe("SettingsLogsPage", () => {
     renderWithProviders();
 
     expect(screen.queryByText("Filters")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(listDiagnosticLogsMock).toHaveBeenCalledTimes(1)
+    );
 
     resolveLogs?.({
       logs: [

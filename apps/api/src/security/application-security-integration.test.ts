@@ -169,7 +169,12 @@ test("the application gateway denies every protected surface until a credential 
           subjectId: "paired-browser-dev-proxy-test",
           clientId: "paired-browser-dev-proxy-test",
           clientType: "browser",
-          scopes: ["profile:operator"]
+          profile: "trusted_personal_assistant",
+          scopes: [
+            "read",
+            "write",
+            "profile:trusted_personal_assistant"
+          ]
         },
         pairedBrowserDevTarget
       );

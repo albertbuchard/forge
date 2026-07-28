@@ -21,6 +21,7 @@ import {
   SettingsSectionNav,
   SettingsStateFrame
 } from "@/components/settings/settings-section-nav";
+import { SettingsOwnerBoundary } from "@/components/settings/settings-owner-boundary";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -209,7 +210,8 @@ export function SettingsDataPage() {
     queryKey: ["forge-operator-session"],
     queryFn: ensureOperatorSession
   });
-  const operatorReady = operatorSessionQuery.isSuccess;
+  const operatorReady =
+    operatorSessionQuery.data?.session.profile === "operator";
 
   const dataQuery = useQuery({
     queryKey: ["forge-data-management"],
@@ -571,7 +573,10 @@ export function SettingsDataPage() {
     }
   ];
 
-  if (operatorSessionQuery.isLoading || dataQuery.isLoading) {
+  if (
+    operatorSessionQuery.isLoading ||
+    (operatorReady && dataQuery.isLoading)
+  ) {
     return (
       <SettingsStateFrame>
         <SurfaceSkeleton
@@ -594,6 +599,15 @@ export function SettingsDataPage() {
           onRetry={() => void operatorSessionQuery.refetch()}
         />
       </SettingsStateFrame>
+    );
+  }
+
+  if (!operatorReady) {
+    return (
+      <SettingsOwnerBoundary
+        title="Data administration stays on the Forge host"
+        description="Backups, restores, exports, and data-root changes can replace or disclose the live Forge database, so a remote paired browser cannot run them."
+      />
     );
   }
 

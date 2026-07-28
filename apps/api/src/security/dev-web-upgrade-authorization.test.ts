@@ -22,7 +22,7 @@ function principal(overrides: Partial<ForgePrincipal> = {}): ForgePrincipal {
   };
 }
 
-test("dev web upgrades admit only local owner sessions and paired operator browsers", () => {
+test("dev web upgrades admit local owners and supported paired browser profiles", () => {
   assert.equal(
     canUseDevWebUpgrade(
       principal({
@@ -33,8 +33,22 @@ test("dev web upgrades admit only local owner sessions and paired operator brows
     true
   );
   assert.equal(canUseDevWebUpgrade(principal()), true);
+  assert.equal(
+    canUseDevWebUpgrade(
+      principal({ profile: "trusted_personal_assistant" })
+    ),
+    true
+  );
   assert.equal(canUseDevWebUpgrade(principal({ profile: "viewer" })), false);
-  assert.equal(canUseDevWebUpgrade(principal({ clientType: "api" })), false);
+  assert.equal(
+    canUseDevWebUpgrade(
+      principal({
+        clientType: "api",
+        profile: "trusted_personal_assistant"
+      })
+    ),
+    false
+  );
   assert.equal(
     canUseDevWebUpgrade(principal({ kind: "legacy_agent_token" })),
     false

@@ -172,10 +172,16 @@ export const settingsMutationSchema = z.object({
     .optional()
 });
 
-export const settingsFormSchema = settingsMutationSchema.omit({
-  calendarProviders: true,
-  modelSettings: true
-});
+export const settingsFormSchema = settingsMutationSchema
+  .omit({
+    calendarProviders: true,
+    modelSettings: true
+  })
+  .extend({
+    profile: settingsMutationSchema.shape.profile.extend({
+      operatorEmail: z.string().trim()
+    })
+  });
 
 export const createAgentTokenSchema = z.object({
   label: z.string().trim().min(1, "Label is required"),

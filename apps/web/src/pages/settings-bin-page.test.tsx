@@ -97,7 +97,7 @@ describe("SettingsBinPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ensureOperatorSessionMock.mockResolvedValue({
-      session: { actorLabel: "Operator" }
+      session: { actorLabel: "Operator", profile: "operator" }
     });
     deleteEntitiesMock.mockResolvedValue({ results: [] });
     restoreEntitiesMock.mockResolvedValue({ results: [] });
@@ -106,6 +106,22 @@ describe("SettingsBinPage", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+  });
+
+  it("shows the local-owner boundary without requesting deleted records for a paired browser", async () => {
+    ensureOperatorSessionMock.mockResolvedValueOnce({
+      session: {
+        actorLabel: "Paired Browser",
+        profile: "trusted_personal_assistant"
+      }
+    });
+
+    renderPage([makeRecord(1)]);
+
+    expect(
+      await screen.findByText("Permanent deletion stays on the Forge host")
+    ).toBeInTheDocument();
+    expect(getSettingsBinMock).not.toHaveBeenCalled();
   });
 
   it("bounds the rendered records and destructive batch size", async () => {
