@@ -173,6 +173,30 @@ test("the shared release gate installs Forge Memory dependencies", () => {
   );
 });
 
+test("the Forge Memory publisher builds its authenticated client before CLI tests", () => {
+  const document = workflow("release-forge-memory.yml");
+  const steps = document.jobs.publish.steps;
+  const repositoryInstall = steps.findIndex(
+    (step) => step.name === "Install repository dependencies"
+  );
+  const runtimeBuild = steps.findIndex(
+    (step) => step.name === "Build the authenticated Forge client runtime"
+  );
+  const memoryInstall = steps.findIndex(
+    (step) => step.name === "Install Forge Memory dependencies"
+  );
+  const memoryTest = steps.findIndex(
+    (step) => step.name === "Test Forge Memory"
+  );
+
+  assert.ok(repositoryInstall >= 0);
+  assert.ok(runtimeBuild > repositoryInstall);
+  assert.ok(memoryInstall > runtimeBuild);
+  assert.ok(memoryTest > memoryInstall);
+  assert.equal(steps[repositoryInstall].run, "npm ci");
+  assert.equal(steps[runtimeBuild].run, "npm run build:openclaw-plugin");
+});
+
 test("every release workflow supports an exact manual publication dispatch", () => {
   for (const fileName of [
     "release-forge-memory.yml",
