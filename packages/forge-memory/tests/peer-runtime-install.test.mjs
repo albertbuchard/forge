@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync } from "node:crypto";
 import {
   chmod,
+  link,
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
@@ -114,6 +116,58 @@ function fakeCargo(calls) {
   };
 }
 
+function hardlinkedFakeCargo(calls) {
+  return async ({ args, cwd, env }) => {
+    calls.push({ args, cwd, env });
+    const releaseRoot = path.join(env.CARGO_TARGET_DIR, "release");
+    const depsRoot = path.join(releaseRoot, "deps");
+    const peerArtifact = path.join(depsRoot, "forge-peer-artifact");
+    const ownerBrokerArtifact = path.join(
+      depsRoot,
+      "forge-owner-broker-artifact"
+    );
+    await mkdir(depsRoot, { recursive: true, mode: 0o700 });
+    await writeFile(peerArtifact, "verified linked peer binary\n", {
+      mode: 0o700
+    });
+    await writeFile(
+      ownerBrokerArtifact,
+      "verified linked owner broker binary\n",
+      { mode: 0o700 }
+    );
+    await link(peerArtifact, path.join(releaseRoot, "forge-peer"));
+    await link(
+      ownerBrokerArtifact,
+      path.join(releaseRoot, "forge-owner-broker")
+    );
+    return { ok: true };
+  };
+}
+
+function distinctVariantCargo(calls) {
+  return async ({ args, cwd, env }) => {
+    calls.push({ args, cwd, env });
+    const releaseRoot = path.join(env.CARGO_TARGET_DIR, "release");
+    const minimalOwnerBuild = args.includes("--no-default-features");
+    await mkdir(releaseRoot, { recursive: true, mode: 0o700 });
+    if (!minimalOwnerBuild) {
+      await writeFile(
+        path.join(releaseRoot, "forge-peer"),
+        "full peer runtime\n",
+        { mode: 0o700 }
+      );
+    }
+    await writeFile(
+      path.join(releaseRoot, "forge-owner-broker"),
+      minimalOwnerBuild
+        ? "minimal owner broker\n"
+        : "full-runtime owner broker\n",
+      { mode: 0o700 }
+    );
+    return { ok: true };
+  };
+}
+
 async function prepare(value, calls) {
   return await prepareForgePeerRuntime({
     mode: "packaged",
@@ -169,7 +223,7 @@ test("builds verified source outside the signed tree and records a receipt", asy
   );
   assert.equal(
     JSON.parse(await readFile(result.receiptPath, "utf8")).schemaVersion,
-    2
+    3
   );
 });
 
@@ -206,9 +260,81 @@ test("builds and reuses only the minimal verified owner broker when peer sharing
   ]);
   assert.equal(
     JSON.parse(await readFile(first.receiptPath, "utf8")).schemaVersion,
-    1
+    2
   );
   assert.equal(calls.length, 1);
+});
+
+test("installs Cargo hardlinks as private single-link executables", async (t) => {
+  const value = await fixture(t);
+  const calls = [];
+  const result = await prepareForgePeerRuntime({
+    mode: "packaged",
+    pluginRoot: value.pluginRoot,
+    repoRoot: null,
+    nativeRoot: value.nativeRoot,
+    runtimePackageVersion: "0.3.33",
+    trustedKeys: [value.key.trusted],
+    now: NOW,
+    environment: { PATH: process.env.PATH },
+    runCargo: hardlinkedFakeCargo(calls)
+  });
+  const binaryMetadata = await lstat(result.binaryPath);
+  const brokerMetadata = await lstat(result.ownerBrokerBinaryPath);
+  assert.equal(binaryMetadata.nlink, 1);
+  assert.equal(brokerMetadata.nlink, 1);
+  assert.equal(binaryMetadata.mode & 0o077, 0);
+  assert.equal(brokerMetadata.mode & 0o077, 0);
+  assert.equal(path.basename(path.dirname(result.binaryPath)), "bin");
+  assert.equal(calls.length, 1);
+});
+
+test("rebuilds a cached runtime when an installed executable gains another link", async (t) => {
+  const value = await fixture(t);
+  const calls = [];
+  const first = await prepare(value, calls);
+  await link(
+    first.ownerBrokerBinaryPath,
+    `${first.ownerBrokerBinaryPath}.alias`
+  );
+  const second = await prepare(value, calls);
+  assert.equal(second.built, true);
+  assert.equal((await lstat(second.ownerBrokerBinaryPath)).nlink, 1);
+  assert.equal(calls.length, 2);
+});
+
+test("isolates concurrent full-runtime and minimal owner-broker installs", async (t) => {
+  const value = await fixture(t);
+  const calls = [];
+  const runCargo = distinctVariantCargo(calls);
+  const common = {
+    mode: "packaged",
+    pluginRoot: value.pluginRoot,
+    repoRoot: null,
+    nativeRoot: value.nativeRoot,
+    runtimePackageVersion: "0.3.33",
+    trustedKeys: [value.key.trusted],
+    now: NOW,
+    environment: { PATH: process.env.PATH },
+    runCargo
+  };
+  const [full, ownerOnly] = await Promise.all([
+    prepareForgePeerRuntime(common),
+    prepareForgeOwnerBrokerRuntime(common)
+  ]);
+  assert.notEqual(full.ownerBrokerBinaryPath, ownerOnly.ownerBrokerBinaryPath);
+  assert.notEqual(full.receiptPath, ownerOnly.receiptPath);
+  assert.equal(
+    await readFile(full.ownerBrokerBinaryPath, "utf8"),
+    "full-runtime owner broker\n"
+  );
+  assert.equal(
+    await readFile(ownerOnly.ownerBrokerBinaryPath, "utf8"),
+    "minimal owner broker\n"
+  );
+  assert.equal((await lstat(full.ownerBrokerBinaryPath)).nlink, 1);
+  assert.equal((await lstat(ownerOnly.ownerBrokerBinaryPath)).nlink, 1);
+  assert.equal(calls.length, 2);
 });
 
 test("rebuilds the minimal owner broker after checksum tampering", async (t) => {

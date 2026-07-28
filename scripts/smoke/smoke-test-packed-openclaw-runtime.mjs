@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -22,6 +23,10 @@ import {
   validateNativeSourceManifest,
   verifyNativeSourceBundle
 } from "../../packages/forge-memory/lib/native-source-manifest.mjs";
+import {
+  prepareForgeOwnerBrokerRuntime,
+  prepareForgePeerRuntime
+} from "../../packages/forge-memory/lib/peer-runtime-install.mjs";
 import { runPackedOwnerApproval } from "./packed-owner-approval.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
@@ -52,7 +57,8 @@ const tempRoot = realpathSync(
 );
 const installRoot = path.join(tempRoot, "install");
 const dataRoot = path.join(tempRoot, "data");
-const peerSourceTarget = path.join(tempRoot, "forge-peer-target");
+const peerNativeRoot = path.join(tempRoot, "native");
+const unsignedPeerTarget = path.join(tempRoot, "unsigned-forge-peer-target");
 const companionIrohTarget = path.join(tempRoot, "companion-iroh-target");
 const companionIrohBinaryPath = path.join(
   companionIrohTarget,
@@ -199,84 +205,104 @@ async function verifyPackedForgePeerSource(
     );
   }
 
-  run(
-    "cargo",
-    [
-      "build",
-      "--locked",
-      "--release",
-      "--manifest-path",
-      cargoManifest,
-      "--no-default-features",
-      "--features",
-      "owner-broker",
-      "--bin",
-      "forge-owner-broker"
-    ],
-    {
+  if (!existsSync(signaturePath)) {
+    const cargoArgs = buildBinary
+      ? [
+          "build",
+          "--locked",
+          "--release",
+          "--manifest-path",
+          cargoManifest,
+          "--bin",
+          "forge-peer",
+          "--bin",
+          "forge-owner-broker"
+        ]
+      : [
+          "build",
+          "--locked",
+          "--release",
+          "--no-default-features",
+          "--features",
+          "owner-broker",
+          "--manifest-path",
+          cargoManifest,
+          "--bin",
+          "forge-owner-broker"
+        ];
+    run("cargo", cargoArgs, {
       cwd: sourceRoot,
       timeout: 600_000,
-      env: { ...process.env, CARGO_TARGET_DIR: peerSourceTarget }
-    }
-  );
-
-  const ownerBrokerBinaryName =
-    process.platform === "win32"
-      ? "forge-owner-broker.exe"
-      : "forge-owner-broker";
-  const ownerBrokerBinaryPath = path.join(
-    peerSourceTarget,
-    "release",
-    ownerBrokerBinaryName
-  );
-  if (!existsSync(ownerBrokerBinaryPath)) {
-    throw new Error(
-      "locked packed forge-peer build did not produce its owner-broker binary"
+      env: { ...process.env, CARGO_TARGET_DIR: unsignedPeerTarget }
+    });
+    const installDirectory = path.join(peerNativeRoot, "unsigned-bin");
+    mkdirSync(installDirectory, { recursive: true, mode: 0o700 });
+    chmodSync(installDirectory, 0o700);
+    const installBinary = (name) => {
+      const sourcePath = path.join(unsignedPeerTarget, "release", name);
+      const installedPath = path.join(installDirectory, name);
+      copyFileSync(sourcePath, installedPath);
+      chmodSync(installedPath, 0o700);
+      const metadata = lstatSync(installedPath);
+      if (
+        !metadata.isFile() ||
+        metadata.isSymbolicLink() ||
+        metadata.nlink !== 1 ||
+        (typeof process.getuid === "function" &&
+          metadata.uid !== process.getuid()) ||
+        (metadata.mode & 0o077) !== 0
+      ) {
+        throw new Error(
+          `unsigned local smoke could not privately install ${name}`
+        );
+      }
+      return {
+        path: installedPath,
+        sha256: createHash("sha256")
+          .update(readFileSync(installedPath))
+          .digest("hex")
+      };
+    };
+    const ownerBroker = installBinary(
+      process.platform === "win32"
+        ? "forge-owner-broker.exe"
+        : "forge-owner-broker"
     );
-  }
-  const ownerBrokerSha256 = createHash("sha256")
-    .update(readFileSync(ownerBrokerBinaryPath))
-    .digest("hex");
-
-  if (!buildBinary) {
     return {
-      binaryPath: null,
-      ownerBrokerBinaryPath,
-      ownerBrokerSha256,
+      binaryPath: buildBinary
+        ? installBinary(
+            process.platform === "win32" ? "forge-peer.exe" : "forge-peer"
+          ).path
+        : null,
+      ownerBrokerBinaryPath: ownerBroker.path,
+      ownerBrokerSha256: ownerBroker.sha256,
       sourceRoot
     };
   }
 
-  run(
-    "cargo",
-    [
-      "build",
-      "--locked",
-      "--release",
-      "--manifest-path",
-      cargoManifest,
-      "--bin",
-      "forge-peer"
-    ],
-    {
-      cwd: sourceRoot,
-      timeout: 600_000,
-      env: { ...process.env, CARGO_TARGET_DIR: peerSourceTarget }
+  const prepareRuntime = buildBinary
+    ? prepareForgePeerRuntime
+    : prepareForgeOwnerBrokerRuntime;
+  const prepared = await prepareRuntime({
+    mode: "packaged",
+    pluginRoot: installedPluginRoot,
+    repoRoot: null,
+    nativeRoot: peerNativeRoot,
+    runtimePackageVersion: runtimePackage.version,
+    environment: process.env,
+    runCargo: async ({ args, cwd, env }) => {
+      run("cargo", args, {
+        cwd,
+        timeout: 600_000,
+        env
+      });
+      return { ok: true };
     }
-  );
-
-  const binaryName =
-    process.platform === "win32" ? "forge-peer.exe" : "forge-peer";
-  const binaryPath = path.join(peerSourceTarget, "release", binaryName);
-  if (!existsSync(binaryPath)) {
-    throw new Error(
-      "locked packed forge-peer build did not produce its daemon binary"
-    );
-  }
+  });
   return {
-    binaryPath,
-    ownerBrokerBinaryPath,
-    ownerBrokerSha256,
+    binaryPath: prepared.binaryPath,
+    ownerBrokerBinaryPath: prepared.ownerBrokerBinaryPath,
+    ownerBrokerSha256: prepared.ownerBrokerBinarySha256,
     sourceRoot
   };
 }

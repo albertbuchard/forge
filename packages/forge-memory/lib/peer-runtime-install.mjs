@@ -1,7 +1,8 @@
-import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { constants as fsConstants, createReadStream } from "node:fs";
 import {
   chmod,
+  copyFile,
   lstat,
   mkdir,
   readFile,
@@ -18,9 +19,9 @@ import {
   verifyNativeSourceBundle
 } from "./native-source-manifest.mjs";
 
-const RECEIPT_SCHEMA_VERSION = 2;
+const RECEIPT_SCHEMA_VERSION = 3;
 const RECEIPT_FILE = "build-receipt.json";
-const OWNER_RECEIPT_SCHEMA_VERSION = 1;
+const OWNER_RECEIPT_SCHEMA_VERSION = 2;
 const OWNER_RECEIPT_FILE = "owner-broker-build-receipt.json";
 const MAX_RECEIPT_BYTES = 16 * 1024;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
@@ -286,6 +287,8 @@ async function inspectCachedBinary(binaryPath, expectedSha256) {
       !metadata.isFile() ||
       metadata.size <= 0 ||
       metadata.uid !== currentUid() ||
+      metadata.nlink !== 1 ||
+      (metadata.mode & 0o022) !== 0 ||
       (metadata.mode & 0o111) === 0
     ) {
       return false;
@@ -319,7 +322,7 @@ function devSourceRoot(repoRoot) {
 }
 
 async function writeReceipt(receiptPath, receipt) {
-  const temporaryPath = `${receiptPath}.tmp-${process.pid}-${Date.now()}`;
+  const temporaryPath = `${receiptPath}.tmp-${process.pid}-${randomUUID()}`;
   try {
     await writeFile(temporaryPath, `${JSON.stringify(receipt)}\n`, {
       encoding: "utf8",
@@ -334,20 +337,50 @@ async function writeReceipt(receiptPath, receipt) {
   }
 }
 
-async function inspectBuiltBinary(binaryPath, label) {
-  const metadata = await lstat(binaryPath).catch((error) => {
+async function installBuiltBinary(sourcePath, installedPath, label) {
+  const sourceMetadata = await lstat(sourcePath).catch((error) => {
     fail("build", `Cargo did not produce the ${label} binary.`, error);
   });
   if (
-    metadata.isSymbolicLink() ||
-    !metadata.isFile() ||
-    metadata.size <= 0 ||
-    metadata.uid !== currentUid()
+    sourceMetadata.isSymbolicLink() ||
+    !sourceMetadata.isFile() ||
+    sourceMetadata.size <= 0 ||
+    sourceMetadata.uid !== currentUid() ||
+    (sourceMetadata.mode & 0o111) === 0
   ) {
     fail("build", `Cargo produced an unsafe ${label} binary.`);
   }
-  await chmod(binaryPath, 0o700);
-  return await hashFile(binaryPath);
+  const sourceSha256 = await hashFile(sourcePath);
+  const temporaryPath = `${installedPath}.tmp-${process.pid}-${randomUUID()}`;
+  try {
+    await copyFile(sourcePath, temporaryPath, fsConstants.COPYFILE_EXCL);
+    await chmod(temporaryPath, 0o700);
+    const temporaryMetadata = await lstat(temporaryPath);
+    if (
+      temporaryMetadata.isSymbolicLink() ||
+      !temporaryMetadata.isFile() ||
+      temporaryMetadata.size <= 0 ||
+      temporaryMetadata.uid !== currentUid() ||
+      temporaryMetadata.nlink !== 1 ||
+      (temporaryMetadata.mode & 0o077) !== 0
+    ) {
+      fail("build", `Forge could not privately install ${label}.`);
+    }
+    const installedSha256 = await hashFile(temporaryPath);
+    if (installedSha256 !== sourceSha256) {
+      fail("build", `The installed ${label} does not match Cargo output.`);
+    }
+    await rename(temporaryPath, installedPath);
+    await chmod(installedPath, 0o700);
+    if (!(await inspectCachedBinary(installedPath, sourceSha256))) {
+      fail("build", `Forge could not verify the installed ${label}.`);
+    }
+    return sourceSha256;
+  } catch (error) {
+    await unlink(temporaryPath).catch(() => undefined);
+    if (error instanceof PeerRuntimeInstallError) throw error;
+    fail("filesystem", `Forge could not install ${label}.`, error);
+  }
 }
 
 async function resolveSource(input) {
@@ -450,7 +483,11 @@ async function ownerBrokerSourceIdentity(sourceRoot, sourceIdentity, mode) {
   };
 }
 
-async function ensureBuildDirectories(nativeRoot, sourceIdentity) {
+async function ensureBuildDirectories(
+  nativeRoot,
+  sourceIdentity,
+  runtimeVariant
+) {
   const privateNativeRoot = await ensurePrivateDirectory(nativeRoot);
   const peerRoot = await ensurePrivateChildDirectory(
     privateNativeRoot,
@@ -464,14 +501,30 @@ async function ensureBuildDirectories(nativeRoot, sourceIdentity) {
     versionRoot,
     platformKey()
   );
-  const targetDirectory = await ensurePrivateChildDirectory(
+  const variantRoot = await ensurePrivateChildDirectory(
     buildRoot,
+    runtimeVariant
+  );
+  const targetDirectory = await ensurePrivateChildDirectory(
+    variantRoot,
     "target"
   );
-  return { buildRoot, targetDirectory };
+  const installDirectory = await ensurePrivateChildDirectory(
+    variantRoot,
+    "bin"
+  );
+  return {
+    buildRoot: variantRoot,
+    installDirectory,
+    targetDirectory
+  };
 }
 
-async function inspectBuildDirectories(nativeRoot, sourceIdentity) {
+async function inspectBuildDirectories(
+  nativeRoot,
+  sourceIdentity,
+  runtimeVariant
+) {
   const privateNativeRoot = await inspectPrivateDirectory(nativeRoot);
   if (privateNativeRoot === null) return null;
   const peerRoot = await inspectPrivateChildDirectory(
@@ -489,19 +542,34 @@ async function inspectBuildDirectories(nativeRoot, sourceIdentity) {
     platformKey()
   );
   if (buildRoot === null) return null;
-  const targetDirectory = await inspectPrivateChildDirectory(
+  const variantRoot = await inspectPrivateChildDirectory(
     buildRoot,
+    runtimeVariant
+  );
+  if (variantRoot === null) return null;
+  const targetDirectory = await inspectPrivateChildDirectory(
+    variantRoot,
     "target"
   );
   if (targetDirectory === null) return null;
-  return { buildRoot, targetDirectory };
+  const installDirectory = await inspectPrivateChildDirectory(
+    variantRoot,
+    "bin"
+  );
+  if (installDirectory === null) return null;
+  return {
+    buildRoot: variantRoot,
+    installDirectory,
+    targetDirectory
+  };
 }
 
 export async function inspectForgePeerRuntime(input) {
   const { sourceRoot, sourceIdentity } = await resolveSource(input);
   const directories = await inspectBuildDirectories(
     input.nativeRoot,
-    sourceIdentity
+    sourceIdentity,
+    "peer-runtime"
   );
   if (directories === null) {
     return {
@@ -516,14 +584,9 @@ export async function inspectForgePeerRuntime(input) {
       reason: "The verified forge-peer runtime has not been built yet."
     };
   }
-  const binaryPath = path.join(
-    directories.targetDirectory,
-    "release",
-    binaryName()
-  );
+  const binaryPath = path.join(directories.installDirectory, binaryName());
   const ownerBrokerBinaryPath = path.join(
-    directories.targetDirectory,
-    "release",
+    directories.installDirectory,
     ownerBrokerBinaryName()
   );
   const receiptPath = path.join(directories.buildRoot, RECEIPT_FILE);
@@ -567,12 +630,19 @@ export async function inspectForgePeerRuntime(input) {
 
 export async function prepareForgePeerRuntime(input) {
   const { sourceRoot, sourceIdentity } = await resolveSource(input);
-  const { buildRoot, targetDirectory } = await ensureBuildDirectories(
-    input.nativeRoot,
-    sourceIdentity
-  );
-  const binaryPath = path.join(targetDirectory, "release", binaryName());
+  const { buildRoot, installDirectory, targetDirectory } =
+    await ensureBuildDirectories(
+      input.nativeRoot,
+      sourceIdentity,
+      "peer-runtime"
+    );
+  const binaryPath = path.join(installDirectory, binaryName());
   const ownerBrokerBinaryPath = path.join(
+    installDirectory,
+    ownerBrokerBinaryName()
+  );
+  const cargoBinaryPath = path.join(targetDirectory, "release", binaryName());
+  const cargoOwnerBrokerBinaryPath = path.join(
     targetDirectory,
     "release",
     ownerBrokerBinaryName()
@@ -628,8 +698,13 @@ export async function prepareForgePeerRuntime(input) {
       now: input.now ?? new Date()
     });
   }
-  const binarySha256 = await inspectBuiltBinary(binaryPath, "forge-peer");
-  const ownerBrokerBinarySha256 = await inspectBuiltBinary(
+  const binarySha256 = await installBuiltBinary(
+    cargoBinaryPath,
+    binaryPath,
+    "forge-peer"
+  );
+  const ownerBrokerBinarySha256 = await installBuiltBinary(
+    cargoOwnerBrokerBinaryPath,
     ownerBrokerBinaryPath,
     "forge-owner-broker"
   );
@@ -662,11 +737,17 @@ export async function prepareForgeOwnerBrokerRuntime(input) {
     resolved.sourceIdentity,
     input.mode
   );
-  const { buildRoot, targetDirectory } = await ensureBuildDirectories(
-    input.nativeRoot,
-    sourceIdentity
-  );
+  const { buildRoot, installDirectory, targetDirectory } =
+    await ensureBuildDirectories(
+      input.nativeRoot,
+      sourceIdentity,
+      "owner-broker"
+    );
   const ownerBrokerBinaryPath = path.join(
+    installDirectory,
+    ownerBrokerBinaryName()
+  );
+  const cargoOwnerBrokerBinaryPath = path.join(
     targetDirectory,
     "release",
     ownerBrokerBinaryName()
@@ -724,7 +805,8 @@ export async function prepareForgeOwnerBrokerRuntime(input) {
       now: input.now ?? new Date()
     });
   }
-  const ownerBrokerBinarySha256 = await inspectBuiltBinary(
+  const ownerBrokerBinarySha256 = await installBuiltBinary(
+    cargoOwnerBrokerBinaryPath,
     ownerBrokerBinaryPath,
     "forge-owner-broker"
   );
