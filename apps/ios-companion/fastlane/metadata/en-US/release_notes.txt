@@ -1,5 +1,5 @@
-Forge Companion 1.0.169 adds People and selective Forge-to-Forge sharing.
+Forge Companion 1.0.170 makes secure pairing faster and clearer.
 
-Create and link Person records, pair another Forge by QR code, and review exactly what each person can receive. Shared information keeps its source, freshness, precision, and revocation state.
+The app now discovers a nearby Forge automatically when possible and starts the protected device-pairing flow directly. QR scanning and manual server entry remain available when discovery is unavailable.
 
-iPhone handles pairing and human approvals. Apple Watch can open deliberately pinned People records. This update also restores reliable sync with existing companion versions and preserves existing Forge data and pairing.
+Pairing still requires explicit approval from the unlocked Forge owner interface. Once approved, the Companion activates its scoped credential and renews it silently for normal daily use.
