@@ -482,6 +482,25 @@ function writeProxyUpgradeResponse(socket: Duplex, response: IncomingMessage) {
   );
 }
 
+function isExactRequestOrigin(request: IncomingMessage, origin: string) {
+  const host = request.headers.host;
+  if (!host) {
+    return false;
+  }
+  try {
+    const parsed = new URL(origin);
+    return (
+      ["http:", "https:"].includes(parsed.protocol) &&
+      !parsed.username &&
+      !parsed.password &&
+      parsed.origin === origin &&
+      parsed.host === host
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function proxyDevWebSocket(input: {
   devWebRuntime: DevWebRuntime;
   request: IncomingMessage;
@@ -821,7 +840,8 @@ export async function registerWebRoutes(
         const origin = request.headers.origin;
         const exactOriginAllowed =
           typeof origin === "string" &&
-          (options.allowedOrigins ?? []).includes(origin);
+          ((options.allowedOrigins ?? []).includes(origin) ||
+            isExactRequestOrigin(request, origin));
         const hmrSubprotocol =
           request.headers["sec-websocket-protocol"] === "vite-hmr";
         if (exactOriginAllowed && hmrSubprotocol && options.authorizeUpgrade) {

@@ -421,7 +421,7 @@ test("development-web upgrades require application authentication before contact
   }
 });
 
-test("authenticated API HMR proxy replaces browser secrets with a one-time assertion", async () => {
+test("authenticated same-origin HMR proxy replaces browser secrets with a one-time assertion", async () => {
   let upstreamHeaders:
     | {
         cookie: string | undefined;
@@ -460,7 +460,7 @@ test("authenticated API HMR proxy replaces browser secrets with a one-time asser
     },
     authorizeUpgrade: async (_request, target) =>
       target === "/forge/__vite_hmr" ? "hmr-proxy-assertion" : null,
-    allowedOrigins: ["http://127.0.0.1:3027"]
+    allowedOrigins: []
   });
   await app.listen({ host: "127.0.0.1", port: 0 });
 
@@ -476,7 +476,8 @@ test("authenticated API HMR proxy replaces browser secrets with a one-time asser
           authorization: "Bearer must-not-reach-vite",
           connection: "Upgrade",
           cookie: "forge_session=must-not-reach-vite",
-          origin: "http://127.0.0.1:3027",
+          host: "forge.example.ts.net",
+          origin: "https://forge.example.ts.net",
           "sec-websocket-protocol": "vite-hmr",
           upgrade: "websocket"
         }
@@ -499,7 +500,7 @@ test("authenticated API HMR proxy replaces browser secrets with a one-time asser
       authorization: undefined,
       assertion: "hmr-proxy-assertion",
       target: "/forge/__vite_hmr",
-      origin: "http://127.0.0.1:3027"
+      origin: "https://forge.example.ts.net"
     });
   } finally {
     await app.close();
@@ -512,5 +513,58 @@ test("authenticated API HMR proxy replaces browser secrets with a one-time asser
         resolve();
       });
     });
+  }
+});
+
+test("authenticated HMR proxy rejects a cross-origin websocket before authorization", async () => {
+  let authorizationChecks = 0;
+  const app = fastify();
+  await registerWebRoutes(app, {
+    devWebRuntime: {
+      ensureReady: async () => {
+        throw new Error("Vite must not be contacted cross-origin.");
+      },
+      stop: async () => {}
+    },
+    authorizeUpgrade: async () => {
+      authorizationChecks += 1;
+      return "must-not-be-issued";
+    },
+    allowedOrigins: []
+  });
+  await app.listen({ host: "127.0.0.1", port: 0 });
+
+  try {
+    const address = app.server.address() as AddressInfo;
+    const status = await new Promise<number>((resolve, reject) => {
+      const request = httpRequest({
+        host: "127.0.0.1",
+        port: address.port,
+        method: "GET",
+        path: "/forge/__vite_hmr",
+        headers: {
+          connection: "Upgrade",
+          host: "forge.example.ts.net",
+          origin: "https://attacker.example",
+          "sec-websocket-protocol": "vite-hmr",
+          upgrade: "websocket"
+        }
+      });
+      request.once("upgrade", (_response, socket) => {
+        socket.destroy();
+        reject(new Error("Cross-origin upgrade was admitted."));
+      });
+      request.once("response", (response) => {
+        response.resume();
+        response.once("end", () => resolve(response.statusCode ?? 0));
+      });
+      request.once("error", reject);
+      request.end();
+    });
+
+    assert.equal(status, 401);
+    assert.equal(authorizationChecks, 0);
+  } finally {
+    await app.close();
   }
 });
