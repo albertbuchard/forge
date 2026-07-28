@@ -1287,10 +1287,13 @@ mod tests {
             .map_err(|error| PeerError::Mls(format!("serializing reflected update: {error}")))?;
         let reflected_commit =
             alice.process_message(&pending_commit, &trust, now + 1, &alice_coordinator);
-        assert!(matches!(
-            &reflected_commit,
-            Err(PeerError::Mls(message)) if message.contains("reflected local MLS")
-        ), "{reflected_commit:?}");
+        assert!(
+            matches!(
+                &reflected_commit,
+                Err(PeerError::Mls(message)) if message.contains("reflected local MLS")
+            ),
+            "{reflected_commit:?}"
+        );
         alice
             .group
             .merge_pending_commit(&alice.provider)
