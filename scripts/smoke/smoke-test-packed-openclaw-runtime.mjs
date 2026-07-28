@@ -25,6 +25,7 @@ import {
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 const pluginRoot = path.join(repoRoot, "plugins/openclaw");
+const previousProcessUmask = process.umask(0o077);
 const smokeRoot = path.join(os.homedir(), ".forge-packed-runtime-smoke");
 mkdirSync(smokeRoot, { recursive: true, mode: 0o700 });
 let smokeRootMetadata = lstatSync(smokeRoot);
@@ -654,6 +655,7 @@ try {
   smokeSucceeded = true;
   console.log("packed openclaw runtime smoke passed");
 } finally {
+  process.umask(previousProcessUmask);
   if (child && child.exitCode === null) {
     child.kill("SIGTERM");
     await new Promise((resolve) => {
