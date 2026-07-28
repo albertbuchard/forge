@@ -15,6 +15,9 @@ test("CORS admits only exact built-in development and explicitly configured orig
     "http://127.0.0.1:3027",
     "http://localhost:3027",
     "http://[::1]:3027",
+    "http://127.0.0.1:4317",
+    "http://localhost:4317",
+    "http://[::1]:4317",
     "http://127.0.0.1:4027",
     "https://forge-device.example.ts.net",
     "https://forge.example"

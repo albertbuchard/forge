@@ -31,7 +31,8 @@ import {
   patchSettings
 } from "@/lib/api";
 import {
-  settingsMutationSchema,
+  settingsFormSchema,
+  type SettingsFormInput,
   type SettingsMutationInput
 } from "@/lib/schemas";
 import {
@@ -426,7 +427,7 @@ export function SettingsPage() {
     staleTime: 30_000
   });
 
-  const settingsForm = useForm<SettingsMutationInput>({
+  const settingsForm = useForm<SettingsFormInput>({
     defaultValues: {
       profile: {
         operatorName: "",
@@ -457,7 +458,7 @@ export function SettingsPage() {
   };
 
   const updateMutation = useMutation({
-    mutationFn: (input: SettingsMutationInput) => patchSettings(input),
+    mutationFn: (input: SettingsFormInput) => patchSettings(input),
     onSuccess: invalidateSettings
   });
 
@@ -515,9 +516,7 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (!settingsQuery.data?.settings) return;
-    settingsForm.reset(
-      settingsMutationSchema.parse(settingsQuery.data.settings)
-    );
+    settingsForm.reset(settingsFormSchema.parse(settingsQuery.data.settings));
   }, [settingsQuery.data, settingsForm]);
 
   const settings = settingsQuery.data?.settings;

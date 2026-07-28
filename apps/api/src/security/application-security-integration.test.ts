@@ -160,6 +160,55 @@ test("the application gateway denies every protected surface until a credential 
     });
     assert.equal(replayedDevProxy.statusCode, 401);
 
+    const pairedBrowserDevTarget = "/forge/__vite_hmr";
+    const pairedBrowserDevProxyAssertion =
+      securityRuntime.devAssetProxyAssertions.issue(
+        {
+          ...devProxyPrincipal,
+          kind: "paired_client",
+          subjectId: "paired-browser-dev-proxy-test",
+          clientId: "paired-browser-dev-proxy-test",
+          clientType: "browser",
+          scopes: ["profile:operator"]
+        },
+        pairedBrowserDevTarget
+      );
+    const admittedPairedBrowserDevProxy = await app.inject({
+      method: "GET",
+      url: "/api/v1/security/dev-session-check",
+      headers: {
+        "x-forge-dev-proxy-assertion": pairedBrowserDevProxyAssertion,
+        "x-forge-dev-proxy-target": pairedBrowserDevTarget
+      }
+    });
+    assert.equal(
+      admittedPairedBrowserDevProxy.statusCode,
+      200,
+      admittedPairedBrowserDevProxy.body
+    );
+
+    const pairedApiDevProxyAssertion =
+      securityRuntime.devAssetProxyAssertions.issue(
+        {
+          ...devProxyPrincipal,
+          kind: "paired_client",
+          subjectId: "paired-api-dev-proxy-test",
+          clientId: "paired-api-dev-proxy-test",
+          clientType: "api",
+          scopes: ["profile:operator"]
+        },
+        pairedBrowserDevTarget
+      );
+    const rejectedPairedApiDevProxy = await app.inject({
+      method: "GET",
+      url: "/api/v1/security/dev-session-check",
+      headers: {
+        "x-forge-dev-proxy-assertion": pairedApiDevProxyAssertion,
+        "x-forge-dev-proxy-target": pairedBrowserDevTarget
+      }
+    });
+    assert.equal(rejectedPairedApiDevProxy.statusCode, 401);
+
     const issued = createAgentToken(
       createAgentTokenSchema.parse({
         label: "Gateway integration test",

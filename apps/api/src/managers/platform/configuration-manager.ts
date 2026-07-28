@@ -37,6 +37,7 @@ export class ConfigurationManager extends AbstractManager {
   }
 
   readRuntimeConfig(overrides: { dataRoot?: string } = {}): ForgeRuntimeConfig {
+    const port = Number(this.env.PORT ?? 4317);
     const explicitOrigins = (this.env.FORGE_ALLOWED_ORIGINS ?? "")
       .split(",")
       .map((entry) => entry.trim())
@@ -47,6 +48,9 @@ export class ConfigurationManager extends AbstractManager {
       "http://127.0.0.1:3027",
       "http://localhost:3027",
       "http://[::1]:3027",
+      `http://127.0.0.1:${port}`,
+      `http://localhost:${port}`,
+      `http://[::1]:${port}`,
       ...(devWebOrigin
         ? [exactHttpOrigin(devWebOrigin, "FORGE_DEV_WEB_ORIGIN")]
         : []),
@@ -54,7 +58,7 @@ export class ConfigurationManager extends AbstractManager {
     ];
     return {
       host: this.env.HOST?.trim() || "0.0.0.0",
-      port: Number(this.env.PORT ?? 4317),
+      port,
       basePath: this.normalizeBasePath(this.env.FORGE_BASE_PATH ?? "/forge/"),
       dataRoot: overrides.dataRoot
         ? overrides.dataRoot

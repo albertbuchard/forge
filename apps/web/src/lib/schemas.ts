@@ -172,6 +172,11 @@ export const settingsMutationSchema = z.object({
     .optional()
 });
 
+export const settingsFormSchema = settingsMutationSchema.omit({
+  calendarProviders: true,
+  modelSettings: true
+});
+
 export const createAgentTokenSchema = z.object({
   label: z.string().trim().min(1, "Label is required"),
   agentLabel: z.string().trim().min(1, "Agent name is required"),
@@ -365,6 +370,7 @@ export const tagMutationSchema = z.object({
 export type GoalMutationInput = z.infer<typeof goalMutationSchema>;
 export type ProjectMutationInput = z.infer<typeof projectMutationSchema>;
 export type SettingsMutationInput = z.infer<typeof settingsMutationSchema>;
+export type SettingsFormInput = z.infer<typeof settingsFormSchema>;
 export type CreateAgentTokenInput = z.infer<typeof createAgentTokenSchema>;
 export type CreateInsightInput = z.infer<typeof createInsightSchema>;
 export type QuickTaskInput = z.infer<typeof quickTaskSchema>;

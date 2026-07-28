@@ -724,6 +724,7 @@ import {
   createBackgroundJobAdmissionPolicy,
   systemBackgroundPrincipal
 } from "./security/background-job-authorization.js";
+import { canUseDevWebUpgrade } from "./security/dev-web-upgrade-authorization.js";
 import {
   CapabilityExecutor,
   createMachineCapabilitySession
@@ -24656,7 +24657,7 @@ export async function buildServer(
     },
     authorizeUpgrade: (request, target) => {
       const principal = applicationSecurity.authenticateUpgrade(request);
-      return principal?.kind === "operator_session"
+      return canUseDevWebUpgrade(principal)
         ? applicationSecurity.devAssetProxyAssertions.issue(principal, target)
         : null;
     },

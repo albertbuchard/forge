@@ -27,6 +27,7 @@ import {
   forgeDevProxyAssertionHeader,
   forgeDevProxyTargetHeader
 } from "./dev-asset-proxy-assertion.js";
+import { canUseDevWebUpgrade } from "./dev-web-upgrade-authorization.js";
 import { DpopVerifier } from "./dpop.js";
 import { LocalOwnerAssertionService } from "./local-owner-assertion.js";
 import { LocalOwnerSessionCoordinator } from "./local-owner-session-coordinator.js";
@@ -585,7 +586,7 @@ export async function initializeApplicationSecurityRuntime(input: {
             : null;
         if (
           !principal ||
-          !["operator_session", "system"].includes(principal.kind)
+          (principal.kind !== "system" && !canUseDevWebUpgrade(principal))
         ) {
           throw new HttpError(
             401,

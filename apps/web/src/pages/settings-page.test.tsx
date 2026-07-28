@@ -345,6 +345,68 @@ describe("SettingsPage theme persistence", () => {
     );
   });
 
+  it("loads a public Google credential summary without resubmitting credential metadata", async () => {
+    getSettingsMock.mockResolvedValueOnce({
+      settings: {
+        profile: {
+          operatorName: "Albert",
+          operatorEmail: "architect@kineticforge.ai",
+          operatorTitle: "Local-first operator"
+        },
+        notifications: {
+          goalDriftAlerts: true,
+          dailyQuestReminders: true,
+          achievementCelebrations: true
+        },
+        execution: {
+          maxActiveTasks: 2,
+          timeAccountingMode: "split"
+        },
+        themePreference: "obsidian",
+        gamificationTheme: "dramatic-smithie",
+        customTheme: null,
+        localePreference: "en",
+        security: {
+          integrityScore: 98,
+          storageMode: "local-first",
+          lastAuditAt: "2026-04-09T18:00:00.000Z"
+        },
+        calendarProviders: {
+          google: {
+            clientId: "saved-client-id.apps.googleusercontent.com",
+            storedClientId: "saved-client-id.apps.googleusercontent.com",
+            hasStoredClientSecret: true,
+            hasEffectiveClientSecret: true,
+            clientSecretStorage: "encrypted"
+          }
+        },
+        modelSettings: {
+          forgeAgent: {
+            basicChat: {
+              connectionId: null,
+              model: ""
+            },
+            wiki: {
+              connectionId: null,
+              model: ""
+            }
+          }
+        }
+      }
+    });
+    renderSettingsPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Save settings" })
+    );
+
+    await waitFor(() => expect(patchSettingsMock).toHaveBeenCalledTimes(1));
+    const submittedSettings = patchSettingsMock.mock.calls[0]?.[0];
+    expect(submittedSettings).not.toHaveProperty("calendarProviders");
+    expect(submittedSettings).not.toHaveProperty("modelSettings");
+    expect(screen.queryByText("Forge could not finish rendering")).toBeNull();
+  });
+
   it("restores the persisted shell theme when selection fails", async () => {
     patchSettingsMock.mockRejectedValueOnce(
       new Error("Theme preference could not be saved")
