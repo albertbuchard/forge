@@ -267,6 +267,42 @@ test(
 );
 
 test(
+  "Windows rejects credential roots that differ only by case",
+  { skip: process.platform !== "win32" },
+  async (t) => {
+    const root = await fsp.mkdtemp(
+      path.join(os.tmpdir(), "forge-windows-owner-case-")
+    );
+    t.after(async () => {
+      await fsp.rm(root, { recursive: true, force: true });
+    });
+    const rootName = path.basename(root);
+    const letterIndex = rootName.search(/[A-Za-z]/);
+    assert.notEqual(letterIndex, -1);
+    const letter = rootName[letterIndex];
+    const changedLetter =
+      letter === letter.toUpperCase()
+        ? letter.toLowerCase()
+        : letter.toUpperCase();
+    const differentlyCasedRoot = path.join(
+      path.dirname(root),
+      `${rootName.slice(0, letterIndex)}${changedLetter}${rootName.slice(letterIndex + 1)}`
+    );
+    assert.notEqual(differentlyCasedRoot, root);
+    const credentialPath = path.join(root, "native", "windows-owner.json");
+
+    await assert.rejects(
+      ensureWindowsOwnerCredential({
+        credentialPath,
+        expectedRoot: differentlyCasedRoot
+      }),
+      /reparse point/
+    );
+    assert.equal(fs.existsSync(credentialPath), false);
+  }
+);
+
+test(
   "Windows cleans up only its newly created invalid credential and retries safely",
   { skip: process.platform !== "win32" },
   async (t) => {

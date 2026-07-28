@@ -155,22 +155,26 @@ function windowsPathChainHasNoReparsePoints(
       candidate = path.win32.join(candidate, segment);
       candidates.push(candidate);
     }
+    if (candidate !== resolvedTarget) {
+      return false;
+    }
     const script = [
       "$ErrorActionPreference='Stop'",
-      "$target=[IO.Path]::GetFullPath($forgeArgs[0])",
+      "if ($forgeArgs.Count -ne 1 -or [String]::IsNullOrWhiteSpace([String]$forgeArgs[0])) { exit 22 }",
+      "$inputTarget=[String]$forgeArgs[0]",
+      "$target=[IO.Path]::GetFullPath($inputTarget)",
+      "if (-not [StringComparer]::Ordinal.Equals($target,$inputTarget)) { exit 22 }",
       "$item=Get-Item -LiteralPath $target -Force",
-      "if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { exit 21 }",
-      "[Console]::Out.Write($target)"
+      "if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { exit 21 }"
     ].join("\n");
     for (const inspectedCandidate of candidates) {
-      const inspected = runPowerShell({
+      runPowerShell({
         script,
         args: [inspectedCandidate],
         timeoutMs: 5_000,
         systemRoot,
         spawnSyncImpl
       });
-      if (inspected !== inspectedCandidate) return false;
     }
     return true;
   } catch {
