@@ -74,6 +74,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Harden local-owner verification path
+        run: |
+          python3 - <<'PY'
+          import os
+          import stat
+
+          home = os.environ["HOME"]
+          metadata = os.lstat(home)
+          if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+              raise SystemExit("GitHub runner HOME must be a real directory.")
+          if metadata.st_uid != os.getuid():
+              raise SystemExit("GitHub runner HOME is not owned by the current runner.")
+          os.chmod(home, metadata.st_mode & ~0o022)
+          hardened = os.lstat(home)
+          if hardened.st_mode & 0o022:
+              raise SystemExit("GitHub runner HOME remains group- or other-writable.")
+          PY
+
       - name: Prepare native source signing key
         env:
           FORGE_NATIVE_SOURCE_ED25519_PRIVATE_KEY: ${{ secrets.FORGE_NATIVE_SOURCE_ED25519_PRIVATE_KEY }}
