@@ -18,6 +18,23 @@ import {
   windowsOwnerProofPayload
 } from "../lib/windows-owner-auth.mjs";
 
+const POWERSHELL_ARGUMENTS_ENV = "FORGE_WINDOWS_OWNER_POWERSHELL_ARGUMENTS_B64";
+
+function inspectPowerShellInvocation(args, options) {
+  const encodedCommandIndex = args.indexOf("-EncodedCommand");
+  assert.notEqual(encodedCommandIndex, -1);
+  const encodedCommand = args[encodedCommandIndex + 1];
+  const encodedArguments = options.env?.[POWERSHELL_ARGUMENTS_ENV];
+  assert.equal(typeof encodedCommand, "string");
+  assert.equal(typeof encodedArguments, "string");
+  return {
+    script: Buffer.from(encodedCommand, "base64").toString("utf16le"),
+    arguments: JSON.parse(
+      Buffer.from(encodedArguments, "base64").toString("utf8")
+    )
+  };
+}
+
 function challenge(overrides = {}) {
   return {
     protocol: WINDOWS_OWNER_PROOF_PROTOCOL,
@@ -262,12 +279,13 @@ test(
     const credentialPath = path.join(root, "native", "windows-owner.json");
     let deniedCredentialAcl = false;
     const failCredentialAclOnce = (command, args, options) => {
+      const invocation = inspectPowerShellInvocation(args, options);
       if (
         !deniedCredentialAcl &&
-        args.some((value) =>
-          value.includes("Set-Acl -LiteralPath $target -AclObject $acl")
+        invocation.script.includes(
+          "Set-Acl -LiteralPath $target -AclObject $acl"
         ) &&
-        args.at(-1) === credentialPath
+        invocation.arguments.at(-1) === credentialPath
       ) {
         deniedCredentialAcl = true;
         return { status: 91, stdout: "", stderr: "" };

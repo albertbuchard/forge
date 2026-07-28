@@ -21,6 +21,7 @@ const MAXIMUM_CREDENTIAL_BYTES = 16 * 1024;
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 const BASE64_PATTERN =
   /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const POWERSHELL_ARGUMENTS_ENV = "FORGE_WINDOWS_OWNER_POWERSHELL_ARGUMENTS_B64";
 
 function assertWindows(platform = process.platform) {
   if (platform !== "win32") {
@@ -52,11 +53,32 @@ function runPowerShell({
   systemRoot,
   spawnSyncImpl = spawnSync
 }) {
+  const encodedArguments = Buffer.from(JSON.stringify(args), "utf8").toString(
+    "base64"
+  );
+  const encodedCommand = Buffer.from(
+    [
+      "$forgeArgumentsJson=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:FORGE_WINDOWS_OWNER_POWERSHELL_ARGUMENTS_B64))",
+      "$forgeArgs=@(ConvertFrom-Json -InputObject $forgeArgumentsJson)",
+      script
+    ].join("\n"),
+    "utf16le"
+  ).toString("base64");
   const result = spawnSyncImpl(
     resolveWindowsPowerShell(systemRoot),
-    ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script, ...args],
+    [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-EncodedCommand",
+      encodedCommand
+    ],
     {
       encoding: "utf8",
+      env: {
+        ...process.env,
+        [POWERSHELL_ARGUMENTS_ENV]: encodedArguments
+      },
       input,
       windowsHide: true,
       timeout: timeoutMs,
@@ -78,7 +100,7 @@ function windowsPathIsCurrentOwnerOnly(
   try {
     const script = [
       "$ErrorActionPreference='Stop'",
-      "$target=[IO.Path]::GetFullPath($args[0])",
+      "$target=[IO.Path]::GetFullPath($forgeArgs[0])",
       "$item=Get-Item -LiteralPath $target -Force",
       "if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { exit 10 }",
       "$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
@@ -135,7 +157,7 @@ function windowsPathChainHasNoReparsePoints(
     }
     const script = [
       "$ErrorActionPreference='Stop'",
-      "$target=[IO.Path]::GetFullPath($args[0])",
+      "$target=[IO.Path]::GetFullPath($forgeArgs[0])",
       "$item=Get-Item -LiteralPath $target -Force",
       "if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { exit 21 }",
       "[Console]::Out.Write($target)"
@@ -162,7 +184,7 @@ function lockWindowsPathForCurrentOwner(
 ) {
   const script = [
     "$ErrorActionPreference='Stop'",
-    "$target=[IO.Path]::GetFullPath($args[0])",
+    "$target=[IO.Path]::GetFullPath($forgeArgs[0])",
     "$item=Get-Item -LiteralPath $target -Force",
     "if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'reparse point refused' }",
     "$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User",
