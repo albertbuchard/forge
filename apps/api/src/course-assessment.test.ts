@@ -18,9 +18,7 @@ import { ensureSystemUsers } from "./repositories/users.js";
 import { assessCourseResponse } from "./services/course-assessment.js";
 
 function proofAssessmentContext() {
-  const course = exportCoursePackage(
-    "course.polynomials-etale-triple-covers"
-  );
+  const course = exportCoursePackage("course.polynomials-etale-triple-covers");
   const lesson = course.lessons.find(
     (entry) => entry.id === "term-1-week-17-day-3"
   );
@@ -370,6 +368,85 @@ test("requires an overall score in the model schema for non-proof written work",
     assert.equal(formatSchema?.properties?.overallScore?.type, "number");
     assert.equal(result.feedback.score, 84);
     assert.equal(result.feedback.verdict, "pass");
+
+    const rubricActivity = {
+      ...activity,
+      rubric: [
+        {
+          id: "mathematics",
+          label: "Mathematics",
+          description: "The mathematical conclusion is correct.",
+          weight: 0.6,
+          masteryDimensionIds: activity.masteryDimensionIds,
+          misconceptionIds: []
+        },
+        {
+          id: "reasoning",
+          label: "Reasoning",
+          description: "The decisive implication is justified.",
+          weight: 0.4,
+          masteryDimensionIds: activity.masteryDimensionIds,
+          misconceptionIds: []
+        }
+      ]
+    };
+    let capturedRubricFormat: Record<string, unknown> | undefined;
+    let capturedRubricPrompt = "";
+    const rubricResult = await assessCourseResponse(
+      {
+        runTextPrompt: async (_profile, input) => {
+          capturedRubricFormat = input.format;
+          capturedRubricPrompt = input.prompt;
+          return {
+            outputText: JSON.stringify({
+              overallScore: null,
+              summary: "The answer is correct and justified.",
+              strengths: ["The decisive implication is explicit."],
+              issues: [],
+              lineFeedback: [],
+              nextStep: "Continue to the next checkpoint.",
+              criterionScores: [
+                {
+                  criterionId: "mathematics",
+                  score: 90,
+                  rationale: "The conclusion is correct."
+                },
+                {
+                  criterionId: "reasoning",
+                  score: 80,
+                  rationale: "The implication is justified."
+                }
+              ],
+              conceptScores: [],
+              misconceptionIds: []
+            })
+          };
+        }
+      },
+      {
+        courseTitle: course.course.title,
+        lessonTitle: lesson.title,
+        activity: rubricActivity,
+        concepts: [],
+        answerMarkdown: "A complete rubric-backed short answer."
+      }
+    );
+    const rubricFormatSchema = capturedRubricFormat?.schema as
+      | {
+          properties?: {
+            overallScore?: { type?: unknown };
+          };
+        }
+      | undefined;
+    assert.deepEqual(rubricFormatSchema?.properties?.overallScore?.type, [
+      "number",
+      "null"
+    ]);
+    assert.match(capturedRubricPrompt, /mathematics \(60%\)/u);
+    assert.match(capturedRubricPrompt, /reasoning \(40%\)/u);
+    assert.equal(rubricResult.feedback.score, 86);
+    assert.equal(rubricResult.feedback.criterionScores.length, 2);
+    assert.equal(rubricResult.feedback.verdict, "pass");
   } finally {
     closeDatabase();
     await rm(dataRoot, { recursive: true, force: true });

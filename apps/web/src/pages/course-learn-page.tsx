@@ -1249,7 +1249,9 @@ export function CourseLearnPage() {
                       {attemptStatusLabel(currentAttempt)}
                     </div>
                     <div>{activity.points} points</div>
-                    <div className="mt-1">{activity.estimatedMinutes} min</div>
+                    <div className="mt-1">
+                      {activity.estimatedMinutes} min
+                    </div>
                   </div>
                 </div>
                 <CourseMarkdown
@@ -1278,12 +1280,15 @@ export function CourseLearnPage() {
                   </section>
                 ) : null}
 
-                {activity.type === "proof" ? (
+                {"rubric" in activity && activity.rubric?.length ? (
                   <details className="course-rubric">
-                    <summary>How this proof is graded</summary>
+                    <summary>How this work is graded</summary>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
                       {activity.rubric.map((criterion) => (
-                        <div key={criterion.id} className="course-rubric__item">
+                        <div
+                          key={criterion.id}
+                          className="course-rubric__item"
+                        >
                           <div className="flex justify-between gap-3 font-semibold">
                             <span>{criterion.label}</span>
                             <span>{Math.round(criterion.weight * 100)}%</span>

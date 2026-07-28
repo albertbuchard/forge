@@ -85,18 +85,20 @@ function constrainedString(values: string[]): JsonSchema {
     : { type: "string" };
 }
 
+function activityRubric(activity: CourseActivity) {
+  return "rubric" in activity ? (activity.rubric ?? []) : [];
+}
+
 function buildAssessmentFormat(context: AssessmentContext) {
-  const criterionIds =
-    context.activity.type === "proof"
-      ? context.activity.rubric.map((criterion) => criterion.id)
-      : [];
+  const rubric = activityRubric(context.activity);
+  const criterionIds = rubric.map((criterion) => criterion.id);
   return {
     type: "json_schema",
     name: "forge_course_assessment",
     strict: true,
     schema: closedObject({
       overallScore:
-        context.activity.type === "proof"
+        rubric.length > 0
           ? { type: ["number", "null"], minimum: 0, maximum: 100 }
           : { type: "number", minimum: 0, maximum: 100 },
       summary: { type: "string" },
@@ -234,7 +236,7 @@ function normalizeAssessmentScoreScale(
     relevantConceptIds.has(entry.conceptId)
   );
   const normalizedCriteria =
-    activity.type === "proof"
+    activityRubric(activity).length > 0
       ? normalizeVector(parsed.criterionScores, "rubric criteria")
       : parsed.criterionScores;
   const normalizedRelevantConcepts = new Map(
@@ -262,6 +264,7 @@ function normalizeAssessmentScoreScale(
 
 function buildPrompt(context: AssessmentContext) {
   const activity = context.activity;
+  const activityCriteria = activityRubric(activity);
   const reference =
     "referenceAnswerMarkdown" in activity
       ? activity.referenceAnswerMarkdown
@@ -271,8 +274,8 @@ function buildPrompt(context: AssessmentContext) {
           ? JSON.stringify(activity.assessment)
           : "";
   const rubric =
-    activity.type === "proof"
-      ? activity.rubric
+    activityCriteria.length > 0
+      ? activityCriteria
           .map(
             (criterion) =>
               `- ${criterion.id} (${Math.round(criterion.weight * 100)}%): ${criterion.description}`
@@ -312,7 +315,7 @@ function buildPrompt(context: AssessmentContext) {
     "",
     "Return one strict JSON object and no prose outside it with keys:",
     "overallScore, summary, strengths, issues, lineFeedback, nextStep, criterionScores, conceptScores, misconceptionIds.",
-    "For a proof, return exactly one criterionScores item {criterionId, score, rationale} for every rubric criterion; Forge computes the weighted total and verdict server-side. For other written work, set overallScore.",
+    "For any activity with authored rubric criteria, return exactly one criterionScores item {criterionId, score, rationale} for every criterion; Forge computes the weighted total and verdict server-side. If no authored rubric is listed, set overallScore.",
     "Every score must be a percentage on the 0–100 scale: write 95 for 95%, never 0.95.",
     "lineFeedback is an array of {quote, comment}. conceptScores is an array of {conceptId, score, evidence} using only the concept ids listed above. misconceptionIds may use only the allowed ids supplied by the course.",
     "Use Markdown in feedback strings. Delimit every inline mathematical expression with $...$ and display mathematics with $$...$$; do not use \\(...\\) or bare TeX commands."
@@ -390,20 +393,21 @@ export async function assessCourseResponse(
       )
     ];
     let score: number;
-    if (context.activity.type === "proof") {
+    const activityCriteria = activityRubric(context.activity);
+    if (activityCriteria.length > 0) {
       const criteria = new Map(
         parsed.criterionScores.map((entry) => [entry.criterionId, entry])
       );
       if (
         criteria.size !== parsed.criterionScores.length ||
-        criteria.size !== context.activity.rubric.length ||
-        context.activity.rubric.some((criterion) => !criteria.has(criterion.id))
+        criteria.size !== activityCriteria.length ||
+        activityCriteria.some((criterion) => !criteria.has(criterion.id))
       ) {
         throw new Error(
           "Assessment did not score every rubric criterion exactly once."
         );
       }
-      score = context.activity.rubric.reduce(
+      score = activityCriteria.reduce(
         (sum, criterion) =>
           sum + criteria.get(criterion.id)!.score * criterion.weight,
         0

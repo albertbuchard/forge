@@ -161,7 +161,8 @@ export const courseActivitySchema = z.discriminatedUnion("type", [
   activityBaseSchema.extend({
     type: z.enum(["short_answer", "computation", "reflection", "recall"]),
     referenceAnswerMarkdown: z.string().trim().default(""),
-    answerGuidance: z.array(z.string().trim().min(1)).default([])
+    answerGuidance: z.array(z.string().trim().min(1)).default([]),
+    rubric: z.array(proofRubricCriterionSchema).optional()
   }),
   activityBaseSchema.extend({
     type: z.literal("extension"),
@@ -732,17 +733,26 @@ function assertReferences(coursePackage: ForgeCoursePackage) {
           `Activity ${activity.id} links missing assessment profile ${activity.assessmentProfileId}.`
         );
       }
-      if (activity.type === "proof") {
-        const totalWeight = activity.rubric.reduce(
+      const rubric = "rubric" in activity ? (activity.rubric ?? []) : [];
+      if (rubric.length > 0) {
+        const duplicateRubricIds = duplicateIds(
+          rubric.map((criterion) => criterion.id)
+        );
+        if (duplicateRubricIds.length > 0) {
+          errors.push(
+            `Rubric ${activity.id} has duplicate criterion ids: ${duplicateRubricIds.join(", ")}.`
+          );
+        }
+        const totalWeight = rubric.reduce(
           (sum, criterion) => sum + criterion.weight,
           0
         );
         if (Math.abs(totalWeight - 1) > 0.000_001) {
           errors.push(
-            `Proof rubric ${activity.id} weights sum to ${totalWeight}, not 1.`
+            `Rubric ${activity.id} weights sum to ${totalWeight}, not 1.`
           );
         }
-        for (const criterion of activity.rubric) {
+        for (const criterion of rubric) {
           for (const dimensionId of criterion.masteryDimensionIds) {
             if (!dimensionIds.has(dimensionId))
               errors.push(

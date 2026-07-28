@@ -130,6 +130,7 @@ export type CourseActivity =
   | (ActivityBase & {
       type: "short_answer" | "computation" | "reflection" | "recall";
       answerGuidance: string[];
+      rubric?: ProofRubricCriterion[];
     })
   | (ActivityBase & {
       type: "extension";

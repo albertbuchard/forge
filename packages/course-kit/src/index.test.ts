@@ -114,6 +114,59 @@ describe("Forge Course Kit", () => {
     );
   });
 
+  it("preserves authored rubrics for non-proof written activities", () => {
+    const fixture = basePackage();
+    const parsed = defineCoursePackage({
+      ...fixture,
+      lessons: [
+        {
+          ...fixture.lessons[0]!,
+          activities: [
+            {
+              id: "short.one",
+              type: "short_answer" as const,
+              title: "Explain it",
+              promptMarkdown: "Explain why the conclusion follows.",
+              conceptIds: ["concept.one"],
+              points: 10,
+              estimatedMinutes: 10,
+              referenceAnswerMarkdown: "The hidden instructor explanation.",
+              answerGuidance: [],
+              rubric: [
+                {
+                  id: "reasoning",
+                  label: "Reasoning",
+                  description: "The decisive implication is justified.",
+                  weight: 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    });
+    const activity = parsed.lessons[0]?.activities[0];
+    expect(activity?.type).toBe("short_answer");
+    expect("rubric" in activity! ? activity.rubric : []).toHaveLength(1);
+    const learnerJson = stableJson(toLearnerLesson(parsed.lessons[0]!));
+    expect(learnerJson).toContain("The decisive implication is justified.");
+    expect(learnerJson).not.toContain("The hidden instructor explanation.");
+
+    const malformed = structuredClone(parsed);
+    const malformedActivity = malformed.lessons[0]?.activities[0];
+    if (
+      !malformedActivity ||
+      !("rubric" in malformedActivity) ||
+      !malformedActivity.rubric
+    ) {
+      throw new Error("Expected a rubric-backed short-answer fixture.");
+    }
+    malformedActivity.rubric[0]!.weight = 0.9;
+    expect(() => defineCoursePackage(malformed)).toThrow(
+      /Rubric short\.one weights sum to 0\.9, not 1/u
+    );
+  });
+
   it("allows a course to reference a shared concept without redefining it", () => {
     const fixture = basePackage();
     const parsed = defineCoursePackage({
