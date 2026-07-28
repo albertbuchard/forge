@@ -7384,7 +7384,7 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     notes: [
       "Read forge_get_weight_loss_overview first and identify the exact existing log; do not ask the user for an internal id when current results can resolve it.",
       "Reflect the current value and the proposed correction, then send only fields the user accepted changing.",
-      "If items is present, it is the complete desired nonempty item list for that log. The connector deliberately prevents clearing a meal to zero items. Search foods or use barcode lookup first and preserve the same foodId and researched custom-food nutrition rules used by forge_log_food.",
+      "If items is present, it is the complete desired item list for that log and must remain nonempty. The connector deliberately prevents clearing a meal to zero items. Search foods or use barcode lookup first and preserve the same foodId and researched custom-food nutrition rules used by forge_log_food.",
       "The exact API method is PATCH /api/v1/health/weight-loss/food-logs/:id, with foodLogId supplied by the tool as the path id."
     ],
     example:
