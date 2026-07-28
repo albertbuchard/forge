@@ -127,31 +127,29 @@ function windowsPathChainHasNoReparsePoints(
     ) {
       return false;
     }
+    const candidates = [root];
+    let candidate = root;
+    for (const segment of relative.split(path.win32.sep).filter(Boolean)) {
+      candidate = path.win32.join(candidate, segment);
+      candidates.push(candidate);
+    }
     const script = [
       "$ErrorActionPreference='Stop'",
       "$root=[IO.Path]::GetFullPath($args[0]).TrimEnd([IO.Path]::DirectorySeparatorChar)",
-      "$target=[IO.Path]::GetFullPath($args[1]).TrimEnd([IO.Path]::DirectorySeparatorChar)",
+      "$target=[IO.Path]::GetFullPath($args[$args.Count-1]).TrimEnd([IO.Path]::DirectorySeparatorChar)",
       "$prefix=$root + [IO.Path]::DirectorySeparatorChar",
       "if ($target -ne $root -and -not $target.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase)) { exit 20 }",
-      "$candidates=New-Object Collections.Generic.List[string]",
-      "$candidates.Add($root)",
-      "if ($target -ne $root) {",
-      "  $current=$root",
-      "  $suffix=$target.Substring($prefix.Length)",
-      "  foreach ($part in $suffix.Split([IO.Path]::DirectorySeparatorChar,[StringSplitOptions]::RemoveEmptyEntries)) {",
-      "    $current=[IO.Path]::Combine($current,$part)",
-      "    $candidates.Add($current)",
-      "  }",
-      "}",
-      "foreach ($candidate in $candidates) {",
-      "  $item=Get-Item -LiteralPath $candidate -Force",
+      "foreach ($candidate in @($args)) {",
+      "  $full=[IO.Path]::GetFullPath($candidate).TrimEnd([IO.Path]::DirectorySeparatorChar)",
+      "  if ($full -ne $root -and -not $full.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase)) { exit 20 }",
+      "  $item=Get-Item -LiteralPath $full -Force",
       "  if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { exit 21 }",
       "}",
       "exit 0"
     ].join("\n");
     runPowerShell({
       script,
-      args: [root, resolvedTarget],
+      args: candidates,
       timeoutMs: 5_000,
       systemRoot,
       spawnSyncImpl

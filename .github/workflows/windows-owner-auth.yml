@@ -37,6 +37,11 @@ jobs:
     name: Windows ${{ matrix.windows }} / Node ${{ matrix.node }}
     runs-on: ${{ matrix.windows }}
     timeout-minutes: 20
+    env:
+      FORGE_WINDOWS_CLI_HOME: ${{ github.workspace }}\.windows-owner-cli-home
+      FORGE_WINDOWS_CLI_DATA_ROOT: ${{ github.workspace }}\.windows-owner-cli-data
+      FORGE_WINDOWS_FIXTURE_ROOT: ${{ github.workspace }}\.windows-owner-cross-user-fixture
+      FORGE_WINDOWS_CREDENTIAL_PATH: ${{ github.workspace }}\.windows-owner-cross-user-fixture\forge-root\native\windows-owner.json
     strategy:
       fail-fast: false
       matrix:
@@ -62,15 +67,131 @@ jobs:
         working-directory: packages/forge-memory
         run: npm ci --ignore-scripts
 
-      - name: Exercise Windows owner authentication and package behavior
+      - name: Exercise the standalone Windows DPAPI owner credential
         working-directory: packages/forge-memory
-        run: npm test
+        run: |
+          node --test `
+            ./tests/macos-browser-handler.test.mjs `
+            ./tests/native-source-manifest.test.mjs `
+            ./tests/native-source-signing-key.test.mjs `
+            ./tests/remote-pairing.test.mjs `
+            ./tests/windows-owner-auth.test.mjs
+          if ($LASTEXITCODE -ne 0) {
+            throw "Forge Windows-compatible package tests failed"
+          }
+          node ./tests/cli-smoke.mjs
+          if ($LASTEXITCODE -ne 0) {
+            throw "Forge Memory CLI smoke failed on Windows"
+          }
 
-      - name: Prove another local account cannot read or decrypt owner material
+      - name: Prove the supported CLI prepares reusable owner-only material
         shell: pwsh
-        env:
-          FORGE_WINDOWS_FIXTURE_ROOT: ${{ github.workspace }}\.windows-owner-cross-user-fixture
-          FORGE_WINDOWS_CREDENTIAL_PATH: ${{ github.workspace }}\.windows-owner-cross-user-fixture\forge-root\native\windows-owner.json
+        run: |
+          $ErrorActionPreference = "Stop"
+          $cli = Join-Path $env:GITHUB_WORKSPACE "packages\forge-memory\bin\forge-memory.mjs"
+          New-Item -ItemType Directory -Path $env:FORGE_WINDOWS_CLI_HOME -Force | Out-Null
+          New-Item -ItemType Directory -Path $env:FORGE_WINDOWS_CLI_DATA_ROOT -Force | Out-Null
+          $env:HOME = $env:FORGE_WINDOWS_CLI_HOME
+          $env:USERPROFILE = $env:FORGE_WINDOWS_CLI_HOME
+
+          node $cli install `
+            --yes `
+            --no-start `
+            --no-doctor `
+            --skip-pair-ios `
+            --adapters none `
+            --data-root $env:FORGE_WINDOWS_CLI_DATA_ROOT `
+            --port 4317 `
+            --json | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            throw "Forge could not prepare the isolated Windows CLI configuration"
+          }
+
+          $firstUrl = node $cli ui --no-start --print-url
+          if ($LASTEXITCODE -ne 0 -or $firstUrl.Trim() -ne "http://127.0.0.1:4317/forge/") {
+            throw "Forge could not prepare the supported Windows local-owner CLI path"
+          }
+
+          $descriptorPath = Join-Path $env:FORGE_WINDOWS_CLI_HOME ".forge\native\windows-owner.json"
+          $keyPath = Join-Path $env:FORGE_WINDOWS_CLI_HOME ".forge\native\windows-owner.key"
+          if (
+            -not (Test-Path -LiteralPath $descriptorPath -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $keyPath -PathType Leaf)
+          ) {
+            throw "Forge did not create the expected Windows owner descriptor and key"
+          }
+
+          function Assert-CurrentOwnerOnly {
+            param([Parameter(Mandatory = $true)][string]$Path)
+            $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+            $acl = Get-Acl -LiteralPath $Path
+            $owner = ([Security.Principal.NTAccount]$acl.Owner).Translate(
+              [Security.Principal.SecurityIdentifier]
+            ).Value
+            $rules = @($acl.Access)
+            $bad = @(
+              $rules | Where-Object {
+                $_.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow -or
+                $_.IsInherited -or
+                $_.IdentityReference.Translate(
+                  [Security.Principal.SecurityIdentifier]
+                ).Value -ne $sid
+              }
+            )
+            $full = [Security.AccessControl.FileSystemRights]::FullControl
+            $ownerFull = @(
+              $rules | Where-Object { ($_.FileSystemRights -band $full) -eq $full }
+            )
+            if (
+              $owner -ne $sid -or
+              -not $acl.AreAccessRulesProtected -or
+              $rules.Count -lt 1 -or
+              $bad.Count -ne 0 -or
+              $ownerFull.Count -lt 1
+            ) {
+              throw "Forge owner material is not restricted to the current Windows owner: $Path"
+            }
+          }
+
+          Assert-CurrentOwnerOnly (Split-Path -Parent $keyPath)
+          Assert-CurrentOwnerOnly $descriptorPath
+          Assert-CurrentOwnerOnly $keyPath
+
+          $descriptor = Get-Content -LiteralPath $descriptorPath -Raw | ConvertFrom-Json
+          $expectedKeyPath = [IO.Path]::GetFullPath($keyPath)
+          if (
+            $descriptor.schemaVersion -ne 1 -or
+            [IO.Path]::GetFullPath([string]$descriptor.keyPath) -ne $expectedKeyPath
+          ) {
+            throw "Forge wrote an invalid Windows owner descriptor"
+          }
+          $keyHashBefore = (Get-FileHash -LiteralPath $keyPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          $descriptorHashBefore = (Get-FileHash -LiteralPath $descriptorPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ([string]$descriptor.keySha256 -ne $keyHashBefore) {
+            throw "Forge Windows owner descriptor does not bind the installed key"
+          }
+
+          $env:FORGE_WINDOWS_CLI_KEY_PATH = $keyPath
+          node --input-type=module -e "import fs from 'node:fs'; const value=fs.readFileSync(process.env.FORGE_WINDOWS_CLI_KEY_PATH,'utf8').trim(); if(!/^[A-Za-z0-9_-]{43}$/.test(value)||Buffer.from(value,'base64url').byteLength!==32) throw new Error('invalid Windows owner key');"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Forge did not create a 256-bit Windows owner key"
+          }
+
+          $secondUrl = node $cli ui --no-start --print-url
+          if ($LASTEXITCODE -ne 0 -or $secondUrl.Trim() -ne $firstUrl.Trim()) {
+            throw "Forge could not reuse the supported Windows local-owner CLI path"
+          }
+          $keyHashAfter = (Get-FileHash -LiteralPath $keyPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          $descriptorHashAfter = (Get-FileHash -LiteralPath $descriptorPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if (
+            $keyHashAfter -ne $keyHashBefore -or
+            $descriptorHashAfter -ne $descriptorHashBefore
+          ) {
+            throw "Forge unexpectedly rotated reusable Windows owner material"
+          }
+
+      - name: Prove another local account cannot read CLI or DPAPI owner material
+        shell: pwsh
         run: |
           New-Item -ItemType Directory -Path $env:FORGE_WINDOWS_FIXTURE_ROOT | Out-Null
           $controlPath = Join-Path $env:FORGE_WINDOWS_FIXTURE_ROOT "readable-control.txt"
@@ -79,6 +200,14 @@ jobs:
           & icacls.exe $env:FORGE_WINDOWS_FIXTURE_ROOT /inheritance:r /grant:r "*${currentSid}:(OI)(CI)(F)" "*S-1-5-32-545:(OI)(CI)(RX)" | Out-Null
           if ($LASTEXITCODE -ne 0) {
             throw "Forge could not prepare a traversable synthetic fixture root"
+          }
+          $cliDescriptorPath = Join-Path $env:FORGE_WINDOWS_CLI_HOME ".forge\native\windows-owner.json"
+          $cliKeyPath = Join-Path $env:FORGE_WINDOWS_CLI_HOME ".forge\native\windows-owner.key"
+          if (
+            -not (Test-Path -LiteralPath $cliDescriptorPath -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $cliKeyPath -PathType Leaf)
+          ) {
+            throw "Forge could not find the isolated CLI owner material"
           }
           node --input-type=module -e "import { ensureWindowsOwnerCredential } from './packages/forge-memory/lib/windows-owner-auth.mjs'; await ensureWindowsOwnerCredential({ credentialPath: process.env.FORGE_WINDOWS_CREDENTIAL_PATH });"
           if ($LASTEXITCODE -ne 0) {
@@ -95,20 +224,30 @@ jobs:
           param(
             [Parameter(Mandatory = $true)][string]$CredentialPath,
             [Parameter(Mandatory = $true)][string]$ControlPath,
-            [Parameter(Mandatory = $true)][string]$PublicCopy
+            [Parameter(Mandatory = $true)][string]$PublicCopy,
+            [Parameter(Mandatory = $true)][string]$CliDescriptorPath,
+            [Parameter(Mandatory = $true)][string]$CliKeyPath
           )
           $ErrorActionPreference = "Stop"
           if ((Get-Content -LiteralPath $ControlPath -Raw).Trim() -ne "cross-user-control") {
             exit 42
           }
-          $readWasDenied = $false
-          try {
-            [void](Get-Content -LiteralPath $CredentialPath -Raw)
-          } catch [System.UnauthorizedAccessException] {
-            $readWasDenied = $true
-          }
-          if (-not $readWasDenied) {
-            exit 40
+          foreach ($entry in @(
+            @{ Path = $CredentialPath; ExitCode = 40 },
+            @{ Path = $CliDescriptorPath; ExitCode = 43 },
+            @{ Path = $CliKeyPath; ExitCode = 44 }
+          )) {
+            $readWasDenied = $false
+            try {
+              [void](Get-Content -LiteralPath $entry.Path -Raw)
+            } catch [System.UnauthorizedAccessException] {
+              $readWasDenied = $true
+            } catch {
+              throw
+            }
+            if (-not $readWasDenied) {
+              exit $entry.ExitCode
+            }
           }
           $record = Get-Content -LiteralPath $PublicCopy -Raw | ConvertFrom-Json
           $protected = [Convert]::FromBase64String($record.protectedKey)
@@ -145,7 +284,9 @@ jobs:
                 $helperPath,
                 $env:FORGE_WINDOWS_CREDENTIAL_PATH,
                 $controlPath,
-                $publicCopy
+                $publicCopy,
+                $cliDescriptorPath,
+                $cliKeyPath
               ) `
               -Credential $credential `
               -LoadUserProfile `
@@ -158,6 +299,8 @@ jobs:
             Remove-LocalUser -Name $testUser -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath $helperPath, $publicCopy -Force -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath $env:FORGE_WINDOWS_FIXTURE_ROOT -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $env:FORGE_WINDOWS_CLI_HOME -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $env:FORGE_WINDOWS_CLI_DATA_ROOT -Recurse -Force -ErrorAction SilentlyContinue
             $passwordText = $null
             $securePassword = $null
             $credential = $null
