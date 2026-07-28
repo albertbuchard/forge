@@ -76,6 +76,13 @@ describe("local owner broker descriptor", () => {
     const verifier = localOwnerClientSource.slice(verifierStart, verifierEnd);
 
     expect(verifier).toContain('].join("\\n");');
+    expect(verifier).toContain('"utf16le"');
+    expect(verifier).toContain('"-EncodedCommand"');
+    expect(localOwnerClientSource).toContain(
+      "FORGE_WINDOWS_OWNER_CLIENT_POWERSHELL_ARGUMENTS_B64"
+    );
+    expect(verifier).toContain("WINDOWS_POWERSHELL_ARGUMENTS_ENV");
+    expect(verifier).not.toContain('"-Command", script, target');
     expect(verifier).toContain("$rules.Count -lt 1");
     expect(verifier).toContain(
       "[Security.AccessControl.FileSystemRights]::FullControl"

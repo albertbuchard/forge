@@ -270,11 +270,32 @@ jobs:
           )) {
             $readWasDenied = $false
             try {
-              [void](Get-Content -LiteralPath $entry.Path -Raw)
-            } catch [System.UnauthorizedAccessException] {
-              $readWasDenied = $true
+              $stream = [IO.File]::Open(
+                $entry.Path,
+                [IO.FileMode]::Open,
+                [IO.FileAccess]::Read,
+                [IO.FileShare]::ReadWrite
+              )
+              try {
+                [void]$stream.ReadByte()
+              } finally {
+                $stream.Dispose()
+              }
             } catch {
-              throw
+              $failure = $_.Exception
+              while ($null -ne $failure) {
+                if (
+                  $failure -is [System.UnauthorizedAccessException] -or
+                  $failure -is [System.Security.SecurityException]
+                ) {
+                  $readWasDenied = $true
+                  break
+                }
+                $failure = $failure.InnerException
+              }
+              if (-not $readWasDenied) {
+                throw
+              }
             }
             if (-not $readWasDenied) {
               exit $entry.ExitCode
@@ -293,8 +314,15 @@ jobs:
               [Security.Cryptography.DataProtectionScope]::CurrentUser
             )
             exit 41
-          } catch [Security.Cryptography.CryptographicException] {
-            exit 0
+          } catch {
+            $failure = $_.Exception
+            while ($null -ne $failure) {
+              if ($failure -is [Security.Cryptography.CryptographicException]) {
+                exit 0
+              }
+              $failure = $failure.InnerException
+            }
+            throw
           }
           '@ | Set-Content -LiteralPath $helperPath -Encoding UTF8
 
@@ -315,12 +343,12 @@ jobs:
                 "-ExecutionPolicy",
                 "Bypass",
                 "-File",
-                $helperPath,
-                $env:FORGE_WINDOWS_CREDENTIAL_PATH,
-                $controlPath,
-                $publicCopy,
-                $cliDescriptorPath,
-                $cliKeyPath
+                "`"$helperPath`"",
+                "`"$($env:FORGE_WINDOWS_CREDENTIAL_PATH)`"",
+                "`"$controlPath`"",
+                "`"$publicCopy`"",
+                "`"$cliDescriptorPath`"",
+                "`"$cliKeyPath`""
               ) `
               -Credential $credential `
               -LoadUserProfile `

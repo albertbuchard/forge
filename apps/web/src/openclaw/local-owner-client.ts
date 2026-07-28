@@ -12,6 +12,8 @@ import { fileURLToPath } from "node:url";
 
 const LOCAL_HOSTNAMES = new Set(["127.0.0.1", "localhost", "::1"]);
 const OWNER_BROKER_PROTOCOL = "forge-owner-broker/1";
+const WINDOWS_POWERSHELL_ARGUMENTS_ENV =
+  "FORGE_WINDOWS_OWNER_CLIENT_POWERSHELL_ARGUMENTS_B64";
 
 type BrokerRequest = {
   protocol: typeof OWNER_BROKER_PROTOCOL;
@@ -91,7 +93,7 @@ function windowsPathIsCurrentOwnerOnly(target: string) {
   );
   const script = [
     "$ErrorActionPreference='Stop'",
-    "$target=[IO.Path]::GetFullPath($args[0])",
+    "$target=[IO.Path]::GetFullPath($forgeArgs[0])",
     "$item=Get-Item -LiteralPath $target -Force",
     "if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { exit 10 }",
     "$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
@@ -111,10 +113,37 @@ function windowsPathIsCurrentOwnerOnly(target: string) {
     "if ($null -eq $ownerFull) { exit 14 }",
     "exit 0"
   ].join("\n");
+  const encodedArguments = Buffer.from(
+    JSON.stringify({ values: [target] }),
+    "utf8"
+  ).toString("base64");
+  const encodedCommand = Buffer.from(
+    [
+      `$forgeArgumentsJson=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:${WINDOWS_POWERSHELL_ARGUMENTS_ENV}))`,
+      "$forgeArgumentEnvelope=ConvertFrom-Json -InputObject $forgeArgumentsJson",
+      "$forgeArgs=[Object[]]$forgeArgumentEnvelope.values",
+      script
+    ].join("\n"),
+    "utf16le"
+  ).toString("base64");
   const result = spawnSync(
     powershell,
-    ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script, target],
-    { stdio: "ignore", windowsHide: true, timeout: 5_000 }
+    [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-EncodedCommand",
+      encodedCommand
+    ],
+    {
+      env: {
+        ...process.env,
+        [WINDOWS_POWERSHELL_ARGUMENTS_ENV]: encodedArguments
+      },
+      stdio: "ignore",
+      windowsHide: true,
+      timeout: 5_000
+    }
   );
   return result.status === 0;
 }
