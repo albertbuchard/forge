@@ -178,6 +178,10 @@ function runtimeStartLockPath() {
   return path.join(forgeHome(), "run", "forge-memory-start.lock");
 }
 
+function runtimeStartLockOwnerPath() {
+  return path.join(runtimeStartLockPath(), "owner.json");
+}
+
 function logPath() {
   return path.join(forgeHome(), "logs", "forge-memory-runtime.log");
 }
@@ -299,14 +303,19 @@ function windowsPathIsCurrentOwnerOnly(target) {
       "}",
       "$owner=([Security.Principal.NTAccount]$acl.Owner).Translate([Security.Principal.SecurityIdentifier]).Value",
       "if ($owner -ne $sid -or -not $acl.AreAccessRulesProtected) { exit 11 }",
-      "$bad=$acl.Access | Where-Object {",
+      "$rules=@($acl.Access)",
+      "if ($rules.Count -lt 1) { exit 12 }",
+      "$bad=$rules | Where-Object {",
       "  $_.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow -or",
       "  $_.IsInherited -or",
       "  $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value -ne $sid",
       "}",
-      "if ($null -ne $bad) { exit 12 }",
+      "if ($null -ne $bad) { exit 13 }",
+      "$full=[Security.AccessControl.FileSystemRights]::FullControl",
+      "$ownerFull=$rules | Where-Object { ($_.FileSystemRights -band $full) -eq $full }",
+      "if ($null -eq $ownerFull) { exit 14 }",
       "exit 0"
-    ].join("; ");
+    ].join("\n");
     runWindowsPowerShell(script, [target], 5_000);
     return true;
   } catch {
@@ -2893,7 +2902,29 @@ async function stopRecordedRuntimeProcess(recorded) {
     signalProcess(pid, "SIGKILL");
   }
   await waitForProcessExit(pid, 500);
-  return true;
+  return !recordedProcessIdentityMatches(recorded);
+}
+
+async function stopRecordedRuntimeChildren(children) {
+  const outcomes = await Promise.all(
+    children.map(async (child) => ({
+      child,
+      stopped: await stopRecordedRuntimeProcess(child).catch(() => false)
+    }))
+  );
+  const survivors = outcomes
+    .filter(
+      ({ child, stopped }) =>
+        stopped !== true && recordedProcessIdentityMatches(child)
+    )
+    .map(({ child }) => child);
+  return {
+    ok: survivors.length === 0,
+    stopped: outcomes
+      .filter(({ stopped }) => stopped)
+      .map(({ child }) => child.pid),
+    survivors
+  };
 }
 
 async function waitForHealth(config, timeoutMs = 30_000) {
@@ -2906,32 +2937,107 @@ async function waitForHealth(config, timeoutMs = 30_000) {
   return health(config);
 }
 
-async function acquireRuntimeStartLock(config, timeoutMs = 30_000) {
+function runtimeStartLockOwnerIsAlive(owner) {
+  return (
+    typeof owner?.token === "string" &&
+    /^[0-9a-f]{64}$/.test(owner.token) &&
+    recordedProcessIdentityMatches(owner)
+  );
+}
+
+async function reapAbandonedRuntimeStartLock(lockPath, expectedOwner) {
+  const reapClaimPath = path.join(lockPath, ".reap");
+  try {
+    await fsp.mkdir(reapClaimPath, { mode: 0o700 });
+  } catch (error) {
+    if (error?.code === "EEXIST" || error?.code === "ENOENT") return false;
+    throw error;
+  }
+
+  try {
+    const currentOwner = await readJson(runtimeStartLockOwnerPath(), null);
+    if (expectedOwner) {
+      if (
+        currentOwner?.token !== expectedOwner.token ||
+        runtimeStartLockOwnerIsAlive(currentOwner)
+      ) {
+        return false;
+      }
+    } else {
+      if (currentOwner) return false;
+      const metadata = await fsp.stat(lockPath);
+      if (Date.now() - metadata.mtimeMs <= 10_000) return false;
+    }
+    await fsp.rm(lockPath, { recursive: true, force: true });
+    return true;
+  } catch (error) {
+    if (error?.code === "ENOENT") return true;
+    throw error;
+  } finally {
+    await fsp.rm(reapClaimPath, { recursive: true, force: true }).catch(() => {
+      // The containing abandoned lock may already have been removed.
+    });
+  }
+}
+
+async function acquireRuntimeStartLock(config, timeoutMs = 120_000) {
   const lockPath = runtimeStartLockPath();
   await fsp.mkdir(path.dirname(lockPath), { recursive: true, mode: 0o700 });
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    let created = false;
     try {
       await fsp.mkdir(lockPath, { mode: 0o700 });
+      created = true;
+      const identity = captureProcessIdentity(process.pid);
+      if (!identity) {
+        await fsp.rm(lockPath, { recursive: true, force: true });
+        throw new Error(
+          "Forge could not verify the runtime-mutation lock owner process."
+        );
+      }
+      const owner = {
+        pid: process.pid,
+        identity,
+        token: randomBytes(32).toString("hex"),
+        acquiredAt: new Date().toISOString()
+      };
+      await fsp.writeFile(
+        runtimeStartLockOwnerPath(),
+        `${JSON.stringify(owner, null, 2)}\n`,
+        { encoding: "utf8", mode: 0o600 }
+      );
       let released = false;
       return async () => {
         if (released) return;
         released = true;
-        await fsp.rmdir(lockPath).catch(() => undefined);
+        const currentOwner = await readJson(runtimeStartLockOwnerPath(), null);
+        if (currentOwner?.token !== owner.token) return;
+        await fsp.rm(lockPath, { recursive: true, force: true });
       };
     } catch (error) {
+      if (created) {
+        await fsp.rm(lockPath, { recursive: true, force: true });
+      }
       if (error?.code !== "EEXIST") throw error;
     }
-    const current = await health(config, 1_000);
-    if (isHealthyForgeRuntime(current)) return null;
     try {
-      const metadata = await fsp.stat(lockPath);
-      if (Date.now() - metadata.mtimeMs > 60_000) {
-        await fsp.rmdir(lockPath);
+      const owner = await readJson(runtimeStartLockOwnerPath(), null);
+      if (owner) {
+        if (!runtimeStartLockOwnerIsAlive(owner)) {
+          if (await reapAbandonedRuntimeStartLock(lockPath, owner)) continue;
+        }
+      } else {
+        const metadata = await fsp.stat(lockPath);
+        if (Date.now() - metadata.mtimeMs > 10_000) {
+          if (await reapAbandonedRuntimeStartLock(lockPath, null)) continue;
+        }
+      }
+    } catch (error) {
+      if (error?.code === "ENOENT") {
         continue;
       }
-    } catch {
-      continue;
+      throw error;
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
@@ -2940,19 +3046,22 @@ async function acquireRuntimeStartLock(config, timeoutMs = 30_000) {
   );
 }
 
-async function ensureManagedRuntimeForLocalClient(config, peerPreparation) {
-  if (isHealthyForgeRuntime(await health(config, 1_500))) return;
+async function withRuntimeMutationLock(config, operation) {
   const release = await acquireRuntimeStartLock(config);
-  if (!release) return;
   try {
-    const result = await startRuntime(config, { peerPreparation });
-    if (!result.ok) {
-      throw new Error(
-        result.message ?? `Forge did not become healthy at ${baseUrl(config)}.`
-      );
-    }
+    return await operation();
   } finally {
     await release();
+  }
+}
+
+async function ensureManagedRuntimeForLocalClient(config, peerPreparation) {
+  if (isHealthyForgeRuntime(await health(config, 1_500))) return;
+  const result = await startRuntime(config, { peerPreparation });
+  if (!result.ok) {
+    throw new Error(
+      result.message ?? `Forge did not become healthy at ${baseUrl(config)}.`
+    );
   }
 }
 
@@ -3159,9 +3268,19 @@ async function rotateRuntimeLog(reason) {
   return backupPath;
 }
 
-async function repairPackagedRuntimeCache(config) {
+async function repairPackagedRuntimeCache(config, options = {}) {
+  if (options.runtimeMutationLockHeld !== true) {
+    return withRuntimeMutationLock(config, () =>
+      repairPackagedRuntimeCache(config, {
+        ...options,
+        runtimeMutationLockHeld: true
+      })
+    );
+  }
   if (config.mode === "dev") {
-    const result = await startRuntime(config);
+    const result = await startRuntime(config, {
+      runtimeMutationLockHeld: true
+    });
     return {
       ok: result.ok,
       mode: "dev",
@@ -3170,14 +3289,22 @@ async function repairPackagedRuntimeCache(config) {
     };
   }
 
-  await stopRuntime();
+  const stop = await stopRuntime(config, { runtimeMutationLockHeld: true });
+  if (!stop.ok) {
+    throw new Error(
+      stop.message ??
+        "Forge could not stop the recorded runtime safely, so cache repair was cancelled."
+    );
+  }
   const rotatedLogPath = await rotateRuntimeLog("repair");
   await fsp.rm(runtimeStatePath(), { force: true });
   await fsp.rm(runtimeInstallRoot(), { recursive: true, force: true });
   const pluginRoot = await ensurePackagedRuntimeInstalled({
     forceInstall: true
   });
-  const result = await startRuntime(config);
+  const result = await startRuntime(config, {
+    runtimeMutationLockHeld: true
+  });
   const record = {
     repairedAt: new Date().toISOString(),
     ok: result.ok,
@@ -3282,7 +3409,271 @@ async function authenticatedRuntimeHealth(config, peerPreparation = null) {
   }
 }
 
+function protectedRuntimePid(healthResult) {
+  const runtimePid = Number(healthResult?.payload?.runtime?.pid);
+  return Number.isInteger(runtimePid) && runtimePid > 0 ? runtimePid : null;
+}
+
+async function waitForAuthenticatedRuntimeHealth(
+  config,
+  peerPreparation,
+  timeoutMs = 2_000
+) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError = null;
+  while (Date.now() < deadline) {
+    try {
+      const result = await authenticatedRuntimeHealth(config, peerPreparation);
+      if (protectedRuntimePid(result) === null) {
+        throw new Error(
+          "The protected Forge health response did not identify its runtime process."
+        );
+      }
+      return result;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  throw (
+    lastError ??
+    new Error("Forge did not return a protected runtime identity in time.")
+  );
+}
+
+function runtimeAdoptionFailure(config, state, healthResult) {
+  const runningIdentity = healthRuntimePackageIdentity(healthResult);
+  const runningStorageRoot = resolveRuntimeStorageRoot(healthResult);
+  const ownsHealthyRuntime = runtimeStateOwnsHealthProcess(state, healthResult);
+  const packageMatches =
+    config.mode !== "packaged" ||
+    (runtimePackageIdentityMatches(runningIdentity) &&
+      (!ownsHealthyRuntime || runtimeStateMatchesPackage(state, config)));
+  if (!packageMatches) {
+    return {
+      ok: false,
+      started: false,
+      adopted: false,
+      runtimeVersionMismatch: true,
+      expectedRuntimePackage: {
+        name: RUNTIME_PACKAGE,
+        version: RUNTIME_PACKAGE_VERSION
+      },
+      runningRuntimePackage: runningIdentity,
+      state,
+      health: healthResult,
+      message:
+        "The healthy Forge runtime package version could not be verified. Stop it or run npx forge-memory restart before continuing."
+    };
+  }
+  if (
+    runningStorageRoot === null ||
+    !pathsMatch(runningStorageRoot, config.dataRoot)
+  ) {
+    return {
+      ok: false,
+      started: false,
+      adopted: false,
+      storageRootMismatch: true,
+      expectedStorageRoot: path.resolve(config.dataRoot),
+      runningStorageRoot,
+      state,
+      health: healthResult,
+      message:
+        "The protected Forge runtime uses a different or unverified data folder. Stop it or run npx forge-memory restart before continuing."
+    };
+  }
+  if (!runtimeStateMatchesPeerConfig(state, config)) {
+    return {
+      ok: false,
+      started: false,
+      adopted: false,
+      configurationMismatch: true,
+      state,
+      health: healthResult,
+      message:
+        "The healthy Forge runtime was started with different peer-sharing settings. Run npx forge-memory restart."
+    };
+  }
+  return null;
+}
+
+function runtimeCleanupFailure(cleanup, state, healthResult, message) {
+  return {
+    ok: false,
+    started: false,
+    adopted: false,
+    cleanupFailed: true,
+    survivingCandidatePids: cleanup.survivors.map((child) => child.pid),
+    state,
+    health: healthResult,
+    message
+  };
+}
+
+async function finalizeStartedRuntimeAttempt(
+  { config, peerPreparation, state, publicHealth },
+  dependencies = {}
+) {
+  const stopChildren =
+    dependencies.stopChildren ?? stopRecordedRuntimeChildren;
+  const readState = dependencies.readState ?? readRuntimeState;
+  const writeState =
+    dependencies.writeState ??
+    ((payload) => writeJson(runtimeStatePath(), payload, { backup: false }));
+  const authenticatedHealth =
+    dependencies.authenticatedHealth ?? waitForAuthenticatedRuntimeHealth;
+  const ownsHealthProcess =
+    dependencies.ownsHealthProcess ?? runtimeStateOwnsHealthProcess;
+
+  const cleanupCandidate = async (message, healthResult) => {
+    const cleanup = await stopChildren(state.children);
+    if (cleanup.ok) return null;
+    return runtimeCleanupFailure(
+      cleanup,
+      await readState(),
+      healthResult,
+      message
+    );
+  };
+
+  if (!isHealthyForgeRuntime(publicHealth)) {
+    const cleanupFailure = await cleanupCandidate(
+      "Forge did not become healthy, and Forge Memory could not stop every process started by this attempt. No runtime ownership was recorded.",
+      publicHealth
+    );
+    if (cleanupFailure) return cleanupFailure;
+    return {
+      ok: false,
+      started: false,
+      adopted: false,
+      state: await readState(),
+      health: publicHealth,
+      message:
+        "Forge did not become healthy, so Forge Memory stopped only the processes started by this attempt and recorded no runtime ownership."
+    };
+  }
+
+  let protectedHealth;
+  try {
+    protectedHealth = await authenticatedHealth(config, peerPreparation);
+    if (protectedRuntimePid(protectedHealth) === null) {
+      throw new Error(
+        "The protected Forge health response did not identify its runtime process."
+      );
+    }
+  } catch (error) {
+    const cleanupFailure = await cleanupCandidate(
+      "Forge became reachable without a verifiable protected runtime identity, and Forge Memory could not stop every process started by this attempt. No runtime ownership was recorded.",
+      publicHealth
+    );
+    if (cleanupFailure) return cleanupFailure;
+    return {
+      ok: false,
+      started: false,
+      adopted: false,
+      authenticationFailed: true,
+      state: await readState(),
+      health: publicHealth,
+      message: [
+        "Forge became reachable, but Forge Memory could not verify which protected process answered.",
+        error instanceof Error ? error.message : String(error),
+        "Only the processes started by this attempt were stopped, and no runtime ownership was recorded."
+      ].join(" ")
+    };
+  }
+
+  if (ownsHealthProcess(state, protectedHealth)) {
+    const adoptionFailure = runtimeAdoptionFailure(
+      config,
+      state,
+      protectedHealth
+    );
+    if (adoptionFailure) {
+      const cleanupFailure = await cleanupCandidate(
+        "The started Forge process failed its package or peer-configuration verification, and Forge Memory could not stop it. No runtime ownership was recorded.",
+        protectedHealth
+      );
+      if (cleanupFailure) return cleanupFailure;
+      return { ...adoptionFailure, state: await readState() };
+    }
+    await writeState(state);
+    return {
+      ok: true,
+      started: true,
+      adopted: false,
+      state,
+      health: protectedHealth
+    };
+  }
+
+  const cleanupFailure = await cleanupCandidate(
+    "Another Forge process won the runtime address, but Forge Memory could not stop every process from the losing attempt. No runtime ownership was recorded.",
+    protectedHealth
+  );
+  if (cleanupFailure) return cleanupFailure;
+
+  let observedHealth;
+  try {
+    observedHealth = await authenticatedHealth(config, peerPreparation);
+    if (protectedRuntimePid(observedHealth) === null) {
+      throw new Error(
+        "The protected Forge health response did not identify its runtime process."
+      );
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      started: false,
+      adopted: false,
+      authenticationFailed: true,
+      state: await readState(),
+      health: protectedHealth,
+      message: [
+        "Another process answered while Forge was starting, but it could not be verified after the losing processes were stopped.",
+        error instanceof Error ? error.message : String(error),
+        "No runtime ownership was recorded by this attempt."
+      ].join(" ")
+    };
+  }
+  const latest = await readState();
+  const adoptionFailure = runtimeAdoptionFailure(
+    config,
+    latest,
+    observedHealth
+  );
+  if (adoptionFailure) return adoptionFailure;
+  if (!ownsHealthProcess(latest, observedHealth)) {
+    return {
+      ok: false,
+      started: false,
+      adopted: false,
+      runtimeOwnershipUnknown: true,
+      state: latest,
+      health: observedHealth,
+      message:
+        "Another authenticated Forge process won the runtime address, but no verified Forge Memory state owns it. The process was left unchanged and this attempt recorded no ownership."
+    };
+  }
+  return {
+    ok: true,
+    started: false,
+    adopted: true,
+    state: latest,
+    health: observedHealth
+  };
+}
+
 async function startRuntime(config, options = {}) {
+  if (options.runtimeMutationLockHeld !== true) {
+    return withRuntimeMutationLock(config, () =>
+      startRuntime(config, {
+        ...options,
+        runtimeMutationLockHeld: true
+      })
+    );
+  }
+
   let current = await health(config);
   let existing = await readRuntimeState();
   let peerPreparation = options.peerPreparation ?? null;
@@ -3299,13 +3690,29 @@ async function startRuntime(config, options = {}) {
       (peerPreparation.browserHandler?.handlerScheme === "forge" &&
         existing?.localBrowserHandler?.scheme !== "forge"));
   if (needsManagedOwnerRuntimeRefresh) {
-    await stopRuntime(config);
+    const stop = await stopRuntime(config, {
+      runtimeMutationLockHeld: true
+    });
+    if (!stop.ok) {
+      return {
+        ok: false,
+        started: false,
+        adopted: false,
+        stop,
+        message:
+          stop.message ??
+          "Forge could not stop the recorded runtime safely, so the owner runtime was not refreshed."
+      };
+    }
     current = await health(config);
     existing = null;
   }
   if (isHealthyForgeRuntime(current)) {
     try {
-      current = await authenticatedRuntimeHealth(config, peerPreparation);
+      current = await waitForAuthenticatedRuntimeHealth(
+        config,
+        peerPreparation
+      );
     } catch (error) {
       return {
         ok: false,
@@ -3321,50 +3728,32 @@ async function startRuntime(config, options = {}) {
         ].join(" ")
       };
     }
-    const runningIdentity = healthRuntimePackageIdentity(current);
     const ownsHealthyRuntime = runtimeStateOwnsHealthProcess(existing, current);
-    const packageMatches =
-      config.mode !== "packaged" ||
-      runningIdentity === null ||
-      (runtimePackageIdentityMatches(runningIdentity) &&
-        (!ownsHealthyRuntime || runtimeStateMatchesPackage(existing, config)));
-    if (!packageMatches) {
+    const adoptionFailure = runtimeAdoptionFailure(config, existing, current);
+    if (adoptionFailure?.runtimeVersionMismatch) {
       if (ownsHealthyRuntime) {
-        await stopRuntime(config);
+        const stop = await stopRuntime(config, {
+          runtimeMutationLockHeld: true
+        });
+        if (!stop.ok) {
+          return {
+            ...adoptionFailure,
+            stop,
+            message:
+              stop.message ??
+              "Forge could not stop the outdated managed runtime safely."
+          };
+        }
         current = await health(config);
         existing = null;
       } else {
-        return {
-          ok: false,
-          started: false,
-          adopted: false,
-          runtimeVersionMismatch: true,
-          expectedRuntimePackage: {
-            name: RUNTIME_PACKAGE,
-            version: RUNTIME_PACKAGE_VERSION
-          },
-          runningRuntimePackage: healthRuntimePackageIdentity(current),
-          state: existing,
-          health: current,
-          message:
-            "The healthy Forge runtime package version could not be verified. Stop it or run npx forge-memory restart before continuing."
-        };
+        return adoptionFailure;
       }
     }
   }
   if (isHealthyForgeRuntime(current)) {
-    if (!runtimeStateMatchesPeerConfig(existing, config)) {
-      return {
-        ok: false,
-        started: false,
-        adopted: false,
-        configurationMismatch: true,
-        state: existing,
-        health: current,
-        message:
-          "The healthy Forge runtime was started with different peer-sharing settings. Run npx forge-memory restart."
-      };
-    }
+    const adoptionFailure = runtimeAdoptionFailure(config, existing, current);
+    if (adoptionFailure) return adoptionFailure;
     if (!runtimeStateOwnsHealthProcess(existing, current)) {
       const latest = await readRuntimeState();
       if (runtimeStateOwnsHealthProcess(latest, current)) {
@@ -3513,11 +3902,16 @@ async function startRuntime(config, options = {}) {
       children.push(await recordManagedChild("server", child));
     }
   } catch (error) {
-    await Promise.all(
-      children.map(async (child) => {
-        await stopRecordedRuntimeProcess(child).catch(() => false);
-      })
-    );
+    const cleanup = await stopRecordedRuntimeChildren(children);
+    if (!cleanup.ok) {
+      throw new Error(
+        [
+          error instanceof Error ? error.message : String(error),
+          `Forge also could not stop candidate process${cleanup.survivors.length === 1 ? "" : "es"} ${cleanup.survivors.map((child) => child.pid).join(", ")}.`,
+          "No runtime ownership was recorded."
+        ].join(" ")
+      );
+    }
     throw error;
   } finally {
     if (typeof out === "number") {
@@ -3551,9 +3945,12 @@ async function startRuntime(config, options = {}) {
     children,
     startedAt: new Date().toISOString()
   };
-  await writeJson(runtimeStatePath(), state, { backup: false });
-  const result = await waitForHealth(config);
-  return { ok: result.ok, started: true, state, health: result };
+  return finalizeStartedRuntimeAttempt({
+    config,
+    peerPreparation,
+    state,
+    publicHealth: await waitForHealth(config)
+  });
 }
 
 function assertRuntimeStartedForPairing(result, config) {
@@ -3580,12 +3977,37 @@ function assertRuntimeStartedForPairing(result, config) {
   );
 }
 
-async function stopRuntime() {
+async function stopRuntime(config = null, options = {}) {
+  const resolvedConfig = config ?? (await readConfig());
+  if (options.runtimeMutationLockHeld !== true) {
+    return withRuntimeMutationLock(resolvedConfig, () =>
+      stopRuntime(resolvedConfig, {
+        ...options,
+        runtimeMutationLockHeld: true
+      })
+    );
+  }
   const state = await readRuntimeState();
   const stopped = [];
+  const survivors = [];
   for (const child of state?.children ?? []) {
     if (!recordedProcessIdentityMatches(child)) continue;
-    if (await stopRecordedRuntimeProcess(child)) stopped.push(child.pid);
+    if (await stopRecordedRuntimeProcess(child)) {
+      stopped.push(child.pid);
+    } else if (recordedProcessIdentityMatches(child)) {
+      survivors.push(child);
+    }
+  }
+  if (survivors.length > 0) {
+    return {
+      ok: false,
+      stopped: stopped.length > 0,
+      pids: stopped,
+      cleanupFailed: true,
+      survivingCandidatePids: survivors.map((child) => child.pid),
+      message:
+        "Forge could not stop every recorded runtime process safely. Runtime state was preserved for a later verified retry."
+    };
   }
   await fsp.rm(runtimeStatePath(), { force: true });
   if (stopped.length === 0) {
@@ -3601,6 +4023,38 @@ async function stopRuntime() {
     };
   }
   return { ok: true, stopped: true, pids: stopped };
+}
+
+async function restartRuntime(config, options = {}) {
+  if (options.runtimeMutationLockHeld !== true) {
+    return withRuntimeMutationLock(config, () =>
+      restartRuntime(config, {
+        ...options,
+        runtimeMutationLockHeld: true
+      })
+    );
+  }
+  const stopImplementation = options.stopImplementation ?? stopRuntime;
+  const startImplementation = options.startImplementation ?? startRuntime;
+  const stop = await stopImplementation(options.stopConfig ?? config, {
+    runtimeMutationLockHeld: true
+  });
+  if (stop?.ok === false || stop?.cleanupFailed === true) {
+    return {
+      ok: false,
+      started: false,
+      adopted: false,
+      stop,
+      message:
+        stop?.message ??
+        "Forge could not stop the recorded runtime safely, so restart did not start another process."
+    };
+  }
+  const start = await startImplementation(config, {
+    peerPreparation: options.peerPreparation,
+    runtimeMutationLockHeld: true
+  });
+  return { ...start, stop };
 }
 
 async function exportForgeData(parsed) {
@@ -4073,22 +4527,6 @@ async function uninstallForgeMemory(parsed) {
         true
       );
   if (!confirmed) return { ok: false, cancelled: true };
-
-  const stop = await stopRuntime();
-  const removed = [];
-  for (const target of [
-    runtimeInstallRoot(),
-    runtimeStatePath(),
-    logPath(),
-    configPath()
-  ]) {
-    if (fs.existsSync(target)) {
-      await fsp.rm(target, { recursive: true, force: true });
-      removed.push(target);
-    }
-  }
-
-  let adapterResults = [];
   const removeAdapters =
     parsed.flags.removeAdapters ||
     (!parsed.flags.yes &&
@@ -4096,38 +4534,66 @@ async function uninstallForgeMemory(parsed) {
         "Remove Forge adapter entries from OpenClaw, Hermes, Codex, and Claude Code?",
         false
       )));
-  if (removeAdapters) {
-    adapterResults = [
-      await removeOpenClawAdapterConfig(),
-      await removeHermesAdapterConfig(),
-      await removeCodexAdapterConfig(),
-      await removeClaudeAdapterConfig()
-    ];
-  }
+  const dataConfirmed =
+    parsed.flags.removeData &&
+    (parsed.flags.yes ||
+      (await promptYesNo(
+        `Delete Forge data folder ${config.dataRoot}? This cannot be undone.`,
+        false
+      )));
 
-  let removedDataRoot = false;
-  if (parsed.flags.removeData) {
-    const dataConfirmed = parsed.flags.yes
-      ? true
-      : await promptYesNo(
-          `Delete Forge data folder ${config.dataRoot}? This cannot be undone.`,
-          false
-        );
+  const release = await acquireRuntimeStartLock(config);
+  try {
+    const stop = await stopRuntime(config, {
+      runtimeMutationLockHeld: true
+    });
+    if (!stop.ok) {
+      throw new Error(
+        stop.message ??
+          "Forge could not stop the recorded runtime safely, so uninstall was cancelled."
+      );
+    }
+    const removed = [];
+    for (const target of [
+      runtimeInstallRoot(),
+      runtimeStatePath(),
+      logPath(),
+      configPath()
+    ]) {
+      if (fs.existsSync(target)) {
+        await fsp.rm(target, { recursive: true, force: true });
+        removed.push(target);
+      }
+    }
+
+    let adapterResults = [];
+    if (removeAdapters) {
+      adapterResults = [
+        await removeOpenClawAdapterConfig(),
+        await removeHermesAdapterConfig(),
+        await removeCodexAdapterConfig(),
+        await removeClaudeAdapterConfig()
+      ];
+    }
+
+    let removedDataRoot = false;
     if (dataConfirmed) {
       await fsp.rm(config.dataRoot, { recursive: true, force: true });
       removedDataRoot = true;
     }
-  }
 
-  return {
-    ok: true,
-    stop,
-    removed,
-    adapterResults,
-    dataRoot: config.dataRoot,
-    dataKept: !removedDataRoot,
-    removedDataRoot
-  };
+    return {
+      ok: true,
+      stop,
+      removed,
+      adapterResults,
+      dataRoot: config.dataRoot,
+      dataKept: !removedDataRoot,
+      removedDataRoot
+    };
+  } finally {
+    await release();
+  }
 }
 
 function normalizePublicPairingUrl(value) {
@@ -4755,6 +5221,42 @@ function peerRuntimeConfigChanged(left, right) {
   );
 }
 
+async function applyRuntimeConfigTransaction(
+  {
+    lockConfig,
+    resolveConfig,
+    dryRun = false,
+    runtimeMutation = null
+  },
+  dependencies = {}
+) {
+  const readCurrentConfig = dependencies.readConfig ?? readConfig;
+  const persistConfig =
+    dependencies.writeConfig ??
+    ((nextConfig) => writeConfig(nextConfig, { dryRun }));
+
+  const apply = async () => {
+    const previousConfig = await readCurrentConfig();
+    const nextConfig = await resolveConfig(previousConfig);
+    const writeResult = await persistConfig(nextConfig);
+    const runtimeResult = runtimeMutation
+      ? await runtimeMutation({
+          previousConfig,
+          config: nextConfig,
+          runtimeMutationLockHeld: !dryRun
+        })
+      : null;
+    return {
+      previousConfig,
+      config: nextConfig,
+      writeResult,
+      runtimeResult
+    };
+  };
+
+  return dryRun ? apply() : withRuntimeMutationLock(lockConfig, apply);
+}
+
 function doctorPassedForCommand(result, flags) {
   if (!result || flags.dryRun) return true;
   if (result.ok) return true;
@@ -4837,27 +5339,6 @@ async function runInstall(parsed, command) {
       remoteCredentialId: "forge-client-dry-run-placeholder"
     };
   }
-  const writeResult = await withProgress(
-    "Saving Forge settings",
-    configPath(),
-    parsed.flags,
-    () =>
-      writeConfig(config, {
-        dryRun: parsed.flags.dryRun
-      })
-  );
-  if (
-    peerRuntimeConfigChanged(currentConfig, config) &&
-    !parsed.flags.noStart &&
-    !parsed.flags.dryRun
-  ) {
-    await withProgress(
-      "Applying Forge peer runtime settings",
-      "restarting only the managed runtime process",
-      parsed.flags,
-      () => stopRuntime(currentConfig)
-    );
-  }
   if (!config.remoteTarget) {
     await withProgress(
       "Preparing Forge data folder",
@@ -4908,17 +5389,57 @@ async function runInstall(parsed, command) {
       (parsed.flags.yes
         ? true
         : await promptYesNo("Pair the iOS companion now?", true)));
-  let runtimeResult = null;
-  if (!config.remoteTarget && !parsed.flags.noStart && !parsed.flags.dryRun) {
-    runtimeResult = await withProgress(
-      config.mode === "dev"
-        ? "Starting source-backed Forge runtime"
-        : "Installing and starting Forge runtime",
-      `logs: ${logPath()}`,
-      parsed.flags,
-      () => startRuntime(config, { peerPreparation })
-    );
-  } else if (parsed.flags.noStart && !config.remoteTarget) {
+  const installTransaction = await applyRuntimeConfigTransaction(
+    {
+      lockConfig: currentConfig,
+      resolveConfig: async () => config,
+      dryRun: parsed.flags.dryRun,
+      runtimeMutation:
+        !config.remoteTarget &&
+        !parsed.flags.noStart &&
+        !parsed.flags.dryRun
+          ? async ({
+              previousConfig,
+              config: nextConfig,
+              runtimeMutationLockHeld
+            }) =>
+              withProgress(
+                nextConfig.mode === "dev"
+                  ? "Starting source-backed Forge runtime"
+                  : "Installing and starting Forge runtime",
+                `logs: ${logPath()}`,
+                parsed.flags,
+                () =>
+                  peerRuntimeConfigChanged(previousConfig, nextConfig)
+                    ? restartRuntime(nextConfig, {
+                        stopConfig: previousConfig,
+                        peerPreparation,
+                        runtimeMutationLockHeld
+                      })
+                    : startRuntime(nextConfig, {
+                        peerPreparation,
+                        runtimeMutationLockHeld
+                      })
+              )
+          : null
+    },
+    {
+      writeConfig: (nextConfig) =>
+        withProgress(
+          "Saving Forge settings",
+          configPath(),
+          parsed.flags,
+          () =>
+            writeConfig(nextConfig, {
+              dryRun: parsed.flags.dryRun
+            })
+        )
+    }
+  );
+  config = installTransaction.config;
+  const writeResult = installTransaction.writeResult;
+  let runtimeResult = installTransaction.runtimeResult;
+  if (parsed.flags.noStart && !config.remoteTarget) {
     printStep(
       "Runtime start skipped",
       "run npx forge-memory ui or npx forge-memory restart later",
@@ -4958,27 +5479,48 @@ async function runInstall(parsed, command) {
       new URL(pairingOptions.publicUrl).origin
     );
     if (config.canonicalExternalOrigin !== canonicalExternalOrigin) {
-      const previousConfig = config;
-      config = { ...config, canonicalExternalOrigin };
-      canonicalOriginWriteResult = await withProgress(
-        "Binding Forge to its Tailscale HTTPS origin",
-        canonicalExternalOrigin,
-        parsed.flags,
-        () => writeConfig(config, { dryRun: false })
-      );
-      if (runtimeResult?.ok) {
-        await withProgress(
-          "Applying the secured Tailscale origin",
-          "restarting only the Forge-managed runtime; data is preserved",
-          parsed.flags,
-          () => stopRuntime(previousConfig)
+      const canonicalOriginTransaction =
+        await applyRuntimeConfigTransaction(
+          {
+            lockConfig: config,
+            resolveConfig: async (latestConfig) => ({
+              ...latestConfig,
+              canonicalExternalOrigin
+            }),
+            runtimeMutation:
+              runtimeResult?.ok
+                ? async ({
+                    previousConfig,
+                    config: nextConfig,
+                    runtimeMutationLockHeld
+                  }) =>
+                    withProgress(
+                      "Restarting Forge with sender-bound HTTPS",
+                      `managed runtime only; data is preserved; logs: ${logPath()}`,
+                      parsed.flags,
+                      () =>
+                        restartRuntime(nextConfig, {
+                          stopConfig: previousConfig,
+                          peerPreparation,
+                          runtimeMutationLockHeld
+                        })
+                    )
+                : null
+          },
+          {
+            writeConfig: (nextConfig) =>
+              withProgress(
+                "Binding Forge to its Tailscale HTTPS origin",
+                canonicalExternalOrigin,
+                parsed.flags,
+                () => writeConfig(nextConfig, { dryRun: false })
+              )
+          }
         );
-        runtimeResult = await withProgress(
-          "Restarting Forge with sender-bound HTTPS",
-          `logs: ${logPath()}`,
-          parsed.flags,
-          () => startRuntime(config, { peerPreparation })
-        );
+      config = canonicalOriginTransaction.config;
+      canonicalOriginWriteResult = canonicalOriginTransaction.writeResult;
+      if (canonicalOriginTransaction.runtimeResult) {
+        runtimeResult = canonicalOriginTransaction.runtimeResult;
         assertRuntimeStartedForPairing(runtimeResult, config);
       }
     }
@@ -5113,7 +5655,7 @@ async function runUpdate(parsed) {
   const adapterOverride = parsed.flags.skipAdapters
     ? null
     : normalizeAdapterList(parsed.values.adapters);
-  const config =
+  let config =
     adapterOverride === null
       ? currentConfig
       : { ...currentConfig, adapters: adapterOverride };
@@ -5149,101 +5691,135 @@ async function runUpdate(parsed) {
     () => prepareManagedSkillUpdates(config, parsed)
   );
 
+  const runtimeUpdateRelease = parsed.flags.dryRun
+    ? null
+    : await acquireRuntimeStartLock(currentConfig);
   let writeResult = null;
-  if (adapterOverride !== null) {
-    writeResult = await withProgress(
-      "Saving updated adapter selection",
-      config.adapters.length ? config.adapters.join(", ") : "none",
-      parsed.flags,
-      () => writeConfig(config, { dryRun: parsed.flags.dryRun })
-    );
-  }
-
-  const stopResult = await withProgress(
-    "Stopping Forge runtime before update",
-    "runtime cache only; data is preserved",
-    parsed.flags,
-    () =>
-      parsed.flags.dryRun
-        ? { ok: true, dryRun: true, stopped: false }
-        : stopRuntime(config)
-  );
-
-  const runtimeUpdateResult = await withProgress(
-    config.mode === "dev"
-      ? "Skipping packaged runtime refresh"
-      : "Refreshing packaged Forge runtime",
-    config.mode === "dev"
-      ? "source-backed dev install"
-      : `${RUNTIME_PACKAGE}@${RUNTIME_PACKAGE_VERSION}`,
-    parsed.flags,
-    () =>
-      config.mode === "dev"
-        ? {
-            ok: true,
-            mode: "dev",
-            skipped: true,
-            message:
-              "Dev mode uses the Forge checkout on disk; pull/build that checkout separately when needed."
-          }
-        : refreshPackagedRuntimeCache(parsed)
-  );
-
-  let peerPreparation = {
-    ok: true,
-    enabled: config.peerEnabled,
-    built: false,
-    binaryPath: null,
-    dryRun: parsed.flags.dryRun
-  };
-  const shouldPrepareNativeSecurity = !parsed.flags.noStart;
-  if (!parsed.flags.dryRun && shouldPrepareNativeSecurity) {
-    peerPreparation = await withProgress(
-      config.peerEnabled
-        ? "Verifying secure Forge peer sharing"
-        : "Verifying secure local-owner authentication",
-      "signed source, owner-only build cache, and executable receipts",
-      parsed.flags,
-      () => ensureForgePeerPrepared(config, parsed.flags)
-    );
-  }
-
-  const adapterResults = await withProgress(
-    parsed.flags.skipAdapters || config.adapters.length === 0
-      ? "Skipping host adapter updates"
-      : "Updating selected host adapters",
-    parsed.flags.skipAdapters
-      ? "--skip-adapters"
-      : config.adapters.length
-        ? config.adapters.join(", ")
-        : "none selected",
-    parsed.flags,
-    () =>
-      parsed.flags.skipAdapters
-        ? []
-        : configureAdapters(config, { dryRun: parsed.flags.dryRun })
-  );
-
-  if (!parsed.flags.dryRun && !parsed.flags.skipAdapters) {
-    await writeManagedSkillsManifest(skillPlan.targets, {
-      dryRun: parsed.flags.dryRun
-    });
-  }
-
+  let stopResult;
+  let runtimeUpdateResult;
+  let peerPreparation;
+  let adapterResults;
   let runtimeResult = null;
-  if (!parsed.flags.noStart && !parsed.flags.dryRun) {
-    runtimeResult = await withProgress(
-      "Starting updated Forge runtime",
-      `logs: ${logPath()}`,
+  try {
+    const lockedCurrentConfig = await readConfig();
+    if (
+      !parsed.flags.dryRun &&
+      !pathsMatch(lockedCurrentConfig.dataRoot, currentConfig.dataRoot)
+    ) {
+      throw new Error(
+        "Forge settings changed to a different data folder while the update backup was prepared. No runtime or configuration change was applied; rerun the update."
+      );
+    }
+    config =
+      adapterOverride === null
+        ? lockedCurrentConfig
+        : { ...lockedCurrentConfig, adapters: adapterOverride };
+    if (adapterOverride !== null) {
+      writeResult = await withProgress(
+        "Saving updated adapter selection",
+        config.adapters.length ? config.adapters.join(", ") : "none",
+        parsed.flags,
+        () => writeConfig(config, { dryRun: parsed.flags.dryRun })
+      );
+    }
+
+    stopResult = await withProgress(
+      "Stopping Forge runtime before update",
+      "runtime cache only; data is preserved",
       parsed.flags,
-      () => startRuntime(config, { peerPreparation })
+      () =>
+        parsed.flags.dryRun
+          ? { ok: true, dryRun: true, stopped: false }
+          : stopRuntime(config, { runtimeMutationLockHeld: true })
     );
-  } else if (parsed.flags.noStart) {
-    printStep(
-      "Runtime start skipped",
-      "run npx forge-memory restart or npx forge-memory ui when ready",
-      parsed.flags
+    if (!stopResult.ok) {
+      throw new Error(
+        stopResult.message ??
+          "Forge could not stop the recorded runtime safely, so update was cancelled."
+      );
+    }
+
+    runtimeUpdateResult = await withProgress(
+      config.mode === "dev"
+        ? "Skipping packaged runtime refresh"
+        : "Refreshing packaged Forge runtime",
+      config.mode === "dev"
+        ? "source-backed dev install"
+        : `${RUNTIME_PACKAGE}@${RUNTIME_PACKAGE_VERSION}`,
+      parsed.flags,
+      () =>
+        config.mode === "dev"
+          ? {
+              ok: true,
+              mode: "dev",
+              skipped: true,
+              message:
+                "Dev mode uses the Forge checkout on disk; pull/build that checkout separately when needed."
+            }
+          : refreshPackagedRuntimeCache(parsed)
     );
+
+    peerPreparation = {
+      ok: true,
+      enabled: config.peerEnabled,
+      built: false,
+      binaryPath: null,
+      dryRun: parsed.flags.dryRun
+    };
+    const shouldPrepareNativeSecurity = !parsed.flags.noStart;
+    if (!parsed.flags.dryRun && shouldPrepareNativeSecurity) {
+      peerPreparation = await withProgress(
+        config.peerEnabled
+          ? "Verifying secure Forge peer sharing"
+          : "Verifying secure local-owner authentication",
+        "signed source, owner-only build cache, and executable receipts",
+        parsed.flags,
+        () => ensureForgePeerPrepared(config, parsed.flags)
+      );
+    }
+
+    adapterResults = await withProgress(
+      parsed.flags.skipAdapters || config.adapters.length === 0
+        ? "Skipping host adapter updates"
+        : "Updating selected host adapters",
+      parsed.flags.skipAdapters
+        ? "--skip-adapters"
+        : config.adapters.length
+          ? config.adapters.join(", ")
+          : "none selected",
+      parsed.flags,
+      () =>
+        parsed.flags.skipAdapters
+          ? []
+          : configureAdapters(config, { dryRun: parsed.flags.dryRun })
+    );
+
+    if (!parsed.flags.dryRun && !parsed.flags.skipAdapters) {
+      await writeManagedSkillsManifest(skillPlan.targets, {
+        dryRun: parsed.flags.dryRun
+      });
+    }
+
+    if (!parsed.flags.noStart && !parsed.flags.dryRun) {
+      runtimeResult = await withProgress(
+        "Starting updated Forge runtime",
+        `logs: ${logPath()}`,
+        parsed.flags,
+        () =>
+          startRuntime(config, {
+            peerPreparation,
+            runtimeMutationLockHeld: true
+          })
+      );
+    } else if (parsed.flags.noStart) {
+      printStep(
+        "Runtime start skipped",
+        "run npx forge-memory restart or npx forge-memory ui when ready",
+        parsed.flags
+      );
+    }
+  } finally {
+    await runtimeUpdateRelease?.();
   }
 
   let doctorResult = null;
@@ -5615,8 +6191,7 @@ async function runUi(parsed) {
           "Forge is healthy but is not owned by Forge Memory, so it was left unchanged. Restart that API process with the Forge local browser-handler environment, then rerun `npx forge-memory ui`."
         );
       }
-      await stopRuntime(config);
-      runtime = await startRuntime(config, {
+      runtime = await restartRuntime(config, {
         peerPreparation: preparation
       });
     }
@@ -5685,27 +6260,46 @@ async function runPairIos(parsed) {
       new URL(pairingOptions.publicUrl).origin
     );
     if (config.canonicalExternalOrigin !== canonicalExternalOrigin) {
-      const previousConfig = config;
-      config = { ...config, canonicalExternalOrigin };
-      await withProgress(
-        "Binding Forge to its Tailscale HTTPS origin",
-        canonicalExternalOrigin,
-        parsed.flags,
-        () => writeConfig(config, { dryRun: false })
-      );
-      if (!parsed.flags.noStart && runtimeResult?.ok) {
-        await withProgress(
-          "Applying the secured Tailscale origin",
-          "restarting only the Forge-managed runtime; data is preserved",
-          parsed.flags,
-          () => stopRuntime(previousConfig)
+      const canonicalOriginTransaction =
+        await applyRuntimeConfigTransaction(
+          {
+            lockConfig: config,
+            resolveConfig: async (latestConfig) => ({
+              ...latestConfig,
+              canonicalExternalOrigin
+            }),
+            runtimeMutation:
+              !parsed.flags.noStart && runtimeResult?.ok
+                ? async ({
+                    previousConfig,
+                    config: nextConfig,
+                    runtimeMutationLockHeld
+                  }) =>
+                    withProgress(
+                      "Restarting Forge with sender-bound HTTPS",
+                      `managed runtime only; data is preserved; logs: ${logPath()}`,
+                      parsed.flags,
+                      () =>
+                        restartRuntime(nextConfig, {
+                          stopConfig: previousConfig,
+                          runtimeMutationLockHeld
+                        })
+                    )
+                : null
+          },
+          {
+            writeConfig: (nextConfig) =>
+              withProgress(
+                "Binding Forge to its Tailscale HTTPS origin",
+                canonicalExternalOrigin,
+                parsed.flags,
+                () => writeConfig(nextConfig, { dryRun: false })
+              )
+          }
         );
-        runtimeResult = await withProgress(
-          "Restarting Forge with sender-bound HTTPS",
-          `logs: ${logPath()}`,
-          parsed.flags,
-          () => startRuntime(config)
-        );
+      config = canonicalOriginTransaction.config;
+      if (canonicalOriginTransaction.runtimeResult) {
+        runtimeResult = canonicalOriginTransaction.runtimeResult;
         assertRuntimeStartedForPairing(runtimeResult, config);
       }
     }
@@ -6388,9 +6982,8 @@ async function main() {
       }
       break;
     case "restart":
-      await stopRuntime();
       console.log(
-        JSON.stringify(await startRuntime(await readConfig()), null, 2)
+        JSON.stringify(await restartRuntime(await readConfig()), null, 2)
       );
       break;
     case "ui":
@@ -6447,7 +7040,29 @@ function printFatalError(error, { json = false } = {}) {
   console.error(`- Runtime log: ${payload.logPath}`);
 }
 
-main().catch((error) => {
-  printFatalError(error, { json: process.argv.includes("--json") });
-  process.exitCode = 1;
+export const __forgeMemoryRuntimeMutationTest = Object.freeze({
+  acquireRuntimeStartLock,
+  applyRuntimeConfigTransaction,
+  captureProcessIdentity,
+  finalizeStartedRuntimeAttempt,
+  reapAbandonedRuntimeStartLock,
+  recordedProcessIdentityMatches,
+  restartRuntime,
+  runtimeAdoptionFailure,
+  runtimeStartLockOwnerPath,
+  runtimeStartLockPath,
+  runtimeStatePath,
+  stopRuntime
 });
+
+if (
+  !(
+    process.env.NODE_ENV === "test" &&
+    process.env.FORGE_MEMORY_TEST_IMPORT === "1"
+  )
+) {
+  main().catch((error) => {
+    printFatalError(error, { json: process.argv.includes("--json") });
+    process.exitCode = 1;
+  });
+}

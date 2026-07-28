@@ -15,6 +15,21 @@ const packageVersion = JSON.parse(
 ).version;
 const runtimePackageName = "forge-openclaw-plugin";
 const cliSource = fs.readFileSync(bin, "utf8");
+const windowsAclVerifierSource = cliSource.slice(
+  cliSource.indexOf("function windowsPathIsCurrentOwnerOnly"),
+  cliSource.indexOf("function inspectWindowsOwnerKey")
+);
+if (
+  !windowsAclVerifierSource.includes('].join("\\n");') ||
+  !windowsAclVerifierSource.includes("$rules.Count -lt 1") ||
+  !windowsAclVerifierSource.includes(
+    "[Security.AccessControl.FileSystemRights]::FullControl"
+  )
+) {
+  throw new Error(
+    "Forge Memory must execute a syntactically valid, non-empty, full-control Windows owner ACL verification"
+  );
+}
 if (
   !cliSource.includes('path.join(repoRoot, "apps", "api", "src", "index.ts")')
 ) {
@@ -298,7 +313,7 @@ async function withPlainServer(callback) {
 function forgeHealthResponse({
   packageName = runtimePackageName,
   runtimeVersion = packageVersion,
-  pid = null
+  pid = process.pid
 } = {}) {
   return {
     app: "forge",

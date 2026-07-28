@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  existsSync,
   linkSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync
@@ -15,6 +17,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import { resolveDescriptorOwnerBroker } from "./local-owner-client";
 
 const temporaryRoots: string[] = [];
+const localOwnerClientPath = [
+  path.resolve(process.cwd(), "src/openclaw/local-owner-client.ts"),
+  path.resolve(process.cwd(), "apps/web/src/openclaw/local-owner-client.ts")
+].find((candidate) => existsSync(candidate));
+if (!localOwnerClientPath) {
+  throw new Error("Could not locate the Forge local-owner client source.");
+}
+const localOwnerClientSource = readFileSync(localOwnerClientPath, "utf8");
 
 function sha256(value: string) {
   return createHash("sha256").update(value).digest("hex");
@@ -54,6 +64,24 @@ afterEach(() => {
 });
 
 describe("local owner broker descriptor", () => {
+  it("keeps the Windows owner ACL verifier executable and fail-closed", () => {
+    const verifierStart = localOwnerClientSource.indexOf(
+      "function windowsPathIsCurrentOwnerOnly"
+    );
+    const verifierEnd = localOwnerClientSource.indexOf(
+      "export function resolvePlatformOwnerKey"
+    );
+    expect(verifierStart).toBeGreaterThanOrEqual(0);
+    expect(verifierEnd).toBeGreaterThan(verifierStart);
+    const verifier = localOwnerClientSource.slice(verifierStart, verifierEnd);
+
+    expect(verifier).toContain('].join("\\n");');
+    expect(verifier).toContain("$rules.Count -lt 1");
+    expect(verifier).toContain(
+      "[Security.AccessControl.FileSystemRights]::FullControl"
+    );
+  });
+
   it("accepts an owner-only descriptor, receipt, and matching binary", () => {
     const fixture = writeFixture();
     expect(resolveDescriptorOwnerBroker(fixture.descriptorPath)).toBe(

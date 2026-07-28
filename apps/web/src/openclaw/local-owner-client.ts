@@ -98,14 +98,19 @@ function windowsPathIsCurrentOwnerOnly(target: string) {
     "$acl=Get-Acl -LiteralPath $target",
     "$owner=([Security.Principal.NTAccount]$acl.Owner).Translate([Security.Principal.SecurityIdentifier]).Value",
     "if ($owner -ne $sid -or -not $acl.AreAccessRulesProtected) { exit 11 }",
-    "$bad=$acl.Access | Where-Object {",
+    "$rules=@($acl.Access)",
+    "if ($rules.Count -lt 1) { exit 12 }",
+    "$bad=$rules | Where-Object {",
     "  $_.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow -or",
     "  $_.IsInherited -or",
     "  $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value -ne $sid",
     "}",
-    "if ($null -ne $bad) { exit 12 }",
+    "if ($null -ne $bad) { exit 13 }",
+    "$full=[Security.AccessControl.FileSystemRights]::FullControl",
+    "$ownerFull=$rules | Where-Object { ($_.FileSystemRights -band $full) -eq $full }",
+    "if ($null -eq $ownerFull) { exit 14 }",
     "exit 0"
-  ].join("; ");
+  ].join("\n");
   const result = spawnSync(
     powershell,
     ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script, target],

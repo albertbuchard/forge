@@ -9,6 +9,7 @@ on:
       - ".github/workflows/windows-owner-auth.yml"
       - "packages/forge-memory/bin/forge-memory.mjs"
       - "packages/forge-memory/lib/windows-owner-auth.mjs"
+      - "packages/forge-memory/tests/runtime-mutation.test.mjs"
       - "packages/forge-memory/tests/windows-owner-auth.test.mjs"
       - "apps/api/src/security/application-security-runtime.ts"
       - "apps/api/src/security/local-owner-session-coordinator.ts"
@@ -20,6 +21,7 @@ on:
       - ".github/workflows/windows-owner-auth.yml"
       - "packages/forge-memory/bin/forge-memory.mjs"
       - "packages/forge-memory/lib/windows-owner-auth.mjs"
+      - "packages/forge-memory/tests/runtime-mutation.test.mjs"
       - "packages/forge-memory/tests/windows-owner-auth.test.mjs"
       - "apps/api/src/security/application-security-runtime.ts"
       - "apps/api/src/security/local-owner-session-coordinator.ts"
@@ -38,7 +40,7 @@ jobs:
     runs-on: ${{ matrix.windows }}
     timeout-minutes: 20
     env:
-      FORGE_WINDOWS_CLI_HOME: ${{ github.workspace }}\.windows-owner-cli-home
+      FORGE_WINDOWS_CLI_HOME: ${{ github.workspace }}\.windows owner cli home
       FORGE_WINDOWS_CLI_DATA_ROOT: ${{ github.workspace }}\.windows-owner-cli-data
       FORGE_WINDOWS_FIXTURE_ROOT: ${{ github.workspace }}\.windows-owner-cross-user-fixture
       FORGE_WINDOWS_CREDENTIAL_PATH: ${{ github.workspace }}\.windows-owner-cross-user-fixture\forge-root\native\windows-owner.json
@@ -75,6 +77,7 @@ jobs:
             ./tests/native-source-manifest.test.mjs `
             ./tests/native-source-signing-key.test.mjs `
             ./tests/remote-pairing.test.mjs `
+            ./tests/runtime-mutation.test.mjs `
             ./tests/windows-owner-auth.test.mjs
           if ($LASTEXITCODE -ne 0) {
             throw "Forge Windows-compatible package tests failed"
@@ -184,6 +187,38 @@ jobs:
             $descriptorHashAfter -ne $descriptorHashBefore
           ) {
             throw "Forge unexpectedly rotated reusable Windows owner material"
+          }
+
+      - name: Install the web client test runtime
+        if: matrix.windows == 'windows-2025' && matrix.node == '24.18.0'
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Prove the Windows web client consumes the protected owner key
+        if: matrix.windows == 'windows-2025' && matrix.node == '24.18.0'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $descriptorPath = Join-Path $env:FORGE_WINDOWS_CLI_HOME ".forge\native\windows-owner.json"
+          $keyPath = Join-Path $env:FORGE_WINDOWS_CLI_HOME ".forge\native\windows-owner.key"
+          $env:FORGE_WINDOWS_CLIENT_DESCRIPTOR = $descriptorPath
+          $env:FORGE_WINDOWS_CLIENT_KEY = $keyPath
+          $consumerCheck = @'
+          import fs from "node:fs";
+          import { resolvePlatformOwnerKey } from "./apps/web/src/openclaw/local-owner-client.ts";
+          const actual = resolvePlatformOwnerKey(process.env.FORGE_WINDOWS_CLIENT_DESCRIPTOR);
+          const expected = Buffer.from(fs.readFileSync(process.env.FORGE_WINDOWS_CLIENT_KEY, "utf8").trim(), "base64url");
+          try {
+            if (!actual || actual.byteLength !== 32 || !actual.equals(expected)) {
+              throw new Error("Forge's Windows web client could not consume the protected owner key.");
+            }
+          } finally {
+            actual?.fill(0);
+            expected.fill(0);
+          }
+          '@
+          node --import tsx --input-type=module --eval $consumerCheck
+          if ($LASTEXITCODE -ne 0) {
+            throw "Forge's supported Windows web client owner path failed"
           }
 
       - name: Prove another local account cannot read CLI or DPAPI owner material
