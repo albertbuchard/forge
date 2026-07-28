@@ -163,7 +163,10 @@ function windowsPathChainHasNoReparsePoints(
       "if ($forgeArgs.Count -ne 1 -or [String]::IsNullOrWhiteSpace([String]$forgeArgs[0])) { exit 22 }",
       "$inputTarget=[String]$forgeArgs[0]",
       "$target=[IO.Path]::GetFullPath($inputTarget)",
-      "if (-not [StringComparer]::Ordinal.Equals($target,$inputTarget)) { exit 22 }",
+      "if (-not [StringComparer]::Ordinal.Equals($target,$inputTarget)) {",
+      "  if ([StringComparer]::OrdinalIgnoreCase.Equals($target,$inputTarget)) { exit 23 }",
+      "  exit 24",
+      "}",
       "$item=Get-Item -LiteralPath $target -Force",
       "if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { exit 21 }"
     ].join("\n");
