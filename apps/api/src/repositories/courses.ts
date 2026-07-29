@@ -1088,7 +1088,27 @@ export function listCourses(userId: string) {
   }));
 }
 
-export function upgradeCourseEnrollment(courseId: string, userId: string) {
+export type CourseEnrollmentUpgradeReceipt =
+  | {
+      upgraded: false;
+      fromVersion: string;
+      toVersion: string;
+      carriedActivityIds: string[];
+      remainingActivityIds: string[];
+    }
+  | {
+      upgraded: true;
+      receiptId: string;
+      fromVersion: string;
+      toVersion: string;
+      carriedActivityIds: string[];
+      remainingActivityIds: string[];
+    };
+
+export function upgradeCourseEnrollment(
+  courseId: string,
+  userId: string
+): CourseEnrollmentUpgradeReceipt {
   const courseRow = requireCourseRow(courseId);
   const database = getDatabase();
   const enrollment = database
