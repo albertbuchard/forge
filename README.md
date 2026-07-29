@@ -130,6 +130,10 @@ The preferred install for everyone is one guided command:
 npx forge-memory
 ```
 
+You need Node.js 22 or newer. For the complete numbered journey, including every
+installer choice, success check, platform difference, remote-browser approval, and
+iPhone prompt, read [Install Forge](./docs/installation.md).
+
 `forge-memory` is the front door for Forge. It installs the local Forge UI/runtime,
 discovers OpenClaw, Hermes, Codex, and Claude Code in the background, shows detected host
 adapters in a checkbox menu, selects every detected adapter by default, leaves missing
@@ -138,6 +142,22 @@ pair the iOS companion at the end.
 
 Use the same command whether you want the browser UI, OpenClaw, Hermes, Codex, Claude
 Code, or all of them sharing one local Forge memory system.
+
+The exact first run is:
+
+1. Run `npx forge-memory` as your normal operating-system user.
+2. Keep or change the detected adapters.
+3. Confirm the Forge data folder, normally `~/.forge`.
+4. Leave optional Forge-to-Forge sharing off unless you need it.
+5. Pair the iPhone now or skip it and run `npx forge-memory pair-ios` later.
+6. Wait for `Forge Memory configured and checked.` and `Doctor: passed`.
+7. Run `npx forge-memory ui`, then verify with `npx forge-memory status` and
+   `npx forge-memory doctor`.
+
+Forge Companion must already be installed before iPhone pairing. It is currently
+distributed to invited testers through TestFlight; `forge-memory` creates the pairing
+material but does not install the app or enroll a TestFlight account. Skip the phone
+prompt if you do not already have Companion.
 
 The installer prepares a per-user local authentication helper. Local adapters use that
 helper automatically, so you do not copy or maintain an API key. Open the browser with
@@ -194,12 +214,18 @@ restarts the runtime when allowed, and prints concrete next steps without deleti
 data.
 
 `pair-ios` prefers Tailscale when it is installed, authenticated, and Forge is reachable
-through the Mac's MagicDNS HTTPS URL. That gives the iPhone a normal phone-reachable Forge
+through the host's MagicDNS HTTPS URL. That gives the iPhone a normal phone-reachable Forge
 URL for sync and the embedded WebView. If Tailscale is not available or is declined, Forge
 falls back to an Iroh QR with the desktop Iroh node id, pairing token, optional relay hint,
 and ALPN `forge-companion/1`. The CLI uses a compact QR and saves the same compact payload
 under `~/.forge/pairing/` so you can paste it into the iPhone app if the camera cannot
 scan.
+
+Phone pairing can ask before installing Tailscale, configuring Tailscale Serve,
+installing the minimal Rust/Cargo toolchain for the Iroh fallback, compiling the bundled
+native host, or restarting only the managed Forge runtime to bind its verified HTTPS
+origin. Each conditional change is shown before it happens. Skip phone pairing if you do
+not want those steps during the base install.
 
 Explicit direct HTTP/TCP pairing remains available for deliberate LAN, Tailscale, or
 debugging setups. A physical iPhone needs a phone-reachable URL:

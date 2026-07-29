@@ -62,15 +62,33 @@ companion.
 
 ## Install Forge
 
-The normal install path is one guided command:
+The normal install path requires Node.js 22 or newer and one guided command:
 
 ```bash
 npx forge-memory
 ```
 
-Use the same command whether you want the browser UI, OpenClaw, Hermes, Codex, Claude
-Code, or all of them sharing one local Forge memory system. Development installs use the
-same flow but link adapters to this checkout:
+Follow the complete numbered [installation guide](./installation.md) for the exact
+adapter choices, data-folder prompt, success checks, platform differences, remote-browser
+approval, and iPhone pairing steps.
+
+The short path is:
+
+1. Run `npx forge-memory` as your normal operating-system user.
+2. Keep or change the detected Codex, OpenClaw, Hermes, and Claude Code adapters.
+3. Confirm the Forge data folder.
+4. Keep optional Forge-to-Forge sharing off unless you need it.
+5. Pair the iPhone now or skip it and run `npx forge-memory pair-ios` later.
+6. Wait for `Forge Memory configured and checked.` and `Doctor: passed`.
+7. Open Forge with `npx forge-memory ui`.
+
+The optional iPhone step requires Forge Companion to be installed already. The app is
+currently distributed to invited TestFlight testers; the CLI creates pairing material
+but does not install or enroll the app.
+
+Use the same command whether you want the browser UI, one agent host, or all supported
+hosts sharing one local Forge system. Development installs use the same flow but link
+adapters to this checkout:
 
 ```bash
 npx forge-memory --dev
@@ -103,9 +121,8 @@ After install, the usual local addresses are:
 - API: `http://127.0.0.1:4317/api/v1/`
 - OpenAPI: `http://127.0.0.1:4317/api/v1/openapi.json`
 
-Use [`../README.md`](../README.md) for the full install narrative, source-development
-commands, manual adapter setup, data-location guidance, screenshots, and contributor
-checks.
+Use [`../README.md`](../README.md) for the project overview, source-development commands,
+manual adapter setup, data-location guidance, screenshots, and contributor checks.
 
 ## Current References
 

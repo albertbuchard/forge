@@ -237,7 +237,20 @@
           </div>
           <div class="card-grid two">
             <article class="card">
-              <h3>Single-command install</h3>
+              <h3>1. Check Node.js</h3>
+              <p>
+                Forge Memory requires Node.js 22 or newer. Node includes
+                <code>npm</code> and <code>npx</code>.
+              </p>
+              <pre><code>node --version
+npm --version</code></pre>
+              <p>
+                Install a current Node.js LTS release and reopen the terminal if
+                the first command reports a version older than 22.
+              </p>
+            </article>
+            <article class="card">
+              <h3>2. Run the guided install</h3>
               <p>
                 Start here for the browser UI, OpenClaw, Hermes, Codex, Claude
                 Code, or all of them together. The guided installer sets up the
@@ -250,6 +263,92 @@
                 The adapter menu selects every detected host by default, shows
                 missing hosts as disabled rows, and supports Space to toggle
                 OpenClaw, Hermes, Codex, and Claude Code.
+              </p>
+            </article>
+            <article class="card">
+              <h3>3. Complete the choices</h3>
+              <ol class="guide-list">
+                <li>Keep or change the detected host adapters.</li>
+                <li>
+                  Confirm the Forge data folder, normally <code>~/.forge</code>.
+                </li>
+                <li>
+                  Leave optional Forge-to-Forge sharing off unless you need it.
+                </li>
+                <li>
+                  Pair the iPhone now, or skip it and run
+                  <code>npx forge-memory pair-ios</code> later.
+                </li>
+              </ol>
+              <p>
+                Run the installer as the normal operating-system user who will
+                own this Forge installation.
+              </p>
+            </article>
+            <article class="card">
+              <h3>4. Verify success</h3>
+              <p>
+                Wait for <code>Forge Memory configured and checked.</code> and
+                <code>Doctor: passed</code>, then open and verify Forge.
+              </p>
+              <pre><code>npx forge-memory ui
+npx forge-memory status
+npx forge-memory doctor</code></pre>
+              <p>
+                The normal local app is
+                <code>http://127.0.0.1:4317/forge/</code>. The base install
+                stays local and does not expose Forge to another machine.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Optional iPhone prompts</h3>
+              <p>
+                Forge Companion must already be installed. The current app is
+                distributed to invited testers through TestFlight. The CLI
+                creates pairing material; it does not install the app or enroll
+                a TestFlight account.
+              </p>
+              <p>
+                Phone pairing may ask before installing Tailscale, configuring
+                Tailscale Serve, installing Rust/Cargo for the Iroh fallback,
+                compiling the bundled native host, or restarting only the
+                managed Forge runtime to bind its verified HTTPS origin.
+              </p>
+              <p>
+                You can decline or skip phone pairing during the base install.
+                Tailscale Funnel is not required.
+              </p>
+              <pre><code>npx forge-memory pair-ios</code></pre>
+            </article>
+            <article class="card">
+              <h3>Remote browser approval</h3>
+              <p>
+                A remote browser first needs an explicitly configured private
+                HTTPS route, such as the consented Tailscale Serve path offered
+                during iPhone pairing. Network reachability alone never
+                authorizes Forge.
+              </p>
+              <p>
+                Start pairing in the remote browser. Then approve the exact
+                pending request from an unlocked local-owner Forge window, or
+                run this on the Forge host as the operating-system owner:
+              </p>
+              <pre><code>npx forge-memory pairing</code></pre>
+              <p>Review the client, enter its short code once, and approve.</p>
+            </article>
+            <article class="card">
+              <h3>Platform differences</h3>
+              <p>
+                The macOS install includes the owner-only
+                <code>forge://</code> browser handoff and macOS Keychain storage
+                for renewable remote CLI credentials. Linux and Windows do not
+                receive those macOS features in 0.3.52; use the verified
+                Forge-host CLI for pending browser approvals.
+              </p>
+              <p>
+                Forge-to-Forge sharing is available on macOS and Linux. It is
+                not available on Windows in 0.3.52 and should remain disabled
+                there.
               </p>
             </article>
             <article class="card">
@@ -310,13 +409,19 @@ npx forge-memory pair-ios</code></pre>
               </p>
             </article>
             <article class="card">
-              <h3>Advanced adapter docs</h3>
+              <h3>Exact guide and advanced adapters</h3>
               <p>
-                The manual OpenClaw, Hermes, Codex, and Claude Code commands are
-                still documented for recovery, source-linking, and host-specific
-                debugging. They are reference paths, not the normal quickstart.
+                Read the complete numbered guide for platform-specific setup,
+                pairing, update, recovery, and data-preservation details. Manual
+                adapter commands remain reference paths for recovery,
+                source-linking, and host-specific debugging.
               </p>
               <div class="link-row">
+                <a
+                  class="button primary"
+                  href="https://github.com/albertbuchard/forge/blob/main/docs/installation.md"
+                  >Exact install guide</a
+                >
                 <a class="button" href="./integrations.html#advanced-adapters"
                   >Advanced adapters</a
                 >
