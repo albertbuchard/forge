@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  authorizePreparedLocalBrowser,
   beginRemoteBrowserPairing,
   cancelRemoteBrowserPairing,
   cancelRemoteBrowserPairingOnPageExit,
   claimTaskRun,
-  completePreparedLocalBrowserAuthorization,
   createCalendarConnection,
   createGoal,
   createProject,
@@ -1055,14 +1055,23 @@ describe("create entity payload normalization", () => {
     expect(handlerUrls).toHaveLength(1);
     expect(beginCount).toBe(2);
     expect(exchangeCount).toBe(1);
-    expect(getPreparedLocalBrowserAuthorizationUrl()).toMatch(
-      /^forge:\/\/local-auth\?/
-    );
+    const stagedHandlerUrl = getPreparedLocalBrowserAuthorizationUrl();
+    expect(stagedHandlerUrl).toMatch(/^forge:\/\/local-auth\?/);
 
-    await completePreparedLocalBrowserAuthorization();
+    await authorizePreparedLocalBrowser();
 
     expect(exchangeCount).toBe(2);
-    expect(handlerUrls).toHaveLength(1);
+    expect(handlerUrls).toHaveLength(2);
+    expect(handlerUrls[1]).toBe(stagedHandlerUrl);
+    expect(
+      [...new URL(handlerUrls[1]!).searchParams.keys()].sort()
+    ).toEqual([
+      "apiOrigin",
+      "browserNonce",
+      "browserOrigin",
+      "transactionId"
+    ]);
+    expect(handlerUrls[1]).not.toContain("fg_browser_");
     expect(getPreparedLocalBrowserAuthorizationUrl()).toBeNull();
     expect(localStorage.getItem("forge.browser.csrf")).toBe(
       "fg_csrf_staged_test"

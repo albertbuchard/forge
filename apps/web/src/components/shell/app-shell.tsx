@@ -101,8 +101,8 @@ import { RemoteBrowserPairing } from "@/components/security/remote-browser-pairi
 import { PairingRequestNotification } from "@/components/security/pairing-request-notification";
 import { useLiveEvents } from "@/hooks/use-live-events";
 import {
+  authorizePreparedLocalBrowser,
   claimTaskRun,
-  completePreparedLocalBrowserAuthorization,
   getPreparedLocalBrowserAuthorizationUrl,
   patchTask,
   prepareLocalBrowserAuthorization,
@@ -1656,18 +1656,16 @@ export function AppShell() {
           retryHref={localAuthorizationUrl ?? undefined}
           onRetry={() => {
             if (localAuthorizationError && localAuthorizationUrl) {
-              window.setTimeout(() => {
-                void completePreparedLocalBrowserAuthorization()
-                  .then(() => operatorSessionQuery.refetch())
-                  .catch(async () => {
-                    try {
-                      await prepareLocalBrowserAuthorization();
-                    } catch {
-                      // The query error remains the reader-facing failure.
-                    }
-                    await operatorSessionQuery.refetch();
-                  });
-              }, 0);
+              void authorizePreparedLocalBrowser()
+                .then(() => operatorSessionQuery.refetch())
+                .catch(async () => {
+                  try {
+                    await prepareLocalBrowserAuthorization();
+                  } catch {
+                    // The query error remains the reader-facing failure.
+                  }
+                  await operatorSessionQuery.refetch();
+                });
               return;
             }
             if (localAuthorizationError) {

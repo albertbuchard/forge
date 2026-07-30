@@ -38,8 +38,7 @@ describe("shared page states", () => {
       name: /authorize this browser/i
     });
     expect(link).toHaveAttribute("href", retryHref);
-    link.addEventListener("click", (event) => event.preventDefault());
-    fireEvent.click(link);
+    expect(fireEvent.click(link)).toBe(false);
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 

@@ -79,7 +79,10 @@ export function ErrorState({
               className={buttonVariants({ variant: "secondary" })}
               href={retryHref}
               rel="noreferrer"
-              onClick={onRetry}
+              onClick={(event) => {
+                event.preventDefault();
+                onRetry();
+              }}
             >
               <RefreshCcw className="mr-2 size-4" />
               {retryLabel ?? t("common.actions.retry")}

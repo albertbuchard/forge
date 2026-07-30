@@ -937,6 +937,21 @@ export async function completePreparedLocalBrowserAuthorization() {
   await exchangePreparedLocalBrowserAuthorization();
 }
 
+export async function authorizePreparedLocalBrowser() {
+  const prepared = preparedLocalBrowserAuthorization;
+  if (!prepared) {
+    throw new ForgeApiError({
+      status: 409,
+      code: "local_browser_transaction_missing",
+      message: "Prepare local browser authorization before approving it.",
+      requestPath: LOCAL_BROWSER_EXCHANGE_PATH,
+      details: []
+    });
+  }
+  invokeLocalBrowserOwnerHandler(prepared.handlerUrl);
+  await exchangePreparedLocalBrowserAuthorization();
+}
+
 export function retryLocalBrowserAuthorization() {
   browserSessionBootstrapBlocked = false;
 }
