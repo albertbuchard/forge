@@ -14,6 +14,7 @@ import {
   createWindowsOwnerProofFromCredential,
   ensureWindowsOwnerCredential,
   inspectWindowsOwnerCredential,
+  lockWindowsPathForCurrentOwner,
   verifyWindowsOwnerProof,
   windowsOwnerProofPayload
 } from "../lib/windows-owner-auth.mjs";
@@ -116,6 +117,18 @@ test("Windows owner proof canonicalization ignores untrusted extra fields", () =
     windowsOwnerProofPayload(withExtras),
     windowsOwnerProofPayload(canonical)
   );
+});
+
+test("Windows owner ACL mutation allows the bounded hardened PowerShell window", () => {
+  let timeout;
+  lockWindowsPathForCurrentOwner("C:\\forge\\owner.json", {
+    systemRoot: "C:\\Windows",
+    spawnSyncImpl: (_command, _args, options) => {
+      timeout = options.timeout;
+      return { status: 0, stdout: "", stderr: "" };
+    }
+  });
+  assert.equal(timeout, 30_000);
 });
 
 test(

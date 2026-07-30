@@ -18,6 +18,7 @@ const BASE64URL_256_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const IDENTIFIER_PATTERN = /^[A-Za-z0-9._-]+$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const MAXIMUM_CREDENTIAL_BYTES = 16 * 1024;
+const WINDOWS_OWNER_ACL_MUTATION_TIMEOUT_MS = 30_000;
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 const BASE64_PATTERN =
   /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
@@ -217,6 +218,7 @@ export function lockWindowsPathForCurrentOwner(
   runPowerShell({
     script,
     args: [target],
+    timeoutMs: WINDOWS_OWNER_ACL_MUTATION_TIMEOUT_MS,
     systemRoot,
     spawnSyncImpl
   });

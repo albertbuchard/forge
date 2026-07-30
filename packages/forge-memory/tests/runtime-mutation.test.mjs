@@ -174,25 +174,28 @@ test("Forge Memory renews its OpenClaw compatibility lease before the legacy lif
     refreshMs: 10,
     waitMs: 5
   });
-  const ownerPath =
-    runtime.openClawRuntimeStartupLockOwnerPath(config);
-  const first = JSON.parse(await fsp.readFile(ownerPath, "utf8"));
-  for (let index = 0; index < 80; index += 1) {
-    await delay(1);
-    const concurrentRead = JSON.parse(
-      await fsp.readFile(ownerPath, "utf8")
+  try {
+    const ownerPath =
+      runtime.openClawRuntimeStartupLockOwnerPath(config);
+    const first = JSON.parse(await fsp.readFile(ownerPath, "utf8"));
+    for (let index = 0; index < 80; index += 1) {
+      await delay(1);
+      const concurrentRead = JSON.parse(
+        await fsp.readFile(ownerPath, "utf8")
+      );
+      assert.equal(concurrentRead.token, first.token);
+    }
+    const refreshed = JSON.parse(await fsp.readFile(ownerPath, "utf8"));
+    assert.equal(refreshed.pid, process.pid);
+    assert.equal(refreshed.token, first.token);
+    assert.ok(
+      Date.parse(refreshed.acquiredAt) > Date.parse(first.acquiredAt)
     );
-    assert.equal(concurrentRead.token, first.token);
+    assert.ok(Date.now() - Date.parse(refreshed.acquiredAt) < 30_000);
+    await lease.assertOwned();
+  } finally {
+    await lease.release();
   }
-  const refreshed = JSON.parse(await fsp.readFile(ownerPath, "utf8"));
-  assert.equal(refreshed.pid, process.pid);
-  assert.equal(refreshed.token, first.token);
-  assert.ok(
-    Date.parse(refreshed.acquiredAt) > Date.parse(first.acquiredAt)
-  );
-  assert.ok(Date.now() - Date.parse(refreshed.acquiredAt) < 30);
-  await lease.assertOwned();
-  await lease.release();
   assert.equal(
     fs.existsSync(runtime.openClawRuntimeStartupLockPath(config)),
     false
