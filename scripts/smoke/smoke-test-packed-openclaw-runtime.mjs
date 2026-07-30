@@ -77,7 +77,7 @@ const ownerUserId = "user_operator";
 const referenceCourse = {
   id: "course.polynomials-etale-triple-covers",
   slug: "from-polynomials-to-etale-triple-covers",
-  version: "2.9.0",
+  version: "3.0.0",
   fileName: "from-polynomials-to-etale-triple-covers.forge-course.json"
 };
 const releaseMode = (process.env.FORGE_RELEASE_MODE ?? "").trim();
