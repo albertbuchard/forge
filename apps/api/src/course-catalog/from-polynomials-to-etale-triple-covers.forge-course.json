@@ -200,9 +200,329 @@
   "conceptRefs": [],
   "conceptUpgrades": [
     {
-      "conceptId": "concept.proof",
-      "fromContentHash": "dd5d402cdec98a9dfdad50aeac63c00b0498c449a9921a6615c330bb1b688318",
-      "reason": "Replace an ambiguous inverse-map example with a complete statement of both maps and both composition identities."
+      "conceptId": "concept.inverse-function-theorem",
+      "fromContentHash": "3e319e45817c162271bf2f058821abc6b723de63dd0cfea651895a620a383b40",
+      "reason": "State the real C1 local inverse theorem with explicit neighborhoods, bijectivity, and a C1 inverse."
+    },
+    {
+      "conceptId": "concept.tangent-space",
+      "fromContentHash": "9e53111cef5f187d9dc877366d95a2ed2ffd184348e097e473d8fc38481b790d",
+      "reason": "Replace a multiplication-map kernel example with the canonical Zariski tangent-space definition and a radical-ideal safeguard."
+    },
+    {
+      "conceptId": "concept.projective-line",
+      "fromContentHash": "c242e78b1538ba0c8d5f07066d1b98f51ff82606d40520dbdf1136366c4ca1d6",
+      "reason": "Replace a circular projective-root prerequisite with the audited vector-space and function prerequisites."
+    },
+    {
+      "conceptId": "concept.week-04",
+      "fromContentHash": "c486f5c1c0408de4e9327c1c115c1f19237f0fe9faee748f578c7015b435e957",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 04."
+    },
+    {
+      "conceptId": "concept.week-05",
+      "fromContentHash": "f275da8dfa9b3b1853adbe2874140392b22904930decb6bfd47e959cafc8bc7e",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 05."
+    },
+    {
+      "conceptId": "concept.week-06",
+      "fromContentHash": "b596c9c6b825cb6760ff794df503fbc98bf5bc9ed1117244c05b3a91d315e1c4",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 06."
+    },
+    {
+      "conceptId": "concept.week-07",
+      "fromContentHash": "62b0824bdc10f4370bf53713e8e29e19236ed572268b17c023fe3e523e8d75b1",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 07."
+    },
+    {
+      "conceptId": "concept.week-08",
+      "fromContentHash": "020098bf93b8ae97f709339c4b3294e2315117e8f61ec7bea3b580e78da2084a",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 08."
+    },
+    {
+      "conceptId": "concept.week-09",
+      "fromContentHash": "29aa8e0052ac55ecb7e01c4e191d5b4fd7f442cbd529c55847c32f2d18bd5ce3",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 09."
+    },
+    {
+      "conceptId": "concept.week-11",
+      "fromContentHash": "6412dcedac3f1648185b0113517e821a1b5e9d2f7efe86bc6067a34681895dd1",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 11."
+    },
+    {
+      "conceptId": "concept.week-12",
+      "fromContentHash": "124aa072ef80b1c0ce0aca622d2f11556d475af09dd0d5428581536241fb1068",
+      "reason": "Replace the legacy Week 12 focus concept with the authored linear maps and rank-nullity focus and its audited prerequisites."
+    },
+    {
+      "conceptId": "concept.week-13",
+      "fromContentHash": "ef6290be125a04854009922a0ffb9b2a4ddeb0fed00683f0ab64e576c4c17cb2",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 13."
+    },
+    {
+      "conceptId": "concept.week-14",
+      "fromContentHash": "4a46f320c72c407097fa7924926aae3a662f93300a8fd480cc63ab02c2f34bf5",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 14."
+    },
+    {
+      "conceptId": "concept.week-15",
+      "fromContentHash": "895f56e73354163b3492b0e3e3ff30dfd1cb592e4030c1abd448075ce0aef623",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 15."
+    },
+    {
+      "conceptId": "concept.week-16",
+      "fromContentHash": "6420d201cacd3f5cf9ed79913c9c0e054d38ef93cb7bf62ce3a74a9a1f60cb3f",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 16."
+    },
+    {
+      "conceptId": "concept.week-17",
+      "fromContentHash": "af5820d8b532dc5f6c3c02a96b2e85f723881984f9f46f62cfed335051a36cba",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 17."
+    },
+    {
+      "conceptId": "concept.week-18",
+      "fromContentHash": "31bc0b30f6fbe252fc55c987d4036cbb20cce182ae1284f5fae47bae2041f4a4",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 18."
+    },
+    {
+      "conceptId": "concept.week-19",
+      "fromContentHash": "f55fea6eb2976c9d7b082d1aa3e9c41e55d4ead8a46b4f88201c8fd5798d34ec",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 19."
+    },
+    {
+      "conceptId": "concept.week-20",
+      "fromContentHash": "9b98976bed04f349b5d2450f537a3a9a19a70da3c2b1ce63602fd6c4a150a439",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 20."
+    },
+    {
+      "conceptId": "concept.week-21",
+      "fromContentHash": "26fab890f0ed8c886d3a856d568621ee300da5767060d059b243c0cccd567e50",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 21."
+    },
+    {
+      "conceptId": "concept.week-22",
+      "fromContentHash": "1ab53c183fe2528aba75c1d25f2bbea9a9e29d727fd4260e3748d51b0327e19f",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 22."
+    },
+    {
+      "conceptId": "concept.week-23",
+      "fromContentHash": "6fa85ac811a062236c9d1f0efe9b0c86671488cbfe420fc2c5e4fb28f466ced4",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 23."
+    },
+    {
+      "conceptId": "concept.week-24",
+      "fromContentHash": "1e294f1b496211061ec6cfb27fe9acdc5c3317caeeba4cdf4708e7951df32a5d",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 24."
+    },
+    {
+      "conceptId": "concept.week-25",
+      "fromContentHash": "21b30006cc9f07e70f7c3a4a1ecc8f42f28eacb1426ae952a4d0c5d0c0d60e6e",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 25."
+    },
+    {
+      "conceptId": "concept.week-26",
+      "fromContentHash": "5b545737d3ebc8d71bf82e71cbf924ea22d7a6dbaec606f27562ff6d21e5ef7a",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 26."
+    },
+    {
+      "conceptId": "concept.week-27",
+      "fromContentHash": "43b10eb7668d7b9a2b727f9c81acd3bfd4c753bc6954ac1874c2d9242b732080",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 27."
+    },
+    {
+      "conceptId": "concept.week-28",
+      "fromContentHash": "fcec4eb93af8f4d9c4853b60a8291b6b2452dd31329c8a512068ea4983ff5ac4",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 28."
+    },
+    {
+      "conceptId": "concept.week-29",
+      "fromContentHash": "9203a63683fe44051bcc735269bc8afa02dfd5478ae34b8db912ebf54a506b0d",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 29."
+    },
+    {
+      "conceptId": "concept.week-30",
+      "fromContentHash": "db420672d8ba508b8d201fafb93cbf674539e13240d8b4f9f3208f2e0830b104",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 30."
+    },
+    {
+      "conceptId": "concept.week-31",
+      "fromContentHash": "b58682156c51d6ee2ab323cb9ebbe95a037f723fb977ccf80c3137a6453f617d",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 31."
+    },
+    {
+      "conceptId": "concept.week-32",
+      "fromContentHash": "0a426d2eaae2d5623d1ee2e4c0bca91aa8ffb68340b7407f3439f674c530a4cf",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 32."
+    },
+    {
+      "conceptId": "concept.week-33",
+      "fromContentHash": "7e9768a315a4e51964d0deda5727d3bfefb36c468357b22d7dbe6f4ad454d9a5",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 33."
+    },
+    {
+      "conceptId": "concept.week-34",
+      "fromContentHash": "c4b48dc18d96a95edfbc19064edad01908d2da265f9a0e4ac79369a575bd8e35",
+      "reason": "Replace the legacy Week 34 focus concept with the authored affine varieties and coordinate rings focus and its audited prerequisites."
+    },
+    {
+      "conceptId": "concept.week-35",
+      "fromContentHash": "4fc92026ec1fac1543ae5e94832c252ff3c26565e5d3fdd43f39446884f5132f",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 35."
+    },
+    {
+      "conceptId": "concept.week-36",
+      "fromContentHash": "1dfe1c7ed0fa380666941b93536d86b4f8002f99d09bf61ddea4159730daee1b",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 36."
+    },
+    {
+      "conceptId": "concept.week-37",
+      "fromContentHash": "96fc3377a3f4ab3f1b979733c60f908beb7e2806491609abd85bf3efc161f39a",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 37."
+    },
+    {
+      "conceptId": "concept.week-38",
+      "fromContentHash": "67a7daecb8d4233e34de318b641a52d52d1697577579d831ae1fb41a3b12d5bc",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 38."
+    },
+    {
+      "conceptId": "concept.week-39",
+      "fromContentHash": "d1a20d217c615d2e3a599e7fdd6e8a05202b9879ffff4d32e39c32d4ca6aee39",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 39."
+    },
+    {
+      "conceptId": "concept.week-40",
+      "fromContentHash": "402e6e695b7fbe5c3a45d5f8fb9b73acd162cb5615e41ac0daa36a03cac4a1e9",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 40."
+    },
+    {
+      "conceptId": "concept.week-41",
+      "fromContentHash": "98db1ff29a47c0573051034500e772c7033abe9c9a120ec67e16d8bc818e08b6",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 41."
+    },
+    {
+      "conceptId": "concept.week-42",
+      "fromContentHash": "14331875baf331a4c7a98872bf945dbc68bdd030152b36abc2ea89e30f4bb6bd",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 42."
+    },
+    {
+      "conceptId": "concept.week-43",
+      "fromContentHash": "035693d4441a3ddb91c1bdf5c7dbfd417be78287d2fca75170cfa1cd096e4a9e",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 43."
+    },
+    {
+      "conceptId": "concept.week-44",
+      "fromContentHash": "c3dd57dc1ff84980e4b09c721852597cadaf4fe0dfa1c2ff0e75bc053e59daf0",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 44."
+    },
+    {
+      "conceptId": "concept.week-45",
+      "fromContentHash": "7e4b8a62b4eb29303ab1257a09b8f00afd56711b8804c7d310d6399e4fb254e4",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 45."
+    },
+    {
+      "conceptId": "concept.week-46",
+      "fromContentHash": "0337c72b320377c3fdb8d1a273d33b1a286cee8c1ffea10936fa4f77e2cb99c4",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 46."
+    },
+    {
+      "conceptId": "concept.week-47",
+      "fromContentHash": "05b5e749404cbf69a0525adabfcfb826b73bbb7baad4fd7bac531db9220112f0",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 47."
+    },
+    {
+      "conceptId": "concept.week-48",
+      "fromContentHash": "9281942b448ea48765c8375d0dcecc77b466857091f4fc30b8938f6522d2f8bc",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 48."
+    },
+    {
+      "conceptId": "concept.week-49",
+      "fromContentHash": "5699e5024407f7732fb41f210e75f7e75222ff6d74668e9715179ff0724d3a08",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 49."
+    },
+    {
+      "conceptId": "concept.week-50",
+      "fromContentHash": "efe79b6b5fc89b8da0f28bfa8fd2e17072e5baea3061d2f8cacbbe61acf1950f",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 50."
+    },
+    {
+      "conceptId": "concept.week-51",
+      "fromContentHash": "4c53514f1c35b70392212809ef7566ddfc0388d32769a2afffeb805ad6dda4ef",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 51."
+    },
+    {
+      "conceptId": "concept.week-52",
+      "fromContentHash": "9d62dd88a37ada51f70878c7e303526a3426daf6e852b0bc328f4d7a03a8439b",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 52."
+    },
+    {
+      "conceptId": "concept.week-53",
+      "fromContentHash": "ade9b5f6c5d6aaa84acd49eb37af83ec8f1f6849538b8aa9cfe68df90a09cda0",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 53."
+    },
+    {
+      "conceptId": "concept.week-54",
+      "fromContentHash": "34742fa147b9c6c8b72fb63ec03eb31da4f1d4dfcca9441adac12a4cb1871bec",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 54."
+    },
+    {
+      "conceptId": "concept.week-55",
+      "fromContentHash": "5175f3c381a1552205569cd395bfd7945857a98827f939b5faee1d16c1d69f92",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 55."
+    },
+    {
+      "conceptId": "concept.week-56",
+      "fromContentHash": "d775e8b2c7a1a976468e9e58bce81aafdcec15b70113aa02856befd51861711c",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 56."
+    },
+    {
+      "conceptId": "concept.week-57",
+      "fromContentHash": "536f54dc39984e87ac379c292c3baa2435845dbbebb92ca256a136259b0d2179",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 57."
+    },
+    {
+      "conceptId": "concept.week-58",
+      "fromContentHash": "433b82fff82ef0978d3893f0aee9d31a87f696899563ca2ac0005f19274f345e",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 58."
+    },
+    {
+      "conceptId": "concept.week-59",
+      "fromContentHash": "24ef5273992b7b68cdad49ff8b2266d9dba3362307ed0f946cec042863b6d836",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 59."
+    },
+    {
+      "conceptId": "concept.week-60",
+      "fromContentHash": "ee49cb5e983783e09dd30481adc8dcf0ba98cce076df4685f9722a1b7c63e3e3",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 60."
+    },
+    {
+      "conceptId": "concept.week-61",
+      "fromContentHash": "96351ec894a263e858dd1b708ac00bb3db912e511775b3b0ee52b3c53ccefd17",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 61."
+    },
+    {
+      "conceptId": "concept.week-62",
+      "fromContentHash": "617f0289b3514ad6cb8ee4a36cda6033c487196b074cc4ddd559bed988273582",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 62."
+    },
+    {
+      "conceptId": "concept.week-63",
+      "fromContentHash": "146c8ddd104789d7b78af5119c5fad6a372302513a22dc285a951c8b63961570",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 63."
+    },
+    {
+      "conceptId": "concept.week-64",
+      "fromContentHash": "cfc97cc43f45b70687a773a8368815e7fed1f93085e92d5c8973204db1c878cf",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 64."
+    },
+    {
+      "conceptId": "concept.week-65",
+      "fromContentHash": "4cc21b55a9af2fb49c4f9026eea8d047e171f60d0010c4c96b57fa6b2a7e3eb9",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 65."
+    },
+    {
+      "conceptId": "concept.week-66",
+      "fromContentHash": "5d2bbc009e994ab09fb888be42c3cd0c5b9b103b85dc04d80313522b59f4d56e",
+      "reason": "Replace the automatic previous-week chain with the audited prerequisite graph for Week 66."
     }
   ],
   "concepts": [
@@ -146329,7 +146649,7 @@
   "extensions": {},
   "provenance": {
     "generatedAt": "2026-07-27T00:00:00.000Z",
-    "contentHash": "5e9d22f127d40040c56cd5eb6656e8177ec5d6aab88a18066dc0e711ae7e16db",
+    "contentHash": "4c84221996802fafe26af0931de7f12838815931809076248a086e8b6868ed82",
     "notes": "The course treats exact algebra as proved or checkable and labels broader geometric extensions conservatively."
   }
 }

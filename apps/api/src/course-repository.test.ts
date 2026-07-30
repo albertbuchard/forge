@@ -703,11 +703,95 @@ test("keeps an enrollment on its immutable release until an explicit audited upg
       )
     ) as Record<string, unknown> & {
       course: Record<string, unknown>;
+      concepts: Array<Record<string, unknown> & { id: string }>;
+      conceptUpgrades?: Array<{
+        conceptId: string;
+        fromContentHash: string;
+        reason: string;
+      }>;
       provenance: Record<string, unknown>;
     };
+    const installedCanonicalFixture = JSON.parse(
+      readFileSync(
+        new URL(
+          "./course-catalog/test-fixtures/course-r-2.9-canonical-concepts.json",
+          import.meta.url
+        ),
+        "utf8"
+      )
+    ) as {
+      schemaVersion: number;
+      courseId: string;
+      courseVersion: string;
+      courseContentHash: string;
+      conceptHashAlgorithm: string;
+      concepts: Array<{
+        id: string;
+        contentHash: string;
+        definition: Record<string, unknown> & { id: string };
+      }>;
+    };
+    const installedConceptById = new Map(
+      installedCanonicalFixture.concepts.map((entry) => [
+        entry.id,
+        entry
+      ])
+    );
+    const bundledConceptById = new Map(
+      bundledCourse.concepts.map((concept) => [concept.id, concept])
+    );
+    const upgradeById = new Map(
+      (bundledCourse.conceptUpgrades ?? []).map((upgrade) => [
+        upgrade.conceptId,
+        upgrade
+      ])
+    );
+
+    assert.equal(installedCanonicalFixture.schemaVersion, 1);
+    assert.equal(
+      installedCanonicalFixture.courseId,
+      "course.polynomials-etale-triple-covers"
+    );
+    assert.equal(installedCanonicalFixture.courseVersion, "2.9.0");
+    assert.equal(
+      installedCanonicalFixture.courseContentHash,
+      "2d3a8e00694ecbddb00a9c83c5cc5d1b6b0dcc423156d216177bfed90ead60fc"
+    );
+    assert.equal(
+      installedCanonicalFixture.conceptHashAlgorithm,
+      "sha256(stableJson(definition))"
+    );
+    assert.equal(installedCanonicalFixture.concepts.length, 65);
+    assert.equal(installedConceptById.size, 65);
+    assert.equal(upgradeById.size, 65);
+    assert.deepEqual(
+      [...upgradeById.keys()],
+      installedCanonicalFixture.concepts.map((entry) => entry.id)
+    );
+    for (const entry of installedCanonicalFixture.concepts) {
+      const bundledConcept = bundledConceptById.get(entry.id);
+      const declaredUpgrade = upgradeById.get(entry.id);
+      assert.ok(bundledConcept);
+      assert.ok(declaredUpgrade);
+      assert.equal(
+        createHash("sha256").update(stableJson(entry.definition)).digest("hex"),
+        entry.contentHash
+      );
+      assert.notEqual(
+        createHash("sha256").update(stableJson(bundledConcept)).digest("hex"),
+        entry.contentHash
+      );
+      assert.equal(declaredUpgrade.fromContentHash, entry.contentHash);
+      assert.ok(declaredUpgrade.reason.trim().length > 40);
+    }
+
     importCoursePackage({
       ...bundledCourse,
       course: { ...bundledCourse.course, version: "2.9.0" },
+      concepts: bundledCourse.concepts.map(
+        (concept) => installedConceptById.get(concept.id)?.definition ?? concept
+      ),
+      conceptUpgrades: [],
       provenance: {
         ...bundledCourse.provenance,
         generatedAt: "2026-07-27T00:00:00.000Z",
@@ -766,7 +850,187 @@ test("keeps an enrollment on its immutable release until an explicit audited upg
       nextLessonId: context.nextLessonId
     });
 
+    const database = getDatabase();
+    const protectedConceptId = "concept.inverse-function-theorem";
+    const sharedConceptId = "concept.tangent-space";
+    const protectionCourseId = "course.canonical-concept-protection-fixture";
+    database
+      .prepare(
+        `INSERT INTO courses (
+           id, slug, version, schema_version, title, subtitle, description,
+           language, authors_json, license, estimated_weeks, minutes_per_week,
+           tags_json, entry_lesson_id, featured_lesson_id, source_url,
+           content_hash, definition_json, created_at, updated_at
+         )
+         SELECT ?, ?, version, schema_version, ?, subtitle, description,
+                language, authors_json, license, estimated_weeks,
+                minutes_per_week, tags_json, entry_lesson_id,
+                featured_lesson_id, source_url, content_hash,
+                definition_json, created_at, updated_at
+         FROM courses WHERE id = ?`
+      )
+      .run(
+        protectionCourseId,
+        "canonical-concept-protection-fixture",
+        "Canonical concept protection fixture",
+        courseId
+      );
+    database
+      .prepare(
+        `INSERT INTO course_concepts (
+           course_id, concept_id, order_index, status, delivery_owner
+         ) VALUES (?, ?, 0, 'required', 'shared')`
+      )
+      .run(protectionCourseId, sharedConceptId);
+    assert.equal(
+      (
+        database
+          .prepare(
+            "SELECT COUNT(*) AS count FROM concept_evidence WHERE concept_id = ?"
+          )
+          .get(protectedConceptId) as { count: number }
+      ).count,
+      0
+    );
+    database
+      .prepare(
+        `INSERT INTO concept_evidence (
+           attempt_id, concept_id, user_id, score, evidence_markdown, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        attempt.attemptId,
+        protectedConceptId,
+        userId,
+        90,
+        "Installed canonical evidence protection fixture.",
+        "2026-07-30T00:00:00.000Z"
+      );
+    assert.equal(
+      (
+        database
+          .prepare(
+            `SELECT COUNT(*) AS count FROM course_concepts
+             WHERE concept_id = ? AND course_id <> ?`
+          )
+          .get(sharedConceptId, courseId) as { count: number }
+      ).count,
+      1
+    );
+    assert.equal(
+      (
+        database
+          .prepare(
+            "SELECT COUNT(*) AS count FROM concept_evidence WHERE concept_id = ?"
+          )
+          .get(protectedConceptId) as { count: number }
+      ).count,
+      1
+    );
+
+    const packageWithoutDeclarations = {
+      ...bundledCourse,
+      conceptUpgrades: [],
+      provenance: { ...bundledCourse.provenance, contentHash: "" }
+    };
+    assert.throws(
+      () => importCoursePackage(packageWithoutDeclarations),
+      (error: unknown) =>
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "course_concept_definition_conflict" &&
+        error.message.includes(protectedConceptId)
+    );
+    const packageTestingSharedLink = {
+      ...packageWithoutDeclarations,
+      concepts: bundledCourse.concepts.map(
+        (concept) =>
+          concept.id === protectedConceptId
+            ? installedConceptById.get(concept.id)?.definition ?? concept
+            : concept
+      )
+    };
+    assert.throws(
+      () => importCoursePackage(packageTestingSharedLink),
+      (error: unknown) =>
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "course_concept_definition_conflict" &&
+        error.message.includes(sharedConceptId)
+    );
+    assert.equal(
+      (
+        database
+          .prepare(
+            "SELECT COUNT(*) AS count FROM course_concept_revisions WHERE source_course_id = ?"
+          )
+          .get(courseId) as { count: number }
+      ).count,
+      0
+    );
+
     ensureBuiltInCourses();
+
+    assert.equal(
+      (
+        database
+          .prepare(
+            "SELECT COUNT(*) AS count FROM course_concept_revisions WHERE source_course_id = ?"
+          )
+          .get(courseId) as { count: number }
+      ).count,
+      65
+    );
+    for (const entry of installedCanonicalFixture.concepts) {
+      const revision = database
+        .prepare(
+          `SELECT content_hash, source_course_version,
+                  replaced_by_content_hash, reason
+           FROM course_concept_revisions
+           WHERE concept_id = ? AND source_course_id = ?`
+        )
+        .get(entry.id, courseId) as
+        | {
+            content_hash: string;
+            source_course_version: string;
+            replaced_by_content_hash: string;
+            reason: string;
+          }
+        | undefined;
+      const nextDefinition = bundledConceptById.get(entry.id);
+      assert.ok(revision);
+      assert.ok(nextDefinition);
+      assert.equal(revision.content_hash, entry.contentHash);
+      assert.equal(revision.source_course_version, "3.0.0");
+      assert.equal(
+        revision.replaced_by_content_hash,
+        createHash("sha256")
+          .update(stableJson(nextDefinition))
+          .digest("hex")
+      );
+      assert.equal(revision.reason, upgradeById.get(entry.id)?.reason);
+    }
+    assert.equal(
+      (
+        database
+          .prepare(
+            "SELECT COUNT(*) AS count FROM concept_evidence WHERE concept_id = ?"
+          )
+          .get(protectedConceptId) as { count: number }
+      ).count,
+      1
+    );
+    assert.equal(
+      (
+        database
+          .prepare(
+            `SELECT COUNT(*) AS count FROM course_concepts
+             WHERE concept_id = ? AND course_id = ?`
+          )
+          .get(sharedConceptId, protectionCourseId) as { count: number }
+      ).count,
+      1
+    );
 
     const beforeUpgrade = getCourseDetail(courseId, userId);
     assert.deepEqual(beforeUpgrade.release, {

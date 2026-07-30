@@ -1,0 +1,1639 @@
+{
+  "schemaVersion": 1,
+  "courseId": "course.polynomials-etale-triple-covers",
+  "courseVersion": "2.9.0",
+  "courseContentHash": "2d3a8e00694ecbddb00a9c83c5cc5d1b6b0dcc423156d216177bfed90ead60fc",
+  "conceptHashAlgorithm": "sha256(stableJson(definition))",
+  "concepts": [
+    {
+      "id": "concept.inverse-function-theorem",
+      "contentHash": "3e319e45817c162271bf2f058821abc6b723de63dd0cfea651895a620a383b40",
+      "definition": {
+        "id": "concept.inverse-function-theorem",
+        "slug": "inverse-function-theorem",
+        "title": "Inverse function theorem",
+        "summary": "An invertible derivative gives a unique local inverse near the point.",
+        "definitionMarkdown": "If $DF_x$ is invertible, then $F$ restricts to a diffeomorphism or biholomorphism between suitable neighborhoods of $x$ and $F(x)$.",
+        "exampleMarkdown": "$z\\mapsto z^3$ has a local holomorphic inverse near every nonzero $z$.",
+        "nonExampleMarkdown": "The theorem does not produce one inverse on all of $\\mathbb C^\\times$.",
+        "prerequisiteConceptIds": [
+          "concept.jacobian"
+        ],
+        "relatedConceptIds": [
+          "concept.local-global",
+          "concept.etale"
+        ],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "calculus"
+        ]
+      }
+    },
+    {
+      "id": "concept.tangent-space",
+      "contentHash": "9e53111cef5f187d9dc877366d95a2ed2ffd184348e097e473d8fc38481b790d",
+      "definition": {
+        "id": "concept.tangent-space",
+        "slug": "tangent-space",
+        "title": "Tangent spaces and differentials",
+        "summary": "The kernel of the multiplication differential is exactly the relative-scaling direction.",
+        "definitionMarkdown": "$dM_{(L,Q)}(\\dot L,\\dot Q)=\\dot LQ+L\\dot Q$.",
+        "exampleMarkdown": "When $\\gcd(L,Q)=1$, the kernel is $\\mathbb C(L,-Q)$.",
+        "nonExampleMarkdown": "Dimension counting alone does not identify the kernel vector.",
+        "prerequisiteConceptIds": [
+          "concept.jacobian",
+          "concept.affine-variety"
+        ],
+        "relatedConceptIds": [
+          "concept.etale"
+        ],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "algebraic-geometry"
+        ]
+      }
+    },
+    {
+      "id": "concept.projective-line",
+      "contentHash": "c242e78b1538ba0c8d5f07066d1b98f51ff82606d40520dbdf1136366c4ca1d6",
+      "definition": {
+        "id": "concept.projective-line",
+        "slug": "projective-line",
+        "title": "The projective line",
+        "summary": "$\\mathbb P^1$ completes the affine root chart by adding the point at infinity.",
+        "definitionMarkdown": "$\\mathbb P^1$ is the set of one-dimensional subspaces of $\\mathbb C^2$, written $[T:S]$.",
+        "exampleMarkdown": "The charts $S\\ne0$ and $T\\ne0$ cover $\\mathbb P^1$.",
+        "nonExampleMarkdown": "$\\mathbb C$ alone omits the root at infinity.",
+        "prerequisiteConceptIds": [
+          "concept.projective-root"
+        ],
+        "relatedConceptIds": [
+          "concept.marked-root"
+        ],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "projective-geometry"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-04",
+      "contentHash": "c486f5c1c0408de4e9327c1c115c1f19237f0fe9faee748f578c7015b435e957",
+      "definition": {
+        "id": "concept.week-04",
+        "slug": "week-04-sets-complements-and-fibers",
+        "title": "Sets, complements, and fibers",
+        "summary": "Set notation makes logical conditions visible and lets equations be read as inverse images of values.",
+        "definitionMarkdown": "For $A,B\\subseteq U$, union means “in $A$ or $B$,” intersection means “in both,” and $U\\setminus A$ means “in $U$ but not in $A$.” The fiber of $f:X\\to Y$ over $y$ is $f^{-1}(y)=\\{x\\in X:f(x)=y\\}$.",
+        "exampleMarkdown": "If $F:\\mathbb C^5\\to\\mathbb C^2$ is $F=(f_1,f_2)$, then $V(f_1,f_2)=F^{-1}(0,0)$.",
+        "nonExampleMarkdown": "The notation $f^{-1}(y)$ for a fiber does not assume that $f$ has an inverse function.",
+        "prerequisiteConceptIds": [
+          "concept.week-03"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-4"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-05",
+      "contentHash": "f275da8dfa9b3b1853adbe2874140392b22904930decb6bfd47e959cafc8bc7e",
+      "definition": {
+        "id": "concept.week-05",
+        "slug": "week-05-quantifiers-and-logical-negation",
+        "title": "Quantifiers and logical negation",
+        "summary": "Precise quantifiers distinguish local claims from global ones and make a proposed negation checkable.",
+        "definitionMarkdown": "The negation of “for every $x$ there exists $y$ such that $P(x,y)$” is “there exists $x$ such that for every $y$, $P(x,y)$ is false.” Each quantifier changes and the final claim is negated.",
+        "exampleMarkdown": "The negation of injectivity is: there exist distinct $x,x'$ in the domain with $f(x)=f(x')$.",
+        "nonExampleMarkdown": "Replacing “for every” by “there exists” without also negating the inner statement does not produce the logical negation.",
+        "prerequisiteConceptIds": [
+          "concept.week-04"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-5"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-06",
+      "contentHash": "b596c9c6b825cb6760ff794df503fbc98bf5bc9ed1117244c05b3a91d315e1c4",
+      "definition": {
+        "id": "concept.week-06",
+        "slug": "week-06-direct-proof-contrapositive-and-contradiction",
+        "title": "Direct proof, contrapositive, and contradiction",
+        "summary": "The proof method should match the logical form of the claim and should expose, rather than hide, the decisive implication.",
+        "definitionMarkdown": "A direct proof derives the conclusion from the hypotheses. A contrapositive proves “not $Q$ implies not $P$” instead of “$P$ implies $Q$.” A contradiction assumes the hypotheses and the negation of the conclusion and derives an impossibility.",
+        "exampleMarkdown": "To prove that $ab$ odd implies $a$ and $b$ odd, prove the contrapositive: if either factor is even, then $ab$ is even.",
+        "nonExampleMarkdown": "Writing “this is obvious by contradiction” without stating the negated conclusion or the contradiction is not a complete proof.",
+        "prerequisiteConceptIds": [
+          "concept.week-05"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-6"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-07",
+      "contentHash": "62b0824bdc10f4370bf53713e8e29e19236ed572268b17c023fe3e523e8d75b1",
+      "definition": {
+        "id": "concept.week-07",
+        "slug": "week-07-induction-equivalence-and-counterexamples",
+        "title": "Induction, equivalence, and counterexamples",
+        "summary": "Induction proves a statement along the natural numbers, equivalence needs both implications, and one valid counterexample refutes a universal claim.",
+        "definitionMarkdown": "Induction requires a verified base case and a step proving $P(n)\\Rightarrow P(n+1)$. An equivalence $P\\Leftrightarrow Q$ requires proofs of both $P\\Rightarrow Q$ and $Q\\Rightarrow P$.",
+        "exampleMarkdown": "The binomial formula follows by checking $n=0$ and deriving the case $n+1$ from the case $n$ with Pascal's identity.",
+        "nonExampleMarkdown": "Several successful examples do not prove a universal statement, while an induction step without a base case proves nothing about where the chain begins.",
+        "prerequisiteConceptIds": [
+          "concept.week-06"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-7"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-08",
+      "contentHash": "020098bf93b8ae97f709339c4b3294e2315117e8f61ec7bea3b580e78da2084a",
+      "definition": {
+        "id": "concept.week-08",
+        "slug": "week-08-bijections-and-two-sided-inverses",
+        "title": "Bijections and two-sided inverses",
+        "summary": "A concrete isomorphism is established by writing maps both ways and checking both compositions.",
+        "definitionMarkdown": "A function is bijective when it is injective and surjective. Functions $f:X\\to Y$ and $g:Y\\to X$ are mutual inverses precisely when $g\\circ f=\\operatorname{id}_X$ and $f\\circ g=\\operatorname{id}_Y$.",
+        "exampleMarkdown": "If polynomial maps $\\Phi:\\mathbb A^3\\to X$ and $\\Psi:X\\to\\mathbb A^3$ satisfy both identities, they give a polynomial isomorphism.",
+        "nonExampleMarkdown": "A left inverse proves injectivity and a right inverse proves surjectivity; either identity by itself is insufficient for bijectivity.",
+        "prerequisiteConceptIds": [
+          "concept.week-07"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-8"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-09",
+      "contentHash": "29aa8e0052ac55ecb7e01c4e191d5b4fd7f442cbd529c55847c32f2d18bd5ce3",
+      "definition": {
+        "id": "concept.week-09",
+        "slug": "week-09-linear-systems-and-affine-solution-sets",
+        "title": "Linear systems and affine solution sets",
+        "summary": "Row reduction reveals whether a system is inconsistent, uniquely solvable, or an affine translate of a kernel.",
+        "definitionMarkdown": "A linear system $Ax=b$ has solution set $x_0+\\ker A$ whenever one particular solution $x_0$ exists. Its direction space is the kernel of the coefficient map.",
+        "exampleMarkdown": "The system $x+2y-z=3$, $2x+4y-2z=6$ has solution set $(3,0,0)+s(-2,1,0)+t(1,0,1)$.",
+        "nonExampleMarkdown": "The solution set of an inhomogeneous system need not be a vector subspace because it may not contain the zero vector.",
+        "prerequisiteConceptIds": [
+          "concept.week-08"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-9"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-11",
+      "contentHash": "6412dcedac3f1648185b0113517e821a1b5e9d2f7efe86bc6067a34681895dd1",
+      "definition": {
+        "id": "concept.week-11",
+        "slug": "week-11-linear-maps-and-matrix-representations",
+        "title": "Linear maps and matrix representations",
+        "summary": "A matrix records a linear map only after bases have been chosen, so basis changes alter coordinates but not the underlying map.",
+        "definitionMarkdown": "For a linear map $u:V\\to W$ and ordered bases of $V$ and $W$, the matrix of $u$ has as its columns the coordinates of the images of the basis vectors of $V$.",
+        "exampleMarkdown": "Multiplication by a fixed linear form sends the basis $(T^2,TS,S^2)$ of quadratics to three cubics whose coefficient columns form a $4\\times3$ matrix.",
+        "nonExampleMarkdown": "The same abstract linear map can have different matrices in different bases; a matrix without its source and target bases is incomplete data.",
+        "prerequisiteConceptIds": [
+          "concept.week-10"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-11"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-12",
+      "contentHash": "124aa072ef80b1c0ce0aca622d2f11556d475af09dd0d5428581536241fb1068",
+      "definition": {
+        "id": "concept.week-12",
+        "slug": "week-12-kernel-image-and-rank-nullity",
+        "title": "Kernel, image, and rank-nullity",
+        "summary": "Kernel and image measure the lost and retained directions of a linear map.",
+        "definitionMarkdown": "For $u:V\\to W$, $\\ker u=\\{v:u(v)=0\\}$ and $\\operatorname{im}u=\\{u(v):v\\in V\\}$. If $V$ is finite-dimensional, then $\\dim V=\\dim\\ker u+\\operatorname{rank}u$.",
+        "exampleMarkdown": "A linear map from a five-dimensional space to a four-dimensional space has a nonzero kernel because its rank is at most four.",
+        "nonExampleMarkdown": "Counting source and target dimensions alone does not give the exact kernel dimension unless the rank is also known.",
+        "prerequisiteConceptIds": [
+          "concept.week-11"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-12"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-13",
+      "contentHash": "ef6290be125a04854009922a0ffb9b2a4ddeb0fed00683f0ab64e576c4c17cb2",
+      "definition": {
+        "id": "concept.week-13",
+        "slug": "week-13-determinants-and-oriented-volume",
+        "title": "Determinants and oriented volume",
+        "summary": "The determinant detects invertibility and measures how a linear map scales oriented volume.",
+        "definitionMarkdown": "The determinant is the unique alternating multilinear function of the columns that equals $1$ on the identity matrix. A square matrix is invertible exactly when its determinant is nonzero.",
+        "exampleMarkdown": "Multilinearity gives $\\det(AB)=\\det(A)\\det(B)$, so a product is invertible precisely when both square factors are invertible.",
+        "nonExampleMarkdown": "A nonzero entry or a nonzero trace does not imply that the whole matrix is invertible.",
+        "prerequisiteConceptIds": [
+          "concept.week-12"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-13"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-14",
+      "contentHash": "4a46f320c72c407097fa7924926aae3a662f93300a8fd480cc63ab02c2f34bf5",
+      "definition": {
+        "id": "concept.week-14",
+        "slug": "week-14-dual-spaces-and-bilinear-forms",
+        "title": "Dual spaces and bilinear forms",
+        "summary": "Linear functionals extract scalar information from vectors, while bilinear forms compare two vector inputs linearly in each slot.",
+        "definitionMarkdown": "The dual space $V^*$ consists of linear maps $\\ell:V\\to k$. A bilinear form is a map $B:V\\times V\\to k$ that is linear in each variable separately.",
+        "exampleMarkdown": "On binary cubics, the rule that extracts the coefficient of $T^2S$ is a linear functional; its level set $\\ell^{-1}(1)$ is an affine hyperplane.",
+        "nonExampleMarkdown": "A quadratic function such as $v\\mapsto v^2$ is not a linear functional, even though it returns a scalar.",
+        "prerequisiteConceptIds": [
+          "concept.week-13"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-14"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-15",
+      "contentHash": "895f56e73354163b3492b0e3e3ff30dfd1cb592e4030c1abd448075ce0aef623",
+      "definition": {
+        "id": "concept.week-15",
+        "slug": "week-15-tensor-and-symmetric-powers",
+        "title": "Tensor and symmetric powers",
+        "summary": "Symmetric powers encode homogeneous polynomials and make multiplication between degrees into a natural bilinear map.",
+        "definitionMarkdown": "The symmetric power $\\operatorname{Sym}^d(V)$ is obtained from $V^{\\otimes d}$ by identifying tensors that differ only by a permutation of factors.",
+        "exampleMarkdown": "For a two-dimensional $V$, $\\operatorname{Sym}^1(V^*)$, $\\operatorname{Sym}^2(V^*)$, and $\\operatorname{Sym}^3(V^*)$ model binary linear, quadratic, and cubic forms.",
+        "nonExampleMarkdown": "The full tensor power $V^{\\otimes d}$ contains nonsymmetric tensors and is generally larger than $\\operatorname{Sym}^d(V)$.",
+        "prerequisiteConceptIds": [
+          "concept.week-14"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-15"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-16",
+      "contentHash": "6420d201cacd3f5cf9ed79913c9c0e054d38ef93cb7bf62ce3a74a9a1f60cb3f",
+      "definition": {
+        "id": "concept.week-16",
+        "slug": "week-16-total-derivatives-and-the-chain-rule",
+        "title": "Total derivatives and the chain rule",
+        "summary": "The total derivative is the best linear approximation, and the chain rule composes those linear approximations in the correct order.",
+        "definitionMarkdown": "For $F:k^n\\to k^m$, the derivative $DF_x$ is the linear map satisfying $F(x+h)=F(x)+DF_x(h)+o(\\lVert h\\rVert)$. If $G\\circ F$ is defined, then $D(G\\circ F)_x=DG_{F(x)}\\circ DF_x$.",
+        "exampleMarkdown": "For multiplication $M(L,Q)=LQ$, differentiation gives $dM_{(L,Q)}(\\dot L,\\dot Q)=\\dot LQ+L\\dot Q$.",
+        "nonExampleMarkdown": "Differentiating each output coordinate separately without assembling the resulting linear map can obscure its domain, codomain, and kernel.",
+        "prerequisiteConceptIds": [
+          "concept.week-15"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-16"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-17",
+      "contentHash": "af5820d8b532dc5f6c3c02a96b2e85f723881984f9f46f62cfed335051a36cba",
+      "definition": {
+        "id": "concept.week-17",
+        "slug": "week-17-local-inversion",
+        "title": "Local inversion",
+        "summary": "An invertible derivative gives a unique inverse near one point but does not settle the behavior of the map on its whole domain.",
+        "definitionMarkdown": "The inverse function theorem says that if $DF_x$ is invertible, then $F$ restricts to an isomorphism between suitable neighborhoods of $x$ and $F(x)$.",
+        "exampleMarkdown": "The map $z\\mapsto z^3$ is locally invertible at every $z\\ne0$ because its derivative is $3z^2\\ne0$.",
+        "nonExampleMarkdown": "Local invertibility at every point does not imply global injectivity; cube roots of unity give different inputs with the same cube.",
+        "prerequisiteConceptIds": [
+          "concept.week-16"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-17"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-18",
+      "contentHash": "31bc0b30f6fbe252fc55c987d4036cbb20cce182ae1284f5fae47bae2041f4a4",
+      "definition": {
+        "id": "concept.week-18",
+        "slug": "week-18-implicit-equations-and-simple-root-branches",
+        "title": "Implicit equations and simple-root branches",
+        "summary": "A nonvanishing derivative in the solved-for variable lets an implicit equation select one local branch.",
+        "definitionMarkdown": "For an equation $F(s,t)=0$, if $F(s_0,t_0)=0$ and $\\partial F/\\partial t(s_0,t_0)\\ne0$, the implicit function theorem gives a unique local function $t=t(s)$ through that point.",
+        "exampleMarkdown": "For $F(s,t)=t^2-s$, a nonzero root $t_0$ lies on a unique local square-root branch because $2t_0\\ne0$.",
+        "nonExampleMarkdown": "At $(s,t)=(0,0)$, the two square-root branches meet and the derivative in $t$ vanishes, so the uniqueness conclusion is unavailable.",
+        "prerequisiteConceptIds": [
+          "concept.week-17"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-18"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-19",
+      "contentHash": "f55fea6eb2976c9d7b082d1aa3e9c41e55d4ead8a46b4f88201c8fd5798d34ec",
+      "definition": {
+        "id": "concept.week-19",
+        "slug": "week-19-groups-and-symmetry-actions",
+        "title": "Groups and symmetry actions",
+        "summary": "A group action packages compatible symmetries and makes stabilizers and invariant quantities precise.",
+        "definitionMarkdown": "An action of a group $G$ on a set $X$ satisfies $e\\cdot x=x$ and $(gh)\\cdot x=g\\cdot(h\\cdot x)$. The stabilizer of $x$ is $\\{g:g\\cdot x=x\\}$.",
+        "exampleMarkdown": "The action $\\lambda\\cdot(x,y)=(\\lambda x,\\lambda^{-1}y)$ of $\\mathbb C^\\times$ preserves the product $xy$.",
+        "nonExampleMarkdown": "A family of transformations that is not closed under composition or does not contain the identity is not a group action.",
+        "prerequisiteConceptIds": [
+          "concept.week-18"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-19"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-20",
+      "contentHash": "9b98976bed04f349b5d2450f537a3a9a19a70da3c2b1ce63602fd6c4a150a439",
+      "definition": {
+        "id": "concept.week-20",
+        "slug": "week-20-homomorphisms-orbits-stabilizers-and-quotients",
+        "title": "Homomorphisms, orbits, stabilizers, and quotients",
+        "summary": "A quotient should encode whole orbits without silently discarding exceptional ones.",
+        "definitionMarkdown": "The orbit of $x$ is $G\\cdot x$, and its stabilizer records the group elements that fix it. An orbit-space quotient identifies points in the same orbit, while an algebraic quotient is usually described by invariant functions.",
+        "exampleMarkdown": "On $x\\ne0$, every orbit of $\\lambda\\cdot(x,y)=(\\lambda x,\\lambda^{-1}y)$ meets the slice $x=1$ exactly once.",
+        "nonExampleMarkdown": "That slice misses every orbit with $x=0$, so it cannot represent the quotient of the entire plane.",
+        "prerequisiteConceptIds": [
+          "concept.week-19"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-20"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-21",
+      "contentHash": "26fab890f0ed8c886d3a856d568621ee300da5767060d059b243c0cccd567e50",
+      "definition": {
+        "id": "concept.week-21",
+        "slug": "week-21-rings-fields-and-homomorphisms",
+        "title": "Rings, fields, and homomorphisms",
+        "summary": "Algebraic maps preserve operations, and their kernels record exactly what becomes zero.",
+        "definitionMarkdown": "A ring homomorphism preserves addition, multiplication, and the multiplicative identity. Its kernel is an ideal. A field is a commutative ring in which every nonzero element has a multiplicative inverse.",
+        "exampleMarkdown": "Evaluation at $a$, $k[x]\\to k$, sends $p$ to $p(a)$ and has kernel $(x-a)$.",
+        "nonExampleMarkdown": "A rational expression with a vanishing denominator does not define a function on the whole field, even if cancellation produces a polynomial elsewhere.",
+        "prerequisiteConceptIds": [
+          "concept.week-20"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-21"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-22",
+      "contentHash": "1ab53c183fe2528aba75c1d25f2bbea9a9e29d727fd4260e3748d51b0327e19f",
+      "definition": {
+        "id": "concept.week-22",
+        "slug": "week-22-ideals-and-quotient-rings",
+        "title": "Ideals and quotient rings",
+        "summary": "A quotient ring turns selected polynomial relations into literal equalities of residue classes.",
+        "definitionMarkdown": "For an ideal $I\\subseteq A$, the quotient $A/I$ identifies $f$ and $g$ exactly when $f-g\\in I$. Multiplication is well defined because $I$ absorbs multiplication by elements of $A$.",
+        "exampleMarkdown": "In $k[x,y]/(xy-1)$, the classes of $xy$ and $1$ are equal, so the class of $x$ is invertible with inverse the class of $y$.",
+        "nonExampleMarkdown": "Equality in a quotient ring need not be equality of the original polynomials in the ambient polynomial ring.",
+        "prerequisiteConceptIds": [
+          "concept.week-21"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-22"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-23",
+      "contentHash": "6fa85ac811a062236c9d1f0efe9b0c86671488cbfe420fc2c5e4fb28f466ced4",
+      "definition": {
+        "id": "concept.week-23",
+        "slug": "week-23-divisibility-greatest-common-divisors-and-b-zout",
+        "title": "Divisibility, greatest common divisors, and Bézout",
+        "summary": "Coprimality is useful because a Bézout identity lets divisibility pass through a product.",
+        "definitionMarkdown": "Elements $a,b$ are coprime when their greatest common divisor is a unit; in a principal ideal domain this is equivalent to the existence of $u,v$ with $ua+vb=1$.",
+        "exampleMarkdown": "If $\\gcd(L,Q)=1$ and $L\\mid \\dot LQ$, multiply a Bézout identity $AL+BQ=1$ by $\\dot L$ to conclude $L\\mid\\dot L$.",
+        "nonExampleMarkdown": "From $L\\mid \\dot LQ$ alone one cannot cancel $Q$ unless the required coprimality or non-zero-divisor hypothesis is established.",
+        "prerequisiteConceptIds": [
+          "concept.week-22"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-23"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-24",
+      "contentHash": "1e294f1b496211061ec6cfb27fe9acdc5c3317caeeba4cdf4708e7951df32a5d",
+      "definition": {
+        "id": "concept.week-24",
+        "slug": "week-24-modules-and-graded-rings",
+        "title": "Modules and graded rings",
+        "summary": "Modules generalize vector spaces to ring coefficients, while a grading tracks how algebraic pieces transform or combine.",
+        "definitionMarkdown": "An $A$-module has addition and scalar multiplication by a ring $A$. A graded ring $R=\\bigoplus_n R_n$ satisfies $R_mR_n\\subseteq R_{m+n}$.",
+        "exampleMarkdown": "Assigning weights $\\deg a=1$, $\\deg d=-1$, and $\\deg e=-2$ makes the monomial $a^2e$ have total weight zero.",
+        "nonExampleMarkdown": "Weight is not ordinary polynomial degree; negative weights are allowed and two monomials of equal ordinary degree can have different weights.",
+        "prerequisiteConceptIds": [
+          "concept.week-23"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-24"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-25",
+      "contentHash": "21b30006cc9f07e70f7c3a4a1ecc8f42f28eacb1426ae952a4d0c5d0c0d60e6e",
+      "definition": {
+        "id": "concept.week-25",
+        "slug": "week-25-localization-and-principal-open-sets",
+        "title": "Localization and principal open sets",
+        "summary": "Localization permits division by one chosen function and describes the part of a variety where that function does not vanish.",
+        "definitionMarkdown": "For a ring $A$ and $f\\in A$, the localization $A_f$ contains fractions $a/f^n$. Geometrically, it is the coordinate ring of the principal open set $D(f)$.",
+        "exampleMarkdown": "On the open set $a\\ne0$, the equations of $X$ can be solved for $d$ and $e$ using powers of $a$ in the denominator.",
+        "nonExampleMarkdown": "A formula in $A_a$ need not extend across the divisor $a=0$; extension requires a separate global argument.",
+        "prerequisiteConceptIds": [
+          "concept.week-24"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-25"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-26",
+      "contentHash": "5b545737d3ebc8d71bf82e71cbf924ea22d7a6dbaec606f27562ff6d21e5ef7a",
+      "definition": {
+        "id": "concept.week-26",
+        "slug": "week-26-homogeneous-coordinates-and-projective-roots",
+        "title": "Homogeneous coordinates and projective roots",
+        "summary": "Projective coordinates retain roots at infinity that disappear in an affine ratio.",
+        "definitionMarkdown": "The projective line consists of nonzero pairs $[T:S]$ up to common scaling. A binary form vanishes at a projective point when its homogeneous evaluation there is zero.",
+        "exampleMarkdown": "The linear form $aT+bS$ has root $[-b:a]$; when $a=0$ and $b\\ne0$, that root is $[1:0]$.",
+        "nonExampleMarkdown": "The affine expression $-b/a$ is undefined at $a=0$ and therefore cannot describe every projective root.",
+        "prerequisiteConceptIds": [
+          "concept.week-25"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-26"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-27",
+      "contentHash": "43b10eb7668d7b9a2b727f9c81acd3bfd4c753bc6954ac1874c2d9242b732080",
+      "definition": {
+        "id": "concept.week-27",
+        "slug": "week-27-resultants",
+        "title": "Resultants",
+        "summary": "The resultant detects whether two homogeneous forms share a projective root without solving for that root.",
+        "definitionMarkdown": "The resultant is a polynomial in the coefficients that vanishes exactly when the two forms have a common projective zero. For a binary linear form and quadratic it has bidegree $(2,1)$.",
+        "exampleMarkdown": "For $L=aT+bS$ and $Q=cT^2+dTS+eS^2$, $\\operatorname{Res}(L,Q)=a^2e-abd+b^2c$.",
+        "nonExampleMarkdown": "A nonzero resultant proves that the factors share no projective root; it does not say that either factor has no root of its own.",
+        "prerequisiteConceptIds": [
+          "concept.week-26"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-27"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-28",
+      "contentHash": "fcec4eb93af8f4d9c4853b60a8291b6b2452dd31329c8a512068ea4983ff5ac4",
+      "definition": {
+        "id": "concept.week-28",
+        "slug": "week-28-discriminants-and-repeated-roots",
+        "title": "Discriminants and repeated roots",
+        "summary": "The discriminant detects when a polynomial loses distinct roots.",
+        "definitionMarkdown": "For a polynomial with roots $r_i$, the discriminant is, up to the conventional leading-coefficient factor, the product of $(r_i-r_j)^2$ over pairs. It vanishes exactly when a root is repeated.",
+        "exampleMarkdown": "For $p(t)=t^3+ut+v$, the discriminant is $-4u^3-27v^2$; it vanishes for $(t-1)^2(t+2)$.",
+        "nonExampleMarkdown": "A small nonzero discriminant may indicate nearby roots, but only a zero discriminant proves an actual repeated root.",
+        "prerequisiteConceptIds": [
+          "concept.week-27"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-28"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-29",
+      "contentHash": "9203a63683fe44051bcc735269bc8afa02dfd5478ae34b8db912ebf54a506b0d",
+      "definition": {
+        "id": "concept.week-29",
+        "slug": "week-29-equivariance-and-semi-invariants",
+        "title": "Equivariance and semi-invariants",
+        "summary": "Equivariance says that a map respects an action, while a semi-invariant may scale by a predictable character.",
+        "definitionMarkdown": "A map $F:X\\to Y$ is equivariant when $F(g\\cdot x)=g\\cdot F(x)$. A function $r$ is a semi-invariant of character $\\chi$ when $r(g\\cdot x)=\\chi(g)r(x)$.",
+        "exampleMarkdown": "The resultant obeys $\\operatorname{Res}(\\lambda L,\\mu Q)=\\lambda^2\\mu\\operatorname{Res}(L,Q)$.",
+        "nonExampleMarkdown": "An expression that changes under the action with no consistent character is neither invariant nor a semi-invariant.",
+        "prerequisiteConceptIds": [
+          "concept.week-28"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-29"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-30",
+      "contentHash": "db420672d8ba508b8d201fafb93cbf674539e13240d8b4f9f3208f2e0830b104",
+      "definition": {
+        "id": "concept.week-30",
+        "slug": "week-30-the-normalized-factorization-space",
+        "title": "The normalized factorization space",
+        "summary": "Two normalization equations remove the relative scaling ambiguity from a linear–quadratic factorization.",
+        "definitionMarkdown": "The normalized space is $X=\\{(a,b,c,d,e):a^2e-abd+cb^2=1,\\ ad+bc=1\\}$. The first equation fixes the resultant and the second fixes a chosen cubic coefficient.",
+        "exampleMarkdown": "On $a=0$, the equations force $b=c=1$, leaving the free coordinates $d,e$.",
+        "nonExampleMarkdown": "Imposing only the resultant equation leaves a one-parameter relative scaling and does not produce the same three-dimensional space.",
+        "prerequisiteConceptIds": [
+          "concept.week-29"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-30"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-31",
+      "contentHash": "b58682156c51d6ee2ab323cb9ebbe95a037f723fb977ccf80c3137a6453f617d",
+      "definition": {
+        "id": "concept.week-31",
+        "slug": "week-31-affine-algebraic-sets-and-the-zariski-topology",
+        "title": "Affine algebraic sets and the Zariski topology",
+        "summary": "Polynomial zero sets are the closed sets of affine algebraic geometry, and their inclusion order reverses ideal inclusion.",
+        "definitionMarkdown": "For $S\\subseteq k[x_1,\\ldots,x_n]$, the algebraic set $V(S)$ consists of the common zeros of every polynomial in $S$. These sets are the closed sets of the Zariski topology.",
+        "exampleMarkdown": "The identity $V(fg)=V(f)\\cup V(g)$ follows because a product vanishes over a field exactly when one factor vanishes.",
+        "nonExampleMarkdown": "A finite union of algebraic sets is algebraic, but an arbitrary union of Zariski-closed sets need not be closed.",
+        "prerequisiteConceptIds": [
+          "concept.week-30"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-31"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-32",
+      "contentHash": "0a426d2eaae2d5623d1ee2e4c0bca91aa8ffb68340b7407f3439f674c530a4cf",
+      "definition": {
+        "id": "concept.week-32",
+        "slug": "week-32-the-algebra-geometry-dictionary",
+        "title": "The algebra–geometry dictionary",
+        "summary": "Passing between ideals and zero sets reverses arrows and translates geometric questions into ring questions.",
+        "definitionMarkdown": "A polynomial map $f:X\\to Y$ induces a pullback homomorphism $f^*:k[Y]\\to k[X]$ by $h\\mapsto h\\circ f$. This reversal is the contravariant algebra–geometry dictionary.",
+        "exampleMarkdown": "An inclusion $I\\subseteq J$ gives the reversed inclusion $V(J)\\subseteq V(I)$.",
+        "nonExampleMarkdown": "Treating coordinate-ring maps as if they pointed in the same direction as geometric maps reverses compositions incorrectly.",
+        "prerequisiteConceptIds": [
+          "concept.week-31"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-32"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-33",
+      "contentHash": "7e9768a315a4e51964d0deda5727d3bfefb36c468357b22d7dbe6f4ad454d9a5",
+      "definition": {
+        "id": "concept.week-33",
+        "slug": "week-33-regular-morphisms-and-rational-maps",
+        "title": "Regular morphisms and rational maps",
+        "summary": "Regular maps are defined everywhere by allowable functions; rational maps are only defined on a dense open set until an extension is proved.",
+        "definitionMarkdown": "A morphism of affine varieties is given by coordinate functions that are regular at every point. A rational map is an equivalence class of morphisms defined on dense open subsets.",
+        "exampleMarkdown": "The quotient $(b-1)/a$ defines a regular function on $a\\ne0$; the identity $b-1=a(2bd-ae)$ proves that it extends globally as $2bd-ae$ on $X$.",
+        "nonExampleMarkdown": "A denominator that happens not to vanish on one chart does not by itself prove global regularity.",
+        "prerequisiteConceptIds": [
+          "concept.week-32"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-33"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-34",
+      "contentHash": "c4b48dc18d96a95edfbc19064edad01908d2da265f9a0e4ac79369a575bd8e35",
+      "definition": {
+        "id": "concept.week-34",
+        "slug": "week-34-zariski-tangent-spaces-and-the-jacobian-criterion",
+        "title": "Zariski tangent spaces and the Jacobian criterion",
+        "summary": "Linearizing the defining equations gives the tangent space and detects smoothness when the expected rank is achieved.",
+        "definitionMarkdown": "If $X=V(f_1,\\ldots,f_r)\\subseteq\\mathbb A^n$, then $T_xX$ is the kernel of the Jacobian matrix $(\\partial f_i/\\partial x_j)(x)$. At a complete intersection, full row rank gives the expected tangent dimension.",
+        "exampleMarkdown": "For two independent equations in $\\mathbb A^5$, Jacobian rank two gives a three-dimensional tangent space.",
+        "nonExampleMarkdown": "A Jacobian determinant is unavailable for a nonsquare constraint matrix; the relevant quantity is its rank.",
+        "prerequisiteConceptIds": [
+          "concept.week-33"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-34"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-35",
+      "contentHash": "4fc92026ec1fac1543ae5e94832c252ff3c26565e5d3fdd43f39446884f5132f",
+      "definition": {
+        "id": "concept.week-35",
+        "slug": "week-35-dimension-and-complete-intersections",
+        "title": "Dimension and complete intersections",
+        "summary": "Dimension counts independent local parameters, while a complete intersection has exactly the codimension predicted by its defining equations.",
+        "definitionMarkdown": "The Krull dimension of an affine variety is the dimension of its coordinate ring. A variety cut out by $r$ equations in a smooth $n$-dimensional ambient space is a complete intersection when its codimension is $r$.",
+        "exampleMarkdown": "The quotient $k[x,y,z]/(x-y^2,z-y^3)\\cong k[y]$ has dimension one, so the twisted cubic chart has codimension two in affine three-space.",
+        "nonExampleMarkdown": "Counting displayed equations does not prove codimension when the equations are dependent or define embedded components.",
+        "prerequisiteConceptIds": [
+          "concept.week-34"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-35"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-36",
+      "contentHash": "1dfe1c7ed0fa380666941b93536d86b4f8002f99d09bf61ddea4159730daee1b",
+      "definition": {
+        "id": "concept.week-36",
+        "slug": "week-36-fiber-products-and-universal-properties",
+        "title": "Fiber products and universal properties",
+        "summary": "A fiber product records pairs with the same image and is characterized by a universal mapping property.",
+        "definitionMarkdown": "For maps $X\\to S$ and $Y\\to S$, the fiber product $X\\times_S Y$ consists of compatible pairs and comes with projections whose composites to $S$ agree.",
+        "exampleMarkdown": "For $t=u^2$ and $t=v^3$, the fiber product is $V(u^2-v^3)\\subseteq\\mathbb A^2_{u,v}$.",
+        "nonExampleMarkdown": "The ordinary Cartesian product $X\\times Y$ does not enforce equality of the two images in the base $S$.",
+        "prerequisiteConceptIds": [
+          "concept.week-35"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-36"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-37",
+      "contentHash": "96fc3377a3f4ab3f1b979733c60f908beb7e2806491609abd85bf3efc161f39a",
+      "definition": {
+        "id": "concept.week-37",
+        "slug": "week-37-finite-and-quasi-finite-morphisms",
+        "title": "Finite and quasi-finite morphisms",
+        "summary": "Finiteness is an algebraic integrality condition; quasi-finiteness only controls fiber dimension and is weaker.",
+        "definitionMarkdown": "An affine morphism is finite when the target coordinate ring makes the source coordinate ring a finite module. A morphism is quasi-finite when its fibers are finite near every point.",
+        "exampleMarkdown": "If a source coordinate $y$ satisfies a monic polynomial over the target ring, it is integral and can help prove that the morphism is finite.",
+        "nonExampleMarkdown": "Having finitely many points in a generic fiber does not by itself prove that the map is finite over every target point.",
+        "prerequisiteConceptIds": [
+          "concept.week-36"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-37"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-38",
+      "contentHash": "67a7daecb8d4233e34de318b641a52d52d1697577579d831ae1fb41a3b12d5bc",
+      "definition": {
+        "id": "concept.week-38",
+        "slug": "week-38-unramified-and-tale-morphisms",
+        "title": "Unramified and étale morphisms",
+        "summary": "An étale morphism is the algebraic analogue of a local isomorphism: it is smooth of relative dimension zero.",
+        "definitionMarkdown": "A morphism is étale when it is flat and unramified; for a map between smooth varieties of equal dimension, an invertible differential gives the local étale condition.",
+        "exampleMarkdown": "For $t\\mapsto t^2$ away from $t=0$, the derivative $2t$ is invertible, so the map is étale there.",
+        "nonExampleMarkdown": "A finite fiber does not imply étaleness; ramification can merge local sheets even when the fiber has few points.",
+        "prerequisiteConceptIds": [
+          "concept.week-37"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-38"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-39",
+      "contentHash": "d1a20d217c615d2e3a599e7fdd6e8a05202b9879ffff4d32e39c32d4ca6aee39",
+      "definition": {
+        "id": "concept.week-39",
+        "slug": "week-39-gr-bner-bases-and-elimination",
+        "title": "Gröbner bases and elimination",
+        "summary": "A Gröbner basis gives a terminating reduction process and can eliminate variables to reveal equations in selected coordinates.",
+        "definitionMarkdown": "A Gröbner basis is a generating set whose leading terms generate the initial ideal. With an elimination order, the basis elements using only the retained variables generate the elimination ideal.",
+        "exampleMarkdown": "For the basis $\\{x-y^2,z-y^3\\}$ with $x>z>y$, every residue class reduces to a polynomial in $y$.",
+        "nonExampleMarkdown": "An arbitrary generating set need not support unique normal forms or expose the elimination ideal.",
+        "prerequisiteConceptIds": [
+          "concept.week-38"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-39"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-40",
+      "contentHash": "402e6e695b7fbe5c3a45d5f8fb9b73acd162cb5615e41ac0daa36a03cac4a1e9",
+      "definition": {
+        "id": "concept.week-40",
+        "slug": "week-40-the-coefficient-resultant-tale-map",
+        "title": "The coefficient–resultant étale map",
+        "summary": "Adding the normalized resultant removes the one-dimensional scaling kernel of multiplication and yields an equal-dimensional local map.",
+        "definitionMarkdown": "The map that records selected cubic coefficients together with $\\operatorname{Res}(L,Q)$ has differential combining the multiplication derivative with the derivative of the resultant.",
+        "exampleMarkdown": "The vector $(L,-Q)$ lies in the kernel of multiplication, but the bidegree $(2,1)$ makes the resultant derivative nonzero in that direction.",
+        "nonExampleMarkdown": "Checking only the multiplication differential leaves the scaling direction in the kernel and cannot prove étaleness.",
+        "prerequisiteConceptIds": [
+          "concept.week-39"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-40"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-41",
+      "contentHash": "98db1ff29a47c0573051034500e772c7033abe9c9a120ec67e16d8bc818e08b6",
+      "definition": {
+        "id": "concept.week-41",
+        "slug": "week-41-projective-line-charts",
+        "title": "Projective-line charts",
+        "summary": "Two affine charts cover the projective line and their reciprocal transition keeps the point at infinity visible.",
+        "definitionMarkdown": "The standard charts $U_S=\\{S\\ne0\\}$ and $U_T=\\{T\\ne0\\}$ have coordinates $t=T/S$ and $s=S/T$, related by $s=1/t$ where both are defined.",
+        "exampleMarkdown": "The point $[1:0]$ is absent from the $t$-chart but appears as $s=0$ in the other chart.",
+        "nonExampleMarkdown": "One affine chart is not the whole projective line, so an argument using only $T/S$ must separately handle $S=0$.",
+        "prerequisiteConceptIds": [
+          "concept.week-40"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-41"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-42",
+      "contentHash": "14331875baf331a4c7a98872bf945dbc68bdd030152b36abc2ea89e30f4bb6bd",
+      "definition": {
+        "id": "concept.week-42",
+        "slug": "week-42-symmetric-powers-of-the-projective-line",
+        "title": "Symmetric powers of the projective line",
+        "summary": "An unordered degree-$d$ divisor on the projective line corresponds to a binary form up to scale.",
+        "definitionMarkdown": "The symmetric power $\\operatorname{Sym}^d(\\mathbb P^1)$ parametrizes unordered $d$-tuples of points with multiplicity and is naturally isomorphic to $\\mathbb P^d$ through binary forms.",
+        "exampleMarkdown": "A cubic with roots $p_1,p_2,p_3$ determines the divisor $p_1+p_2+p_3$, including repeated points when roots repeat.",
+        "nonExampleMarkdown": "An ordered triple contains extra labeling data and is not the same object as a point of the symmetric power.",
+        "prerequisiteConceptIds": [
+          "concept.week-41"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-42"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-43",
+      "contentHash": "035693d4441a3ddb91c1bdf5c7dbfd417be78287d2fca75170cfa1cd096e4a9e",
+      "definition": {
+        "id": "concept.week-43",
+        "slug": "week-43-incidence-varieties-and-marked-roots",
+        "title": "Incidence varieties and marked roots",
+        "summary": "Marking one root creates a cover whose fiber records the distinct root choices.",
+        "definitionMarkdown": "The incidence variety $I=\\{(C,p):C(p)=0\\}$ maps to the space of cubics by forgetting $p$. Its fiber over $C$ is the set of distinct projective roots of $C$.",
+        "exampleMarkdown": "A cubic with three distinct roots has three points in the incidence fiber; a double root and a simple root give two points.",
+        "nonExampleMarkdown": "Root multiplicity is not the same as the number of points in the fiber because the incidence pair records a root location only once.",
+        "prerequisiteConceptIds": [
+          "concept.week-42"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-43"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-44",
+      "contentHash": "c3dd57dc1ff84980e4b09c721852597cadaf4fe0dfa1c2ff0e75bc053e59daf0",
+      "definition": {
+        "id": "concept.week-44",
+        "slug": "week-44-ramification-and-the-resultant-locus",
+        "title": "Ramification and the resultant locus",
+        "summary": "The marked-root cover ramifies exactly when the chosen linear factor meets its complementary factor.",
+        "definitionMarkdown": "If $C=LQ$ and $L$ vanishes at the marked root $p$, then $p$ is repeated in $C$ exactly when $Q(p)=0$, equivalently when $\\operatorname{Res}(L,Q)=0$.",
+        "exampleMarkdown": "A double root makes the marked-root projection fail to have three separate local sheets at that cubic.",
+        "nonExampleMarkdown": "The discriminant or resultant locus is not merely a numerical accident; it is the geometric branch locus where roots collide.",
+        "prerequisiteConceptIds": [
+          "concept.week-43"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-44"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-45",
+      "contentHash": "7e4b8a62b4eb29303ab1257a09b8f00afd56711b8804c7d310d6399e4fb254e4",
+      "definition": {
+        "id": "concept.week-45",
+        "slug": "week-45-the-twisted-cubic-and-osculating-geometry",
+        "title": "The twisted cubic and osculating geometry",
+        "summary": "Derivatives of the Veronese parametrization produce its tangent and higher-contact spaces.",
+        "definitionMarkdown": "The twisted cubic is the image of $\\nu:\\mathbb P^1\\to\\mathbb P^3$, $[S:T]\\mapsto[S^3:S^2T:ST^2:T^3]$. Its tangent line is spanned locally by $\\nu(t)$ and $\\nu'(t)$.",
+        "exampleMarkdown": "On the chart $\\nu(t)=[1:t:t^2:t^3]$, the tangent direction is $(0,1,2t,3t^2)$.",
+        "nonExampleMarkdown": "The secant line through two distinct curve points is generally not the tangent line, although it approaches one as the points merge.",
+        "prerequisiteConceptIds": [
+          "concept.week-44"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-45"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-46",
+      "contentHash": "0337c72b320377c3fdb8d1a273d33b1a286cee8c1ffea10936fa4f77e2cb99c4",
+      "definition": {
+        "id": "concept.week-46",
+        "slug": "week-46-hyperplane-contact-and-root-divisors",
+        "title": "Hyperplane contact and root divisors",
+        "summary": "The order of hyperplane contact with the twisted cubic matches the multiplicity pattern of the associated binary cubic.",
+        "definitionMarkdown": "Restricting a projective hyperplane equation to the parametrized twisted cubic gives a degree-three polynomial; its zero divisor records the contact points and their multiplicities.",
+        "exampleMarkdown": "A divisor $2p+q$ represents double contact at $p$ and simple contact at $q$, while $3p$ represents osculating contact.",
+        "nonExampleMarkdown": "Three points listed without multiplicity do not distinguish a tangent section from a transverse section.",
+        "prerequisiteConceptIds": [
+          "concept.week-45"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-46"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-47",
+      "contentHash": "05b5e749404cbf69a0525adabfcfb826b73bbb7baad4fd7bac531db9220112f0",
+      "definition": {
+        "id": "concept.week-47",
+        "slug": "week-47-compactness-and-proper-maps",
+        "title": "Compactness and proper maps",
+        "summary": "Properness prevents inverse images of compact sets from escaping to infinity and is the global condition needed to control covering sheets.",
+        "definitionMarkdown": "A continuous map is proper when the inverse image of every compact set is compact. In complex algebraic geometry, finite morphisms are proper after analytification.",
+        "exampleMarkdown": "A proper local homeomorphism with finite fibers is a covering map whose sheets cannot disappear along a convergent path in the target.",
+        "nonExampleMarkdown": "Local invertibility alone does not imply properness; a sequence in the source may escape while its image remains bounded.",
+        "prerequisiteConceptIds": [
+          "concept.week-46"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-47"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-48",
+      "contentHash": "9281942b448ea48765c8375d0dcecc77b466857091f4fc30b8938f6522d2f8bc",
+      "definition": {
+        "id": "concept.week-48",
+        "slug": "week-48-covering-maps-and-power-maps",
+        "title": "Covering maps and power maps",
+        "summary": "A covering map is locally a disjoint union of homeomorphic sheets, but it can be globally many-to-one.",
+        "definitionMarkdown": "A map $p:E\\to B$ is a covering when every point of $B$ has a neighborhood whose inverse image is a disjoint union of open sets mapped homeomorphically onto it.",
+        "exampleMarkdown": "For every integer $n\\ge1$, $z\\mapsto z^n$ on $\\mathbb C^\\times$ is an $n$-sheeted covering and every nonzero value has $n$ distinct preimages.",
+        "nonExampleMarkdown": "A covering is locally injective on each sheet, not necessarily injective on the whole source.",
+        "prerequisiteConceptIds": [
+          "concept.week-47"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-48"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-49",
+      "contentHash": "5699e5024407f7732fb41f210e75f7e75222ff6d74668e9715179ff0724d3a08",
+      "definition": {
+        "id": "concept.week-49",
+        "slug": "week-49-nonproperness-and-escaping-sheets",
+        "title": "Nonproperness and escaping sheets",
+        "summary": "A nonproper étale map can lose a sheet at infinity, which is the mechanism that evades finite-cover rigidity.",
+        "definitionMarkdown": "A sequence $x_m$ is an escaping sheet over a convergent target sequence when $x_m$ leaves every compact subset of the source while $F(x_m)$ converges.",
+        "exampleMarkdown": "If an étale map were also finite, its analytification would be proper, so such an escaping sequence could not occur.",
+        "nonExampleMarkdown": "Showing that a map is not injective does not by itself locate the failure of properness or exhibit an escaping sheet.",
+        "prerequisiteConceptIds": [
+          "concept.week-48"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-49"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-50",
+      "contentHash": "efe79b6b5fc89b8da0f28bfa8fd2e17072e5baea3061d2f8cacbbe61acf1950f",
+      "definition": {
+        "id": "concept.week-50",
+        "slug": "week-50-the-normalized-triple-cover",
+        "title": "The normalized triple cover",
+        "summary": "A cubic with three distinct roots has three normalized linear–quadratic factorizations, one for each marked root.",
+        "definitionMarkdown": "Choose a linear factor $L_i$ for each distinct root and put $Q_i=C/L_i$. Relative scaling can be chosen to impose the resultant normalization, producing one point of $X$ for each root.",
+        "exampleMarkdown": "A square-free cubic $C$ yields exactly three normalized pairs $(L_i,Q_i)$ above its coefficient data.",
+        "nonExampleMarkdown": "Counting scalar multiples of the same factorization as different points ignores the normalization that removes relative scaling.",
+        "prerequisiteConceptIds": [
+          "concept.week-49"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-50"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-51",
+      "contentHash": "4c53514f1c35b70392212809ef7566ddfc0388d32769a2afffeb805ad6dda4ef",
+      "definition": {
+        "id": "concept.week-51",
+        "slug": "week-51-representations-and-equivariant-maps",
+        "title": "Representations and equivariant maps",
+        "summary": "A representation turns each group element into a compatible linear transformation and lets natural constructions be compared without choosing coordinates.",
+        "definitionMarkdown": "A representation of $G$ on $V$ is a homomorphism $G\\to GL(V)$. A map between representations is equivariant when it commutes with every group action.",
+        "exampleMarkdown": "Multiplication $\\operatorname{Sym}^1(V^*)\\times\\operatorname{Sym}^2(V^*)\\to\\operatorname{Sym}^3(V^*)$ is equivariant under change of variables.",
+        "nonExampleMarkdown": "A coordinate formula that works in one basis but has no transformation law has not been shown to define an equivariant map.",
+        "prerequisiteConceptIds": [
+          "concept.week-50"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-51"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-52",
+      "contentHash": "9d62dd88a37ada51f70878c7e303526a3426daf6e852b0bc328f4d7a03a8439b",
+      "definition": {
+        "id": "concept.week-52",
+        "slug": "week-52-the-action-on-binary-forms",
+        "title": "The $SL_2$ action on binary forms",
+        "summary": "Changing variables by a determinant-one matrix acts on binary forms while preserving their intrinsic projective root geometry.",
+        "definitionMarkdown": "For $g\\in SL_2$, the induced action on a binary form is obtained by substituting the transformed variables. Degree-$d$ forms carry the representation $\\operatorname{Sym}^d((\\mathbb C^2)^*)$.",
+        "exampleMarkdown": "For $g=\\operatorname{diag}(\\lambda,\\lambda^{-1})$, the monomial $T^{d-i}S^i$ has weight $d-2i$.",
+        "nonExampleMarkdown": "Scaling all coefficients arbitrarily is not an $SL_2$ change of variables and need not preserve the relevant invariants.",
+        "prerequisiteConceptIds": [
+          "concept.week-51"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-52"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-53",
+      "contentHash": "ade9b5f6c5d6aaa84acd49eb37af83ec8f1f6849538b8aa9cfe68df90a09cda0",
+      "definition": {
+        "id": "concept.week-53",
+        "slug": "week-53-torus-weights-and-graded-coordinate-rings",
+        "title": "Torus weights and graded coordinate rings",
+        "summary": "The residual one-parameter action assigns weights that predict homogeneous relations and useful coordinates.",
+        "definitionMarkdown": "If $\\mathbb G_m$ acts on a coordinate $x$ by $\\lambda\\cdot x=\\lambda^w x$, then $x$ has weight $w$. Products add weights, giving a graded coordinate ring.",
+        "exampleMarkdown": "With weights $1,0,0,-1,-2$ on $a,b,c,d,e$, each term of $a^2e-abd+cb^2$ has weight zero.",
+        "nonExampleMarkdown": "Ordinary degree and torus weight answer different questions; a quadratic monomial need not have weight two.",
+        "prerequisiteConceptIds": [
+          "concept.week-52"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-53"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-54",
+      "contentHash": "34742fa147b9c6c8b72fb63ec03eb31da4f1d4dfcca9441adac12a4cb1871bec",
+      "definition": {
+        "id": "concept.week-54",
+        "slug": "week-54-the-tangent-kernel-and-resultant-correction",
+        "title": "The tangent kernel and resultant correction",
+        "summary": "Differentiating the scaling symmetry isolates the kernel of multiplication, and the resultant supplies the missing transverse coordinate.",
+        "definitionMarkdown": "The curve $(e^sL,e^{-s}Q)$ keeps $LQ$ fixed, so its derivative $(L,-Q)$ lies in $\\ker dM$. The normalized resultant changes in this direction by its bidegree character.",
+        "exampleMarkdown": "Because the resultant has bidegree $(2,1)$, it scales by $e^s$ along this curve and has derivative $1$ at $s=0$ on the normalized locus.",
+        "nonExampleMarkdown": "A dimension count may predict a kernel direction, but the differentiated action identifies it and the resultant calculation proves it is removed.",
+        "prerequisiteConceptIds": [
+          "concept.week-53"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-54"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-55",
+      "contentHash": "5175f3c381a1552205569cd395bfd7945857a98827f939b5faee1d16c1d69f92",
+      "definition": {
+        "id": "concept.week-55",
+        "slug": "week-55-the-boundary-stratum",
+        "title": "The boundary stratum $a=0$",
+        "summary": "The chart boundary is a genuine affine plane with explicit coordinates, not an exceptional set to be discarded.",
+        "definitionMarkdown": "Inside $X$, setting $a=0$ reduces the equations to $cb^2=1$ and $bc=1$, which force $b=c=1$ while $d,e$ remain free.",
+        "exampleMarkdown": "The maps $(d,e)\\mapsto(0,1,1,d,e)$ and projection back to $(d,e)$ give inverse polynomial maps with $\\mathbb A^2$.",
+        "nonExampleMarkdown": "Solving only on $a\\ne0$ misses this entire divisor and cannot establish a global description of $X$.",
+        "prerequisiteConceptIds": [
+          "concept.week-54"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-55"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-56",
+      "contentHash": "d775e8b2c7a1a976468e9e58bce81aafdcec15b70113aa02856befd51861711c",
+      "definition": {
+        "id": "concept.week-56",
+        "slug": "week-56-first-and-second-normal-jets",
+        "title": "First and second normal jets",
+        "summary": "Successive coefficients transverse to the boundary provide coordinates that remain meaningful when the visible quotient denominator vanishes.",
+        "definitionMarkdown": "The identities $b-1=ay$ and $c-1+\\tfrac32ay=a^2z$ define corrected first and second normal coefficients along $a=0$.",
+        "exampleMarkdown": "The first identity is realized globally by $y=2bd-ae$, a polynomial in the ambient coefficients.",
+        "nonExampleMarkdown": "Writing $y=(b-1)/a$ only on $a\\ne0$ does not prove that $y$ extends regularly to the boundary.",
+        "prerequisiteConceptIds": [
+          "concept.week-55"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-56"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-57",
+      "contentHash": "536f54dc39984e87ac379c292c3baa2435845dbbebb92ca256a136259b0d2179",
+      "definition": {
+        "id": "concept.week-57",
+        "slug": "week-57-global-polynomial-representatives",
+        "title": "Global polynomial representatives",
+        "summary": "A quotient-ring identity can replace a chartwise fraction by one polynomial valid on the whole variety.",
+        "definitionMarkdown": "A regular function on an affine variety $X$ is represented by an element of its coordinate ring. To extend a fraction, prove that it equals a polynomial residue class modulo the defining ideal.",
+        "exampleMarkdown": "In the coordinate ring of $X$, $b-1=a(2bd-ae)$, so $(b-1)/a$ agrees on $a\\ne0$ with the global polynomial $2bd-ae$.",
+        "nonExampleMarkdown": "Cancelling $a$ in the ambient polynomial ring would be invalid on $a=0$ and would not prove a global extension.",
+        "prerequisiteConceptIds": [
+          "concept.week-56"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-57"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-58",
+      "contentHash": "433b82fff82ef0978d3893f0aee9d31a87f696899563ca2ac0005f19274f345e",
+      "definition": {
+        "id": "concept.week-58",
+        "slug": "week-58-an-explicit-affine-space-isomorphism",
+        "title": "An explicit affine-space isomorphism",
+        "summary": "A global coordinate chart requires polynomial formulas in both directions and verification of both compositions.",
+        "definitionMarkdown": "An isomorphism $X\\simeq\\mathbb A^3$ consists of polynomial maps $\\Phi:\\mathbb A^3\\to X$ and $\\Psi:X\\to\\mathbb A^3$ whose two compositions are identity maps.",
+        "exampleMarkdown": "Coordinates $(a,y,z)$ together with the supplied polynomial formulas for $b,c,d,e$ give a candidate $\\Phi$, while $y=2bd-ae$ is part of $\\Psi$.",
+        "nonExampleMarkdown": "A birational formula valid on $a\\ne0$ is not yet an affine isomorphism because it may fail on the boundary divisor.",
+        "prerequisiteConceptIds": [
+          "concept.week-57"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-58"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-59",
+      "contentHash": "24ef5273992b7b68cdad49ff8b2266d9dba3362307ed0f946cec042863b6d836",
+      "definition": {
+        "id": "concept.week-59",
+        "slug": "week-59-classifying-claims-and-evidence",
+        "title": "Classifying claims and evidence",
+        "summary": "Before proving a statement, identify whether it is algebraic, local, global, or topological so the evidence matches the claim.",
+        "definitionMarkdown": "An algebraic identity is checked in a ring, a local claim on neighborhoods, a global claim over all points, and a topological claim with properties such as compactness or properness.",
+        "exampleMarkdown": "A nonzero Jacobian establishes a local property; a separate fiber calculation is needed for global injectivity.",
+        "nonExampleMarkdown": "Using a local theorem as evidence for a global conclusion is a category error, even when every local calculation is correct.",
+        "prerequisiteConceptIds": [
+          "concept.week-58"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-59"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-60",
+      "contentHash": "ee49cb5e983783e09dd30481adc8dcf0ba98cce076df4685f9722a1b7c63e3e3",
+      "definition": {
+        "id": "concept.week-60",
+        "slug": "week-60-the-five-dimensional-coefficient-resultant-map",
+        "title": "The five-dimensional coefficient–resultant map",
+        "summary": "The augmented factorization map records four cubic coefficients and one resultant so its source and target have equal dimension.",
+        "definitionMarkdown": "From a linear form and a quadratic form, record the four coefficients of their product together with $\\operatorname{Res}(L,Q)$. This defines a polynomial map from affine five-space to affine five-space.",
+        "exampleMarkdown": "Its differential combines $dM_{(L,Q)}(\\dot L,\\dot Q)=\\dot LQ+L\\dot Q$ with the derivative of the resultant.",
+        "nonExampleMarkdown": "The four coefficient functions alone define a map to affine four-space and necessarily retain at least one infinitesimal kernel direction.",
+        "prerequisiteConceptIds": [
+          "concept.week-59"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-60"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-61",
+      "contentHash": "96351ec894a263e858dd1b708ac00bb3db912e511775b3b0ee52b3c53ccefd17",
+      "definition": {
+        "id": "concept.week-61",
+        "slug": "week-61-a-smooth-threefold-by-base-change",
+        "title": "A smooth threefold by base change",
+        "summary": "The normalized factorization space is a fiber of an étale five-dimensional map, so smoothness descends through base change.",
+        "definitionMarkdown": "Étale morphisms are stable under base change. Pulling an étale map back along a smooth subspace gives an étale source over that subspace and preserves the expected dimension.",
+        "exampleMarkdown": "Fixing the normalized resultant and one coefficient cuts the five-dimensional target to a three-dimensional affine subspace; its inverse image is $X$.",
+        "nonExampleMarkdown": "Counting two equations inside affine five-space does not prove smoothness unless their differentials have the required independence.",
+        "prerequisiteConceptIds": [
+          "concept.week-60"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-61"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-62",
+      "contentHash": "617f0289b3514ad6cb8ee4a36cda6033c487196b074cc4ddd559bed988273582",
+      "definition": {
+        "id": "concept.week-62",
+        "slug": "week-62-polynomial-inverse-verification",
+        "title": "Polynomial inverse verification",
+        "summary": "The inverse formulas must be checked in the coordinate ring, where the defining relations justify every simplification.",
+        "definitionMarkdown": "To prove polynomial maps are inverse on $X$, substitute one formula into the other and reduce each coordinate difference modulo the defining ideal of $X$.",
+        "exampleMarkdown": "For $y=2bd-ae$, substitution into the forward chart and reduction by the two equations returns the original coordinate $y$.",
+        "nonExampleMarkdown": "Numerical checks or verification only on the dense chart $a\\ne0$ do not prove the polynomial identities on all of $X$.",
+        "prerequisiteConceptIds": [
+          "concept.week-61"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-62"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-63",
+      "contentHash": "146c8ddd104789d7b78af5119c5fad6a372302513a22dc285a951c8b63961570",
+      "definition": {
+        "id": "concept.week-63",
+        "slug": "week-63-the-explicit-keller-map",
+        "title": "The explicit Keller map $G$",
+        "summary": "Transporting the coefficient map through the affine chart produces a concrete polynomial self-map of affine three-space.",
+        "definitionMarkdown": "Let $\\Phi:\\mathbb A^3\\to X$ be the polynomial chart and let $H:X\\to\\mathbb A^3$ record the selected cubic coefficients. The Keller map is $G=H\\circ\\Phi$.",
+        "exampleMarkdown": "The derivative satisfies $DG=D H_{\\Phi(a,y,z)}\\,D\\Phi_{(a,y,z)}$; the established local isomorphisms make its determinant the stated nonzero constant.",
+        "nonExampleMarkdown": "Calling a map a Keller map requires an explicit polynomial formula and constant nonzero Jacobian, not merely a factorization through smooth spaces.",
+        "prerequisiteConceptIds": [
+          "concept.week-62"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-63"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-64",
+      "contentHash": "cfc97cc43f45b70687a773a8368815e7fed1f93085e92d5c8973204db1c878cf",
+      "definition": {
+        "id": "concept.week-64",
+        "slug": "week-64-linear-equivalence-and-the-determinant-chain",
+        "title": "Linear equivalence and the determinant chain",
+        "summary": "Linear coordinate changes conjugate the constructed map to the original coefficient map and scale Jacobians by constant determinants.",
+        "definitionMarkdown": "If $F_{\\mathrm{orig}}=B\\circ G\\circ A$ for invertible linear maps $A,B$, then $DF_{\\mathrm{orig}}=B\\,DG\\,A$ and $\\det DF_{\\mathrm{orig}}=\\det(B)\\det(DG)\\det(A)$.",
+        "exampleMarkdown": "Writing the actual matrices $A$ and $B$ proves that the two maps have the same fiber structure and relates their constant Jacobians.",
+        "nonExampleMarkdown": "Saying that two maps are equivalent without displaying the coordinate changes leaves both the claim and the determinant factor unsupported.",
+        "prerequisiteConceptIds": [
+          "concept.week-63"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-64"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-65",
+      "contentHash": "4cc21b55a9af2fb49c4f9026eea8d047e171f60d0010c4c96b57fa6b2a7e3eb9",
+      "definition": {
+        "id": "concept.week-65",
+        "slug": "week-65-fiber-cardinality-and-noninjectivity",
+        "title": "Fiber cardinality and noninjectivity",
+        "summary": "A single generic fiber with several explicit points disproves global injectivity even when the derivative is invertible everywhere.",
+        "definitionMarkdown": "The fiber of $F:X\\to Y$ over $y$ is $F^{-1}(y)$. If it contains two distinct points, then $F$ is not injective; a generic fiber count describes this on a dense target set.",
+        "exampleMarkdown": "A square-free binary cubic has three distinct marked roots, hence three distinct normalized factorizations and three corresponding preimages.",
+        "nonExampleMarkdown": "The nonzero Jacobian proves that these preimages are locally separate; it does not collapse them into one global point.",
+        "prerequisiteConceptIds": [
+          "concept.week-64"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-65"
+        ]
+      }
+    },
+    {
+      "id": "concept.week-66",
+      "contentHash": "5d2bbc009e994ab09fb888be42c3cd0c5b9b103b85dc04d80313522b59f4d56e",
+      "definition": {
+        "id": "concept.week-66",
+        "slug": "week-66-proof-synthesis-and-mathematical-exposition",
+        "title": "Proof synthesis and mathematical exposition",
+        "summary": "A finished proof portfolio makes every hypothesis, definition, implication, and claim boundary independently checkable.",
+        "definitionMarkdown": "A complete exposition states the target, fixes notation, cites each theorem with its hypotheses, proves intermediate claims before use, and distinguishes local, global, algebraic, and topological conclusions.",
+        "exampleMarkdown": "A final proof of $X\\simeq\\mathbb A^3$ displays both polynomial maps, checks both compositions, and then explains how the normalized product map becomes the stated affine map.",
+        "nonExampleMarkdown": "A chain of correct formulas is not a readable proof when the objects, logical transitions, or scope of the conclusion remain unstated.",
+        "prerequisiteConceptIds": [
+          "concept.week-65"
+        ],
+        "relatedConceptIds": [],
+        "masteryDimensionIds": [],
+        "misconceptionIds": [],
+        "deliveryOwner": "course",
+        "defaultStatus": "required",
+        "tags": [
+          "weekly-focus",
+          "week-66"
+        ]
+      }
+    }
+  ]
+}
