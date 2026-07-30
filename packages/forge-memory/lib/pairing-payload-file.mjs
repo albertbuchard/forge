@@ -111,7 +111,7 @@ async function assertPosixOwnerFile(target, currentUid, platform) {
 }
 
 function assertWindowsOwnerDirectory(forgeRoot, target) {
-  lockWindowsPathForCurrentOwner(target);
+  lockWindowsPathForCurrentOwner(target, { expectedRoot: forgeRoot });
   if (
     !windowsPathChainHasNoReparsePoints(forgeRoot, target) ||
     !windowsPathIsCurrentOwnerOnly(target)
@@ -123,7 +123,7 @@ function assertWindowsOwnerDirectory(forgeRoot, target) {
 }
 
 function assertWindowsOwnerFile(forgeRoot, target) {
-  lockWindowsPathForCurrentOwner(target);
+  lockWindowsPathForCurrentOwner(target, { expectedRoot: forgeRoot });
   if (
     !windowsPathChainHasNoReparsePoints(forgeRoot, target) ||
     !windowsPathIsCurrentOwnerOnly(target)

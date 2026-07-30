@@ -24,6 +24,8 @@ const BASE64_PATTERN =
   /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 const POWERSHELL_ARGUMENTS_ENV = "FORGE_WINDOWS_OWNER_POWERSHELL_ARGUMENTS_B64";
 
+class WindowsPowerShellTimeoutError extends Error {}
+
 function assertWindows(platform = process.platform) {
   if (platform !== "win32") {
     throw new Error("Forge Windows owner authentication requires Windows.");
@@ -88,6 +90,11 @@ function runPowerShell({
       maxBuffer: 256 * 1024
     }
   );
+  const message =
+    "Forge Windows owner authentication failed closed (PowerShell exit unknown).";
+  if (result.error?.code === "ETIMEDOUT") {
+    throw new WindowsPowerShellTimeoutError(message);
+  }
   if (result.error || result.status !== 0) {
     throw new Error(
       `Forge Windows owner authentication failed closed (PowerShell exit ${result.status ?? "unknown"}).`
@@ -191,7 +198,7 @@ export function windowsPathChainHasNoReparsePoints(
 
 export function lockWindowsPathForCurrentOwner(
   target,
-  { systemRoot, spawnSyncImpl = spawnSync } = {}
+  { expectedRoot = target, systemRoot, spawnSyncImpl = spawnSync } = {}
 ) {
   const script = [
     "$ErrorActionPreference='Stop'",
@@ -215,13 +222,53 @@ export function lockWindowsPathForCurrentOwner(
     "  [IO.File]::SetAccessControl($target,$acl)",
     "}"
   ].join("\n");
-  runPowerShell({
-    script,
-    args: [target],
-    timeoutMs: WINDOWS_OWNER_ACL_MUTATION_TIMEOUT_MS,
-    systemRoot,
-    spawnSyncImpl
-  });
+  const mutateAcl = () =>
+    runPowerShell({
+      script,
+      args: [target],
+      timeoutMs: WINDOWS_OWNER_ACL_MUTATION_TIMEOUT_MS,
+      systemRoot,
+      spawnSyncImpl
+    });
+  const verificationOptions = { systemRoot, spawnSyncImpl };
+
+  try {
+    mutateAcl();
+    return;
+  } catch (error) {
+    if (!(error instanceof WindowsPowerShellTimeoutError)) {
+      throw error;
+    }
+  }
+
+  if (
+    !windowsPathChainHasNoReparsePoints(
+      expectedRoot,
+      target,
+      verificationOptions
+    )
+  ) {
+    throw new Error(
+      "Forge Windows owner authentication failed closed after an ACL timeout."
+    );
+  }
+  if (windowsPathIsCurrentOwnerOnly(target, verificationOptions)) {
+    return;
+  }
+
+  mutateAcl();
+  if (
+    !windowsPathChainHasNoReparsePoints(
+      expectedRoot,
+      target,
+      verificationOptions
+    ) ||
+    !windowsPathIsCurrentOwnerOnly(target, verificationOptions)
+  ) {
+    throw new Error(
+      "Forge Windows owner authentication could not verify the owner-only ACL after retry."
+    );
+  }
 }
 
 function protectForCurrentWindowsUser(
@@ -428,6 +475,7 @@ export async function ensureWindowsOwnerCredential({
     );
   }
   lockWindowsPathForCurrentOwner(nativeDirectory, {
+    expectedRoot,
     systemRoot,
     spawnSyncImpl
   });
@@ -477,6 +525,7 @@ export async function ensureWindowsOwnerCredential({
     });
     createdCredential = true;
     lockWindowsPathForCurrentOwner(credentialPath, {
+      expectedRoot,
       systemRoot,
       spawnSyncImpl
     });

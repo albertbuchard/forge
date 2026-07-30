@@ -38,6 +38,32 @@ function inspectPowerShellInvocation(args, options) {
   };
 }
 
+function powerShellOperation(args, options) {
+  const { script } = inspectPowerShellInvocation(args, options);
+  if (script.includes("::SetAccessControl($target,$acl)")) return "mutation";
+  if (script.includes("$inputTarget=[String]$forgeArgs[0]")) return "path";
+  if (script.includes("$acl.AreAccessRulesProtected")) return "acl";
+  return "other";
+}
+
+function powerShellTimeout(sentinel = "private-timeout-sentinel") {
+  const error = new Error(sentinel);
+  error.code = "ETIMEDOUT";
+  return {
+    error,
+    status: null,
+    signal: "SIGTERM",
+    stdout: "",
+    stderr: sentinel
+  };
+}
+
+function powerShellSuccess(stdout = "") {
+  return { status: 0, stdout, stderr: "" };
+}
+
+const TEST_WINDOWS_OWNER_SID = "S-1-5-21-1000";
+
 function challenge(overrides = {}) {
   return {
     protocol: WINDOWS_OWNER_PROOF_PROTOCOL,
@@ -129,6 +155,208 @@ test("Windows owner ACL mutation allows the bounded hardened PowerShell window",
     }
   });
   assert.equal(timeout, 30_000);
+});
+
+test("Windows accepts a timed-out ACL mutation only after owner-only verification", () => {
+  const calls = { mutation: 0, path: 0, acl: 0 };
+  lockWindowsPathForCurrentOwner("C:\\forge\\owner.json", {
+    systemRoot: "C:\\Windows",
+    spawnSyncImpl: (_command, args, options) => {
+      const operation = powerShellOperation(args, options);
+      calls[operation] += 1;
+      if (operation === "mutation") return powerShellTimeout();
+      if (operation === "path") return powerShellSuccess();
+      if (operation === "acl") {
+        return powerShellSuccess(TEST_WINDOWS_OWNER_SID);
+      }
+      throw new Error(`Unexpected PowerShell operation: ${operation}`);
+    }
+  });
+  assert.deepEqual(calls, { mutation: 1, path: 1, acl: 1 });
+});
+
+test("Windows retries a timed-out ACL mutation once and verifies the final path and ACL", () => {
+  const calls = { mutation: 0, path: 0, acl: 0 };
+  lockWindowsPathForCurrentOwner("C:\\forge\\owner.json", {
+    systemRoot: "C:\\Windows",
+    spawnSyncImpl: (_command, args, options) => {
+      const operation = powerShellOperation(args, options);
+      calls[operation] += 1;
+      if (operation === "mutation") {
+        return calls.mutation === 1
+          ? powerShellTimeout()
+          : powerShellSuccess();
+      }
+      if (operation === "path") return powerShellSuccess();
+      if (operation === "acl") {
+        return calls.acl === 1
+          ? { status: 13, stdout: "", stderr: "" }
+          : powerShellSuccess(TEST_WINDOWS_OWNER_SID);
+      }
+      throw new Error(`Unexpected PowerShell operation: ${operation}`);
+    }
+  });
+  assert.deepEqual(calls, { mutation: 2, path: 2, acl: 2 });
+});
+
+test("Windows does not retry an ordinary ACL mutation failure", () => {
+  const calls = { mutation: 0, path: 0, acl: 0 };
+  assert.throws(
+    () =>
+      lockWindowsPathForCurrentOwner("C:\\forge\\owner.json", {
+        systemRoot: "C:\\Windows",
+        spawnSyncImpl: (_command, args, options) => {
+          const operation = powerShellOperation(args, options);
+          calls[operation] += 1;
+          return { status: 91, stdout: "", stderr: "" };
+        }
+      }),
+    /failed closed/
+  );
+  assert.deepEqual(calls, { mutation: 1, path: 0, acl: 0 });
+});
+
+test("Windows does not retry after a timed-out mutation when the path check rejects", () => {
+  const calls = { mutation: 0, path: 0, acl: 0 };
+  assert.throws(
+    () =>
+      lockWindowsPathForCurrentOwner("C:\\forge\\owner.json", {
+        systemRoot: "C:\\Windows",
+        spawnSyncImpl: (_command, args, options) => {
+          const operation = powerShellOperation(args, options);
+          calls[operation] += 1;
+          if (operation === "mutation") return powerShellTimeout();
+          if (operation === "path") {
+            return { status: 21, stdout: "", stderr: "" };
+          }
+          throw new Error(`Unexpected PowerShell operation: ${operation}`);
+        }
+      }),
+    /failed closed after an ACL timeout/
+  );
+  assert.deepEqual(calls, { mutation: 1, path: 1, acl: 0 });
+});
+
+test("Windows fails closed when both bounded ACL mutation attempts time out", () => {
+  const calls = { mutation: 0, path: 0, acl: 0 };
+  assert.throws(
+    () =>
+      lockWindowsPathForCurrentOwner("C:\\forge\\owner.json", {
+        systemRoot: "C:\\Windows",
+        spawnSyncImpl: (_command, args, options) => {
+          const operation = powerShellOperation(args, options);
+          calls[operation] += 1;
+          if (operation === "mutation") return powerShellTimeout();
+          if (operation === "path") return powerShellSuccess();
+          if (operation === "acl") {
+            return { status: 13, stdout: "", stderr: "" };
+          }
+          throw new Error(`Unexpected PowerShell operation: ${operation}`);
+        }
+      }),
+    /failed closed/
+  );
+  assert.deepEqual(calls, { mutation: 2, path: 1, acl: 1 });
+});
+
+test("Windows rejects a retry when the final path verification fails", () => {
+  const calls = { mutation: 0, path: 0, acl: 0 };
+  assert.throws(
+    () =>
+      lockWindowsPathForCurrentOwner("C:\\forge\\owner.json", {
+        systemRoot: "C:\\Windows",
+        spawnSyncImpl: (_command, args, options) => {
+          const operation = powerShellOperation(args, options);
+          calls[operation] += 1;
+          if (operation === "mutation") {
+            return calls.mutation === 1
+              ? powerShellTimeout()
+              : powerShellSuccess();
+          }
+          if (operation === "path") {
+            return calls.path === 1
+              ? powerShellSuccess()
+              : { status: 21, stdout: "", stderr: "" };
+          }
+          if (operation === "acl") {
+            return { status: 13, stdout: "", stderr: "" };
+          }
+          throw new Error(`Unexpected PowerShell operation: ${operation}`);
+        }
+      }),
+    /could not verify the owner-only ACL after retry/
+  );
+  assert.deepEqual(calls, { mutation: 2, path: 2, acl: 1 });
+});
+
+test("Windows rejects a retry when the final ACL verification fails", () => {
+  const calls = { mutation: 0, path: 0, acl: 0 };
+  assert.throws(
+    () =>
+      lockWindowsPathForCurrentOwner("C:\\forge\\owner.json", {
+        systemRoot: "C:\\Windows",
+        spawnSyncImpl: (_command, args, options) => {
+          const operation = powerShellOperation(args, options);
+          calls[operation] += 1;
+          if (operation === "mutation") {
+            return calls.mutation === 1
+              ? powerShellTimeout()
+              : powerShellSuccess();
+          }
+          if (operation === "path") return powerShellSuccess();
+          if (operation === "acl") {
+            return { status: 13, stdout: "", stderr: "" };
+          }
+          throw new Error(`Unexpected PowerShell operation: ${operation}`);
+        }
+      }),
+    /could not verify the owner-only ACL after retry/
+  );
+  assert.deepEqual(calls, { mutation: 2, path: 2, acl: 2 });
+});
+
+test("Windows ACL timeout errors do not expose child diagnostics or target secrets", () => {
+  const sentinels = [
+    "private-timeout-stderr",
+    "private-command-text",
+    "private-credential-material",
+    "private-owner-path"
+  ];
+  const target = `C:\\forge\\${sentinels[3]}\\owner.json`;
+  let caught;
+  try {
+    lockWindowsPathForCurrentOwner(target, {
+      systemRoot: "C:\\Windows",
+      spawnSyncImpl: (_command, args, options) => {
+        const operation = powerShellOperation(args, options);
+        if (operation === "mutation") {
+          const result = powerShellTimeout(sentinels.join("|"));
+          result.command = sentinels[1];
+          result.credential = sentinels[2];
+          return result;
+        }
+        if (operation === "path") {
+          return { status: 21, stdout: "", stderr: sentinels[0] };
+        }
+        throw new Error(`Unexpected PowerShell operation: ${operation}`);
+      }
+    });
+  } catch (error) {
+    caught = error;
+  }
+  assert.ok(caught instanceof Error);
+  const serializableOwnProperties = Object.fromEntries(
+    Object.keys(caught).map((name) => [name, caught[name]])
+  );
+  const exposed = [
+    caught.name,
+    caught.message,
+    caught.stack,
+    JSON.stringify(serializableOwnProperties)
+  ].join("\n");
+  for (const sentinel of sentinels) {
+    assert.equal(exposed.includes(sentinel), false);
+  }
 });
 
 test(
