@@ -288,6 +288,93 @@ test("dev asset proxy reuses an upstream keep-alive socket", async () => {
   }
 });
 
+test("built hashed assets bypass the dev proxy that cannot serve them", async () => {
+  const tempDir = mkdtempSync(path.join(tmpdir(), "forge-built-assets-"));
+  const assetDir = path.join(tempDir, "assets");
+  const assetPath = path.join(assetDir, "overview-page-DWZlsulP.js");
+  mkdirSync(assetDir, { recursive: true });
+  writeFileSync(assetPath, "export const source = 'built';");
+  let devProxyCalls = 0;
+  const app = fastify();
+  await registerWebRoutes(app, {
+    devWebRuntime: {
+      ensureReady: async () => new URL("http://127.0.0.1:3027/forge/"),
+      stop: async () => {}
+    },
+    devAssetProxy: {
+      fetch: async () => {
+        devProxyCalls += 1;
+        return "<!doctype html><title>Vite fallback</title>";
+      },
+      close: () => {}
+    },
+    resolveWebAssetLocation: async () => ({
+      assetPath,
+      clientDir: tempDir
+    })
+  });
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/forge/assets/overview-page-DWZlsulP.js"
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body, "export const source = 'built';");
+    assert.match(response.headers["content-type"] ?? "", /javascript/);
+    assert.equal(
+      response.headers["cache-control"],
+      "public, max-age=31536000, immutable"
+    );
+    assert.equal(devProxyCalls, 0);
+  } finally {
+    await app.close();
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("missing built hashed assets return 404 instead of Vite HTML", async () => {
+  const tempDir = mkdtempSync(path.join(tmpdir(), "forge-missing-assets-"));
+  let devProxyCalls = 0;
+  const app = fastify();
+  await registerWebRoutes(app, {
+    devWebRuntime: {
+      ensureReady: async () => new URL("http://127.0.0.1:3027/forge/"),
+      stop: async () => {}
+    },
+    devAssetProxy: {
+      fetch: async () => {
+        devProxyCalls += 1;
+        return "<!doctype html><title>Vite fallback</title>";
+      },
+      close: () => {}
+    },
+    resolveWebAssetLocation: async (requestPath) => ({
+      assetPath: path.join(tempDir, requestPath.replace(/^\/+/, "")),
+      clientDir: tempDir
+    })
+  });
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/forge/assets/retired-page-ABCDEFGH.js"
+    });
+
+    assert.equal(response.statusCode, 404);
+    assert.equal(response.json().error, "Asset not found");
+    assert.doesNotMatch(
+      response.headers["content-type"] ?? "",
+      /text\/html/
+    );
+    assert.equal(devProxyCalls, 0);
+  } finally {
+    await app.close();
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("an anonymous Vite rejection falls back to the public built shell", async () => {
   const app = fastify();
   await registerWebRoutes(app, {

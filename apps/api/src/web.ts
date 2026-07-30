@@ -43,6 +43,16 @@ const revalidatedAssetCacheControl =
   "public, max-age=300, stale-while-revalidate=60";
 const viteHashedAssetPattern = /-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$/;
 
+function isViteHashedBuiltAssetPath(pathname: string) {
+  const segments = pathname.split("/").filter(Boolean);
+  return (
+    segments[0] === "assets" &&
+    segments.length >= 2 &&
+    segments.slice(1).every((segment) => segment !== "." && segment !== "..") &&
+    viteHashedAssetPattern.test(pathname)
+  );
+}
+
 export function resolveBuiltAssetCacheControl(input: {
   pathname: string;
   search: string;
@@ -58,9 +68,7 @@ export function resolveBuiltAssetCacheControl(input: {
     hasCurrentAssetVersion &&
     (input.pathname.startsWith(gamificationSpriteRoutePrefix) ||
       input.pathname.startsWith(gamificationPreviewRoutePrefix));
-  const isHashedViteAsset =
-    input.pathname.startsWith("/assets/") &&
-    viteHashedAssetPattern.test(input.pathname);
+  const isHashedViteAsset = isViteHashedBuiltAssetPath(input.pathname);
 
   return isVersionedGamificationAsset || isHashedViteAsset
     ? immutableCacheControl
@@ -739,6 +747,36 @@ async function serveAsset(
     requestTarget.pathname,
     getDefaultBasePath()
   );
+
+  if (isViteHashedBuiltAssetPath(normalizedRequestPath)) {
+    let assetLocation: WebAssetLocation;
+    try {
+      assetLocation = await options.resolveWebAssetLocation(
+        normalizedRequestPath
+      );
+    } catch {
+      reply.code(404);
+      return { error: "Asset not found" };
+    }
+
+    try {
+      const payload = await readFile(assetLocation.assetPath);
+      const extension = path.extname(assetLocation.assetPath);
+      reply.type(contentTypes[extension] ?? "application/octet-stream");
+      reply.header(
+        "Cache-Control",
+        resolveBuiltAssetCacheControl({
+          pathname: normalizedRequestPath,
+          search: requestTarget.search,
+          extension
+        })
+      );
+      return payload;
+    } catch {
+      reply.code(404);
+      return { error: "Asset not found" };
+    }
+  }
 
   const handlesLocalGamificationSprite = normalizedRequestPath.startsWith(
     gamificationSpriteRoutePrefix

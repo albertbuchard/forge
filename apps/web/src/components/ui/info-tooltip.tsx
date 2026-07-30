@@ -156,7 +156,7 @@ export function InfoTooltip({
         aria-label={label}
         aria-describedby={open ? tooltipId : undefined}
         aria-expanded={open}
-        className="inline-flex size-5 items-center justify-center rounded-full text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-medium)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/35"
+        className="inline-flex size-8 items-center justify-center rounded-full text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-medium)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/35"
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         onClick={() => setOpen((current) => !current)}

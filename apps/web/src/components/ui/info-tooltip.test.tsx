@@ -14,6 +14,7 @@ describe("InfoTooltip", () => {
 
     const button = screen.getByRole("button", { name: "Explain acute load" });
 
+    expect(button).toHaveClass("size-8");
     expect(button).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
 
