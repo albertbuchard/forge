@@ -12125,8 +12125,14 @@ export async function buildServer(
     rewriteUrl: (request) => rewriteMountPath(request.url ?? "/")
   });
   applicationSecurityRuntimeByServer.set(app, applicationSecurity);
+  const securityRateLimitPersistence = new SqliteRateLimitStatePersistence(
+    getDatabase()
+  );
+  securityRateLimitPersistence.pruneRetiredBrowserSessionPrincipalState(
+    new Date()
+  );
   const securityRateLimiter = new InMemorySecurityRateLimiter({
-    persistence: new SqliteRateLimitStatePersistence(getDatabase())
+    persistence: securityRateLimitPersistence
   });
   const securityAuditLedger = new TamperEvidentGatewayAuditLedger(
     getDatabase(),

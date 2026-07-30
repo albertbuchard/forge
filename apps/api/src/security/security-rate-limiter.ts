@@ -30,9 +30,7 @@ export type RateLimitStatePersistence = {
   }): RateAdmissionDecision;
 };
 
-export class SqliteRateLimitStatePersistence
-  implements RateLimitStatePersistence
-{
+export class SqliteRateLimitStatePersistence implements RateLimitStatePersistence {
   constructor(private readonly database: DatabaseSync) {}
 
   load() {
@@ -82,6 +80,43 @@ export class SqliteRateLimitStatePersistence
     this.database
       .prepare("DELETE FROM security_rate_limit_buckets WHERE bucket_key = ?")
       .run(key);
+  }
+
+  pruneRetiredBrowserSessionPrincipalState(now: Date) {
+    if (!Number.isFinite(now.getTime())) {
+      throw new Error("Rate-limit cleanup time must be valid.");
+    }
+    const validJsonExpression =
+      "CASE WHEN json_valid(rate.bucket_key) THEN rate.bucket_key ELSE '[]' END";
+    const identityExpression = `json_extract(${validJsonExpression}, '$[1]')`;
+    const recognizedBuckets = Object.keys(DEFAULT_POLICIES);
+    const recognizedBucketPlaceholders = recognizedBuckets
+      .map(() => "?")
+      .join(", ");
+    const result = this.database
+      .prepare(
+        `DELETE FROM security_rate_limit_buckets AS rate
+          WHERE json_type(${validJsonExpression}, '$') = 'array'
+            AND json_array_length(${validJsonExpression}) = 3
+            AND json_type(${validJsonExpression}, '$[0]') = 'text'
+            AND json_type(${validJsonExpression}, '$[1]') = 'text'
+            AND json_type(${validJsonExpression}, '$[2]') = 'text'
+            AND json_extract(${validJsonExpression}, '$[0]')
+                IN (${recognizedBucketPlaceholders})
+            AND EXISTS (
+            SELECT 1
+              FROM security_browser_sessions AS session
+             WHERE session.id = substr(${identityExpression}, 11)
+               AND ${identityExpression} = 'principal:' || session.id
+               AND (
+                 session.revoked_at IS NOT NULL
+                 OR session.idle_expires_at <= ?
+                 OR session.absolute_expires_at <= ?
+               )
+          )`
+      )
+      .run(...recognizedBuckets, now.toISOString(), now.toISOString());
+    return Number(result.changes);
   }
 
   admitAtomically(input: {
@@ -156,8 +191,7 @@ export class SqliteRateLimitStatePersistence
             tokens: Math.min(
               input.policy.capacity,
               (existing?.tokens ?? input.policy.capacity) +
-                (elapsedMilliseconds / 1_000) *
-                  input.policy.refillPerSecond
+                (elapsedMilliseconds / 1_000) * input.policy.refillPerSecond
             ),
             updatedAtMilliseconds: Math.max(
               existing?.updated_at_milliseconds ?? input.nowMilliseconds,
@@ -167,9 +201,7 @@ export class SqliteRateLimitStatePersistence
           }
         };
       });
-      const denied = candidates.find(
-        ({ state }) => state.tokens < input.cost
-      );
+      const denied = candidates.find(({ state }) => state.tokens < input.cost);
       if (denied) {
         this.database.exec("ROLLBACK");
         return {
@@ -177,8 +209,7 @@ export class SqliteRateLimitStatePersistence
           retryAfterSeconds: Math.max(
             1,
             Math.ceil(
-              (input.cost - denied.state.tokens) /
-                input.policy.refillPerSecond
+              (input.cost - denied.state.tokens) / input.policy.refillPerSecond
             )
           ),
           reason: "security_rate_limit_exceeded"
@@ -209,6 +240,7 @@ export class SqliteRateLimitStatePersistence
 const DEFAULT_POLICIES = {
   pairing_attempt: { capacity: 60, refillPerSecond: 0.5 },
   pairing_poll: { capacity: 30, refillPerSecond: 0.5 },
+  local_owner_auth: { capacity: 600, refillPerSecond: 20 },
   authentication_failure: { capacity: 12, refillPerSecond: 0.1 },
   request: { capacity: 600, refillPerSecond: 20 },
   stream: { capacity: 20, refillPerSecond: 0.25 },
@@ -234,9 +266,7 @@ export class InMemorySecurityRateLimiter implements SecurityRateLimiter {
 
   constructor(
     options: {
-      policies?: Partial<
-        Record<RateAdmissionRequest["bucket"], BucketPolicy>
-      >;
+      policies?: Partial<Record<RateAdmissionRequest["bucket"], BucketPolicy>>;
       privateMaximumEntries?: number;
       privateIdleMilliseconds?: number;
       persistence?: RateLimitStatePersistence;
@@ -266,7 +296,9 @@ export class InMemorySecurityRateLimiter implements SecurityRateLimiter {
       options.privateIdleMilliseconds ?? 24 * 60 * 60 * 1_000;
     this.persistence = options.persistence ?? null;
     if (!Number.isSafeInteger(this.maximumEntries) || this.maximumEntries < 1) {
-      throw new Error("Rate limiter maximum entries must be a positive integer.");
+      throw new Error(
+        "Rate limiter maximum entries must be a positive integer."
+      );
     }
     if (
       !Number.isSafeInteger(this.idleMilliseconds) ||
@@ -295,16 +327,14 @@ export class InMemorySecurityRateLimiter implements SecurityRateLimiter {
     const identities = [
       request.principalId ? `principal:${request.principalId}` : null,
       request.clientId ? `client:${request.clientId}` : null,
-      request.installationId
-        ? `installation:${request.installationId}`
-        : null,
+      request.installationId ? `installation:${request.installationId}` : null,
       request.networkId ? `network:${request.networkId}` : null
     ].filter((value): value is string => Boolean(value));
     if (identities.length === 0) {
       identities.push("anonymous:unknown");
     }
-    return [...new Set(identities)].map(
-      (identity) => JSON.stringify([request.bucket, identity, request.action])
+    return [...new Set(identities)].map((identity) =>
+      JSON.stringify([request.bucket, identity, request.action])
     );
   }
 

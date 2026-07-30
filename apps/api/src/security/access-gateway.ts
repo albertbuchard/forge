@@ -476,34 +476,49 @@ export class AccessGatewayController {
       contract.routePath === "/api/v1/auth/token" ||
       contract.routePath === "/api/v1/auth/browser/refresh";
     const isAuthProtocol = contract.securityClass === "bounded_auth_protocol";
+    const isLocalOwnerAuth =
+      isAuthProtocol && contract.routePath.startsWith("/api/v1/auth/local/");
     const isStream =
       contract.routePath.includes("/events/stream") ||
       contract.routePath.includes("/ws");
     const bucket = isPairingPoll
       ? "pairing_poll"
-      : isAuthProtocol
-        ? "pairing_attempt"
-        : phase === "pre_authentication" && isStream
-          ? "request"
-          : contract.routePath.includes("/mcp/") ||
-              contract.routePath.endsWith("/tools/call")
-            ? "mcp_tool"
-            : isStream
-              ? "stream"
-              : contract.routePath.includes("/ai/") ||
-                  contract.routePath.includes("/workbench/")
-                ? "ai_cost"
-                : contract.action.includes("machine")
-                  ? "machine_execution"
-                  : "request";
+      : isLocalOwnerAuth
+        ? "local_owner_auth"
+        : isAuthProtocol
+          ? "pairing_attempt"
+          : phase === "pre_authentication" && isStream
+            ? "request"
+            : contract.routePath.includes("/mcp/") ||
+                contract.routePath.endsWith("/tools/call")
+              ? "mcp_tool"
+              : isStream
+                ? "stream"
+                : contract.routePath.includes("/ai/") ||
+                    contract.routePath.includes("/workbench/")
+                  ? "ai_cost"
+                  : contract.action.includes("machine")
+                    ? "machine_execution"
+                    : "request";
+    const principal = authentication?.principal ?? null;
+    const remoteAddress = request.raw.socket.remoteAddress ?? "unknown";
     const decision = this.options.rateLimiter.admit({
       bucket,
-      principalId: authentication?.principal.subjectId ?? null,
-      clientId: authentication?.principal.clientId ?? null,
-      installationId: authentication?.principal.installationId ?? null,
-      networkId: authentication
-        ? null
-        : (request.raw.socket.remoteAddress ?? "unknown"),
+      principalId:
+        principal === null
+          ? null
+          : principal.kind === "operator_session" ||
+              principal.kind === "local_service"
+            ? `verified-owner:${principal.ownerId}`
+            : principal.subjectId,
+      clientId: principal?.clientId ?? null,
+      installationId: principal?.installationId ?? null,
+      networkId:
+        principal !== null
+          ? null
+          : isLocalOwnerAuth
+            ? `${hasForwardingIdentityHeaders(request) ? "proxied" : "direct"}:${remoteAddress}`
+            : remoteAddress,
       action: contract.action,
       cost: bucket === "ai_cost" ? 1_000 : 1,
       now: new Date()

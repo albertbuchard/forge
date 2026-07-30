@@ -53,10 +53,7 @@ test("rate limits isolate network, principal, action, and bucket identities", ()
     limiter.admit(request({ action: "projects.read" })).allowed,
     true
   );
-  assert.equal(
-    limiter.admit(request({ bucket: "mcp_tool" })).allowed,
-    true
-  );
+  assert.equal(limiter.admit(request({ bucket: "mcp_tool" })).allowed, true);
 });
 
 test("rate limits refill monotonically and do not reset on clock rollback", () => {
@@ -168,11 +165,173 @@ test("persistent multi-dimensional admission rolls back every debit on failure",
     assert.equal(
       (
         database
-          .prepare(
-            "SELECT COUNT(*) AS count FROM security_rate_limit_buckets"
-          )
+          .prepare("SELECT COUNT(*) AS count FROM security_rate_limit_buckets")
           .get() as { count: number }
       ).count,
+      0
+    );
+  } finally {
+    database.close();
+  }
+});
+
+test("retired browser-session principal buckets are pruned without touching active or unrelated rate state", () => {
+  const database = new DatabaseSync(":memory:");
+  try {
+    database.exec(`
+      CREATE TABLE security_rate_limit_buckets (
+        bucket_key TEXT PRIMARY KEY,
+        tokens REAL NOT NULL,
+        updated_at_milliseconds INTEGER NOT NULL,
+        last_seen_milliseconds INTEGER NOT NULL
+      );
+      CREATE TABLE security_browser_sessions (
+        id TEXT PRIMARY KEY,
+        idle_expires_at TEXT NOT NULL,
+        absolute_expires_at TEXT NOT NULL,
+        revoked_at TEXT
+      );
+    `);
+    const persistence = new SqliteRateLimitStatePersistence(database);
+    const state = {
+      tokens: 599,
+      updatedAtMilliseconds: Date.parse("2026-07-30T10:00:00.000Z"),
+      lastSeenMilliseconds: Date.parse("2026-07-30T10:00:00.000Z")
+    };
+    database
+      .prepare(
+        `INSERT INTO security_browser_sessions (
+           id, idle_expires_at, absolute_expires_at, revoked_at
+         ) VALUES (?, ?, ?, ?)`
+      )
+      .run(
+        "ses_revoked",
+        "2026-07-30T11:00:00.000Z",
+        "2026-07-30T12:00:00.000Z",
+        "2026-07-30T10:01:00.000Z"
+      );
+    database
+      .prepare(
+        `INSERT INTO security_browser_sessions (
+           id, idle_expires_at, absolute_expires_at, revoked_at
+         ) VALUES (?, ?, ?, ?)`
+      )
+      .run(
+        "ses_expired",
+        "2026-07-30T09:59:59.000Z",
+        "2026-07-30T09:59:59.000Z",
+        null
+      );
+    database
+      .prepare(
+        `INSERT INTO security_browser_sessions (
+           id, idle_expires_at, absolute_expires_at, revoked_at
+         ) VALUES (?, ?, ?, ?)`
+      )
+      .run(
+        "ses_idle_expired",
+        "2026-07-30T09:59:59.000Z",
+        "2026-07-30T12:00:00.000Z",
+        null
+      );
+    database
+      .prepare(
+        `INSERT INTO security_browser_sessions (
+           id, idle_expires_at, absolute_expires_at, revoked_at
+         ) VALUES (?, ?, ?, ?)`
+      )
+      .run(
+        "ses_active",
+        "2026-07-30T11:00:00.000Z",
+        "2026-07-30T12:00:00.000Z",
+        null
+      );
+
+    const revokedKey = JSON.stringify([
+      "request",
+      "principal:ses_revoked",
+      "notes.read"
+    ]);
+    const expiredKey = JSON.stringify([
+      "request",
+      "principal:ses_expired",
+      "notes.read"
+    ]);
+    const activeKey = JSON.stringify([
+      "request",
+      "principal:ses_active",
+      "notes.read"
+    ]);
+    const idleExpiredKey = JSON.stringify([
+      "request",
+      "principal:ses_idle_expired",
+      "notes.read"
+    ]);
+    const installationKey = JSON.stringify([
+      "request",
+      "installation:installation_a",
+      "notes.read"
+    ]);
+    const malformedTwoElementKey = JSON.stringify([
+      "request",
+      "principal:ses_revoked"
+    ]);
+    const malformedFourElementKey = JSON.stringify([
+      "request",
+      "principal:ses_revoked",
+      "notes.read",
+      "unexpected"
+    ]);
+    const malformedNonTextKey = JSON.stringify([
+      "request",
+      "principal:ses_revoked",
+      42
+    ]);
+    const unknownBucketKey = JSON.stringify([
+      "unknown_bucket",
+      "principal:ses_revoked",
+      "notes.read"
+    ]);
+    for (const key of [
+      revokedKey,
+      expiredKey,
+      idleExpiredKey,
+      activeKey,
+      installationKey,
+      malformedTwoElementKey,
+      malformedFourElementKey,
+      malformedNonTextKey,
+      unknownBucketKey,
+      "not-json"
+    ]) {
+      persistence.upsert(key, state);
+    }
+
+    assert.equal(
+      persistence.pruneRetiredBrowserSessionPrincipalState(
+        new Date("2026-07-30T10:00:00.000Z")
+      ),
+      3
+    );
+    assert.deepEqual(
+      persistence
+        .load()
+        .map(({ key }) => key)
+        .sort(),
+      [
+        activeKey,
+        installationKey,
+        malformedTwoElementKey,
+        malformedFourElementKey,
+        malformedNonTextKey,
+        unknownBucketKey,
+        "not-json"
+      ].sort()
+    );
+    assert.equal(
+      persistence.pruneRetiredBrowserSessionPrincipalState(
+        new Date("2026-07-30T10:00:00.000Z")
+      ),
       0
     );
   } finally {

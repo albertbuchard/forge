@@ -362,6 +362,260 @@ test("gateway publishes bounded Retry-After for request, stream, MCP, AI, and ma
   }
 });
 
+test("gateway rate-limits rotating local sessions by a namespaced verified owner without changing audit attribution", async () => {
+  const app = Fastify({ logger: false });
+  const admissions: Array<{
+    principalId: string | null;
+    installationId: string | null;
+  }> = [];
+  const auditSubjects: Array<string | null> = [];
+  installAccessGateway(app, {
+    credentials: {
+      authenticate(request) {
+        const authorization = header(request, "authorization");
+        if (authorization === "Bearer paired-owner-string") {
+          return {
+            principal: {
+              ...principal("paired_client", [
+                "profile:trusted_personal_assistant"
+              ]),
+              subjectId: "owner_rate_identity"
+            },
+            mode: "access_credential",
+            csrfSatisfied: false
+          };
+        }
+        const sessionId =
+          authorization === "Bearer local-one"
+            ? "ses_local_one"
+            : authorization === "Bearer local-two"
+              ? "ses_local_two"
+              : authorization === "Bearer operator-one"
+                ? "ses_operator_one"
+                : authorization === "Bearer operator-two"
+                  ? "ses_operator_two"
+                  : null;
+        if (!sessionId) return null;
+        const isOperator = sessionId.startsWith("ses_operator_");
+        return {
+          principal: {
+            ...principal(
+              isOperator ? "operator_session" : "local_service",
+              ["*"],
+              "operator"
+            ),
+            subjectId: sessionId,
+            ownerId: "owner_rate_identity",
+            installationId: isOperator ? null : "installation_rate_identity"
+          },
+          mode: "browser_session",
+          csrfSatisfied: true
+        };
+      }
+    },
+    rateLimiter: {
+      admit(request) {
+        if (request.principalId !== null) {
+          admissions.push({
+            principalId: request.principalId,
+            installationId: request.installationId
+          });
+        }
+        return { allowed: true, remaining: 100 };
+      }
+    },
+    audit: {
+      record(event) {
+        if (event.outcome === "admitted") {
+          auditSubjects.push(event.subjectId);
+        }
+      }
+    }
+  });
+  app.get("/api/v1/data", async () => ({ ok: true }));
+
+  try {
+    for (const authorization of [
+      "Bearer local-one",
+      "Bearer local-two",
+      "Bearer operator-one",
+      "Bearer operator-two",
+      "Bearer paired-owner-string"
+    ]) {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/v1/data",
+        headers: { authorization }
+      });
+      assert.equal(response.statusCode, 200);
+    }
+    assert.deepEqual(admissions, [
+      {
+        principalId: "verified-owner:owner_rate_identity",
+        installationId: "installation_rate_identity"
+      },
+      {
+        principalId: "verified-owner:owner_rate_identity",
+        installationId: "installation_rate_identity"
+      },
+      {
+        principalId: "verified-owner:owner_rate_identity",
+        installationId: null
+      },
+      {
+        principalId: "verified-owner:owner_rate_identity",
+        installationId: null
+      },
+      {
+        principalId: "owner_rate_identity",
+        installationId: "gateway_test_installation"
+      }
+    ]);
+    assert.deepEqual(auditSubjects, [
+      "ses_local_one",
+      "ses_local_two",
+      "ses_operator_one",
+      "ses_operator_two",
+      "owner_rate_identity"
+    ]);
+  } finally {
+    await app.close();
+  }
+});
+
+test("gateway separates direct local-owner authentication from proxied and remote pairing budgets", async () => {
+  const app = Fastify({ logger: false });
+  const admissions: Array<{
+    bucket: string;
+    networkId: string | null;
+  }> = [];
+  installAccessGateway(app, {
+    credentials: { authenticate: gatewayAuthentication },
+    rateLimiter: {
+      admit(request) {
+        admissions.push({
+          bucket: request.bucket,
+          networkId: request.networkId
+        });
+        return { allowed: true, remaining: 100 };
+      }
+    }
+  });
+  app.post("/api/v1/auth/local/browser/exchange", async () => ({
+    exchanged: true
+  }));
+  app.post("/api/v1/auth/device", async () => ({ paired: true }));
+
+  try {
+    const direct = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/local/browser/exchange",
+      payload: {}
+    });
+    assert.equal(direct.statusCode, 200);
+
+    const proxied = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/local/browser/exchange",
+      headers: {
+        "x-forwarded-for": "100.64.0.10",
+        "x-forwarded-proto": "https"
+      },
+      payload: {}
+    });
+    assert.equal(proxied.statusCode, 200);
+
+    const remotePairing = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/device",
+      headers: { "x-forwarded-proto": "https" },
+      payload: {}
+    });
+    assert.equal(remotePairing.statusCode, 200);
+
+    assert.deepEqual(admissions, [
+      {
+        bucket: "local_owner_auth",
+        networkId: "direct:127.0.0.1"
+      },
+      {
+        bucket: "local_owner_auth",
+        networkId: "proxied:127.0.0.1"
+      },
+      {
+        bucket: "pairing_attempt",
+        networkId: "127.0.0.1"
+      }
+    ]);
+  } finally {
+    await app.close();
+  }
+});
+
+test("real limiter independently bounds direct, proxied, and remote pairing authentication", async () => {
+  const app = Fastify({ logger: false });
+  installAccessGateway(app, {
+    credentials: { authenticate: gatewayAuthentication },
+    rateLimiter: new InMemorySecurityRateLimiter({
+      policies: {
+        local_owner_auth: { capacity: 1, refillPerSecond: 0.01 },
+        pairing_attempt: { capacity: 1, refillPerSecond: 0.01 }
+      }
+    })
+  });
+  app.post("/api/v1/auth/local/browser/exchange", async () => ({
+    exchanged: true
+  }));
+  app.post("/api/v1/auth/device", async () => ({ paired: true }));
+
+  try {
+    const directFirst = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/local/browser/exchange",
+      payload: {}
+    });
+    assert.equal(directFirst.statusCode, 200);
+    const directBounded = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/local/browser/exchange",
+      payload: {}
+    });
+    assert.equal(directBounded.statusCode, 429);
+    assert.equal(directBounded.headers["retry-after"], "100");
+
+    const proxiedFirst = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/local/browser/exchange",
+      headers: {
+        "x-forwarded-for": "100.64.0.10",
+        "x-forwarded-proto": "https"
+      },
+      payload: {}
+    });
+    assert.equal(proxiedFirst.statusCode, 200);
+    const proxiedBounded = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/local/browser/exchange",
+      headers: {
+        "x-forwarded-for": "100.64.0.10",
+        "x-forwarded-proto": "https"
+      },
+      payload: {}
+    });
+    assert.equal(proxiedBounded.statusCode, 429);
+    assert.equal(proxiedBounded.headers["retry-after"], "100");
+
+    const remotePairingStillAvailable = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/device",
+      payload: {}
+    });
+    assert.equal(remotePairingStillAvailable.statusCode, 200);
+  } finally {
+    await app.close();
+  }
+});
+
 test("gateway bounds stream attempts by network before authentication and by session after authentication", async () => {
   const app = Fastify({ logger: false });
   const admissions: Array<{

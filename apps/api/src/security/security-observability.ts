@@ -30,6 +30,7 @@ export type RateAdmissionRequest = {
   bucket:
     | "pairing_attempt"
     | "pairing_poll"
+    | "local_owner_auth"
     | "authentication_failure"
     | "request"
     | "stream"
