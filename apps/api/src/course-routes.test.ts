@@ -47,7 +47,7 @@ test("course routes expose a learner-safe voice session and enforce the shared l
         .sort((left, right) => left[0].localeCompare(right[0])),
       [
         ["course.cpge-mathematics-concours-fluency", "1.7.0"],
-        ["course.polynomials-etale-triple-covers", "2.9.0"]
+        ["course.polynomials-etale-triple-covers", "3.0.0"]
       ]
     );
 
@@ -80,14 +80,14 @@ test("course routes expose a learner-safe voice session and enforce the shared l
     assert.equal(voice.voice.lessonId, voice.session.lesson.id);
     assert.equal(
       voice.session.flow.blockedByActivityId,
-      "term-0-week-1-day-1-formative-v3"
+      "term-0-week-1-day-1-function-data"
     );
     assert.deepEqual(voice.session.flow.submittableActivityIds, [
-      "term-0-week-1-day-1-formative-v3"
+      "term-0-week-1-day-1-function-data"
     ]);
     assert.deepEqual(
       voice.session.lesson.activities.map((activity) => activity.id),
-      ["term-0-week-1-day-1-formative-v3"]
+      ["term-0-week-1-day-1-function-data"]
     );
     assert.equal(
       voice.voice.deliveryPolicy.disclosure,
@@ -113,7 +113,7 @@ test("course routes expose a learner-safe voice session and enforce the shared l
 
     const unknownVoiceField = await app.inject({
       method: "POST",
-      url: "/api/v1/courses/course.polynomials-etale-triple-covers/lessons/term-0-week-1-day-1/activities/term-0-week-1-day-1-formative-v3/attempts",
+      url: "/api/v1/courses/course.polynomials-etale-triple-covers/lessons/term-0-week-1-day-1/activities/term-0-week-1-day-1-function-data/attempts",
       headers,
       payload: {
         answerMarkdown: "A confirmed answer.",

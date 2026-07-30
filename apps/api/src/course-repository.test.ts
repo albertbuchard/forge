@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -234,7 +235,7 @@ test("imports a modular course and carries proof evidence into concept mastery",
       activity_content_hash: string;
       activity_snapshot_json: string;
     };
-    assert.equal(attemptSnapshot.course_version, "2.9.0");
+    assert.equal(attemptSnapshot.course_version, "3.0.0");
     assert.equal(attemptSnapshot.activity_revision, "3");
     assert.match(attemptSnapshot.activity_content_hash, /^[a-f0-9]{64}$/u);
     assert.equal(
@@ -630,7 +631,7 @@ test("imports a modular course and carries proof evidence into concept mastery",
       .digest("hex");
     const explicitConceptUpgrade = {
       ...researchExport,
-      course: { ...researchExport.course, version: "3.0.0" },
+      course: { ...researchExport.course, version: "3.1.0" },
       concepts: researchExport.concepts.map((concept) =>
         concept.id === upgradedProof.id ? upgradedProof : concept
       ),
@@ -664,7 +665,7 @@ test("imports a modular course and carries proof evidence into concept mastery",
       JSON.parse(revision.definition_json).exampleMarkdown,
       priorProof.exampleMarkdown
     );
-    assert.equal(revision.source_course_version, "3.0.0");
+    assert.equal(revision.source_course_version, "3.1.0");
     assert.equal(revision.replaced_by_content_hash, upgradedProofHash);
     assert.equal(
       revision.reason,
@@ -692,7 +693,27 @@ test("keeps an enrollment on its immutable release until an explicit audited upg
   try {
     await initializeDatabase();
     ensureSystemUsers();
-    ensureBuiltInCourses();
+    const bundledCourse = JSON.parse(
+      readFileSync(
+        new URL(
+          "./course-catalog/from-polynomials-to-etale-triple-covers.forge-course.json",
+          import.meta.url
+        ),
+        "utf8"
+      )
+    ) as Record<string, unknown> & {
+      course: Record<string, unknown>;
+      provenance: Record<string, unknown>;
+    };
+    importCoursePackage({
+      ...bundledCourse,
+      course: { ...bundledCourse.course, version: "2.9.0" },
+      provenance: {
+        ...bundledCourse.provenance,
+        generatedAt: "2026-07-27T00:00:00.000Z",
+        contentHash: ""
+      }
+    });
     const userId = getDefaultUser().id;
     const courseId = "course.polynomials-etale-triple-covers";
     const lessonId = "term-0-week-1-day-1";
@@ -745,16 +766,7 @@ test("keeps an enrollment on its immutable release until an explicit audited upg
       nextLessonId: context.nextLessonId
     });
 
-    const exported = exportCoursePackage(courseId);
-    importCoursePackage({
-      ...exported,
-      course: { ...exported.course, version: "3.0.0" },
-      provenance: {
-        ...exported.provenance,
-        generatedAt: "2026-07-28T00:00:00.000Z",
-        contentHash: ""
-      }
-    });
+    ensureBuiltInCourses();
 
     const beforeUpgrade = getCourseDetail(courseId, userId);
     assert.deepEqual(beforeUpgrade.release, {
