@@ -6,7 +6,7 @@ import {
   waitFor
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { WikiEditorPage } from "@/pages/wiki-editor-page";
@@ -20,6 +20,7 @@ const {
   getWikiPageMock,
   getWikiSettingsMock,
   getWikiTreeMock,
+  listWikiSpacesMock,
   listWikiPagesMock,
   patchWikiPageMock,
   createWikiPageMock,
@@ -32,6 +33,7 @@ const {
   getWikiPageMock: vi.fn(),
   getWikiSettingsMock: vi.fn(),
   getWikiTreeMock: vi.fn(),
+  listWikiSpacesMock: vi.fn(),
   listWikiPagesMock: vi.fn(),
   patchWikiPageMock: vi.fn(),
   createWikiPageMock: vi.fn(),
@@ -46,6 +48,7 @@ vi.mock("@/lib/api", () => ({
   getWikiPageBySlug: getWikiPageBySlugMock,
   getWikiSettings: getWikiSettingsMock,
   getWikiTree: getWikiTreeMock,
+  listWikiSpaces: listWikiSpacesMock,
   listWikiPages: listWikiPagesMock,
   patchWikiPage: patchWikiPageMock,
   createWikiPage: createWikiPageMock,
@@ -67,7 +70,9 @@ vi.mock("@/components/psyche/entity-link-multiselect", () => ({
 }));
 
 vi.mock("@/components/wiki/wiki-ingest-modal", () => ({
-  WikiIngestModal: () => null
+  WikiIngestModal: ({ llmProfiles }: { llmProfiles: unknown[] }) => (
+    <div data-testid="wiki-ingest-profile-count">{llmProfiles.length}</div>
+  )
 }));
 
 vi.mock("@/components/gamification/gamification-widgets", () => ({
@@ -85,21 +90,42 @@ vi.mock("@/components/wiki/wiki-article-markdown", () => ({
 }));
 
 describe("wiki missing-page routing", () => {
+  const operatorSession = {
+    id: "session_operator",
+    actorLabel: "Local Operator",
+    principalKind: "operator_session" as const,
+    localOwner: true,
+    profile: "operator" as const,
+    expiresAt: "2026-04-06T01:00:00.000Z"
+  };
+
+  beforeEach(() => {
+    listWikiSpacesMock.mockImplementation(async () => {
+      const result = await getWikiSettingsMock();
+      return { spaces: result.settings.spaces };
+    });
+  });
+
   afterEach(() => {
     cleanup();
     window.localStorage.clear();
     vi.clearAllMocks();
   });
 
-  function renderRoute(initialEntry: string) {
-    const client = new QueryClient({
+  function createTestQueryClient() {
+    return new QueryClient({
       defaultOptions: {
         queries: {
           retry: false
         }
       }
     });
+  }
 
+  function renderRoute(
+    initialEntry: string,
+    client = createTestQueryClient()
+  ) {
     return render(
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={[initialEntry]}>
@@ -166,6 +192,95 @@ describe("wiki missing-page routing", () => {
     };
   }
 
+  it("renders ordinary Wiki content for a paired non-operator session", async () => {
+    const space = makeSpace({
+      id: "wiki_space_shared",
+      label: "Shared Wiki",
+      visibility: "shared",
+      ownerUserId: null
+    });
+    const page = makePage(space.id, "Remote Wiki Home");
+    const priorPrivateSpace = makeSpace({
+      id: "wiki_space_prior_private",
+      label: "Prior private Wiki",
+      visibility: "personal",
+      ownerUserId: "user_prior"
+    });
+    let resolveSpaces:
+      | ((value: { spaces: ReturnType<typeof makeSpace>[] }) => void)
+      | undefined;
+    listWikiSpacesMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSpaces = resolve;
+      })
+    );
+    getWikiHomeMock.mockResolvedValue(makeDetail(page));
+    getWikiTreeMock.mockResolvedValue({ tree: [], truncated: false });
+    useForgeShellMock.mockReturnValue({
+      operatorSession: {
+        ...operatorSession,
+        id: "session_paired_browser",
+        actorLabel: "Paired browser",
+        principalKind: "paired_client",
+        localOwner: false,
+        profile: "viewer"
+      },
+      selectedUserIds: [],
+      snapshot: { metrics: {} }
+    });
+    const client = createTestQueryClient();
+    client.setQueryData(["forge-wiki-spaces", operatorSession.id], {
+      spaces: [priorPrivateSpace]
+    });
+    client.setQueryData(["forge-wiki-settings", operatorSession.id], {
+      settings: {
+        spaces: [priorPrivateSpace],
+        llmProfiles: [{ id: "llm_operator", label: "Operator LLM" }],
+        embeddingProfiles: [
+          {
+            id: "embedding_operator",
+            label: "Operator embeddings",
+            enabled: true
+          }
+        ]
+      }
+    });
+    client.setQueryData(["forge-wiki-spaces"], {
+      spaces: [priorPrivateSpace]
+    });
+    client.setQueryData(["forge-wiki-settings"], {
+      settings: {
+        spaces: [priorPrivateSpace],
+        llmProfiles: [{ id: "llm_legacy", label: "Legacy operator LLM" }],
+        embeddingProfiles: [
+          {
+            id: "embedding_legacy",
+            label: "Legacy operator embeddings",
+            enabled: true
+          }
+        ]
+      }
+    });
+
+    renderRoute(`/wiki?spaceId=${space.id}`, client);
+
+    expect(screen.queryByText("Prior private Wiki")).not.toBeInTheDocument();
+    expect(
+      client.getQueryState(["forge-wiki-spaces", "session_paired_browser"])
+    ).toBeDefined();
+    resolveSpaces?.({ spaces: [space] });
+    expect(await screen.findByText("# Remote Wiki Home")).toBeInTheDocument();
+    expect(listWikiSpacesMock).toHaveBeenCalledTimes(1);
+    expect(getWikiSettingsMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("wiki-ingest-profile-count")).toHaveTextContent(
+      "0"
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Search KarpaWiki" }));
+    expect(
+      screen.queryByRole("combobox", { name: "Embedding profile" })
+    ).not.toBeInTheDocument();
+  });
+
   it("redirects an unresolved wiki link into a prefilled new page draft", async () => {
     getWikiSettingsMock.mockResolvedValue({
       settings: {
@@ -197,6 +312,7 @@ describe("wiki missing-page routing", () => {
       })
     );
     useForgeShellMock.mockReturnValue({
+      operatorSession,
       snapshot: {
         goals: [],
         dashboard: { projects: [] },
@@ -247,6 +363,7 @@ describe("wiki missing-page routing", () => {
       })
     );
     useForgeShellMock.mockReturnValue({
+      operatorSession,
       snapshot: {
         goals: [],
         dashboard: { projects: [] },
@@ -363,7 +480,10 @@ describe("wiki missing-page routing", () => {
         };
       }
     );
-    useForgeShellMock.mockReturnValue({ snapshot: { metrics: {} } });
+    useForgeShellMock.mockReturnValue({
+      operatorSession,
+      snapshot: { metrics: {} }
+    });
 
     renderRoute(`/wiki?spaceId=${space.id}`);
 
@@ -455,6 +575,7 @@ describe("wiki missing-page routing", () => {
       results: []
     });
     useForgeShellMock.mockReturnValue({
+      operatorSession,
       selectedUserIds: ["user_operator"],
       snapshot: { metrics: {} }
     });
@@ -554,6 +675,7 @@ describe("wiki missing-page routing", () => {
     });
     getWikiTreeMock.mockResolvedValue({ tree: [], truncated: false });
     useForgeShellMock.mockReturnValue({
+      operatorSession,
       selectedUserIds: [],
       snapshot: {
         metrics: {},
@@ -596,6 +718,7 @@ describe("wiki missing-page routing", () => {
     getWikiHomeMock.mockResolvedValue(makeDetail(page));
     getWikiTreeMock.mockResolvedValue({ tree: [], truncated: false });
     useForgeShellMock.mockReturnValue({
+      operatorSession,
       selectedUserIds: [],
       snapshot: { metrics: {} }
     });

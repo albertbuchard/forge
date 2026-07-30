@@ -171,15 +171,13 @@ function createHabit(overrides: Partial<Habit> = {}): Habit {
   };
 }
 
-function renderWithProviders() {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: false
-      }
-    }
+function createTestQueryClient() {
+  return new QueryClient({
+    defaultOptions: { queries: { retry: false } }
   });
+}
 
+function renderWithProviders(client = createTestQueryClient()) {
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={["/habits"]}>
@@ -328,6 +326,110 @@ describe("HabitsPage", () => {
         timezone: getRuntimeTimeZone()
       });
     });
+  });
+
+  it("survives partial cached Psyche collections and restores linked labels", async () => {
+    listHabitsMock.mockResolvedValue({
+      habits: [
+        createHabit({
+          linkedValueIds: ["value_1"],
+          linkedPatternIds: ["pattern_1"],
+          linkedBeliefIds: ["belief_1"],
+          linkedModeIds: ["mode_1"],
+          linkedReportIds: ["report_1"]
+        })
+      ]
+    });
+    getLifeForceMock.mockResolvedValue({
+      lifeForce: {
+        userId: "user_1",
+        dateKey: "2026-04-11",
+        baselineDailyAp: 200,
+        dailyBudgetAp: 210,
+        spentTodayAp: 72,
+        remainingAp: 138,
+        forecastAp: 126,
+        plannedRemainingAp: 20,
+        targetBandMinAp: 178.5,
+        targetBandMaxAp: 210,
+        instantCapacityApPerHour: 10,
+        instantFreeApPerHour: 4.2,
+        overloadApPerHour: 0,
+        currentDrainApPerHour: 4.8,
+        fatigueBufferApPerHour: 1,
+        sleepRecoveryMultiplier: 1,
+        readinessMultiplier: 1,
+        fatigueDebtCarry: 0,
+        stats: [],
+        currentCurve: [],
+        activeDrains: [],
+        plannedDrains: [],
+        warnings: [],
+        recommendations: [],
+        topTaskIdsNeedingSplit: [],
+        updatedAt: "2026-04-11T12:00:00.000Z"
+      },
+      templates: []
+    });
+    useForgeShellMock.mockReturnValue({
+      selectedUserIds: [],
+      refresh: vi.fn().mockResolvedValue(undefined),
+      snapshot: {
+        goals: [],
+        tasks: [],
+        users: [habitUser],
+        dashboard: {
+          goals: [],
+          projects: [],
+          notesSummaryByEntity: {}
+        }
+      }
+    });
+
+    let resolveOverview:
+      | ((value: Awaited<ReturnType<typeof getPsycheOverviewMock>>) => void)
+      | undefined;
+    getPsycheOverviewMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveOverview = resolve;
+      })
+    );
+    const client = createTestQueryClient();
+    client.setQueryData(["forge-psyche-overview"], {
+      overview: {
+        values: [],
+        patterns: [],
+        behaviors: [],
+        beliefs: [],
+        modes: [],
+        reports: []
+      }
+    });
+    client.setQueryData(
+      ["forge-psyche-overview", "entity-collections"],
+      {}
+    );
+
+    renderWithProviders(client);
+
+    expect(await screen.findByText("Meditation")).toBeInTheDocument();
+
+    resolveOverview?.({
+      overview: {
+        values: [{ id: "value_1", title: "Presence" }],
+        patterns: [{ id: "pattern_1", title: "Avoidance loop" }],
+        behaviors: [],
+        beliefs: [{ id: "belief_1", statement: "I must not fail" }],
+        modes: [{ id: "mode_1", title: "Healthy adult" }],
+        reports: [{ id: "report_1", title: "Weekly reflection" }]
+      }
+    });
+
+    expect(await screen.findByText("Value · Presence")).toBeInTheDocument();
+    expect(screen.getByText("Pattern · Avoidance loop")).toBeInTheDocument();
+    expect(screen.getByText("Belief · I must not fail")).toBeInTheDocument();
+    expect(screen.getByText("Mode · Healthy adult")).toBeInTheDocument();
+    expect(screen.getByText("Report · Weekly reflection")).toBeInTheDocument();
   });
 
   it("treats a resisted negative habit as the green aligned history state", async () => {

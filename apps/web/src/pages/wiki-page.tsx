@@ -44,6 +44,7 @@ import {
   getWikiPageBySlug,
   getWikiSettings,
   getWikiTree,
+  listWikiSpaces,
   searchWiki
 } from "@/lib/api";
 import { ForgeApiError } from "@/lib/api-error";
@@ -319,15 +320,25 @@ export function WikiPage() {
   const selectedSpaceId = searchParams.get("spaceId") ?? "";
   const ingestOpen = searchParams.get("ingest") === "1";
   const selectedIngestJobId = searchParams.get("ingestJobId");
+  const sessionId = shell.operatorSession.id;
+  const isOperatorSession = shell.operatorSession.profile === "operator";
 
   const settingsQuery = useQuery({
-    queryKey: ["forge-wiki-settings"],
-    queryFn: getWikiSettings
+    queryKey: ["forge-wiki-settings", sessionId],
+    queryFn: getWikiSettings,
+    enabled: isOperatorSession
   });
+  const spacesQuery = useQuery({
+    queryKey: ["forge-wiki-spaces", sessionId],
+    queryFn: listWikiSpaces
+  });
+  const operatorWikiSettings = isOperatorSession
+    ? settingsQuery.data?.settings
+    : undefined;
 
   const selectedUserIds = shell.selectedUserIds ?? EMPTY_SELECTED_USER_IDS;
   const visibleSpaces = useMemo(() => {
-    const spaces = settingsQuery.data?.settings.spaces ?? [];
+    const spaces = spacesQuery.data?.spaces ?? [];
     if (selectedUserIds.length === 0) {
       return spaces;
     }
@@ -337,7 +348,7 @@ export function WikiPage() {
         space.visibility === "shared" ||
         (space.ownerUserId ? selected.has(space.ownerUserId) : false)
     );
-  }, [selectedUserIds, settingsQuery.data?.settings.spaces]);
+  }, [selectedUserIds, spacesQuery.data?.spaces]);
   const defaultSpaceId = useMemo(() => {
     if (selectedUserIds.length === 1) {
       const personalSpace = visibleSpaces.find(
@@ -362,10 +373,10 @@ export function WikiPage() {
     (selectedSpaceIsVisible ? selectedSpaceId : "") || defaultSpaceId;
   const embeddingProfiles = useMemo(
     () =>
-      settingsQuery.data?.settings.embeddingProfiles.filter(
+      operatorWikiSettings?.embeddingProfiles.filter(
         (profile) => profile.enabled
       ) ?? [],
-    [settingsQuery.data?.settings.embeddingProfiles]
+    [operatorWikiSettings?.embeddingProfiles]
   );
 
   useEffect(() => {
@@ -735,7 +746,8 @@ export function WikiPage() {
 
   if (
     !selectedPage &&
-    (settingsQuery.isLoading ||
+    (spacesQuery.isLoading ||
+      (isOperatorSession && settingsQuery.isLoading) ||
       treeQuery.isLoading ||
       (!slug && homeQuery.isLoading) ||
       (slug && pageQuery.isLoading))
@@ -752,7 +764,8 @@ export function WikiPage() {
   if (
     !selectedPage &&
     !missingLinkedTitle &&
-    (settingsQuery.isError ||
+    (spacesQuery.isError ||
+      (isOperatorSession && settingsQuery.isError) ||
       homeQuery.isError ||
       pageQuery.isError ||
       treeQuery.isError)
@@ -761,13 +774,17 @@ export function WikiPage() {
       <ErrorState
         eyebrow="KarpaWiki"
         error={
-          settingsQuery.error ??
+          spacesQuery.error ??
+          (isOperatorSession ? settingsQuery.error : null) ??
           homeQuery.error ??
           pageQuery.error ??
           treeQuery.error
         }
         onRetry={() => {
-          void settingsQuery.refetch();
+          void spacesQuery.refetch();
+          if (isOperatorSession) {
+            void settingsQuery.refetch();
+          }
           void homeQuery.refetch();
           void pageQuery.refetch();
           void treeQuery.refetch();
@@ -1454,7 +1471,7 @@ export function WikiPage() {
           closeIngestModal();
         }}
         spaces={visibleSpaces}
-        llmProfiles={settingsQuery.data?.settings.llmProfiles ?? []}
+        llmProfiles={operatorWikiSettings?.llmProfiles ?? []}
         initialSpaceId={activeSpaceId}
         selectedJobId={selectedIngestJobId}
         onJobSelected={selectIngestJob}

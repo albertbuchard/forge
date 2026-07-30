@@ -574,13 +574,23 @@ export function HabitsPage() {
       ).habits
   });
   const psycheOverviewQuery = useQuery({
-    queryKey: ["forge-psyche-overview", ...selectedUserIds],
+    queryKey: [
+      "forge-psyche-overview",
+      "entity-collections",
+      ...selectedUserIds
+    ],
     queryFn: async () => (await getPsycheOverview(selectedUserIds)).overview
   });
   const lifeForceQuery = useQuery({
     queryKey: ["forge-life-force", ...selectedUserIds],
     queryFn: async () => (await getLifeForce(selectedUserIds)).lifeForce
   });
+  const psycheValues = psycheOverviewQuery.data?.values ?? [];
+  const psychePatterns = psycheOverviewQuery.data?.patterns ?? [];
+  const psycheBehaviors = psycheOverviewQuery.data?.behaviors ?? [];
+  const psycheBeliefs = psycheOverviewQuery.data?.beliefs ?? [];
+  const psycheModes = psycheOverviewQuery.data?.modes ?? [];
+  const psycheReports = psycheOverviewQuery.data?.reports ?? [];
 
   useEffect(() => {
     if (searchParams.get("create") === "1") {
@@ -1226,10 +1236,9 @@ export function HabitsPage() {
                           ) : null;
                         })}
                         {habit.linkedValueIds.slice(0, 2).map((valueId) => {
-                          const valueEntry =
-                            psycheOverviewQuery.data?.values.find(
-                              (entry) => entry.id === valueId
-                            );
+                          const valueEntry = psycheValues.find(
+                            (entry) => entry.id === valueId
+                          );
                           return valueEntry ? (
                             <Badge
                               key={valueEntry.id}
@@ -1240,10 +1249,9 @@ export function HabitsPage() {
                           ) : null;
                         })}
                         {habit.linkedPatternIds.slice(0, 2).map((patternId) => {
-                          const pattern =
-                            psycheOverviewQuery.data?.patterns.find(
-                              (entry) => entry.id === patternId
-                            );
+                          const pattern = psychePatterns.find(
+                            (entry) => entry.id === patternId
+                          );
                           return pattern ? (
                             <Badge
                               key={pattern.id}
@@ -1254,7 +1262,7 @@ export function HabitsPage() {
                           ) : null;
                         })}
                         {habit.linkedBeliefIds.slice(0, 2).map((beliefId) => {
-                          const belief = psycheOverviewQuery.data?.beliefs.find(
+                          const belief = psycheBeliefs.find(
                             (entry) => entry.id === beliefId
                           );
                           return belief ? (
@@ -1267,7 +1275,7 @@ export function HabitsPage() {
                           ) : null;
                         })}
                         {habit.linkedModeIds.slice(0, 2).map((modeId) => {
-                          const mode = psycheOverviewQuery.data?.modes.find(
+                          const mode = psycheModes.find(
                             (entry) => entry.id === modeId
                           );
                           return mode ? (
@@ -1280,7 +1288,7 @@ export function HabitsPage() {
                           ) : null;
                         })}
                         {habit.linkedReportIds.slice(0, 2).map((reportId) => {
-                          const report = psycheOverviewQuery.data?.reports.find(
+                          const report = psycheReports.find(
                             (entry) => entry.id === reportId
                           );
                           return report ? (
@@ -1355,12 +1363,12 @@ export function HabitsPage() {
         open={dialogOpen}
         pending={saveHabitMutation.isPending}
         editingHabit={editingHabit}
-        values={psycheOverviewQuery.data?.values ?? []}
-        patterns={psycheOverviewQuery.data?.patterns ?? []}
-        behaviors={psycheOverviewQuery.data?.behaviors ?? []}
-        beliefs={psycheOverviewQuery.data?.beliefs ?? []}
-        modes={psycheOverviewQuery.data?.modes ?? []}
-        reports={psycheOverviewQuery.data?.reports ?? []}
+        values={psycheValues}
+        patterns={psychePatterns}
+        behaviors={psycheBehaviors}
+        beliefs={psycheBeliefs}
+        modes={psycheModes}
+        reports={psycheReports}
         goals={shell.snapshot.dashboard.goals}
         projects={shell.snapshot.dashboard.projects}
         tasks={shell.snapshot.tasks}

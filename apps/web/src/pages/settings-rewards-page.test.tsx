@@ -91,13 +91,16 @@ const xpMetrics = {
   }
 };
 
-function renderPage() {
-  const queryClient = new QueryClient({
+function createTestQueryClient() {
+  return new QueryClient({
     defaultOptions: {
       queries: { retry: false },
       mutations: { retry: false }
     }
   });
+}
+
+function renderPage(queryClient = createTestQueryClient()) {
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
@@ -139,6 +142,32 @@ describe("SettingsRewardsPage", () => {
       expect.any(String)
     );
     expect(getPsycheOverviewMock).toHaveBeenCalledWith(["user_albert"]);
+  });
+
+  it("keeps unwrapped Psyche collections in a distinct cache entry", async () => {
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData(["forge-psyche-overview", "user_albert"], {
+      overview: {
+        values: [],
+        patterns: [],
+        behaviors: [],
+        beliefs: [],
+        modes: [],
+        flashcards: [],
+        reports: []
+      }
+    });
+
+    renderPage(queryClient);
+
+    expect(await screen.findByText("Albert progression")).toBeInTheDocument();
+    expect(
+      queryClient.getQueryState([
+        "forge-psyche-overview",
+        "entity-collections",
+        "user_albert"
+      ])
+    ).toBeDefined();
   });
 
   it("shows a retryable progression error instead of a zero-value state", async () => {

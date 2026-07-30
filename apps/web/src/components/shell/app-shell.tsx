@@ -134,6 +134,7 @@ import type {
 import type {
   CalendarSchedulingRules,
   ForgeSnapshot,
+  OperatorSession,
   SettingsPayload,
   Task,
   TaskRun
@@ -209,6 +210,7 @@ function useDesktopShellLayout() {
 
 type ShellContextValue = {
   snapshot: ForgeSnapshot;
+  operatorSession: OperatorSession;
   selectedUserIds: string[];
   setSelectedUserIds: (userIds: string[]) => void;
   refresh: () => Promise<void>;
@@ -1704,6 +1706,7 @@ export function AppShell() {
 
   const contextValue: ShellContextValue = {
     snapshot: snapshotQuery.data,
+    operatorSession: operatorSessionQuery.data!.session,
     selectedUserIds,
     setSelectedUserIds,
     refresh: async () => {

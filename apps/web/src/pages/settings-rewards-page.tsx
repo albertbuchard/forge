@@ -108,7 +108,11 @@ export function SettingsRewardsPage() {
     enabled: operatorReady
   });
   const psycheOverviewQuery = useQuery({
-    queryKey: ["forge-psyche-overview", ...selectedUserIds],
+    queryKey: [
+      "forge-psyche-overview",
+      "entity-collections",
+      ...selectedUserIds
+    ],
     queryFn: async () => (await getPsycheOverview(selectedUserIds)).overview
   });
 
