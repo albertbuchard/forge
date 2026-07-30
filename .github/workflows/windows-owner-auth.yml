@@ -76,7 +76,7 @@ jobs:
       - name: Exercise Windows-compatible package tests
         working-directory: packages/forge-memory
         run: |
-          node --test `
+          node --test --test-concurrency=1 `
             ./tests/macos-browser-handler.test.mjs `
             ./tests/native-source-manifest.test.mjs `
             ./tests/native-source-signing-key.test.mjs `

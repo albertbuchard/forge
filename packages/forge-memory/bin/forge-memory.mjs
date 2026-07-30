@@ -47,6 +47,8 @@ const DEFAULT_UPDATE_BACKUP_CONFIRM_THRESHOLD_BYTES = 100 * 1024 * 1024;
 const BACKUP_SKIP_TOP_LEVEL = new Set(["exports", "logs", "run", "runtime"]);
 const OPENCLAW_RUNTIME_LOCK_REFRESH_MS = 10_000;
 const OPENCLAW_RUNTIME_LOCK_TIMEOUT_MS = 120_000;
+const WINDOWS_LEASE_RENAME_MAX_ATTEMPTS = 20;
+const WINDOWS_LEASE_RENAME_RETRY_DELAY_MS = 10;
 
 const color = {
   dim: (value) => `\u001b[2m${value}\u001b[22m`,
@@ -3144,6 +3146,38 @@ async function acquireRuntimeStartLock(config, timeoutMs = 120_000) {
   );
 }
 
+async function replaceOpenClawLeaseOwnerFile({
+  temporaryPath,
+  ownerPath,
+  expectedToken = null,
+  platform = process.platform,
+  readOwner = (target) => readJson(target, null),
+  rename = (source, target) => fsp.rename(source, target),
+  wait = (milliseconds) =>
+    new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  maxAttempts = WINDOWS_LEASE_RENAME_MAX_ATTEMPTS,
+  retryDelayMs = WINDOWS_LEASE_RENAME_RETRY_DELAY_MS
+}) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    if (expectedToken !== null) {
+      const current = await readOwner(ownerPath);
+      if (current?.token !== expectedToken) return false;
+    }
+    try {
+      await rename(temporaryPath, ownerPath);
+      return true;
+    } catch (error) {
+      const retryable =
+        platform === "win32" &&
+        ["EPERM", "EACCES", "EBUSY"].includes(error?.code) &&
+        attempt < maxAttempts;
+      if (!retryable) throw error;
+      await wait(retryDelayMs);
+    }
+  }
+  return false;
+}
+
 async function acquireOpenClawRuntimeStartupLease(
   config,
   options = {}
@@ -3179,12 +3213,11 @@ async function acquireOpenClawRuntimeStartupLease(
         `${JSON.stringify(owner, null, 2)}\n`,
         { encoding: "utf8", mode: 0o600, flag: "wx" }
       );
-      if (expectedToken !== null) {
-        const current = await readJson(ownerPath, null);
-        if (current?.token !== expectedToken) return false;
-      }
-      await fsp.rename(temporaryPath, ownerPath);
-      return true;
+      return await replaceOpenClawLeaseOwnerFile({
+        temporaryPath,
+        ownerPath,
+        expectedToken
+      });
     } finally {
       await fsp.rm(temporaryPath, { force: true }).catch(() => {});
     }
@@ -3218,6 +3251,7 @@ async function acquireOpenClawRuntimeStartupLease(
         await writeOwnerAtomically(owner, owner.token);
       };
       const timer = setInterval(() => {
+        if (released) return;
         refreshQueue = refreshQueue.then(refresh, refresh);
       }, refreshMs);
       timer.unref?.();
@@ -8315,6 +8349,7 @@ export const __forgeMemoryRuntimeMutationTest = Object.freeze({
   openClawRuntimeStatePath,
   reapAbandonedRuntimeStartLock,
   readVerifiedOpenClawRuntimeRecord,
+  replaceOpenClawLeaseOwnerFile,
   recordedProcessIdentityMatches,
   restartRuntime,
   runtimeAdoptionFailure,

@@ -199,6 +199,129 @@ test("Forge Memory renews its OpenClaw compatibility lease before the legacy lif
   );
 });
 
+test("Windows retries a shared lease-owner rename and rechecks ownership", async () => {
+  let reads = 0;
+  let renames = 0;
+  const waits = [];
+  const result = await runtime.replaceOpenClawLeaseOwnerFile({
+    temporaryPath: "temporary-owner.json",
+    ownerPath: "owner.json",
+    expectedToken: "owned-token",
+    platform: "win32",
+    readOwner: async () => {
+      reads += 1;
+      return { token: "owned-token" };
+    },
+    rename: async () => {
+      renames += 1;
+      if (renames === 1) {
+        throw Object.assign(new Error("sharing violation"), {
+          code: "EPERM"
+        });
+      }
+    },
+    wait: async (milliseconds) => {
+      waits.push(milliseconds);
+    },
+    maxAttempts: 3,
+    retryDelayMs: 7
+  });
+  assert.equal(result, true);
+  assert.equal(reads, 2);
+  assert.equal(renames, 2);
+  assert.deepEqual(waits, [7]);
+});
+
+test("Windows never overwrites a replacement lease owner during retry", async () => {
+  let reads = 0;
+  let renames = 0;
+  const result = await runtime.replaceOpenClawLeaseOwnerFile({
+    temporaryPath: "temporary-owner.json",
+    ownerPath: "owner.json",
+    expectedToken: "owned-token",
+    platform: "win32",
+    readOwner: async () => {
+      reads += 1;
+      return {
+        token: reads === 1 ? "owned-token" : "replacement-token"
+      };
+    },
+    rename: async () => {
+      renames += 1;
+      throw Object.assign(new Error("sharing violation"), {
+        code: "EACCES"
+      });
+    },
+    wait: async () => {},
+    maxAttempts: 3,
+    retryDelayMs: 1
+  });
+  assert.equal(result, false);
+  assert.equal(reads, 2);
+  assert.equal(renames, 1);
+});
+
+test("Windows does not retry a non-sharing lease-owner failure", async () => {
+  let renames = 0;
+  let waits = 0;
+  await assert.rejects(
+    runtime.replaceOpenClawLeaseOwnerFile({
+      temporaryPath: "temporary-owner.json",
+      ownerPath: "owner.json",
+      expectedToken: "owned-token",
+      platform: "win32",
+      readOwner: async () => ({ token: "owned-token" }),
+      rename: async () => {
+        renames += 1;
+        throw Object.assign(new Error("invalid path"), {
+          code: "EINVAL"
+        });
+      },
+      wait: async () => {
+        waits += 1;
+      },
+      maxAttempts: 3,
+      retryDelayMs: 1
+    }),
+    /invalid path/
+  );
+  assert.equal(renames, 1);
+  assert.equal(waits, 0);
+});
+
+test("Windows bounds repeated lease-owner sharing violations", async () => {
+  let reads = 0;
+  let renames = 0;
+  let waits = 0;
+  await assert.rejects(
+    runtime.replaceOpenClawLeaseOwnerFile({
+      temporaryPath: "temporary-owner.json",
+      ownerPath: "owner.json",
+      expectedToken: "owned-token",
+      platform: "win32",
+      readOwner: async () => {
+        reads += 1;
+        return { token: "owned-token" };
+      },
+      rename: async () => {
+        renames += 1;
+        throw Object.assign(new Error("busy owner file"), {
+          code: "EBUSY"
+        });
+      },
+      wait: async () => {
+        waits += 1;
+      },
+      maxAttempts: 3,
+      retryDelayMs: 1
+    }),
+    /busy owner file/
+  );
+  assert.equal(reads, 3);
+  assert.equal(renames, 3);
+  assert.equal(waits, 2);
+});
+
 test("Forge Memory never removes a live or ambiguous foreign OpenClaw lease", async () => {
   await resetRuntimeFiles();
   const lockPath = runtime.openClawRuntimeStartupLockPath(config);
@@ -303,7 +426,11 @@ test("a remote runtime mutation does not touch OpenClaw loopback state", async (
   );
 });
 
-test("OpenClaw's normal owner-matched directory and record modes are accepted", async () => {
+test("OpenClaw's normal owner-matched directory and record modes are accepted", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("POSIX ownership modes do not apply on Windows.");
+    return;
+  }
   await resetRuntimeFiles();
   const statePath = runtime.openClawRuntimeStatePath(config);
   await fsp.mkdir(path.dirname(statePath), {
@@ -333,6 +460,20 @@ test("OpenClaw's normal owner-matched directory and record modes are accepted", 
   );
   assert.equal(fs.statSync(statePath).mode & 0o777, 0o644);
 });
+
+test(
+  "Windows refuses automatic OpenClaw transfer without a provable launch boundary",
+  { skip: process.platform !== "win32" },
+  () => {
+    assert.throws(
+      () =>
+        runtime.inspectOpenClawRuntimeLaunchBoundary(config, {
+          pid: process.pid
+        }),
+      /automatic ownership transfer is disabled/
+    );
+  }
+);
 
 test("stop waits for the runtime mutation lock before touching state or processes", async () => {
   await resetRuntimeFiles();
@@ -949,7 +1090,11 @@ test("OpenClaw transfer never rolls back after a retry leaves a survivor", async
   assert.deepEqual(result.survivingCandidatePids, [9703]);
 });
 
-test("OpenClaw transfer verification binds record, process identity, health PID, and storage root", async () => {
+test("OpenClaw transfer verification binds record, process identity, health PID, and storage root", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("Exact automatic ownership transfer is disabled on Windows.");
+    return;
+  }
   await resetRuntimeFiles();
   const fakeRepo = path.join(tempHome, "verified-openclaw-repo");
   const tsx = path.join(
