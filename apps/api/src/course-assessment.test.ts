@@ -163,8 +163,8 @@ test("assesses proof JSON, filters unknown concepts, and protects learner text",
     );
     assert.equal(capturedFormat?.type, "json_schema");
     assert.equal(capturedFormat?.strict, true);
-    assert.equal(result.feedback.score, 78);
-    assert.equal(result.feedback.grade, "C+");
+    assert.equal(result.feedback.score, 92);
+    assert.equal(result.feedback.grade, "A-");
     assert.equal(result.provider, "mock");
     assert.equal(result.model, "course-canonical-test");
     assert.equal(result.feedback.conceptScores[0]?.score, 95);
@@ -330,6 +330,10 @@ test("requires an overall score in the model schema for non-proof written work",
     );
     assert.ok(activity);
     assert.equal(activity.type, "short_answer");
+    const noRubricActivity = {
+      ...activity,
+      rubric: undefined
+    };
     let capturedFormat: Record<string, unknown> | undefined;
     const result = await assessCourseResponse(
       {
@@ -353,7 +357,7 @@ test("requires an overall score in the model schema for non-proof written work",
       {
         courseTitle: course.course.title,
         lessonTitle: lesson.title,
-        activity,
+        activity: noRubricActivity,
         concepts: [],
         answerMarkdown: "A complete short answer."
       }
