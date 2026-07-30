@@ -14343,7 +14343,11 @@ export async function buildServer(
       .object({
         browserOrigin: z.string().min(1).max(256),
         browserNonce: z.string().regex(/^[A-Za-z0-9_-]{43,128}$/),
-        browserPublicKey: localBrowserPublicKeySchema
+        browserPublicKey: localBrowserPublicKeySchema,
+        approvalMode: z
+          .enum(["automatic", "interactive"])
+          .optional()
+          .default("automatic")
       })
       .strict()
       .parse(request.body ?? {});
@@ -14372,7 +14376,8 @@ export async function buildServer(
     const transaction = await applicationSecurity.localOwnerSessions.begin({
       browserOrigin,
       browserNonce: input.browserNonce,
-      browserPublicKey: input.browserPublicKey
+      browserPublicKey: input.browserPublicKey,
+      approvalMode: input.approvalMode
     });
     if (!transaction.broker || transaction.platform) {
       throw new HttpError(

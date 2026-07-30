@@ -23,8 +23,22 @@ import {
 import type { SecurityClock } from "./security-runtime.js";
 
 const MAXIMUM_PENDING_LOCAL_OWNER_TRANSACTIONS = 4;
+const LOCAL_AUTOMATIC_BROWSER_BROKER_TIMEOUT_MS = 5_000;
+const LOCAL_INTERACTIVE_BROWSER_TRANSACTION_SECONDS = 120;
+const LOCAL_INTERACTIVE_BROWSER_BROKER_TIMEOUT_MS = 120_000;
+const LOCAL_NATIVE_SERVICE_BROKER_TIMEOUT_MS = 15_000;
 const LOCAL_NATIVE_SESSION_IDLE_SECONDS = 15 * 60;
 const LOCAL_NATIVE_SESSION_ABSOLUTE_SECONDS = 60 * 60;
+
+type LocalOwnerApprovalMode = "automatic" | "interactive";
+
+type NativeOwnerBrokerFactory = (input: {
+  binaryPath: string;
+  socketPath: string;
+  clock: SecurityClock;
+  timeoutMilliseconds: number;
+  expectedBinarySha256: string | null;
+}) => NativeOwnerBroker;
 
 type PendingLocalOwnerSession = {
   transactionId: string;
@@ -71,6 +85,9 @@ export type LocalOwnerSessionExchangeResult = {
 
 export class LocalOwnerSessionCoordinator {
   private readonly pending = new Map<string, PendingLocalOwnerSession>();
+  private readonly initializingBrokers = new Set<NativeOwnerBroker>();
+  private pendingInitializations = 0;
+  private lifecycleGeneration = 0;
 
   constructor(
     private readonly installationId: string,
@@ -83,44 +100,166 @@ export class LocalOwnerSessionCoordinator {
     private readonly assertions: LocalOwnerAssertionService,
     private readonly ownerChannel: OwnerChannelAuthority,
     private readonly browserSessions: BrowserSessionService,
-    private readonly platformOwnerKey: Buffer | null = null
+    private readonly platformOwnerKey: Buffer | null = null,
+    private readonly brokerFactory: NativeOwnerBrokerFactory = (input) =>
+      new NativeOwnerBroker(
+        input.binaryPath,
+        input.socketPath,
+        input.clock,
+        input.timeoutMilliseconds,
+        undefined,
+        input.expectedBinarySha256
+      )
   ) {}
 
   async begin(input: {
     browserOrigin: string;
     browserNonce: string;
     browserPublicKey?: BrowserPublicKey;
+    approvalMode?: LocalOwnerApprovalMode;
   }): Promise<LocalOwnerSessionBeginResult> {
-    await this.cleanupExpired();
-    if (this.pending.size >= MAXIMUM_PENDING_LOCAL_OWNER_TRANSACTIONS) {
+    this.cleanupExpired();
+    if (
+      this.pending.size + this.pendingInitializations >=
+      MAXIMUM_PENDING_LOCAL_OWNER_TRANSACTIONS
+    ) {
       throw new HttpError(
         429,
         "local_owner_capacity_exhausted",
         "Forge already has the maximum number of bounded local-owner verifications in progress."
       );
     }
-    const transaction = this.assertions.begin({
-      installId: this.installationId,
-      browserOrigin: input.browserOrigin,
-      browserNonce: input.browserNonce
-    });
-    const request: NativeOwnerBrokerRequest = {
-      protocol: NATIVE_OWNER_BROKER_PROTOCOL,
-      requestId: `owner_${randomUUID()}`,
-      transactionId: transaction.transactionId,
-      installId: this.installationId,
-      browserOrigin: input.browserOrigin,
-      browserNonce: input.browserNonce
-    };
-    if (this.platformOwnerKey) {
-      const platformServerNonce = randomBytes(32).toString("base64url");
+    this.pendingInitializations += 1;
+    const lifecycleGeneration = this.lifecycleGeneration;
+    try {
+      const browserTransaction = input.browserPublicKey !== undefined;
+      const approvalMode = input.approvalMode ?? "automatic";
+      if (!browserTransaction && input.approvalMode !== undefined) {
+        throw new Error(
+          "Forge local-owner approval modes apply only to proof-bound browser transactions."
+        );
+      }
+      const interactiveBrowserApproval =
+        browserTransaction && approvalMode === "interactive";
+      const transaction = this.assertions.begin(
+        {
+          installId: this.installationId,
+          browserOrigin: input.browserOrigin,
+          browserNonce: input.browserNonce
+        },
+        interactiveBrowserApproval
+          ? {
+              transactionLifetimeSeconds:
+                LOCAL_INTERACTIVE_BROWSER_TRANSACTION_SECONDS
+            }
+          : undefined
+      );
+      const request: NativeOwnerBrokerRequest = {
+        protocol: NATIVE_OWNER_BROKER_PROTOCOL,
+        requestId: `owner_${randomUUID()}`,
+        transactionId: transaction.transactionId,
+        installId: this.installationId,
+        browserOrigin: input.browserOrigin,
+        browserNonce: input.browserNonce
+      };
+      if (this.platformOwnerKey) {
+        const platformServerNonce = randomBytes(32).toString("base64url");
+        this.pending.set(transaction.transactionId, {
+          transactionId: transaction.transactionId,
+          expiresAt: transaction.expiresAt,
+          broker: null,
+          request,
+          assertion: null,
+          platformServerNonce,
+          exchangeStarted: false,
+          challengeClaimed: false,
+          browserPublicKey: input.browserPublicKey ?? null
+        });
+        return {
+          transactionId: transaction.transactionId,
+          installationId: this.installationId,
+          expiresAt: transaction.expiresAt,
+          broker: null,
+          platform: {
+            protocol: "forge-platform-owner-proof/1",
+            serverNonce: platformServerNonce,
+            request
+          }
+        };
+      }
+      if (!this.brokerBinaryPath) {
+        throw new HttpError(
+          503,
+          "local_owner_channel_unavailable",
+          "Forge has no verified local-owner authentication channel."
+        );
+      }
+      await this.ensurePrivateSocketDirectory();
+      this.requireActiveLifecycle(lifecycleGeneration);
+      const socketPath = path.join(
+        this.socketDirectory,
+        `o_${createHash("sha256")
+          .update(transaction.transactionId)
+          .digest("hex")
+          .slice(0, 20)}.sock`
+      );
+      const brokerTimeoutMilliseconds = browserTransaction
+        ? interactiveBrowserApproval
+          ? LOCAL_INTERACTIVE_BROWSER_BROKER_TIMEOUT_MS
+          : LOCAL_AUTOMATIC_BROWSER_BROKER_TIMEOUT_MS
+        : LOCAL_NATIVE_SERVICE_BROKER_TIMEOUT_MS;
+      const broker = this.brokerFactory({
+        binaryPath: this.brokerBinaryPath,
+        socketPath,
+        clock: this.clock,
+        timeoutMilliseconds: brokerTimeoutMilliseconds,
+        expectedBinarySha256: this.brokerBinarySha256
+      });
+      this.initializingBrokers.add(broker);
+      let signalReady!: () => void;
+      let rejectReady!: (error: Error) => void;
+      const ready = new Promise<void>((resolve, reject) => {
+        signalReady = resolve;
+        rejectReady = reject;
+      });
+      const assertion = this.ownerChannel
+        .authenticateWithNativeBroker(broker, request, async () => {
+          // Only the independently installed local client may invoke `approve`.
+          // Returning here lets the HTTP begin response expose the exact bounded
+          // request while the server remains blocked in its `serve` role.
+          signalReady();
+        })
+        .then((evidence) =>
+          this.assertions.mintFromOwnerChannel({
+            transactionId: transaction.transactionId,
+            evidence
+          })
+        )
+        .catch((error: unknown) => {
+          rejectReady(
+            error instanceof Error
+              ? error
+              : new Error("Forge local-owner verification failed.")
+          );
+          throw error;
+        });
+      void assertion.catch(() => undefined);
+      try {
+        await ready;
+        this.requireActiveLifecycle(lifecycleGeneration, broker);
+      } catch (error) {
+        broker.close();
+        throw error;
+      } finally {
+        this.initializingBrokers.delete(broker);
+      }
       this.pending.set(transaction.transactionId, {
         transactionId: transaction.transactionId,
         expiresAt: transaction.expiresAt,
-        broker: null,
+        broker,
         request,
-        assertion: null,
-        platformServerNonce,
+        assertion,
+        platformServerNonce: null,
         exchangeStarted: false,
         challengeClaimed: false,
         browserPublicKey: input.browserPublicKey ?? null
@@ -129,93 +268,15 @@ export class LocalOwnerSessionCoordinator {
         transactionId: transaction.transactionId,
         installationId: this.installationId,
         expiresAt: transaction.expiresAt,
-        broker: null,
-        platform: {
-          protocol: "forge-platform-owner-proof/1",
-          serverNonce: platformServerNonce,
+        broker: {
+          socketPath,
           request
-        }
+        },
+        platform: null
       };
+    } finally {
+      this.pendingInitializations -= 1;
     }
-    if (!this.brokerBinaryPath) {
-      throw new HttpError(
-        503,
-        "local_owner_channel_unavailable",
-        "Forge has no verified local-owner authentication channel."
-      );
-    }
-    await this.ensurePrivateSocketDirectory();
-    const socketPath = path.join(
-      this.socketDirectory,
-      `o_${createHash("sha256")
-        .update(transaction.transactionId)
-        .digest("hex")
-        .slice(0, 20)}.sock`
-    );
-    const broker = new NativeOwnerBroker(
-      this.brokerBinaryPath,
-      socketPath,
-      this.clock,
-      15_000,
-      undefined,
-      this.brokerBinarySha256
-    );
-    let signalReady!: () => void;
-    let rejectReady!: (error: Error) => void;
-    const ready = new Promise<void>((resolve, reject) => {
-      signalReady = resolve;
-      rejectReady = reject;
-    });
-    const assertion = this.ownerChannel
-      .authenticateWithNativeBroker(broker, request, async () => {
-        // Only the independently installed local client may invoke `approve`.
-        // Returning here lets the HTTP begin response expose the exact bounded
-        // request while the server remains blocked in its `serve` role.
-        signalReady();
-      })
-      .then((evidence) =>
-        this.assertions.mintFromOwnerChannel({
-          transactionId: transaction.transactionId,
-          evidence
-        })
-      )
-      .catch((error: unknown) => {
-        rejectReady(
-          error instanceof Error
-            ? error
-            : new Error("Forge local-owner verification failed.")
-        );
-        throw error;
-      });
-    void assertion.catch(() => undefined);
-    this.pending.set(transaction.transactionId, {
-      transactionId: transaction.transactionId,
-      expiresAt: transaction.expiresAt,
-      broker,
-      request,
-      assertion,
-      platformServerNonce: null,
-      exchangeStarted: false,
-      challengeClaimed: false,
-      browserPublicKey: input.browserPublicKey ?? null
-    });
-    try {
-      await ready;
-    } catch (error) {
-      this.pending.delete(transaction.transactionId);
-      broker.close();
-      throw error;
-    }
-    return {
-      transactionId: transaction.transactionId,
-      installationId: this.installationId,
-      expiresAt: transaction.expiresAt,
-      broker: {
-        socketPath,
-        request
-      },
-      platform: null
-    };
   }
 
   async exchange(
@@ -295,10 +356,30 @@ export class LocalOwnerSessionCoordinator {
   }
 
   close() {
+    this.lifecycleGeneration += 1;
+    for (const broker of this.initializingBrokers) {
+      broker.close();
+    }
+    this.initializingBrokers.clear();
     for (const pending of this.pending.values()) {
       pending.broker?.close();
     }
     this.pending.clear();
+  }
+
+  private requireActiveLifecycle(
+    expectedGeneration: number,
+    broker?: NativeOwnerBroker
+  ) {
+    if (expectedGeneration === this.lifecycleGeneration) {
+      return;
+    }
+    broker?.close();
+    throw new HttpError(
+      503,
+      "local_owner_coordinator_closed",
+      "Forge stopped this local-owner verification during runtime shutdown."
+    );
   }
 
   challenge(input: {
@@ -353,7 +434,7 @@ export class LocalOwnerSessionCoordinator {
     };
   }
 
-  private async cleanupExpired() {
+  private cleanupExpired() {
     const now = this.clock.now().getTime();
     for (const [transactionId, pending] of this.pending) {
       if (Date.parse(pending.expiresAt) <= now) {

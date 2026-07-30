@@ -94,11 +94,27 @@ export class LocalOwnerAssertionService {
     private readonly lifetimeSeconds = 30
   ) {}
 
-  begin(input: {
-    installId: string;
-    browserOrigin: string;
-    browserNonce: string;
-  }) {
+  begin(
+    input: {
+      installId: string;
+      browserOrigin: string;
+      browserNonce: string;
+    },
+    options: {
+      transactionLifetimeSeconds?: number;
+    } = {}
+  ) {
+    const transactionLifetimeSeconds =
+      options.transactionLifetimeSeconds ?? this.lifetimeSeconds;
+    if (
+      !Number.isSafeInteger(transactionLifetimeSeconds) ||
+      transactionLifetimeSeconds < 1 ||
+      transactionLifetimeSeconds > 300
+    ) {
+      throw new Error(
+        "Forge local-owner transaction lifetime is outside the bounded range."
+      );
+    }
     const ownerSecurityEpoch = this.repository.readOwnerSecurityEpoch(
       this.ownerChannel.ownerUserId
     );
@@ -120,7 +136,7 @@ export class LocalOwnerAssertionService {
       ownerSecurityEpoch,
       createdAt: now.toISOString(),
       expiresAt: new Date(
-        now.getTime() + this.lifetimeSeconds * 1000
+        now.getTime() + transactionLifetimeSeconds * 1000
       ).toISOString(),
       assertionIssuedAt: null,
       exchangedAt: null

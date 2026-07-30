@@ -1005,6 +1005,7 @@ describe("create entity payload normalization", () => {
     });
     let beginCount = 0;
     let exchangeCount = 0;
+    const approvalModes: string[] = [];
     const fetchMock = vi.fn(async (rawPath: unknown, init?: RequestInit) => {
       const requestPath = String(rawPath);
       if (requestPath.includes("/api/v1/auth/local/browser/begin")) {
@@ -1012,7 +1013,9 @@ describe("create entity payload normalization", () => {
         const body = JSON.parse(String(init?.body)) as {
           browserNonce: string;
           browserOrigin: string;
+          approvalMode: string;
         };
+        approvalModes.push(body.approvalMode);
         const handlerUrl = new URL("forge://local-auth");
         handlerUrl.searchParams.set("apiOrigin", "http://127.0.0.1:4317");
         handlerUrl.searchParams.set("browserOrigin", body.browserOrigin);
@@ -1055,6 +1058,7 @@ describe("create entity payload normalization", () => {
     expect(handlerUrls).toHaveLength(1);
     expect(beginCount).toBe(2);
     expect(exchangeCount).toBe(1);
+    expect(approvalModes).toEqual(["automatic", "interactive"]);
     const stagedHandlerUrl = getPreparedLocalBrowserAuthorizationUrl();
     expect(stagedHandlerUrl).toMatch(/^forge:\/\/local-auth\?/);
 

@@ -671,7 +671,10 @@ type PreparedLocalBrowserAuthorization = {
   browserNonce: string;
   handlerUrl: string;
   privateKey: CryptoKey;
+  approvalMode: LocalBrowserApprovalMode;
 };
+
+type LocalBrowserApprovalMode = "automatic" | "interactive";
 
 let browserSessionBootstrapPromise: Promise<void> | null = null;
 let remoteBrowserRenewalPromise: Promise<boolean> | null = null;
@@ -775,10 +778,15 @@ function assertLocalBrowserAuthorizationSupport() {
   }
 }
 
-async function prepareLocalBrowserAuthorizationTransaction() {
+async function prepareLocalBrowserAuthorizationTransaction(
+  approvalMode: LocalBrowserApprovalMode
+) {
   assertLocalBrowserAuthorizationSupport();
-  if (preparedLocalBrowserAuthorization) {
+  if (preparedLocalBrowserAuthorization?.approvalMode === approvalMode) {
     return preparedLocalBrowserAuthorization;
+  }
+  if (preparedLocalBrowserAuthorization) {
+    preparedLocalBrowserAuthorization = null;
   }
   if (!browserAuthorizationPreparationPromise) {
     browserAuthorizationPreparationPromise = (async () => {
@@ -803,7 +811,8 @@ async function prepareLocalBrowserAuthorizationTransaction() {
         body: JSON.stringify({
           browserOrigin,
           browserNonce,
-          browserPublicKey
+          browserPublicKey,
+          approvalMode
         })
       });
       if (!begin.response.ok) {
@@ -854,7 +863,8 @@ async function prepareLocalBrowserAuthorizationTransaction() {
         browserOrigin,
         browserNonce,
         handlerUrl,
-        privateKey: browserKeys.privateKey
+        privateKey: browserKeys.privateKey,
+        approvalMode
       };
       preparedLocalBrowserAuthorization = prepared;
       return prepared;
@@ -929,7 +939,8 @@ export function getPreparedLocalBrowserAuthorizationUrl() {
 }
 
 export async function prepareLocalBrowserAuthorization() {
-  const prepared = await prepareLocalBrowserAuthorizationTransaction();
+  const prepared =
+    await prepareLocalBrowserAuthorizationTransaction("interactive");
   return prepared.handlerUrl;
 }
 
@@ -1371,13 +1382,14 @@ async function bootstrapBrowserSession() {
   }
   if (!browserSessionBootstrapPromise) {
     browserSessionBootstrapPromise = (async () => {
-      const prepared = await prepareLocalBrowserAuthorizationTransaction();
+      const prepared =
+        await prepareLocalBrowserAuthorizationTransaction("automatic");
       invokeLocalBrowserOwnerHandler(prepared.handlerUrl);
       try {
         await exchangePreparedLocalBrowserAuthorization();
       } catch (error) {
         try {
-          await prepareLocalBrowserAuthorizationTransaction();
+          await prepareLocalBrowserAuthorizationTransaction("interactive");
         } catch {
           // The original exchange error is more useful. A failed replacement
           // staging attempt does not launch or retry the owner handler.

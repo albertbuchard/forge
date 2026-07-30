@@ -133,7 +133,8 @@ test(
           body: JSON.stringify({
             browserOrigin,
             browserNonce,
-            browserPublicKey
+            browserPublicKey,
+            approvalMode: "interactive"
           })
         }
       );
@@ -142,8 +143,12 @@ test(
       const browserTransaction = JSON.parse(browserBeginText) as {
         transactionId: string;
         handlerUrl: string;
+        expiresAt: string;
       };
       assert.match(browserTransaction.handlerUrl, /^forge:\/\/local-auth\?/);
+      assert.ok(
+        Date.parse(browserTransaction.expiresAt) - Date.now() > 100_000
+      );
       assert.equal(
         browserTransaction.handlerUrl.includes("fg_browser_"),
         false
@@ -190,6 +195,7 @@ test(
           })
         }
       );
+      await new Promise((resolve) => setTimeout(resolve, 16_000));
       const browserChallengeResponse = await fetch(
         `${baseUrl}/api/v1/auth/local/browser/challenge`,
         {
@@ -286,6 +292,85 @@ test(
         headers: { cookie: browserCookie! }
       });
       assert.equal(revokedBrowserContext.status, 401);
+
+      {
+        const runtime = applicationSecurityRuntimeForTest(app);
+        assert.ok(runtime.localOwnerSessions);
+        const originalBegin = runtime.localOwnerSessions.begin.bind(
+          runtime.localOwnerSessions
+        );
+        const mutableCoordinator = runtime.localOwnerSessions as {
+          begin: typeof runtime.localOwnerSessions.begin;
+        };
+        const capturedModes: Array<"automatic" | "interactive" | undefined> =
+          [];
+        try {
+          mutableCoordinator.begin = async (input) => {
+            capturedModes.push(input.approvalMode);
+            const transactionId = `local_schema_${capturedModes.length
+              .toString()
+              .padStart(16, "0")}`;
+            return {
+              transactionId,
+              installationId: "install-schema",
+              expiresAt: new Date(Date.now() + 30_000).toISOString(),
+              broker: {
+                socketPath: `/tmp/${transactionId}.sock`,
+                request: {
+                  protocol: "forge-owner-broker/1",
+                  requestId: `owner_${transactionId}`,
+                  transactionId,
+                  installId: "install-schema",
+                  browserOrigin,
+                  browserNonce
+                }
+              },
+              platform: null
+            };
+          };
+          for (const approvalMode of [
+            undefined,
+            "automatic",
+            "interactive"
+          ] as const) {
+            const modeResponse = await fetch(
+              `${baseUrl}/api/v1/auth/local/browser/begin`,
+              {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  browserOrigin,
+                  browserNonce,
+                  browserPublicKey,
+                  ...(approvalMode ? { approvalMode } : {})
+                })
+              }
+            );
+            assert.equal(modeResponse.status, 200, await modeResponse.text());
+          }
+          const unknownMode = await fetch(
+            `${baseUrl}/api/v1/auth/local/browser/begin`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                browserOrigin,
+                browserNonce,
+                browserPublicKey,
+                approvalMode: "human"
+              })
+            }
+          );
+          assert.equal(unknownMode.status, 400);
+          assert.deepEqual(capturedModes, [
+            "automatic",
+            "automatic",
+            "interactive"
+          ]);
+        } finally {
+          mutableCoordinator.begin = originalBegin;
+        }
+      }
 
       const proxiedReplay = await fetch(`${baseUrl}/api/v1/health`, {
         headers: {

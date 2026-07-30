@@ -33,6 +33,10 @@ import type { ForgePrincipal } from "./contracts.js";
 import { DpopVerifier } from "./dpop.js";
 import { LocalOwnerAssertionService } from "./local-owner-assertion.js";
 import {
+  LocalOwnerSessionCoordinator,
+  type BrowserPublicKey
+} from "./local-owner-session-coordinator.js";
+import {
   NATIVE_OWNER_BROKER_PROTOCOL,
   NativeOwnerBroker,
   OwnerChannelAuthority,
@@ -742,6 +746,45 @@ test("local-owner exchange survives restart and rejects forged, stale, cross-ori
       /expired/
     );
 
+    const interactive = service.begin(
+      {
+        installId: "install-interactive",
+        browserOrigin: "http://127.0.0.1:3027",
+        browserNonce: "I".repeat(43)
+      },
+      { transactionLifetimeSeconds: 120 }
+    );
+    context.clock.advance(31);
+    const interactiveAssertion = await service.mintFromOwnerChannel({
+      transactionId: interactive.transactionId,
+      evidence: await platformOwnerEvidence(authority, context.clock)
+    });
+    context.clock.advance(33);
+    await assert.rejects(
+      service.exchange({
+        assertion: interactiveAssertion,
+        installId: "install-interactive",
+        browserOrigin: "http://127.0.0.1:3027",
+        browserNonce: "I".repeat(43)
+      }),
+      (error: unknown) =>
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ERR_JWT_EXPIRED"
+    );
+    assert.throws(
+      () =>
+        service.begin(
+          {
+            installId: "install-unbounded",
+            browserOrigin: "http://127.0.0.1:3027",
+            browserNonce: "U".repeat(43)
+          },
+          { transactionLifetimeSeconds: 301 }
+        ),
+      /bounded range/
+    );
+
     const staleEpochTransaction = service.begin({
       installId: "install-stale-epoch",
       browserOrigin: "http://127.0.0.1:3027",
@@ -766,6 +809,157 @@ test("local-owner exchange survives restart and rejects forged, stale, cross-ori
       }),
       /binding/
     );
+  } finally {
+    opened.database.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("concurrent local-owner begins reserve at most four broker slots and release them cleanly", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "forge-local-owner-capacity-")
+  );
+  const context = foundation();
+  const opened = openStore(path.join(root, "security.sqlite"), context);
+  try {
+    opened.store.ensureOwner("501");
+    const keys = new InMemorySigningKeyProvider("https://forge.local");
+    await keys.initialize();
+    const authority = new OwnerChannelAuthority(context.clock, "501");
+    const assertions = new LocalOwnerAssertionService(
+      keys,
+      context.clock,
+      context.digester,
+      opened.store,
+      authority,
+      "forge-local-capacity"
+    );
+    const browserSessions = new BrowserSessionService(
+      context.clock,
+      context.secrets,
+      context.digester,
+      opened.store,
+      opened.store
+    );
+    let releaseBrokerReadiness!: () => void;
+    const brokerReadiness = new Promise<void>((resolve) => {
+      releaseBrokerReadiness = resolve;
+    });
+    let signalFourBrokers!: () => void;
+    const fourBrokersCreated = new Promise<void>((resolve) => {
+      signalFourBrokers = resolve;
+    });
+    const brokerTimeouts: number[] = [];
+    const closedSockets = new Set<string>();
+    const coordinator = new LocalOwnerSessionCoordinator(
+      "install-capacity",
+      "https://forge.local/api",
+      "501",
+      "/private/forge-owner-broker",
+      null,
+      path.join(root, "sockets"),
+      context.clock,
+      assertions,
+      authority,
+      browserSessions,
+      null,
+      (brokerInput) => {
+        brokerTimeouts.push(brokerInput.timeoutMilliseconds);
+        if (brokerTimeouts.length === 4) {
+          signalFourBrokers();
+        }
+        return {
+          socketPath: brokerInput.socketPath,
+          async authenticate(
+            request: {
+              requestId: string;
+            },
+            launchOwnerHelper: (input: {
+              binaryPath: string;
+              socketPath: string;
+              request: unknown;
+            }) => Promise<void>
+          ) {
+            await brokerReadiness;
+            await launchOwnerHelper({
+              binaryPath: brokerInput.binaryPath,
+              socketPath: brokerInput.socketPath,
+              request
+            });
+            return {
+              requestId: request.requestId,
+              peerUid: 501,
+              verifiedAt: context.clock.now().toISOString()
+            };
+          },
+          consume() {},
+          close() {
+            closedSockets.add(brokerInput.socketPath);
+          }
+        } as unknown as NativeOwnerBroker;
+      }
+    );
+    const browserPublicKey: BrowserPublicKey = {
+      kty: "EC",
+      crv: "P-256",
+      x: "A".repeat(43),
+      y: "B".repeat(43),
+      ext: true,
+      key_ops: ["verify"]
+    };
+    const starts = Array.from({ length: 4 }, (_, index) =>
+      coordinator.begin({
+        browserOrigin: "http://127.0.0.1:3027",
+        browserNonce: String(index).repeat(43),
+        browserPublicKey
+      })
+    );
+    await fourBrokersCreated;
+    await assert.rejects(
+      coordinator.begin({
+        browserOrigin: "http://127.0.0.1:3027",
+        browserNonce: "X".repeat(43),
+        browserPublicKey
+      }),
+      /maximum number/
+    );
+    assert.equal(brokerTimeouts.length, 4);
+    assert.deepEqual(brokerTimeouts, [5_000, 5_000, 5_000, 5_000]);
+    coordinator.close();
+    assert.equal(closedSockets.size, 4);
+    releaseBrokerReadiness();
+    const interruptedStarts = await Promise.allSettled(starts);
+    assert.equal(
+      interruptedStarts.every(
+        (entry) =>
+          entry.status === "rejected" &&
+          entry.reason instanceof Error &&
+          "code" in entry.reason &&
+          entry.reason.code === "local_owner_coordinator_closed"
+      ),
+      true
+    );
+    assert.equal(closedSockets.size, 4);
+
+    await coordinator.begin({
+      browserOrigin: "http://127.0.0.1:3027",
+      browserNonce: "R".repeat(43),
+      browserPublicKey,
+      approvalMode: "interactive"
+    });
+    assert.equal(brokerTimeouts.length, 5);
+    assert.equal(brokerTimeouts.at(-1), 120_000);
+    coordinator.close();
+    assert.equal(closedSockets.size, 5);
+
+    await coordinator.begin({
+      browserOrigin: "http://127.0.0.1:3027",
+      browserNonce: "S".repeat(43)
+    });
+    assert.equal(brokerTimeouts.length, 6);
+    assert.equal(brokerTimeouts.at(-1), 15_000);
+    coordinator.close();
+    assert.equal(closedSockets.size, 6);
   } finally {
     opened.database.close();
     await rm(root, { recursive: true, force: true });
