@@ -3817,6 +3817,18 @@ async function verifyOpenClawRuntimeTransferCandidate(
     pid: record.state.pid,
     identity
   };
+  const responderPid = protectedRuntimePid(healthResult);
+  const responderIdentity = captureProcessIdentity(responderPid);
+  if (!responderIdentity) {
+    throw new Error(
+      "Forge refused to transfer the OpenClaw runtime because its protected health responder identity is not live."
+    );
+  }
+  const protectedResponder = {
+    role: "protected-health-responder",
+    pid: responderPid,
+    identity: responderIdentity
+  };
   if (
     !runtimeStateOwnsHealthProcess(
       { children: [recorded] },
@@ -3831,7 +3843,12 @@ async function verifyOpenClawRuntimeTransferCandidate(
     options.inspectLaunchBoundary ??
     inspectOpenClawRuntimeLaunchBoundary
   )(config, record.state);
-  return { ...record, recorded, launchBoundary };
+  return {
+    ...record,
+    recorded,
+    protectedResponder,
+    launchBoundary
+  };
 }
 
 async function stopVerifiedOpenClawRuntimeCandidate(candidate) {
@@ -3889,6 +3906,83 @@ async function stopVerifiedOpenClawRuntimeCandidate(candidate) {
   };
 }
 
+async function waitForTransferredRuntimeQuiescence(
+  config,
+  candidate,
+  options = {}
+) {
+  const healthImplementation =
+    options.healthImplementation ?? health;
+  const portAvailableImplementation =
+    options.portAvailableImplementation ?? isPortAvailable;
+  const responderAliveImplementation =
+    options.responderAliveImplementation ??
+    recordedProcessIdentityMatches;
+  const delayImplementation =
+    options.delayImplementation ??
+    ((milliseconds) =>
+      new Promise((resolve) => setTimeout(resolve, milliseconds)));
+  const timeoutMs = Math.max(0, options.timeoutMs ?? 15_000);
+  const intervalMs = Math.max(1, options.intervalMs ?? 100);
+  if (
+    !Number.isInteger(candidate?.protectedResponder?.pid) ||
+    candidate.protectedResponder.pid <= 0 ||
+    typeof candidate.protectedResponder.identity !== "string" ||
+    !/^[0-9a-f]{64}$/.test(candidate.protectedResponder.identity)
+  ) {
+    return {
+      ok: false,
+      quiesced: false,
+      message:
+        "Forge could not prove the previously authenticated health responder before waiting for endpoint quiescence."
+    };
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  let responderAlive = true;
+  let observedHealth = null;
+  let portAvailable = false;
+  let waiting = true;
+  while (waiting) {
+    responderAlive = responderAliveImplementation(
+      candidate.protectedResponder
+    );
+    observedHealth = await healthImplementation(config);
+    portAvailable = await portAvailableImplementation(
+      config.port || DEFAULT_PORT
+    );
+    if (
+      !responderAlive &&
+      !isHealthyForgeRuntime(observedHealth) &&
+      portAvailable
+    ) {
+      return {
+        ok: true,
+        quiesced: true,
+        responderPid: candidate.protectedResponder.pid,
+        health: observedHealth
+      };
+    }
+    if (Date.now() >= deadline) {
+      waiting = false;
+    } else {
+      await delayImplementation(intervalMs);
+    }
+  }
+
+  return {
+    ok: false,
+    quiesced: false,
+    responderPid: candidate.protectedResponder.pid,
+    responderAlive,
+    endpointHealthy: isHealthyForgeRuntime(observedHealth),
+    portAvailable,
+    health: observedHealth,
+    message:
+      "Forge kept both runtime-manager locks but the previously authenticated responder or its endpoint did not quiesce in time. No replacement runtime was started."
+  };
+}
+
 function runtimeStateHasLiveManagedServer(state) {
   return (
     state?.adopted !== true &&
@@ -3898,6 +3992,92 @@ function runtimeStateHasLiveManagedServer(state) {
         child?.role === "server" && recordedProcessIdentityMatches(child)
     )
   );
+}
+
+function runtimeStartFailureHasSurvivors(result) {
+  return (
+    result?.cleanupFailed === true ||
+    (Array.isArray(result?.survivingCandidatePids) &&
+      result.survivingCandidatePids.length > 0)
+  );
+}
+
+async function verifyTransferredRuntimeStart(
+  config,
+  result,
+  peerPreparation,
+  options = {}
+) {
+  if (
+    result?.ok !== true ||
+    result?.started !== true ||
+    result?.adopted === true ||
+    !runtimeStateHasLiveManagedServer(result?.state)
+  ) {
+    return {
+      ok: false,
+      message:
+        "Forge refused to complete the ownership transfer because the replacement was adopted or was not a newly started managed runtime."
+    };
+  }
+  const readStateImplementation =
+    options.readStateImplementation ?? readRuntimeState;
+  const authenticatedHealthImplementation =
+    options.authenticatedHealthImplementation ??
+    waitForAuthenticatedRuntimeHealth;
+  let persistedState;
+  let protectedHealth;
+  try {
+    persistedState = await readStateImplementation();
+    protectedHealth = await authenticatedHealthImplementation(
+      config,
+      peerPreparation
+    );
+  } catch (error) {
+    return {
+      ok: false,
+      message: [
+        "Forge could not reverify the replacement runtime after the ownership transfer.",
+        error instanceof Error ? error.message : String(error)
+      ].join(" ")
+    };
+  }
+  const returnedServer = result.state.children.find(
+    (child) => child?.role === "server"
+  );
+  const persistedServer = persistedState?.children?.find(
+    (child) =>
+      child?.role === "server" &&
+      child.pid === returnedServer?.pid &&
+      child.identity === returnedServer?.identity
+  );
+  const adoptionFailure = runtimeAdoptionFailure(
+    config,
+    persistedState,
+    protectedHealth
+  );
+  if (
+    persistedState?.adopted === true ||
+    !persistedServer ||
+    !runtimeStateHasLiveManagedServer(persistedState) ||
+    !runtimeStateOwnsHealthProcess(result.state, protectedHealth) ||
+    !runtimeStateOwnsHealthProcess(persistedState, protectedHealth) ||
+    adoptionFailure
+  ) {
+    return {
+      ok: false,
+      state: persistedState,
+      health: protectedHealth,
+      adoptionFailure,
+      message:
+        "Forge refused to complete the ownership transfer because the persisted managed state does not own the authenticated replacement responder."
+    };
+  }
+  return {
+    ok: true,
+    state: persistedState,
+    health: protectedHealth
+  };
 }
 
 async function authenticatedRuntimeHealth(config, peerPreparation = null) {
@@ -4718,6 +4898,16 @@ async function restartRuntime(config, options = {}) {
   const stopTransfer =
     options.stopTransfer ??
     stopVerifiedOpenClawRuntimeCandidate;
+  const waitForQuiescence =
+    options.waitForQuiescence ??
+    waitForTransferredRuntimeQuiescence;
+  const waitForQuiescenceOptions = {
+    healthImplementation,
+    ...(options.waitForQuiescenceOptions ?? {})
+  };
+  const verifyStartedTransfer =
+    options.verifyStartedTransfer ??
+    verifyTransferredRuntimeStart;
   let peerPreparation = options.peerPreparation ?? null;
   let openClawTransfer = null;
   if (
@@ -4770,36 +4960,153 @@ async function restartRuntime(config, options = {}) {
       };
     }
 
+    const quiescence = await waitForQuiescence(
+      config,
+      openClawTransfer,
+      waitForQuiescenceOptions
+    );
+    if (!quiescence.ok) {
+      return {
+        ok: false,
+        started: false,
+        adopted: false,
+        transferredFrom: "openclaw",
+        stop,
+        quiescence,
+        message: quiescence.message
+      };
+    }
+
     const startOptions = {
       peerPreparation,
       runtimeMutationLockHeld: true
     };
     let start = await startImplementation(config, startOptions);
     let retry = null;
-    if (!start?.ok) {
-      const observed = await healthImplementation(config);
-      if (!isHealthyForgeRuntime(observed)) {
-        retry = await startImplementation(config, startOptions);
-        start = retry;
+    let transferOwnership = null;
+    const verifyManagedStart = async (result) =>
+      verifyStartedTransfer(
+        config,
+        result,
+        peerPreparation,
+        {
+          readStateImplementation: readState,
+          authenticatedHealthImplementation: authenticatedHealth
+        }
+      );
+    if (start?.ok) {
+      transferOwnership = await verifyManagedStart(start);
+      if (!transferOwnership.ok) {
+        return {
+          ...start,
+          ok: false,
+          started: false,
+          adopted: false,
+          transferredFrom: "openclaw",
+          stop,
+          quiescence,
+          transferOwnership,
+          message: transferOwnership.message
+        };
       }
     }
     if (!start?.ok) {
-      const observed = await healthImplementation(config);
+      if (runtimeStartFailureHasSurvivors(start)) {
+        return {
+          ...start,
+          ok: false,
+          started: false,
+          adopted: false,
+          transferredFrom: "openclaw",
+          stop,
+          quiescence,
+          message:
+            start.message ??
+            "Forge left a replacement candidate running, so no retry or rollback was attempted."
+        };
+      }
+      const retryQuiescence = await waitForQuiescence(
+        config,
+        openClawTransfer,
+        waitForQuiescenceOptions
+      );
+      if (!retryQuiescence.ok) {
+        return {
+          ...start,
+          ok: false,
+          started: false,
+          adopted: false,
+          transferredFrom: "openclaw",
+          stop,
+          quiescence,
+          retryQuiescence,
+          message: retryQuiescence.message
+        };
+      }
+      retry = await startImplementation(config, startOptions);
+      start = retry;
+      if (start?.ok) {
+        transferOwnership = await verifyManagedStart(start);
+        if (!transferOwnership.ok) {
+          return {
+            ...start,
+            ok: false,
+            started: false,
+            adopted: false,
+            transferredFrom: "openclaw",
+            stop,
+            quiescence,
+            retry,
+            retryQuiescence,
+            transferOwnership,
+            message: transferOwnership.message
+          };
+        }
+      }
+    }
+    if (!start?.ok) {
+      if (runtimeStartFailureHasSurvivors(start)) {
+        return {
+          ...start,
+          ok: false,
+          started: false,
+          adopted: false,
+          transferredFrom: "openclaw",
+          stop,
+          quiescence,
+          retry,
+          message:
+            start.message ??
+            "Forge left a replacement candidate running, so no rollback was attempted."
+        };
+      }
       const rollbackImplementation =
         options.rollbackImplementation ??
         restoreOpenClawRuntimeBoundary;
-      const rollback = !isHealthyForgeRuntime(observed)
-        ? await rollbackImplementation(
-            config,
-            openClawTransfer,
-            peerPreparation
-          )
-        : {
-            ok: false,
-            restored: false,
-            message:
-              "A different healthy Forge process appeared after the failed transfer; it was left unchanged."
-          };
+      const rollbackQuiescence = await waitForQuiescence(
+        config,
+        openClawTransfer,
+        waitForQuiescenceOptions
+      );
+      if (!rollbackQuiescence.ok) {
+        return {
+          ...start,
+          ok: false,
+          started: false,
+          adopted: false,
+          transferredFrom: "openclaw",
+          stop,
+          quiescence,
+          retry,
+          rollbackQuiescence,
+          message: rollbackQuiescence.message
+        };
+      }
+      const rollback = await rollbackImplementation(
+        config,
+        openClawTransfer,
+        peerPreparation
+      );
       return {
         ...start,
         ok: false,
@@ -4823,7 +5130,8 @@ async function restartRuntime(config, options = {}) {
       ...start,
       transferredFrom: "openclaw",
       stop,
-      retry
+      retry,
+      transferOwnership
     };
   }
 
@@ -8015,6 +8323,8 @@ export const __forgeMemoryRuntimeMutationTest = Object.freeze({
   runtimeStatePath,
   stopRuntime,
   stopVerifiedOpenClawRuntimeCandidate,
+  waitForTransferredRuntimeQuiescence,
+  verifyTransferredRuntimeStart,
   verifyOpenClawRuntimeTransferCandidate,
   withRuntimeMutationLock
 });

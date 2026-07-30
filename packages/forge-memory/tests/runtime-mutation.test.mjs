@@ -479,6 +479,18 @@ test("restart transfers an exactly verified OpenClaw runtime under both manager 
         manager: "openclaw"
       };
     },
+    waitForQuiescence: async (_config, received) => {
+      assertBothLocks();
+      assert.equal(received, candidate);
+      events.push("quiesce");
+      return { ok: true, quiesced: true };
+    },
+    verifyStartedTransfer: async (_config, result) => {
+      assertBothLocks();
+      assert.equal(result.ok, true);
+      events.push("verify-managed");
+      return { ok: true };
+    },
     startImplementation: async (_config, options) => {
       assertBothLocks();
       assert.equal(options.runtimeMutationLockHeld, true);
@@ -496,7 +508,9 @@ test("restart transfers an exactly verified OpenClaw runtime under both manager 
   assert.deepEqual(events, [
     "verify",
     "stop-openclaw",
-    "start-forge-memory"
+    "quiesce",
+    "start-forge-memory",
+    "verify-managed"
   ]);
   assert.equal(fs.existsSync(runtime.runtimeStartLockPath()), false);
   assert.equal(
@@ -531,6 +545,7 @@ test("restart performs one clean retry and restores OpenClaw on transfer failure
   let healthReads = 0;
   let starts = 0;
   let rollbacks = 0;
+  let quiescenceChecks = 0;
   const result = await runtime.restartRuntime(config, {
     peerPreparation: {},
     healthImplementation: async () => {
@@ -548,6 +563,10 @@ test("restart performs one clean retry and restores OpenClaw on transfer failure
       pids: [9101],
       manager: "openclaw"
     }),
+    waitForQuiescence: async () => {
+      quiescenceChecks += 1;
+      return { ok: true, quiesced: true };
+    },
     startImplementation: async () => {
       starts += 1;
       return {
@@ -577,8 +596,357 @@ test("restart performs one clean retry and restores OpenClaw on transfer failure
   assert.equal(result.transferredFrom, "openclaw");
   assert.equal(starts, 2);
   assert.equal(rollbacks, 1);
+  assert.equal(quiescenceChecks, 3);
   assert.equal(result.rollback.restored, true);
   assert.match(result.message, /prior OpenClaw source runtime was restored/);
+});
+
+test("OpenClaw transfer waits for the exact responder and endpoint to quiesce", async () => {
+  const observations = [
+    {
+      responderAlive: true,
+      health: { ok: true, forge: true },
+      portAvailable: false
+    },
+    {
+      responderAlive: true,
+      health: { ok: false, forge: false },
+      portAvailable: false
+    },
+    {
+      responderAlive: false,
+      health: { ok: false, forge: false },
+      portAvailable: true
+    }
+  ];
+  let observationIndex = 0;
+  const candidate = {
+    protectedResponder: {
+      role: "protected-health-responder",
+      pid: 9201,
+      identity: "c".repeat(64)
+    }
+  };
+  const result =
+    await runtime.waitForTransferredRuntimeQuiescence(
+      config,
+      candidate,
+      {
+        responderAliveImplementation: () =>
+          observations[observationIndex].responderAlive,
+        healthImplementation: async () =>
+          observations[observationIndex].health,
+        portAvailableImplementation: async () =>
+          observations[observationIndex].portAvailable,
+        delayImplementation: async () => {
+          observationIndex += 1;
+        },
+        timeoutMs: 1_000,
+        intervalMs: 1
+      }
+    );
+  assert.equal(result.ok, true);
+  assert.equal(result.quiesced, true);
+  assert.equal(observationIndex, 2);
+});
+
+test("OpenClaw transfer quiescence fails closed while any Forge responder remains healthy", async () => {
+  const candidate = {
+    protectedResponder: {
+      role: "protected-health-responder",
+      pid: 9301,
+      identity: "d".repeat(64)
+    }
+  };
+  const result =
+    await runtime.waitForTransferredRuntimeQuiescence(
+      config,
+      candidate,
+      {
+        responderAliveImplementation: () => false,
+        healthImplementation: async () => ({
+          ok: true,
+          forge: true
+        }),
+        portAvailableImplementation: async () => false,
+        delayImplementation: async () => delay(1),
+        timeoutMs: 5,
+        intervalMs: 1
+      }
+    );
+  assert.equal(result.ok, false);
+  assert.equal(result.quiesced, false);
+  assert.equal(result.responderAlive, false);
+  assert.equal(result.endpointHealthy, true);
+  assert.equal(result.portAvailable, false);
+  assert.match(result.message, /No replacement runtime was started/);
+});
+
+test("OpenClaw transfer never starts when the protected endpoint does not quiesce", async () => {
+  await resetRuntimeFiles();
+  await fsp.mkdir(
+    path.dirname(runtime.openClawRuntimeStatePath(config)),
+    { recursive: true, mode: 0o700 }
+  );
+  await fsp.writeFile(
+    runtime.openClawRuntimeStatePath(config),
+    "{}\n",
+    { encoding: "utf8", mode: 0o600 }
+  );
+  const candidate = {
+    state: { pid: 9401 },
+    path: runtime.openClawRuntimeStatePath(config),
+    sha256: "e".repeat(64),
+    protectedResponder: {
+      role: "protected-health-responder",
+      pid: 9402,
+      identity: "f".repeat(64)
+    },
+    launchBoundary: {
+      executable: process.execPath,
+      args: [new URL(import.meta.url).pathname],
+      cwd: process.cwd(),
+      mode: "packaged",
+      logPath: runtime.openClawRuntimeLogPath(config)
+    }
+  };
+  let starts = 0;
+  let rollbacks = 0;
+  const result = await runtime.restartRuntime(config, {
+    peerPreparation: {},
+    healthImplementation: async () => ({
+      ok: true,
+      forge: true
+    }),
+    authenticatedHealth: async () => protectedHealth(9402),
+    readState: async () => null,
+    verifyTransfer: async () => candidate,
+    stopTransfer: async () => ({
+      ok: true,
+      stopped: true,
+      pids: [9401],
+      manager: "openclaw"
+    }),
+    waitForQuiescence: async () => ({
+      ok: false,
+      quiesced: false,
+      message:
+        "Protected endpoint remained live. No replacement runtime was started."
+    }),
+    startImplementation: async () => {
+      starts += 1;
+      return { ok: true, started: true };
+    },
+    rollbackImplementation: async () => {
+      rollbacks += 1;
+      return { ok: true, restored: true };
+    }
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.quiescence.ok, false);
+  assert.equal(starts, 0);
+  assert.equal(rollbacks, 0);
+  assert.match(result.message, /No replacement runtime was started/);
+});
+
+test("OpenClaw transfer rejects an adopted race winner after quiescence", async () => {
+  await resetRuntimeFiles();
+  await fsp.mkdir(
+    path.dirname(runtime.openClawRuntimeStatePath(config)),
+    { recursive: true, mode: 0o700 }
+  );
+  await fsp.writeFile(
+    runtime.openClawRuntimeStatePath(config),
+    "{}\n",
+    { encoding: "utf8", mode: 0o600 }
+  );
+  const candidate = {
+    state: { pid: 9501 },
+    path: runtime.openClawRuntimeStatePath(config),
+    sha256: "1".repeat(64),
+    protectedResponder: {
+      role: "protected-health-responder",
+      pid: 9502,
+      identity: "2".repeat(64)
+    }
+  };
+  let starts = 0;
+  let rollbacks = 0;
+  const result = await runtime.restartRuntime(config, {
+    peerPreparation: {},
+    healthImplementation: async () => ({
+      ok: true,
+      forge: true
+    }),
+    authenticatedHealth: async () => protectedHealth(9502),
+    readState: async () => null,
+    verifyTransfer: async () => candidate,
+    stopTransfer: async () => ({
+      ok: true,
+      stopped: true,
+      pids: [9501],
+      manager: "openclaw"
+    }),
+    waitForQuiescence: async () => ({
+      ok: true,
+      quiesced: true
+    }),
+    startImplementation: async () => {
+      starts += 1;
+      return {
+        ok: true,
+        started: false,
+        adopted: true,
+        state: { adopted: true, children: [] }
+      };
+    },
+    rollbackImplementation: async () => {
+      rollbacks += 1;
+      return { ok: true, restored: true };
+    }
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.adopted, false);
+  assert.equal(starts, 1);
+  assert.equal(rollbacks, 0);
+  assert.match(result.message, /not a newly started managed runtime/);
+});
+
+test("OpenClaw transfer never retries after a failed start leaves a survivor", async () => {
+  await resetRuntimeFiles();
+  await fsp.mkdir(
+    path.dirname(runtime.openClawRuntimeStatePath(config)),
+    { recursive: true, mode: 0o700 }
+  );
+  await fsp.writeFile(
+    runtime.openClawRuntimeStatePath(config),
+    "{}\n",
+    { encoding: "utf8", mode: 0o600 }
+  );
+  let starts = 0;
+  let quiescenceChecks = 0;
+  let rollbacks = 0;
+  const result = await runtime.restartRuntime(config, {
+    peerPreparation: {},
+    healthImplementation: async () => ({
+      ok: true,
+      forge: true
+    }),
+    authenticatedHealth: async () => protectedHealth(9602),
+    readState: async () => null,
+    verifyTransfer: async () => ({
+      state: { pid: 9601 },
+      path: runtime.openClawRuntimeStatePath(config),
+      sha256: "3".repeat(64),
+      protectedResponder: {
+        role: "protected-health-responder",
+        pid: 9602,
+        identity: "4".repeat(64)
+      }
+    }),
+    stopTransfer: async () => ({
+      ok: true,
+      stopped: true,
+      pids: [9601],
+      manager: "openclaw"
+    }),
+    waitForQuiescence: async () => {
+      quiescenceChecks += 1;
+      return { ok: true, quiesced: true };
+    },
+    startImplementation: async () => {
+      starts += 1;
+      return {
+        ok: false,
+        started: false,
+        cleanupFailed: true,
+        survivingCandidatePids: [9603],
+        message: "candidate survived cleanup"
+      };
+    },
+    rollbackImplementation: async () => {
+      rollbacks += 1;
+      return { ok: true, restored: true };
+    }
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.cleanupFailed, true);
+  assert.equal(starts, 1);
+  assert.equal(quiescenceChecks, 1);
+  assert.equal(rollbacks, 0);
+  assert.deepEqual(result.survivingCandidatePids, [9603]);
+});
+
+test("OpenClaw transfer never rolls back after a retry leaves a survivor", async () => {
+  await resetRuntimeFiles();
+  await fsp.mkdir(
+    path.dirname(runtime.openClawRuntimeStatePath(config)),
+    { recursive: true, mode: 0o700 }
+  );
+  await fsp.writeFile(
+    runtime.openClawRuntimeStatePath(config),
+    "{}\n",
+    { encoding: "utf8", mode: 0o600 }
+  );
+  let starts = 0;
+  let quiescenceChecks = 0;
+  let rollbacks = 0;
+  const result = await runtime.restartRuntime(config, {
+    peerPreparation: {},
+    healthImplementation: async () => ({
+      ok: true,
+      forge: true
+    }),
+    authenticatedHealth: async () => protectedHealth(9702),
+    readState: async () => null,
+    verifyTransfer: async () => ({
+      state: { pid: 9701 },
+      path: runtime.openClawRuntimeStatePath(config),
+      sha256: "5".repeat(64),
+      protectedResponder: {
+        role: "protected-health-responder",
+        pid: 9702,
+        identity: "6".repeat(64)
+      }
+    }),
+    stopTransfer: async () => ({
+      ok: true,
+      stopped: true,
+      pids: [9701],
+      manager: "openclaw"
+    }),
+    waitForQuiescence: async () => {
+      quiescenceChecks += 1;
+      return { ok: true, quiesced: true };
+    },
+    startImplementation: async () => {
+      starts += 1;
+      if (starts === 1) {
+        return {
+          ok: false,
+          started: false,
+          message: "first start failed cleanly"
+        };
+      }
+      return {
+        ok: false,
+        started: false,
+        cleanupFailed: true,
+        survivingCandidatePids: [9703],
+        message: "retry candidate survived cleanup"
+      };
+    },
+    rollbackImplementation: async () => {
+      rollbacks += 1;
+      return { ok: true, restored: true };
+    }
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.cleanupFailed, true);
+  assert.equal(starts, 2);
+  assert.equal(quiescenceChecks, 2);
+  assert.equal(rollbacks, 0);
+  assert.deepEqual(result.survivingCandidatePids, [9703]);
 });
 
 test("OpenClaw transfer verification binds record, process identity, health PID, and storage root", async () => {
@@ -663,6 +1031,13 @@ test("OpenClaw transfer verification binds record, process identity, health PID,
       sourceEntry
     ]);
     assert.equal(candidate.launchBoundary.logPath, logPath);
+    assert.equal(candidate.protectedResponder.pid, child.pid);
+    assert.equal(
+      runtime.recordedProcessIdentityMatches(
+        candidate.protectedResponder
+      ),
+      true
+    );
     assert.equal(
       runtime.recordedProcessIdentityMatches(candidate.recorded),
       true
