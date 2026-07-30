@@ -71,6 +71,13 @@ async function resetRuntimeFiles() {
     force: true
   });
   await fsp.rm(runtime.runtimeStatePath(), { force: true });
+  await fsp.rm(runtime.openClawRuntimeStartupLockPath(config), {
+    recursive: true,
+    force: true
+  });
+  await fsp.rm(runtime.openClawRuntimeStatePath(config), {
+    force: true
+  });
 }
 
 function protectedHealth(
@@ -160,6 +167,173 @@ test("a stale reaper cannot remove a replacement lock owner", async () => {
   await release();
 });
 
+test("Forge Memory renews its OpenClaw compatibility lease before the legacy lifetime", async () => {
+  await resetRuntimeFiles();
+  const lease = await runtime.acquireOpenClawRuntimeStartupLease(config, {
+    timeoutMs: 200,
+    refreshMs: 10,
+    waitMs: 5
+  });
+  const ownerPath =
+    runtime.openClawRuntimeStartupLockOwnerPath(config);
+  const first = JSON.parse(await fsp.readFile(ownerPath, "utf8"));
+  for (let index = 0; index < 80; index += 1) {
+    await delay(1);
+    const concurrentRead = JSON.parse(
+      await fsp.readFile(ownerPath, "utf8")
+    );
+    assert.equal(concurrentRead.token, first.token);
+  }
+  const refreshed = JSON.parse(await fsp.readFile(ownerPath, "utf8"));
+  assert.equal(refreshed.pid, process.pid);
+  assert.equal(refreshed.token, first.token);
+  assert.ok(
+    Date.parse(refreshed.acquiredAt) > Date.parse(first.acquiredAt)
+  );
+  assert.ok(Date.now() - Date.parse(refreshed.acquiredAt) < 30);
+  await lease.assertOwned();
+  await lease.release();
+  assert.equal(
+    fs.existsSync(runtime.openClawRuntimeStartupLockPath(config)),
+    false
+  );
+});
+
+test("Forge Memory never removes a live or ambiguous foreign OpenClaw lease", async () => {
+  await resetRuntimeFiles();
+  const lockPath = runtime.openClawRuntimeStartupLockPath(config);
+  const ownerPath =
+    runtime.openClawRuntimeStartupLockOwnerPath(config);
+  await fsp.mkdir(lockPath, { recursive: true, mode: 0o700 });
+  const foreign = {
+    pid: process.pid,
+    acquiredAt: new Date(0).toISOString()
+  };
+  await fsp.writeFile(
+    ownerPath,
+    `${JSON.stringify(foreign)}\n`,
+    { encoding: "utf8", mode: 0o600 }
+  );
+  await assert.rejects(
+    runtime.acquireOpenClawRuntimeStartupLease(config, {
+      timeoutMs: 50,
+      refreshMs: 10,
+      waitMs: 5
+    }),
+    /timed out waiting for OpenClaw/
+  );
+  assert.deepEqual(
+    JSON.parse(await fsp.readFile(ownerPath, "utf8")),
+    foreign
+  );
+});
+
+test("OpenClaw compatibility release cannot remove a replacement owner", async () => {
+  await resetRuntimeFiles();
+  const lease = await runtime.acquireOpenClawRuntimeStartupLease(config, {
+    timeoutMs: 200,
+    refreshMs: 10,
+    waitMs: 5
+  });
+  const ownerPath =
+    runtime.openClawRuntimeStartupLockOwnerPath(config);
+  const replacement = {
+    pid: process.pid,
+    token: "f".repeat(64),
+    acquiredAt: new Date().toISOString()
+  };
+  await fsp.writeFile(
+    ownerPath,
+    `${JSON.stringify(replacement)}\n`,
+    { encoding: "utf8", mode: 0o600 }
+  );
+  await lease.release();
+  assert.equal(
+    fs.existsSync(runtime.openClawRuntimeStartupLockPath(config)),
+    true
+  );
+  assert.deepEqual(
+    JSON.parse(await fsp.readFile(ownerPath, "utf8")),
+    replacement
+  );
+});
+
+test("a failed runtime mutation releases both manager locks", async () => {
+  await resetRuntimeFiles();
+  await assert.rejects(
+    runtime.withRuntimeMutationLock(config, async () => {
+      assert.equal(
+        fs.existsSync(runtime.runtimeStartLockOwnerPath()),
+        true
+      );
+      assert.equal(
+        fs.existsSync(
+          runtime.openClawRuntimeStartupLockOwnerPath(config)
+        ),
+        true
+      );
+      throw new Error("bounded test failure");
+    }),
+    /bounded test failure/
+  );
+  assert.equal(fs.existsSync(runtime.runtimeStartLockPath()), false);
+  assert.equal(
+    fs.existsSync(runtime.openClawRuntimeStartupLockPath(config)),
+    false
+  );
+});
+
+test("a remote runtime mutation does not touch OpenClaw loopback state", async () => {
+  await resetRuntimeFiles();
+  const remote = {
+    ...config,
+    origin: "https://forge.example.test",
+    port: 443
+  };
+  const lease = await runtime.acquireOpenClawRuntimeStartupLease(remote, {
+    timeoutMs: 50,
+    refreshMs: 10,
+    waitMs: 5
+  });
+  await lease.assertOwned();
+  await lease.release();
+  assert.equal(
+    fs.existsSync(runtime.openClawRuntimeStartupLockPath(remote)),
+    false
+  );
+});
+
+test("OpenClaw's normal owner-matched directory and record modes are accepted", async () => {
+  await resetRuntimeFiles();
+  const statePath = runtime.openClawRuntimeStatePath(config);
+  await fsp.mkdir(path.dirname(statePath), {
+    recursive: true,
+    mode: 0o755
+  });
+  await fsp.chmod(path.dirname(statePath), 0o755);
+  await fsp.writeFile(
+    statePath,
+    `${JSON.stringify({
+      pid: process.pid,
+      origin: config.origin,
+      port: config.port,
+      baseUrl: `${config.origin}:${config.port}`,
+      startedAt: new Date().toISOString(),
+      logPath: runtime.openClawRuntimeLogPath(config)
+    }, null, 2)}\n`,
+    { encoding: "utf8", mode: 0o644 }
+  );
+  await fsp.chmod(statePath, 0o644);
+  const record =
+    await runtime.readVerifiedOpenClawRuntimeRecord(config);
+  assert.equal(record.state.pid, process.pid);
+  assert.equal(
+    fs.statSync(path.dirname(statePath)).mode & 0o777,
+    0o755
+  );
+  assert.equal(fs.statSync(statePath).mode & 0o777, 0o644);
+});
+
 test("stop waits for the runtime mutation lock before touching state or processes", async () => {
   await resetRuntimeFiles();
   const child = spawn(
@@ -243,6 +417,315 @@ test("restart holds one mutation lock across stop and start", async () => {
   assert.deepEqual(events, ["stop", "start"]);
   assert.equal(result.ok, true);
   assert.equal(result.stop.stopped, true);
+});
+
+test("restart transfers an exactly verified OpenClaw runtime under both manager locks", async () => {
+  await resetRuntimeFiles();
+  await fsp.mkdir(
+    path.dirname(runtime.openClawRuntimeStatePath(config)),
+    { recursive: true, mode: 0o700 }
+  );
+  await fsp.writeFile(
+    runtime.openClawRuntimeStatePath(config),
+    "{}\n",
+    { encoding: "utf8", mode: 0o600 }
+  );
+  const candidate = {
+    state: { pid: 9001 },
+    path: runtime.openClawRuntimeStatePath(config),
+    sha256: "a".repeat(64),
+    launchBoundary: {
+      executable: process.execPath,
+      args: [new URL(import.meta.url).pathname],
+      cwd: process.cwd(),
+      mode: "packaged",
+      logPath: runtime.openClawRuntimeLogPath(config)
+    }
+  };
+  const events = [];
+  const assertBothLocks = () => {
+    assert.equal(
+      fs.existsSync(runtime.runtimeStartLockOwnerPath()),
+      true
+    );
+    assert.equal(
+      fs.existsSync(
+        runtime.openClawRuntimeStartupLockOwnerPath(config)
+      ),
+      true
+    );
+  };
+  const result = await runtime.restartRuntime(config, {
+    peerPreparation: {},
+    healthImplementation: async () => ({
+      ok: true,
+      forge: true
+    }),
+    authenticatedHealth: async () => protectedHealth(9002),
+    readState: async () => null,
+    verifyTransfer: async () => {
+      assertBothLocks();
+      events.push("verify");
+      return candidate;
+    },
+    stopTransfer: async (received) => {
+      assertBothLocks();
+      assert.equal(received, candidate);
+      events.push("stop-openclaw");
+      return {
+        ok: true,
+        stopped: true,
+        pids: [9001],
+        manager: "openclaw"
+      };
+    },
+    startImplementation: async (_config, options) => {
+      assertBothLocks();
+      assert.equal(options.runtimeMutationLockHeld, true);
+      events.push("start-forge-memory");
+      return {
+        ok: true,
+        started: true,
+        adopted: false,
+        state: { children: [{ role: "server", pid: 9003 }] }
+      };
+    }
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.transferredFrom, "openclaw");
+  assert.deepEqual(events, [
+    "verify",
+    "stop-openclaw",
+    "start-forge-memory"
+  ]);
+  assert.equal(fs.existsSync(runtime.runtimeStartLockPath()), false);
+  assert.equal(
+    fs.existsSync(runtime.openClawRuntimeStartupLockPath(config)),
+    false
+  );
+});
+
+test("restart performs one clean retry and restores OpenClaw on transfer failure", async () => {
+  await resetRuntimeFiles();
+  await fsp.mkdir(
+    path.dirname(runtime.openClawRuntimeStatePath(config)),
+    { recursive: true, mode: 0o700 }
+  );
+  await fsp.writeFile(
+    runtime.openClawRuntimeStatePath(config),
+    "{}\n",
+    { encoding: "utf8", mode: 0o600 }
+  );
+  const candidate = {
+    state: { pid: 9101 },
+    path: runtime.openClawRuntimeStatePath(config),
+    sha256: "b".repeat(64),
+    launchBoundary: {
+      executable: process.execPath,
+      args: [new URL(import.meta.url).pathname],
+      cwd: process.cwd(),
+      mode: "packaged",
+      logPath: runtime.openClawRuntimeLogPath(config)
+    }
+  };
+  let healthReads = 0;
+  let starts = 0;
+  let rollbacks = 0;
+  const result = await runtime.restartRuntime(config, {
+    peerPreparation: {},
+    healthImplementation: async () => {
+      healthReads += 1;
+      return healthReads === 1
+        ? { ok: true, forge: true }
+        : { ok: false, forge: false };
+    },
+    authenticatedHealth: async () => protectedHealth(9102),
+    readState: async () => null,
+    verifyTransfer: async () => candidate,
+    stopTransfer: async () => ({
+      ok: true,
+      stopped: true,
+      pids: [9101],
+      manager: "openclaw"
+    }),
+    startImplementation: async () => {
+      starts += 1;
+      return {
+        ok: false,
+        started: false,
+        message: `start failure ${starts}`
+      };
+    },
+    rollbackImplementation: async (
+      _config,
+      received,
+      peerPreparation
+    ) => {
+      assert.equal(received, candidate);
+      assert.deepEqual(peerPreparation, {});
+      assert.equal(
+        fs.existsSync(
+          runtime.openClawRuntimeStartupLockOwnerPath(config)
+        ),
+        true
+      );
+      rollbacks += 1;
+      return { ok: true, restored: true };
+    }
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.transferredFrom, "openclaw");
+  assert.equal(starts, 2);
+  assert.equal(rollbacks, 1);
+  assert.equal(result.rollback.restored, true);
+  assert.match(result.message, /prior OpenClaw source runtime was restored/);
+});
+
+test("OpenClaw transfer verification binds record, process identity, health PID, and storage root", async () => {
+  await resetRuntimeFiles();
+  const fakeRepo = path.join(tempHome, "verified-openclaw-repo");
+  const tsx = path.join(
+    fakeRepo,
+    "node_modules",
+    "tsx",
+    "dist",
+    "cli.mjs"
+  );
+  const sourceEntry = path.join(
+    fakeRepo,
+    "apps",
+    "api",
+    "src",
+    "index.ts"
+  );
+  await fsp.mkdir(path.dirname(tsx), { recursive: true });
+  await fsp.mkdir(path.dirname(sourceEntry), { recursive: true });
+  await fsp.writeFile(
+    tsx,
+    "setInterval(() => {}, 1000);\n",
+    "utf8"
+  );
+  await fsp.writeFile(sourceEntry, "export {};\n", "utf8");
+  const transferConfig = {
+    ...config,
+    mode: "dev",
+    port: 43993,
+    repo: fakeRepo,
+    dataRoot: path.join(tempHome, "verified-data")
+  };
+  const logPath = runtime.openClawRuntimeLogPath(transferConfig);
+  await fsp.mkdir(path.dirname(logPath), { recursive: true });
+  const logFd = fs.openSync(logPath, "a");
+  const child = spawn(
+    process.execPath,
+    [tsx, sourceEntry],
+    {
+      cwd: fakeRepo,
+      detached: true,
+      stdio: ["ignore", logFd, logFd]
+    }
+  );
+  fs.closeSync(logFd);
+  child.unref();
+  try {
+    await waitForProcessIdentity(child.pid);
+    const statePath =
+      runtime.openClawRuntimeStatePath(transferConfig);
+    await fsp.mkdir(path.dirname(statePath), {
+      recursive: true,
+      mode: 0o755
+    });
+    await fsp.writeFile(
+      statePath,
+      `${JSON.stringify({
+        pid: child.pid,
+        origin: transferConfig.origin,
+        port: transferConfig.port,
+        baseUrl: `${transferConfig.origin}:${transferConfig.port}`,
+        startedAt: new Date().toISOString(),
+        logPath
+      }, null, 2)}\n`,
+      { encoding: "utf8", mode: 0o644 }
+    );
+    const candidate =
+      await runtime.verifyOpenClawRuntimeTransferCandidate(
+        transferConfig,
+        protectedHealth(
+          child.pid,
+          packageVersion,
+          transferConfig.dataRoot
+        )
+      );
+    assert.equal(candidate.state.pid, child.pid);
+    assert.equal(candidate.launchBoundary.cwd, fakeRepo);
+    assert.deepEqual(candidate.launchBoundary.args, [
+      tsx,
+      sourceEntry
+    ]);
+    assert.equal(candidate.launchBoundary.logPath, logPath);
+    assert.equal(
+      runtime.recordedProcessIdentityMatches(candidate.recorded),
+      true
+    );
+    assert.throws(
+      () =>
+        runtime.inspectOpenClawRuntimeLaunchBoundary(
+          transferConfig,
+          {
+            ...candidate.state,
+            logPath: path.join(tempHome, "wrong-runtime.log")
+          }
+        ),
+      /log descriptors/
+    );
+    const otherRepo = path.join(tempHome, "other-openclaw-repo");
+    const otherTsx = path.join(
+      otherRepo,
+      "node_modules",
+      "tsx",
+      "dist",
+      "cli.mjs"
+    );
+    const otherSource = path.join(
+      otherRepo,
+      "apps",
+      "api",
+      "src",
+      "index.ts"
+    );
+    await fsp.mkdir(path.dirname(otherTsx), { recursive: true });
+    await fsp.mkdir(path.dirname(otherSource), {
+      recursive: true
+    });
+    await fsp.writeFile(otherTsx, "export {};\n", "utf8");
+    await fsp.writeFile(otherSource, "export {};\n", "utf8");
+    assert.throws(
+      () =>
+        runtime.inspectOpenClawRuntimeLaunchBoundary(
+          { ...transferConfig, repo: otherRepo },
+          candidate.state
+        ),
+      /checkout or entrypoint/
+    );
+    const stopped =
+      await runtime.stopVerifiedOpenClawRuntimeCandidate(candidate);
+    assert.equal(stopped.ok, true);
+    assert.equal(stopped.stopped, true);
+    await waitForProcessExit(child.pid);
+    assert.equal(fs.existsSync(statePath), false);
+  } finally {
+    if (processExists(child.pid)) {
+      try {
+        if (process.platform === "win32") {
+          process.kill(child.pid, "SIGKILL");
+        } else {
+          process.kill(-child.pid, "SIGKILL");
+        }
+      } catch {
+        // Best-effort test cleanup.
+      }
+    }
+  }
 });
 
 test("two config writers cannot split persisted settings from the runtime they start", async () => {

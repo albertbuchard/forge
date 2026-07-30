@@ -45,6 +45,8 @@ const FORGE_PLUGIN_ID = "forge-openclaw-plugin";
 const ADAPTERS = ["openclaw", "hermes", "codex", "claude"];
 const DEFAULT_UPDATE_BACKUP_CONFIRM_THRESHOLD_BYTES = 100 * 1024 * 1024;
 const BACKUP_SKIP_TOP_LEVEL = new Set(["exports", "logs", "run", "runtime"]);
+const OPENCLAW_RUNTIME_LOCK_REFRESH_MS = 10_000;
+const OPENCLAW_RUNTIME_LOCK_TIMEOUT_MS = 120_000;
 
 const color = {
   dim: (value) => `\u001b[2m${value}\u001b[22m`,
@@ -182,6 +184,50 @@ function runtimeStartLockPath() {
 
 function runtimeStartLockOwnerPath() {
   return path.join(runtimeStartLockPath(), "owner.json");
+}
+
+function openClawRuntimeKey(config) {
+  const hostname = new URL(baseUrl(config))
+    .hostname.toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-");
+  return `${hostname}-${config.port || DEFAULT_PORT}`;
+}
+
+function openClawRuntimeStateDirectory() {
+  return path.join(
+    homeDir(),
+    ".openclaw",
+    "run",
+    FORGE_PLUGIN_ID
+  );
+}
+
+function openClawRuntimeStatePath(config) {
+  return path.join(
+    openClawRuntimeStateDirectory(),
+    `${openClawRuntimeKey(config)}.json`
+  );
+}
+
+function openClawRuntimeLogPath(config) {
+  return path.join(
+    homeDir(),
+    ".openclaw",
+    "logs",
+    FORGE_PLUGIN_ID,
+    `${openClawRuntimeKey(config)}.log`
+  );
+}
+
+function openClawRuntimeStartupLockPath(config) {
+  return path.join(
+    openClawRuntimeStateDirectory(),
+    `${openClawRuntimeKey(config)}.startup.lock`
+  );
+}
+
+function openClawRuntimeStartupLockOwnerPath(config) {
+  return path.join(openClawRuntimeStartupLockPath(config), "owner.json");
 }
 
 function logPath() {
@@ -3098,11 +3144,136 @@ async function acquireRuntimeStartLock(config, timeoutMs = 120_000) {
   );
 }
 
+async function acquireOpenClawRuntimeStartupLease(
+  config,
+  options = {}
+) {
+  if (!isLoopbackPairingUrl(baseUrl(config))) {
+    return {
+      assertOwned: async () => {},
+      release: async () => {}
+    };
+  }
+
+  const timeoutMs =
+    options.timeoutMs ?? OPENCLAW_RUNTIME_LOCK_TIMEOUT_MS;
+  const refreshMs =
+    options.refreshMs ?? OPENCLAW_RUNTIME_LOCK_REFRESH_MS;
+  const waitMs = options.waitMs ?? 100;
+  const lockPath = openClawRuntimeStartupLockPath(config);
+  const ownerPath = openClawRuntimeStartupLockOwnerPath(config);
+  const deadline = Date.now() + timeoutMs;
+  await fsp.mkdir(path.dirname(lockPath), {
+    recursive: true,
+    mode: 0o700
+  });
+
+  const writeOwnerAtomically = async (owner, expectedToken = null) => {
+    const temporaryPath = path.join(
+      path.dirname(ownerPath),
+      `.owner-${process.pid}-${randomBytes(12).toString("hex")}.tmp`
+    );
+    try {
+      await fsp.writeFile(
+        temporaryPath,
+        `${JSON.stringify(owner, null, 2)}\n`,
+        { encoding: "utf8", mode: 0o600, flag: "wx" }
+      );
+      if (expectedToken !== null) {
+        const current = await readJson(ownerPath, null);
+        if (current?.token !== expectedToken) return false;
+      }
+      await fsp.rename(temporaryPath, ownerPath);
+      return true;
+    } finally {
+      await fsp.rm(temporaryPath, { force: true }).catch(() => {});
+    }
+  };
+
+  while (Date.now() < deadline) {
+    let created = false;
+    try {
+      await fsp.mkdir(lockPath, { mode: 0o700 });
+      created = true;
+      const identity = captureProcessIdentity(process.pid);
+      if (!identity) {
+        throw new Error(
+          "Forge could not verify the OpenClaw compatibility-lease owner process."
+        );
+      }
+      const owner = {
+        pid: process.pid,
+        identity,
+        token: randomBytes(32).toString("hex"),
+        acquiredAt: new Date().toISOString()
+      };
+      await writeOwnerAtomically(owner);
+
+      let refreshQueue = Promise.resolve();
+      let released = false;
+      const refresh = async () => {
+        const current = await readJson(ownerPath, null);
+        if (current?.token !== owner.token) return;
+        owner.acquiredAt = new Date().toISOString();
+        await writeOwnerAtomically(owner, owner.token);
+      };
+      const timer = setInterval(() => {
+        refreshQueue = refreshQueue.then(refresh, refresh);
+      }, refreshMs);
+      timer.unref?.();
+
+      return {
+        assertOwned: async () => {
+          await refreshQueue;
+          const current = await readJson(ownerPath, null);
+          if (
+            current?.token !== owner.token ||
+            !recordedProcessIdentityMatches(owner)
+          ) {
+            throw new Error(
+              "Forge lost the OpenClaw runtime startup lease and stopped the runtime mutation."
+            );
+          }
+        },
+        release: async () => {
+          if (released) return;
+          released = true;
+          clearInterval(timer);
+          await refreshQueue;
+          const current = await readJson(ownerPath, null);
+          if (current?.token !== owner.token) return;
+          await fsp.rm(lockPath, { recursive: true, force: true });
+        }
+      };
+    } catch (error) {
+      if (created) {
+        await fsp.rm(lockPath, { recursive: true, force: true });
+      }
+      if (error?.code !== "EEXIST") throw error;
+    }
+
+    // OpenClaw 0.3.52 owns this tokenless lease protocol. Forge Memory
+    // deliberately never removes a foreign lease because it cannot exclude a
+    // replacement-owner race without an owner token.
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
+
+  throw new Error(
+    `Forge timed out waiting for OpenClaw to release its runtime startup lease for ${baseUrl(config)}. No runtime process was changed.`
+  );
+}
+
 async function withRuntimeMutationLock(config, operation) {
   const release = await acquireRuntimeStartLock(config);
+  let openClawLease = null;
   try {
-    return await operation();
+    openClawLease = await acquireOpenClawRuntimeStartupLease(config);
+    await openClawLease.assertOwned();
+    const result = await operation();
+    await openClawLease.assertOwned();
+    return result;
   } finally {
+    await openClawLease?.release();
     await release();
   }
 }
@@ -3400,6 +3571,322 @@ function runtimeStateMatchesPeerConfig(state, config) {
         JSON.stringify(state.peer.directEndpoints ?? []) ===
           JSON.stringify(config.peerDirectEndpoints)))
   );
+}
+
+async function readVerifiedOpenClawRuntimeRecord(config) {
+  const statePath = openClawRuntimeStatePath(config);
+  let directoryMetadata;
+  let fileMetadata;
+  let raw;
+  try {
+    directoryMetadata = await fsp.lstat(path.dirname(statePath));
+    fileMetadata = await fsp.lstat(statePath);
+    raw = await fsp.readFile(statePath, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
+  const expectedUid =
+    typeof process.getuid === "function" ? process.getuid() : null;
+  if (
+    !directoryMetadata.isDirectory() ||
+    directoryMetadata.isSymbolicLink() ||
+    (directoryMetadata.mode & 0o022) !== 0 ||
+    (expectedUid !== null && directoryMetadata.uid !== expectedUid) ||
+    !fileMetadata.isFile() ||
+    fileMetadata.isSymbolicLink() ||
+    (expectedUid !== null && fileMetadata.uid !== expectedUid)
+  ) {
+    throw new Error(
+      "Forge refused the OpenClaw runtime record because its ownership or filesystem boundary is unsafe."
+    );
+  }
+
+  let state;
+  try {
+    state = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      "Forge refused the OpenClaw runtime record because it is not valid JSON."
+    );
+  }
+  const expectedBaseUrl = baseUrl(config);
+  const expectedOrigin = new URL(config.origin || DEFAULT_ORIGIN).origin;
+  if (
+    !Number.isInteger(state?.pid) ||
+    state.pid <= 0 ||
+    state.origin !== expectedOrigin ||
+    state.port !== (config.port || DEFAULT_PORT) ||
+    state.baseUrl !== expectedBaseUrl ||
+    state.logPath !== openClawRuntimeLogPath(config) ||
+    typeof state.startedAt !== "string" ||
+    !Number.isFinite(Date.parse(state.startedAt))
+  ) {
+    throw new Error(
+      "Forge refused the OpenClaw runtime record because it does not exactly match the configured loopback runtime."
+    );
+  }
+  return {
+    state,
+    path: statePath,
+    sha256: createHash("sha256").update(raw).digest("hex")
+  };
+}
+
+function readUnixProcessCommand(pid) {
+  if (process.platform === "win32") return null;
+  const result = spawnSync(
+    "ps",
+    ["-ww", "-p", String(pid), "-o", "command="],
+    { encoding: "utf8", timeout: 2_000 }
+  );
+  const command =
+    result.status === 0 && typeof result.stdout === "string"
+      ? result.stdout.trim()
+      : "";
+  return command || null;
+}
+
+function readUnixProcessDescriptorPaths(pid, descriptor) {
+  if (process.platform === "win32") return [];
+  const result = spawnSync(
+    "lsof",
+    [
+      "-a",
+      "-p",
+      String(pid),
+      "-d",
+      String(descriptor),
+      "-Fn"
+    ],
+    { encoding: "utf8", timeout: 2_000 }
+  );
+  if (result.status !== 0 || typeof result.stdout !== "string") {
+    return [];
+  }
+  return result.stdout
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("n"))
+    .map((line) => line.slice(1))
+    .filter(Boolean);
+}
+
+function existingPathsMatch(left, right) {
+  try {
+    return (
+      fs.realpathSync.native(left) === fs.realpathSync.native(right)
+    );
+  } catch {
+    return pathsMatch(left, right);
+  }
+}
+
+function inspectOpenClawRuntimeLaunchBoundary(config, state) {
+  if (process.platform === "win32") {
+    throw new Error(
+      "Forge cannot prove the exact OpenClaw launch boundary on Windows, so automatic ownership transfer is disabled there."
+    );
+  }
+  const pid = state.pid;
+  const command = readUnixProcessCommand(pid);
+  const cwd = readUnixProcessDescriptorPaths(pid, "cwd")[0] ?? null;
+  const executable =
+    readUnixProcessDescriptorPaths(pid, "txt")[0] ?? null;
+  const stdoutPath =
+    readUnixProcessDescriptorPaths(pid, 1)[0] ?? null;
+  const stderrPath =
+    readUnixProcessDescriptorPaths(pid, 2)[0] ?? null;
+  if (
+    !command ||
+    !cwd ||
+    !executable ||
+    !stdoutPath ||
+    !stderrPath ||
+    !existingPathsMatch(stdoutPath, state.logPath) ||
+    !existingPathsMatch(stderrPath, state.logPath) ||
+    processGroupId(pid) !== pid
+  ) {
+    throw new Error(
+      "Forge refused to transfer the OpenClaw runtime because its working directory, detached process group, executable, or log descriptors could not be proven."
+    );
+  }
+
+  let expectedCwd;
+  let args;
+  if (config.mode === "dev") {
+    if (!config.repo) {
+      throw new Error(
+        "Forge refused to transfer the OpenClaw development runtime without an exact repository root."
+      );
+    }
+    expectedCwd = path.resolve(config.repo);
+    const tsx = path.join(
+      expectedCwd,
+      "node_modules",
+      "tsx",
+      "dist",
+      "cli.mjs"
+    );
+    const sourceEntry = resolveDevServerEntry(expectedCwd);
+    args = [tsx, sourceEntry];
+  } else {
+    expectedCwd = resolveOpenClawPluginRoot({
+      installedOnly: true
+    });
+    if (!expectedCwd) {
+      throw new Error(
+        "Forge refused to transfer the packaged OpenClaw runtime because its installed package root is unavailable."
+      );
+    }
+    const candidates = [
+      path.join(expectedCwd, "server", "index.js"),
+      path.join(
+        expectedCwd,
+        "dist",
+        "server",
+        "apps",
+        "api",
+        "src",
+        "index.js"
+      )
+    ];
+    const entry = candidates.find(
+      (candidate) =>
+        fs.existsSync(candidate) && command.includes(candidate)
+    );
+    if (!entry) {
+      throw new Error(
+        "Forge refused to transfer the packaged OpenClaw runtime because its entrypoint is outside the installed package."
+      );
+    }
+    args = [entry];
+  }
+
+  if (
+    !existingPathsMatch(cwd, expectedCwd) ||
+    !command.includes(executable) ||
+    args.some(
+      (argument) =>
+        !path.isAbsolute(argument) ||
+        !fs.existsSync(argument) ||
+        !command.includes(argument)
+    )
+  ) {
+    throw new Error(
+      "Forge refused to transfer the OpenClaw runtime because its checkout or entrypoint does not match the configured launch boundary."
+    );
+  }
+  return {
+    executable,
+    args,
+    cwd: expectedCwd,
+    mode: config.mode,
+    command,
+    logPath: state.logPath
+  };
+}
+
+async function verifyOpenClawRuntimeTransferCandidate(
+  config,
+  healthResult,
+  options = {}
+) {
+  const record = await readVerifiedOpenClawRuntimeRecord(config);
+  if (!record) return null;
+  if (!isLoopbackPairingUrl(baseUrl(config))) {
+    throw new Error(
+      "Forge refused to transfer an OpenClaw runtime that is not configured on direct loopback."
+    );
+  }
+  if (
+    resolveRuntimeStorageRoot(healthResult) === null ||
+    !pathsMatch(resolveRuntimeStorageRoot(healthResult), config.dataRoot)
+  ) {
+    throw new Error(
+      "Forge refused to transfer the OpenClaw runtime because its protected storage root does not match."
+    );
+  }
+  const identity = captureProcessIdentity(record.state.pid);
+  if (!identity) {
+    throw new Error(
+      "Forge refused to transfer the OpenClaw runtime because its recorded process identity is not live."
+    );
+  }
+  const recorded = {
+    role: "server",
+    pid: record.state.pid,
+    identity
+  };
+  if (
+    !runtimeStateOwnsHealthProcess(
+      { children: [recorded] },
+      healthResult
+    )
+  ) {
+    throw new Error(
+      "Forge refused to transfer the OpenClaw runtime because its recorded process does not own the protected health responder."
+    );
+  }
+  const launchBoundary = (
+    options.inspectLaunchBoundary ??
+    inspectOpenClawRuntimeLaunchBoundary
+  )(config, record.state);
+  return { ...record, recorded, launchBoundary };
+}
+
+async function stopVerifiedOpenClawRuntimeCandidate(candidate) {
+  const current = await readVerifiedOpenClawRuntimeRecord({
+    origin: candidate.state.origin,
+    port: candidate.state.port
+  });
+  if (
+    !current ||
+    current.path !== candidate.path ||
+    current.sha256 !== candidate.sha256 ||
+    !recordedProcessIdentityMatches(candidate.recorded)
+  ) {
+    return {
+      ok: false,
+      stopped: false,
+      message:
+        "The OpenClaw runtime identity changed before transfer, so Forge left it unchanged."
+    };
+  }
+  if (!(await stopRecordedRuntimeProcess(candidate.recorded))) {
+    return {
+      ok: false,
+      stopped: false,
+      message:
+        "Forge could not stop the exact verified OpenClaw runtime process group."
+    };
+  }
+  let latest = null;
+  try {
+    latest = await fsp.readFile(candidate.path, "utf8");
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  if (
+    latest !== null &&
+    createHash("sha256").update(latest).digest("hex") !== candidate.sha256
+  ) {
+    return {
+      ok: false,
+      stopped: true,
+      recordChanged: true,
+      message:
+        "The verified OpenClaw runtime stopped, but its state record was replaced and was left unchanged."
+    };
+  }
+  if (latest !== null) {
+    await fsp.rm(candidate.path, { force: true });
+  }
+  return {
+    ok: true,
+    stopped: true,
+    pids: [candidate.recorded.pid],
+    manager: "openclaw"
+  };
 }
 
 function runtimeStateHasLiveManagedServer(state) {
@@ -4004,6 +4491,137 @@ async function startRuntime(config, options = {}) {
   });
 }
 
+async function restoreOpenClawRuntimeBoundary(
+  config,
+  candidate,
+  peerPreparation
+) {
+  if (!(await isPortAvailable(config.port || DEFAULT_PORT))) {
+    return {
+      ok: false,
+      restored: false,
+      message:
+        "Forge could not restore the prior OpenClaw runtime because its loopback port is still occupied."
+    };
+  }
+  const boundary = candidate.launchBoundary;
+  if (
+    !boundary ||
+    !path.isAbsolute(boundary.executable) ||
+    !fs.existsSync(boundary.executable) ||
+    !path.isAbsolute(boundary.cwd) ||
+    !fs.existsSync(boundary.cwd) ||
+    !Array.isArray(boundary.args) ||
+    boundary.args.length === 0 ||
+    boundary.args.some(
+      (argument) =>
+        !path.isAbsolute(argument) || !fs.existsSync(argument)
+    ) ||
+    !pathsMatch(boundary.logPath, candidate.state.logPath)
+  ) {
+    return {
+      ok: false,
+      restored: false,
+      message:
+        "Forge could not resolve the recorded OpenClaw source launch boundary for rollback."
+    };
+  }
+
+  const runtimeEnvironment = forgeRuntimeEnvironment(
+    config,
+    peerPreparation
+  );
+  await fsp.mkdir(path.dirname(candidate.state.logPath), {
+    recursive: true,
+    mode: 0o700
+  });
+  const out = fs.openSync(candidate.state.logPath, "a");
+  let child;
+  try {
+    child = spawn(boundary.executable, boundary.args, {
+      cwd: boundary.cwd,
+      detached: true,
+      stdio: ["ignore", out, out],
+      env: {
+        ...runtimeEnvironment,
+        FORGE_OPENCLAW_DEV: config.mode === "dev" ? "1" : "0",
+        HOST: "127.0.0.1",
+        PORT: String(config.port || DEFAULT_PORT),
+        FORGE_BASE_PATH: "/forge/",
+        FORGE_DATA_ROOT: config.dataRoot,
+        FORGE_DEV_WEB_ORIGIN: `http://127.0.0.1:${config.webPort}/forge/`
+      }
+    });
+    child.unref();
+  } finally {
+    fs.closeSync(out);
+  }
+
+  let recorded;
+  try {
+    recorded = await recordManagedChild("server", child);
+    const restoredState = {
+      ...candidate.state,
+      pid: recorded.pid,
+      startedAt: new Date().toISOString()
+    };
+    await fsp.mkdir(path.dirname(candidate.path), {
+      recursive: true,
+      mode: 0o700
+    });
+    await fsp.writeFile(
+      candidate.path,
+      `${JSON.stringify(restoredState, null, 2)}\n`,
+      { encoding: "utf8", mode: 0o600 }
+    );
+    const publicHealth = await waitForHealth(config);
+    const protectedHealth = await waitForAuthenticatedRuntimeHealth(
+      config,
+      peerPreparation
+    );
+    if (
+      !isHealthyForgeRuntime(publicHealth) ||
+      !runtimeStateOwnsHealthProcess(
+        { children: [recorded] },
+        protectedHealth
+      ) ||
+      resolveRuntimeStorageRoot(protectedHealth) === null ||
+      !pathsMatch(
+        resolveRuntimeStorageRoot(protectedHealth),
+        config.dataRoot
+      )
+    ) {
+      throw new Error(
+        "The restored OpenClaw process did not pass protected runtime identity verification."
+      );
+    }
+    return {
+      ok: true,
+      restored: true,
+      state: restoredState,
+      health: protectedHealth
+    };
+  } catch (error) {
+    if (recorded) {
+      await stopRecordedRuntimeProcess(recorded).catch(() => false);
+    } else if (Number.isInteger(child?.pid)) {
+      if (!signalDetachedProcessGroup(child.pid, "SIGTERM")) {
+        signalProcess(child.pid, "SIGTERM");
+      }
+    }
+    const latest = await readJson(candidate.path, null);
+    if (latest?.pid === recorded?.pid || latest?.pid === child?.pid) {
+      await fsp.rm(candidate.path, { force: true });
+    }
+    return {
+      ok: false,
+      restored: false,
+      message:
+        error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
 function assertRuntimeStartedForPairing(result, config) {
   if (result?.ok) return;
   if (result?.portConflict) {
@@ -4087,6 +4705,128 @@ async function restartRuntime(config, options = {}) {
   }
   const stopImplementation = options.stopImplementation ?? stopRuntime;
   const startImplementation = options.startImplementation ?? startRuntime;
+  const healthImplementation = options.healthImplementation ?? health;
+  const preparePeer =
+    options.preparePeer ?? ensureForgePeerPrepared;
+  const authenticatedHealth =
+    options.authenticatedHealth ??
+    waitForAuthenticatedRuntimeHealth;
+  const readState = options.readState ?? readRuntimeState;
+  const verifyTransfer =
+    options.verifyTransfer ??
+    verifyOpenClawRuntimeTransferCandidate;
+  const stopTransfer =
+    options.stopTransfer ??
+    stopVerifiedOpenClawRuntimeCandidate;
+  let peerPreparation = options.peerPreparation ?? null;
+  let openClawTransfer = null;
+  if (
+    isLoopbackPairingUrl(baseUrl(config)) &&
+    fs.existsSync(openClawRuntimeStatePath(config))
+  ) {
+    const current = await healthImplementation(config);
+    if (isHealthyForgeRuntime(current)) {
+      try {
+        peerPreparation ??= await preparePeer(config);
+        const protectedHealth = await authenticatedHealth(
+          config,
+          peerPreparation
+        );
+        const existing = await readState();
+        if (
+          !runtimeStateOwnsHealthProcess(existing, protectedHealth)
+        ) {
+          openClawTransfer = await verifyTransfer(
+            config,
+            protectedHealth
+          );
+        }
+      } catch (error) {
+        return {
+          ok: false,
+          started: false,
+          adopted: false,
+          transferRefused: true,
+          message: [
+            "Forge found an OpenClaw runtime record but could not verify an exact safe ownership transfer.",
+            error instanceof Error ? error.message : String(error),
+            "The running service was left unchanged."
+          ].join(" ")
+        };
+      }
+    }
+  }
+
+  if (openClawTransfer) {
+    const stop = await stopTransfer(openClawTransfer);
+    if (!stop.ok) {
+      return {
+        ok: false,
+        started: false,
+        adopted: false,
+        transferRefused: true,
+        stop,
+        message: stop.message
+      };
+    }
+
+    const startOptions = {
+      peerPreparation,
+      runtimeMutationLockHeld: true
+    };
+    let start = await startImplementation(config, startOptions);
+    let retry = null;
+    if (!start?.ok) {
+      const observed = await healthImplementation(config);
+      if (!isHealthyForgeRuntime(observed)) {
+        retry = await startImplementation(config, startOptions);
+        start = retry;
+      }
+    }
+    if (!start?.ok) {
+      const observed = await healthImplementation(config);
+      const rollbackImplementation =
+        options.rollbackImplementation ??
+        restoreOpenClawRuntimeBoundary;
+      const rollback = !isHealthyForgeRuntime(observed)
+        ? await rollbackImplementation(
+            config,
+            openClawTransfer,
+            peerPreparation
+          )
+        : {
+            ok: false,
+            restored: false,
+            message:
+              "A different healthy Forge process appeared after the failed transfer; it was left unchanged."
+          };
+      return {
+        ...start,
+        ok: false,
+        started: false,
+        adopted: false,
+        transferredFrom: "openclaw",
+        stop,
+        retry,
+        rollback,
+        message: rollback.ok
+          ? "Forge Memory could not record ownership after one clean retry, so the prior OpenClaw source runtime was restored. No acceptance checks were continued."
+          : [
+              start?.message ??
+                "Forge Memory could not start the transferred runtime.",
+              rollback.message ??
+                "The prior OpenClaw runtime could not be restored."
+            ].join(" ")
+      };
+    }
+    return {
+      ...start,
+      transferredFrom: "openclaw",
+      stop,
+      retry
+    };
+  }
+
   const stop = await stopImplementation(options.stopConfig ?? config, {
     runtimeMutationLockHeld: true
   });
@@ -4102,7 +4842,7 @@ async function restartRuntime(config, options = {}) {
     };
   }
   const start = await startImplementation(config, {
-    peerPreparation: options.peerPreparation,
+    peerPreparation,
     runtimeMutationLockHeld: true
   });
   return { ...start, stop };
@@ -7255,18 +7995,28 @@ function printFatalError(error, { json = false } = {}) {
 }
 
 export const __forgeMemoryRuntimeMutationTest = Object.freeze({
+  acquireOpenClawRuntimeStartupLease,
   acquireRuntimeStartLock,
   applyRuntimeConfigTransaction,
   captureProcessIdentity,
   finalizeStartedRuntimeAttempt,
+  inspectOpenClawRuntimeLaunchBoundary,
+  openClawRuntimeLogPath,
+  openClawRuntimeStartupLockOwnerPath,
+  openClawRuntimeStartupLockPath,
+  openClawRuntimeStatePath,
   reapAbandonedRuntimeStartLock,
+  readVerifiedOpenClawRuntimeRecord,
   recordedProcessIdentityMatches,
   restartRuntime,
   runtimeAdoptionFailure,
   runtimeStartLockOwnerPath,
   runtimeStartLockPath,
   runtimeStatePath,
-  stopRuntime
+  stopRuntime,
+  stopVerifiedOpenClawRuntimeCandidate,
+  verifyOpenClawRuntimeTransferCandidate,
+  withRuntimeMutationLock
 });
 
 if (
