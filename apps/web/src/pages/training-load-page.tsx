@@ -34,7 +34,11 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { getTrainingLoadView } from "@/lib/api";
-import type { TrainingLoadViewData } from "@/lib/types";
+import type {
+  TrainingLoadDecision,
+  TrainingLoadDecisionTrigger,
+  TrainingLoadViewData
+} from "@/lib/types";
 
 const INTENSITY_COLORS: Record<string, string> = {
   low: "var(--success)",
@@ -92,8 +96,7 @@ export function getTrainingEvidenceStatus(
   const latestDateKey =
     [
       ...trainingLoad.sessionSignals.map((entry) => entry.dateKey),
-      ...trainingLoad.dailyLoad.map((entry) => entry.dateKey),
-      ...trainingLoad.vitalsTrend.map((entry) => entry.dateKey)
+      ...trainingLoad.dailyLoad.map((entry) => entry.dateKey)
     ]
       .filter(Boolean)
       .sort()
@@ -144,7 +147,7 @@ export function getTrainingEvidenceStatus(
   }
   return {
     label: "Stale training evidence",
-    detail: `Latest workout or vital evidence is ${ageDays} days old. Keep the analysis as history, not a current prescription.`,
+    detail: `Latest workout evidence is ${ageDays} days old. Keep the analysis as history, not a current prescription.`,
     tone: "default",
     current: false,
     latestDateKey
@@ -165,35 +168,288 @@ function numberLabel(value: number | null | undefined, digits = 0) {
   return value.toFixed(digits);
 }
 
-function readinessCopy(
-  readiness: TrainingLoadViewData["summary"]["readiness"]
-) {
-  switch (readiness) {
-    case "productive":
+function decisionStatusCopy(status: TrainingLoadDecision["status"]) {
+  switch (status) {
+    case "recover":
       return {
-        label: "Productive",
-        tone: "signal" as const,
-        text: "Acute load is close to the current chronic base."
+        badge: "Recovery suggested",
+        title: "Why Forge recommends recovery",
+        tone: "default" as const
       };
-    case "underloaded":
+    case "build":
       return {
-        label: "Underloaded",
-        tone: "meta" as const,
-        text: "The recent week is below the four-week baseline."
+        badge: "Room to build",
+        title: "Why Forge recommends building load",
+        tone: "signal" as const
       };
-    case "overload_watch":
+    case "maintain":
       return {
-        label: "Watch load",
-        tone: "default" as const,
-        text: "Acute load or strain is elevated enough to deserve recovery checks."
+        badge: "Hold current load",
+        title: "Why Forge recommends maintaining",
+        tone: "meta" as const
       };
     default:
       return {
-        label: "Building signal",
-        tone: "meta" as const,
-        text: "Forge needs more recent training evidence for a cleaner read."
+        badge: "Ready to sharpen",
+        title: "Why Forge sees room to sharpen",
+        tone: "signal" as const
       };
   }
+}
+
+function resolveLoadDecision(
+  trainingLoad: TrainingLoadViewData
+): TrainingLoadDecision {
+  if (trainingLoad.trainingIntelligence.loadDecision) {
+    return trainingLoad.trainingIntelligence.loadDecision;
+  }
+  const defaultMode =
+    trainingLoad.trainingIntelligence.modes.find(
+      (mode) => mode.key === trainingLoad.trainingIntelligence.defaultMode
+    ) ?? trainingLoad.trainingIntelligence.modes[0];
+  const legacyStatus = defaultMode?.loadBalance.status;
+  return {
+    status:
+      legacyStatus === "recover" ||
+      legacyStatus === "build" ||
+      legacyStatus === "maintain" ||
+      legacyStatus === "sharpen"
+        ? legacyStatus
+        : "sharpen",
+    primaryTrigger: null,
+    activeTriggers: [],
+    strainFormula: null
+  };
+}
+
+function comparisonSymbol(
+  comparison: TrainingLoadDecisionTrigger["comparison"]
+) {
+  if (comparison === "lt") {
+    return "<";
+  }
+  if (comparison === "gte") {
+    return "≥";
+  }
+  return ">";
+}
+
+function triggerValue(trigger: TrainingLoadDecisionTrigger) {
+  const minimumDigits = trigger.unit === "ratio" ? 2 : 1;
+  const displayedThreshold = Number(triggerThreshold(trigger));
+  for (let digits = minimumDigits; digits <= 12; digits += 1) {
+    const formatted = numberLabel(trigger.value, digits);
+    const displayedValue = Number(formatted);
+    const comparisonRemainsTrue =
+      trigger.comparison === "gt"
+        ? displayedValue > displayedThreshold
+        : trigger.comparison === "gte"
+          ? displayedValue >= displayedThreshold
+          : displayedValue < displayedThreshold;
+    if (comparisonRemainsTrue) {
+      return formatted;
+    }
+  }
+  return String(trigger.value);
+}
+
+function triggerThreshold(trigger: TrainingLoadDecisionTrigger) {
+  if (trigger.unit === "ratio") {
+    return numberLabel(trigger.threshold, 2);
+  }
+  return numberLabel(trigger.threshold, 0);
+}
+
+function decisionCause(
+  trigger: TrainingLoadDecisionTrigger | null,
+  hasDecisionTrace: boolean
+) {
+  if (!hasDecisionTrace) {
+    return "Forge is preserving the existing recommendation while the API finishes exposing its decision trace.";
+  }
+  switch (trigger?.key) {
+    case "strain_high":
+      return "Your 7-day strain crossed the recovery-check threshold.";
+    case "acute_chronic_ratio_high":
+      return "Your 7-day load rose above Forge's recent-load recovery threshold.";
+    case "acute_chronic_ratio_low":
+      return "Your 7-day load is below the recent four-week base.";
+    case "high_intensity_minutes":
+      return "You have already reached Forge's weekly high-intensity marker.";
+    default:
+      return "No recovery, underload, or high-intensity hold threshold is active.";
+  }
+}
+
+function decisionContext(trainingLoad: TrainingLoadViewData) {
+  if (!trainingLoad.trainingIntelligence.loadDecision) {
+    return "Forge is showing the existing load-balance result without inventing threshold values that the older API response did not provide.";
+  }
+  const loadDecision = resolveLoadDecision(trainingLoad);
+  const ratio = trainingLoad.summary.acuteChronicRatio;
+  if (
+    loadDecision.primaryTrigger?.key === "strain_high" &&
+    ratio != null &&
+    ratio >= 0.8 &&
+    ratio <= 1.35
+  ) {
+    return `Your ACWR is ${numberLabel(ratio, 2)}, inside Forge's 0.80 to 1.35 non-recovery range. Accumulated strain, not an acute-load spike, caused this recommendation.`;
+  }
+  if (loadDecision.activeTriggers.length > 1) {
+    return `${loadDecision.activeTriggers.length} recovery rules are active. Forge keeps the recommendation conservative until none of them remains crossed.`;
+  }
+  if (loadDecision.status === "build") {
+    return "The recent week is light relative to your four-week base, so Forge sees room for a gradual increase.";
+  }
+  if (loadDecision.status === "maintain") {
+    return "Load balance is otherwise acceptable, but another hard stimulus would add to an already meaningful high-intensity week.";
+  }
+  if (loadDecision.status === "sharpen") {
+    return "Recent load, strain, and high-intensity exposure are all within Forge's current planning boundaries.";
+  }
+  return "The active threshold above is the reason for the current recommendation.";
+}
+
+function TrainingLoadDecisionCard({
+  trainingLoad,
+  evidenceStatus
+}: {
+  trainingLoad: TrainingLoadViewData;
+  evidenceStatus: TrainingEvidenceStatus;
+}) {
+  const { summary, trainingIntelligence } = trainingLoad;
+  const loadDecision = resolveLoadDecision(trainingLoad);
+  const hasDecisionTrace = Boolean(trainingIntelligence.loadDecision);
+  const status = decisionStatusCopy(loadDecision.status);
+  const defaultMode =
+    trainingIntelligence.modes.find(
+      (mode) => mode.key === trainingIntelligence.defaultMode
+    ) ?? trainingIntelligence.modes[0];
+  const nextWorkout = defaultMode?.nextWorkout;
+  const primaryTrigger = loadDecision.primaryTrigger;
+
+  return (
+    <section
+      aria-labelledby="training-load-decision-title"
+      data-testid="training-load-decision-card"
+    >
+      <Card className="overflow-hidden border-[color-mix(in_srgb,var(--warning)_42%,var(--ui-border-subtle)_58%)] bg-[linear-gradient(135deg,color-mix(in_srgb,var(--warning)_10%,var(--ui-surface-1)_90%),var(--ui-surface-1)_58%)] p-4 sm:p-5">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] xl:gap-7">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone={evidenceStatus.current ? status.tone : "meta"}>
+                {evidenceStatus.current ? status.badge : "Historical analysis"}
+              </Badge>
+              <span className="text-[11px] text-[var(--ui-ink-muted)]">
+                {evidenceStatus.detail}
+              </span>
+            </div>
+            <h2
+              id="training-load-decision-title"
+              className="mt-3 font-display text-2xl leading-tight text-[var(--ui-ink-strong)] sm:text-3xl"
+            >
+              {status.title}
+            </h2>
+            <p className="mt-2 max-w-[62rem] text-sm leading-6 text-[var(--ui-ink-medium)]">
+              {decisionCause(primaryTrigger, hasDecisionTrace)}
+            </p>
+
+            {loadDecision.activeTriggers.length > 0 ? (
+              <div
+                className="mt-4 grid gap-2 sm:grid-cols-2"
+                aria-label="Active training-load decision rules"
+              >
+                {loadDecision.activeTriggers.map((trigger) => (
+                  <div
+                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[12px] border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--ui-surface-2)_88%,transparent)] px-3 py-3"
+                    key={trigger.key}
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
+                        {trigger.metricLabel}
+                      </div>
+                      <div className="mt-1 text-xs text-[var(--ui-ink-medium)]">
+                        Current value {triggerValue(trigger)}
+                      </div>
+                    </div>
+                    <div className="whitespace-nowrap rounded-full border border-[color-mix(in_srgb,var(--warning)_48%,var(--ui-border-subtle)_52%)] bg-[color-mix(in_srgb,var(--warning)_12%,var(--ui-surface-1)_88%)] px-3 py-1.5 font-mono text-sm font-semibold text-[var(--ui-ink-strong)]">
+                      {triggerValue(trigger)}{" "}
+                      {comparisonSymbol(trigger.comparison)}{" "}
+                      {triggerThreshold(trigger)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : hasDecisionTrace ? (
+              <div className="mt-4 rounded-[12px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-3 text-sm text-[var(--ui-ink-medium)]">
+                No planning threshold is currently crossed.
+              </div>
+            ) : (
+              <div className="mt-4 rounded-[12px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-3 text-sm text-[var(--ui-ink-medium)]">
+                Detailed decision values will appear when the Forge API finishes
+                updating. The existing recommendation remains available below.
+              </div>
+            )}
+
+            {loadDecision.strainFormula === "acute_load_x_monotony" ? (
+              <div className="mt-3 text-xs leading-5 text-[var(--ui-ink-muted)]">
+                <span className="font-semibold text-[var(--ui-ink-medium)]">
+                  How strain is calculated:
+                </span>{" "}
+                7-day strain = acute load × load monotony. Supporting values:
+                acute load {numberLabel(summary.acuteLoad7d, 1)} and monotony{" "}
+                {numberLabel(summary.monotony7d, 2)}. Forge calculates strain
+                from unrounded daily values.
+              </div>
+            ) : null}
+          </div>
+
+          <div className="grid content-start gap-3 border-t border-[var(--ui-border-subtle)] pt-4 xl:border-l xl:border-t-0 xl:pl-7 xl:pt-0">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
+                What this means
+              </div>
+              <p className="mt-1.5 text-sm leading-6 text-[var(--ui-ink-medium)]">
+                {decisionContext(trainingLoad)}
+              </p>
+            </div>
+
+            <div className="rounded-[12px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
+              <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
+                <Target className="size-3.5" /> Next step
+              </div>
+              {evidenceStatus.current && nextWorkout ? (
+                <p className="mt-2 text-sm font-medium leading-6 text-[var(--ui-ink-strong)]">
+                  Next workout: {nextWorkout.durationMinutesRange[0]} to{" "}
+                  {nextWorkout.durationMinutesRange[1]} minutes, ceiling{" "}
+                  {nextWorkout.intensityCeiling}.
+                </p>
+              ) : (
+                <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-medium)]">
+                  Sync fresh workout evidence before using this analysis to plan
+                  your next session.
+                </p>
+              )}
+              <p className="mt-1 text-xs leading-5 text-[var(--ui-ink-muted)]">
+                Forge recalculates after synced workouts. The recommendation can
+                change when the active rule is no longer crossed and no other
+                higher-priority rule applies.
+              </p>
+            </div>
+
+            <div className="flex items-start gap-2 text-xs leading-5 text-[var(--ui-ink-muted)]">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-[var(--warning)]" />
+              <span>
+                Evidence quality: {pct(summary.averageHeartRateCoverage)}{" "}
+                average heart-rate coverage. This is a monitoring flag, not a
+                diagnosis.
+              </span>
+            </div>
+          </div>
+        </div>
+      </Card>
+    </section>
+  );
 }
 
 function metricTile({
@@ -461,9 +717,6 @@ export function TrainingLoadPage() {
   });
 
   const trainingLoad = trainingLoadQuery.data;
-  const readiness = readinessCopy(
-    trainingLoad?.summary.readiness ?? "insufficient_data"
-  );
   const weeklyChartData = useMemo(
     () => (trainingLoad ? buildWeeklyChartData(trainingLoad) : []),
     [trainingLoad]
@@ -511,6 +764,9 @@ export function TrainingLoadPage() {
 
   const { summary } = trainingLoad;
   const evidenceStatus = getTrainingEvidenceStatus(trainingLoad);
+  const decisionStatus = decisionStatusCopy(
+    resolveLoadDecision(trainingLoad).status
+  );
 
   return (
     <div className="grid gap-5">
@@ -524,9 +780,13 @@ export function TrainingLoadPage() {
         badge={`${summary.sessionCount} sessions · ${summary.reliableSessionCount} high-resolution`}
         actions={
           <Badge
-            tone={evidenceStatus.current ? readiness.tone : evidenceStatus.tone}
+            tone={
+              evidenceStatus.current ? decisionStatus.tone : evidenceStatus.tone
+            }
           >
-            {evidenceStatus.current ? readiness.label : evidenceStatus.label}
+            {evidenceStatus.current
+              ? decisionStatus.badge
+              : evidenceStatus.label}
           </Badge>
         }
       />
@@ -565,6 +825,11 @@ export function TrainingLoadPage() {
         </div>
       </Card>
 
+      <TrainingLoadDecisionCard
+        trainingLoad={trainingLoad}
+        evidenceStatus={evidenceStatus}
+      />
+
       <section
         className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4"
         data-testid="training-load-summary-grid"
@@ -572,7 +837,8 @@ export function TrainingLoadPage() {
         {metricTile({
           label: "Acute load",
           value: numberLabel(summary.acuteLoad7d, 0),
-          detail: `Last 7 days of internal load. ${readiness.text}`,
+          detail:
+            "Last 7 days of internal load. The decision trace above shows which metric controls the recommendation.",
           help: TRAINING_LOAD_HELP.acuteLoad,
           icon: Gauge
         })}

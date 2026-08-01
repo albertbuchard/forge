@@ -19399,6 +19399,11 @@ test("training-load route exposes zone time series and smart training intelligen
         };
         trainingIntelligence: {
           defaultMode: string;
+          loadDecision: {
+            status: string;
+            primaryTrigger: { key: string } | null;
+            activeTriggers: Array<{ key: string }>;
+          };
           modes: Array<{
             key: string;
             score: number;
@@ -19433,6 +19438,12 @@ test("training-load route exposes zone time series and smart training intelligen
     assert.equal(
       body.trainingLoad.trainingIntelligence.defaultMode,
       "combat_readiness"
+    );
+    assert.ok(body.trainingLoad.trainingIntelligence.loadDecision.status);
+    assert.ok(
+      Array.isArray(
+        body.trainingLoad.trainingIntelligence.loadDecision.activeTriggers
+      )
     );
     assert.ok(combat.score >= 0 && combat.score <= 100);
     assert.ok(combat.nextWeekTargets.domainMinuteTargets.low);

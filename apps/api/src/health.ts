@@ -7691,6 +7691,36 @@ type TrainingLoadSummary = {
   readiness: string;
 };
 
+type TrainingLoadDecisionStatus = "recover" | "build" | "maintain" | "sharpen";
+type TrainingLoadDecisionTriggerKey =
+  | "strain_high"
+  | "acute_chronic_ratio_high"
+  | "acute_chronic_ratio_low"
+  | "high_intensity_minutes";
+
+type TrainingLoadDecisionTrigger = {
+  key: TrainingLoadDecisionTriggerKey;
+  metricLabel: string;
+  value: number;
+  comparison: "gt" | "gte" | "lt";
+  threshold: number;
+  unit: "load" | "ratio" | "minutes";
+};
+
+export type TrainingLoadDecision = {
+  status: TrainingLoadDecisionStatus;
+  primaryTrigger: TrainingLoadDecisionTrigger | null;
+  activeTriggers: TrainingLoadDecisionTrigger[];
+  strainFormula: "acute_load_x_monotony" | null;
+};
+
+const TRAINING_LOAD_DECISION_THRESHOLDS = {
+  strainRecovery: 450,
+  acuteChronicRecovery: 1.35,
+  acuteChronicBuild: 0.8,
+  highIntensityMaintain: 45
+} as const;
+
 const MODE_DOMAIN_TARGETS: Record<
   TrainingModeKey,
   {
@@ -7740,21 +7770,97 @@ function rangeScore(value: number, range: [number, number]) {
   return clampNumber(100 - distance * 350, 0, 100);
 }
 
-function loadBalanceStatus(summary: TrainingLoadSummary) {
+export function buildTrainingLoadDecision(
+  summary: TrainingLoadSummary
+): TrainingLoadDecision {
+  const recoveryTriggers: TrainingLoadDecisionTrigger[] = [];
   if (
-    summary.readiness === "overload_watch" ||
-    (summary.acuteChronicRatio ?? 0) > 1.35 ||
-    (summary.strain7d ?? 0) > 450
+    summary.strain7d != null &&
+    summary.strain7d > TRAINING_LOAD_DECISION_THRESHOLDS.strainRecovery
   ) {
-    return "recover";
+    recoveryTriggers.push({
+      key: "strain_high",
+      metricLabel: "7-day strain",
+      value: summary.strain7d,
+      comparison: "gt",
+      threshold: TRAINING_LOAD_DECISION_THRESHOLDS.strainRecovery,
+      unit: "load"
+    });
   }
-  if ((summary.acuteChronicRatio ?? 1) < 0.8) {
-    return "build";
+  if (
+    summary.acuteChronicRatio != null &&
+    summary.acuteChronicRatio >
+      TRAINING_LOAD_DECISION_THRESHOLDS.acuteChronicRecovery
+  ) {
+    recoveryTriggers.push({
+      key: "acute_chronic_ratio_high",
+      metricLabel: "Acute/chronic ratio",
+      value: summary.acuteChronicRatio,
+      comparison: "gt",
+      threshold: TRAINING_LOAD_DECISION_THRESHOLDS.acuteChronicRecovery,
+      unit: "ratio"
+    });
   }
-  if (summary.highIntensityMinutes7d >= 45) {
-    return "maintain";
+  if (recoveryTriggers.length > 0) {
+    return {
+      status: "recover",
+      primaryTrigger: recoveryTriggers[0] ?? null,
+      activeTriggers: recoveryTriggers,
+      strainFormula: recoveryTriggers.some(
+        (trigger) => trigger.key === "strain_high"
+      )
+        ? "acute_load_x_monotony"
+        : null
+    };
   }
-  return "sharpen";
+
+  if (
+    summary.acuteChronicRatio != null &&
+    summary.acuteChronicRatio <
+      TRAINING_LOAD_DECISION_THRESHOLDS.acuteChronicBuild
+  ) {
+    const trigger: TrainingLoadDecisionTrigger = {
+      key: "acute_chronic_ratio_low",
+      metricLabel: "Acute/chronic ratio",
+      value: summary.acuteChronicRatio,
+      comparison: "lt",
+      threshold: TRAINING_LOAD_DECISION_THRESHOLDS.acuteChronicBuild,
+      unit: "ratio"
+    };
+    return {
+      status: "build",
+      primaryTrigger: trigger,
+      activeTriggers: [trigger],
+      strainFormula: null
+    };
+  }
+
+  if (
+    summary.highIntensityMinutes7d >=
+    TRAINING_LOAD_DECISION_THRESHOLDS.highIntensityMaintain
+  ) {
+    const trigger: TrainingLoadDecisionTrigger = {
+      key: "high_intensity_minutes",
+      metricLabel: "High-intensity minutes",
+      value: summary.highIntensityMinutes7d,
+      comparison: "gte",
+      threshold: TRAINING_LOAD_DECISION_THRESHOLDS.highIntensityMaintain,
+      unit: "minutes"
+    };
+    return {
+      status: "maintain",
+      primaryTrigger: trigger,
+      activeTriggers: [trigger],
+      strainFormula: null
+    };
+  }
+
+  return {
+    status: "sharpen",
+    primaryTrigger: null,
+    activeTriggers: [],
+    strainFormula: null
+  };
 }
 
 function scoreStatus(score: number, balance: string) {
@@ -7814,6 +7920,7 @@ function buildZoneMinuteTargets(
 
 function buildTrainingIntelligence(input: {
   summary: TrainingLoadSummary;
+  loadDecision: TrainingLoadDecision;
   recentIntensityDistribution: ReturnType<
     typeof summarizeIntensityDistribution
   >;
@@ -7829,7 +7936,8 @@ function buildTrainingIntelligence(input: {
     ) ||
     latestWeek?.durationMinutes ||
     180;
-  const balance = loadBalanceStatus(input.summary);
+  const loadDecision = input.loadDecision;
+  const balance = loadDecision.status;
   const lowPct =
     input.recentIntensityDistribution.find((entry) => entry.key === "low")
       ?.percentage ?? 0;
@@ -7855,6 +7963,7 @@ function buildTrainingIntelligence(input: {
 
   return {
     defaultMode: "combat_readiness" as const,
+    loadDecision,
     modes: (Object.keys(MODE_DOMAIN_TARGETS) as TrainingModeKey[]).map(
       (mode) => {
         const target = MODE_DOMAIN_TARGETS[mode];
@@ -8300,6 +8409,13 @@ export function getTrainingLoadViewData(userIds?: string[]) {
   };
   const recentIntensityDistribution = summarizeIntensityDistribution(recent28);
   const zoneTimeSeries = buildZoneTimeSeries(sessions);
+  // Preserve the original strict recovery boundary by evaluating strain before
+  // display rounding. The decision trace still formats values for readers at
+  // the UI boundary.
+  const loadDecision = buildTrainingLoadDecision({
+    ...summary,
+    strain7d
+  });
   return {
     summary,
     zoneTotals: summarizeZoneDistribution(sessions),
@@ -8311,6 +8427,7 @@ export function getTrainingLoadViewData(userIds?: string[]) {
     zoneTimeSeries,
     trainingIntelligence: buildTrainingIntelligence({
       summary,
+      loadDecision,
       recentIntensityDistribution,
       zoneTimeSeries
     }),

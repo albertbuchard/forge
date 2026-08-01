@@ -2467,6 +2467,26 @@ export type TrainingIntelligenceModeKey =
   | "aerobic_base"
   | "endurance_pro";
 
+export interface TrainingLoadDecisionTrigger {
+  key:
+    | "strain_high"
+    | "acute_chronic_ratio_high"
+    | "acute_chronic_ratio_low"
+    | "high_intensity_minutes";
+  metricLabel: string;
+  value: number;
+  comparison: "gt" | "gte" | "lt";
+  threshold: number;
+  unit: "load" | "ratio" | "minutes";
+}
+
+export interface TrainingLoadDecision {
+  status: "recover" | "build" | "maintain" | "sharpen";
+  primaryTrigger: TrainingLoadDecisionTrigger | null;
+  activeTriggers: TrainingLoadDecisionTrigger[];
+  strainFormula: "acute_load_x_monotony" | null;
+}
+
 export interface ZoneTimeBucket {
   bucketKey: string;
   startDate: string;
@@ -2610,6 +2630,7 @@ export interface TrainingLoadViewData {
   };
   trainingIntelligence: {
     defaultMode: TrainingIntelligenceModeKey;
+    loadDecision?: TrainingLoadDecision;
     modes: TrainingIntelligenceMode[];
   };
   activityBreakdown: Array<{

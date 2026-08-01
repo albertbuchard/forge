@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
@@ -313,6 +319,28 @@ function createTrainingLoad(): TrainingLoadViewData {
     },
     trainingIntelligence: {
       defaultMode: "combat_readiness",
+      loadDecision: {
+        status: "maintain",
+        primaryTrigger: {
+          key: "high_intensity_minutes",
+          metricLabel: "High-intensity minutes",
+          value: 52,
+          comparison: "gte",
+          threshold: 45,
+          unit: "minutes"
+        },
+        activeTriggers: [
+          {
+            key: "high_intensity_minutes",
+            metricLabel: "High-intensity minutes",
+            value: 52,
+            comparison: "gte",
+            threshold: 45,
+            unit: "minutes"
+          }
+        ],
+        strainFormula: null
+      },
       modes: [
         {
           key: "combat_readiness",
@@ -444,6 +472,12 @@ describe("TrainingLoadPage", () => {
     );
     expect(screen.getByText("Zone intelligence")).toBeInTheDocument();
     expect(screen.getByText("Combat readiness")).toBeInTheDocument();
+    const decisionCard = screen.getByTestId("training-load-decision-card");
+    expect(within(decisionCard).getByText("Historical analysis")).toBeVisible();
+    expect(
+      within(decisionCard).getByText(/Sync fresh workout evidence/i)
+    ).toBeVisible();
+    expect(within(decisionCard).queryByText(/Next workout:/i)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Explain Acute load" }));
     expect(
       screen.getByText(/Acute load is the last seven days/i)
@@ -465,6 +499,109 @@ describe("TrainingLoadPage", () => {
     expect(screen.getByText("Intensity target")).toBeInTheDocument();
     expect(screen.getAllByText("Kickboxing").length).toBeGreaterThan(0);
     expect(getTrainingLoadViewMock).toHaveBeenCalledWith(["user_operator"]);
+  });
+
+  it("shows the exact strain rule and explains why recovery is not an acute-load spike", async () => {
+    const trainingLoad = createTrainingLoad();
+    trainingLoad.summary = {
+      ...trainingLoad.summary,
+      acuteLoad7d: 376.6,
+      chronicWeeklyLoad28d: 403,
+      acuteChronicRatio: 0.93,
+      monotony7d: 1.3,
+      strain7d: 491.2,
+      highIntensityMinutes7d: 49.3,
+      hardDayCount7d: 2,
+      averageHeartRateCoverage: 0.925,
+      readiness: "overload_watch"
+    };
+    trainingLoad.dailyLoad = trainingLoad.dailyLoad.map((entry) => ({
+      ...entry,
+      dateKey: "2026-07-31"
+    }));
+    trainingLoad.sessionSignals = trainingLoad.sessionSignals.map((entry) => ({
+      ...entry,
+      dateKey: "2026-07-31",
+      startedAt: "2026-07-31T17:00:00.000Z"
+    }));
+    trainingLoad.trainingIntelligence.loadDecision = {
+      status: "recover",
+      primaryTrigger: {
+        key: "strain_high",
+        metricLabel: "7-day strain",
+        value: 491.2,
+        comparison: "gt",
+        threshold: 450,
+        unit: "load"
+      },
+      activeTriggers: [
+        {
+          key: "strain_high",
+          metricLabel: "7-day strain",
+          value: 491.2,
+          comparison: "gt",
+          threshold: 450,
+          unit: "load"
+        }
+      ],
+      strainFormula: "acute_load_x_monotony"
+    };
+    trainingLoad.trainingIntelligence.modes[0] = {
+      ...trainingLoad.trainingIntelligence.modes[0]!,
+      status: "recovery_priority",
+      loadBalance: {
+        ...trainingLoad.trainingIntelligence.modes[0]!.loadBalance,
+        status: "recover",
+        acuteLoad7d: 376.6,
+        chronicWeeklyLoad28d: 403,
+        acuteChronicRatio: 0.93,
+        monotony7d: 1.3,
+        strain7d: 491.2
+      },
+      nextWorkout: {
+        recommendedType: "recovery",
+        intensityCeiling: "Z1",
+        durationMinutesRange: [20, 40],
+        fourByFourAppropriate: false,
+        reason: "Recovery is more useful than another hard interval day."
+      }
+    };
+    getTrainingLoadViewMock.mockResolvedValue({ trainingLoad });
+
+    renderPage();
+
+    const heading = await screen.findByRole("heading", {
+      name: "Why Forge recommends recovery"
+    });
+    expect(heading).toBeVisible();
+    const decisionCard = screen.getByTestId("training-load-decision-card");
+    expect(
+      within(decisionCard).getByText(
+        "Your 7-day strain crossed the recovery-check threshold."
+      )
+    ).toBeVisible();
+    expect(within(decisionCard).getByText("491.2 > 450")).toBeVisible();
+    expect(
+      within(decisionCard).getByText(/acute load × load monotony/i)
+    ).toBeVisible();
+    expect(
+      within(decisionCard).getByText(/unrounded daily values/i)
+    ).toBeVisible();
+    expect(
+      within(decisionCard).getByText(/ACWR is 0.93.*not an acute-load spike/i)
+    ).toBeVisible();
+    expect(
+      within(decisionCard).getByText(
+        "Next workout: 20 to 40 minutes, ceiling Z1."
+      )
+    ).toBeVisible();
+    expect(
+      within(decisionCard).getByText(/monitoring flag, not a diagnosis/i)
+    ).toBeVisible();
+    expect(decisionCard.querySelector(".grid")).toHaveClass(
+      "xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]"
+    );
+    expect(screen.queryByText(/Acute load or strain is elevated/i)).toBeNull();
   });
 
   it("separates current, stale, and missing training evidence", () => {
@@ -493,5 +630,109 @@ describe("TrainingLoadPage", () => {
         new Date("2026-05-21T12:00:00.000Z")
       ).label
     ).toBe("Insufficient evidence");
+  });
+
+  it("keeps a just-above-threshold comparison visibly true", async () => {
+    const trainingLoad = createTrainingLoad();
+    trainingLoad.trainingIntelligence.loadDecision = {
+      status: "recover",
+      primaryTrigger: {
+        key: "strain_high",
+        metricLabel: "7-day strain",
+        value: 450.04,
+        comparison: "gt",
+        threshold: 450,
+        unit: "load"
+      },
+      activeTriggers: [
+        {
+          key: "strain_high",
+          metricLabel: "7-day strain",
+          value: 450.04,
+          comparison: "gt",
+          threshold: 450,
+          unit: "load"
+        }
+      ],
+      strainFormula: "acute_load_x_monotony"
+    };
+    getTrainingLoadViewMock.mockResolvedValue({ trainingLoad });
+
+    renderPage();
+
+    const decisionCard = await screen.findByTestId(
+      "training-load-decision-card"
+    );
+    expect(within(decisionCard).getByText("450.04 > 450")).toBeVisible();
+    expect(within(decisionCard).queryByText("450.0 > 450")).toBeNull();
+  });
+
+  it("does not let a current vital make stale workouts actionable", async () => {
+    const trainingLoad = createTrainingLoad();
+    trainingLoad.dailyLoad = trainingLoad.dailyLoad.map((entry) => ({
+      ...entry,
+      dateKey: "2020-01-01"
+    }));
+    trainingLoad.sessionSignals = trainingLoad.sessionSignals.map((entry) => ({
+      ...entry,
+      dateKey: "2020-01-01",
+      startedAt: "2020-01-01T12:00:00.000Z"
+    }));
+    trainingLoad.vitalsTrend = trainingLoad.vitalsTrend.map((entry) => ({
+      ...entry,
+      dateKey: new Date().toISOString().slice(0, 10)
+    }));
+    getTrainingLoadViewMock.mockResolvedValue({ trainingLoad });
+
+    renderPage();
+
+    const decisionCard = await screen.findByTestId(
+      "training-load-decision-card"
+    );
+    expect(within(decisionCard).getByText("Historical analysis")).toBeVisible();
+    expect(
+      within(decisionCard).getByText(/Sync fresh workout evidence/i)
+    ).toBeVisible();
+    expect(within(decisionCard).queryByText(/Next workout:/i)).toBeNull();
+  });
+
+  it("keeps the page usable while an older API response finishes updating", async () => {
+    const trainingLoad = createTrainingLoad();
+    delete trainingLoad.trainingIntelligence.loadDecision;
+    getTrainingLoadViewMock.mockResolvedValue({ trainingLoad });
+
+    renderPage();
+
+    expect(await screen.findByText("Training Load")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Detailed decision values will appear/i)
+    ).toBeVisible();
+    expect(
+      screen.getByText(/without inventing threshold values/i)
+    ).toBeVisible();
+    expect(
+      screen.queryByText(/No recovery, underload, or high-intensity/i)
+    ).toBeNull();
+  });
+
+  it("withholds next-workout direction when training evidence is insufficient", async () => {
+    const trainingLoad = createTrainingLoad();
+    trainingLoad.dailyLoad = [];
+    trainingLoad.sessionSignals = [];
+    trainingLoad.summary.sessionCount = 0;
+    trainingLoad.summary.reliableSessionCount = 0;
+    trainingLoad.summary.readiness = "insufficient_data";
+    getTrainingLoadViewMock.mockResolvedValue({ trainingLoad });
+
+    renderPage();
+
+    const decisionCard = await screen.findByTestId(
+      "training-load-decision-card"
+    );
+    expect(within(decisionCard).getByText("Historical analysis")).toBeVisible();
+    expect(
+      within(decisionCard).getByText(/Sync fresh workout evidence/i)
+    ).toBeVisible();
+    expect(within(decisionCard).queryByText(/Next workout:/i)).toBeNull();
   });
 });
