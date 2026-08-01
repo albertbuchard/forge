@@ -3808,7 +3808,7 @@ Learner-safety rules:
 - Submit only `answerMarkdown`, `deliveryMode: "voice"`, the current
   `voiceSessionToken`, `voiceConfirmation: true`, and one stable `idempotencyKey`.
   Never send audio, recording metadata, or a separate voice transcript.
-- Use the returned attempt ordinals, feedback, progress, and next unlocked lesson to
+- Use the returned attempt ordinals, feedback, progress, and suggested next lesson to
   adapt the next teaching step.
 - `upgradeEnrollment` is a separate explicit version change. Read current course detail
   first, explain the available release and evidence carry-forward rule, and never

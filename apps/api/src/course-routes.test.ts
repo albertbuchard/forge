@@ -10,18 +10,21 @@ import { closeDatabase } from "./db.js";
 
 const operatorCookie = issueTestOperatorSessionCookie;
 
-test("course OpenAPI documents the learner-session lock response", () => {
+test("course OpenAPI documents open lesson navigation without a lock response", () => {
   const paths = buildCourseOpenApiPaths() as {
     "/api/v1/courses/{courseId}/learn": {
-      get: { responses: Record<string, unknown> };
+      get: { description: string; responses: Record<string, unknown> };
     };
   };
-  assert.ok(
-    paths["/api/v1/courses/{courseId}/learn"].get.responses["409"]
+  const operation = paths["/api/v1/courses/{courseId}/learn"].get;
+  assert.equal(operation.responses["409"], undefined);
+  assert.match(
+    operation.description,
+    /Every published lesson and section is available in any order/u
   );
 });
 
-test("course routes expose a learner-safe voice session and enforce the shared lesson lock", async () => {
+test("course routes expose a learner-safe voice session without locking later lessons", async () => {
   const dataRoot = await mkdtemp(
     path.join(os.tmpdir(), "forge-course-route-test-")
   );
@@ -46,7 +49,7 @@ test("course routes expose a learner-safe voice session and enforce the shared l
         .map((course) => [course.id, course.version])
         .sort((left, right) => left[0].localeCompare(right[0])),
       [
-        ["course.cpge-mathematics-concours-fluency", "1.7.0"],
+        ["course.cpge-mathematics-concours-fluency", "1.8.0"],
         ["course.polynomials-etale-triple-covers", "3.0.0"]
       ]
     );
@@ -82,20 +85,15 @@ test("course routes expose a learner-safe voice session and enforce the shared l
       voice.session.flow.blockedByActivityId,
       "term-0-week-1-day-1-function-data"
     );
-    assert.deepEqual(voice.session.flow.submittableActivityIds, [
-      "term-0-week-1-day-1-function-data"
-    ]);
-    assert.deepEqual(
-      voice.session.lesson.activities.map((activity) => activity.id),
-      ["term-0-week-1-day-1-function-data"]
-    );
+    assert.ok(voice.session.flow.submittableActivityIds.length > 1);
+    assert.ok(voice.session.lesson.activities.length > 1);
     assert.equal(
       voice.voice.deliveryPolicy.disclosure,
       "one_block_or_activity_at_a_time"
     );
     assert.match(voice.voice.deliveryPolicy.persistence, /Do not submit or store audio/u);
     assert.equal(voice.outline.lessons[0]?.unlocked, true);
-    assert.equal(voice.outline.lessons[1]?.unlocked, false);
+    assert.equal(voice.outline.lessons[1]?.unlocked, true);
     const learnerPayload = JSON.stringify(voice.session);
     assert.doesNotMatch(learnerPayload, /referenceAnswerMarkdown/u);
     assert.doesNotMatch(learnerPayload, /correctOptionIds/u);
@@ -105,10 +103,10 @@ test("course routes expose a learner-safe voice session and enforce the shared l
       url: "/api/v1/courses/course.polynomials-etale-triple-covers/learn?lessonId=term-0-week-1-day-2",
       headers
     });
-    assert.equal(futureResponse.statusCode, 409);
+    assert.equal(futureResponse.statusCode, 200);
     assert.equal(
-      (futureResponse.json() as { code: string }).code,
-      "course_lesson_locked"
+      (futureResponse.json() as { lesson: { id: string } }).lesson.id,
+      "term-0-week-1-day-2"
     );
 
     const unknownVoiceField = await app.inject({

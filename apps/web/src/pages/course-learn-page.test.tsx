@@ -253,25 +253,26 @@ function checkpointSession(
 }
 
 describe("progressive lesson flow", () => {
-  it("shows teaching up to the first unanswered checkpoint", () => {
+  it("shows the whole lesson while marking the first unanswered checkpoint", () => {
     const flow = courseLessonFlowState(checkpointSession());
-    expect(flow.blocks).toHaveLength(2);
-    expect(flow.availableActivityIds).toEqual(["first"]);
+    expect(flow.blocks).toHaveLength(5);
+    expect(flow.availableActivityIds).toEqual(["first", "exit"]);
     expect(flow.blockedBy?.activityId).toBe("first");
     expect(flow.complete).toBe(false);
   });
 
-  it("reveals the next teaching section only after a passing review", () => {
+  it("keeps later sections available while moving the guidance marker", () => {
     const reviseFlow = courseLessonFlowState(
       checkpointSession([assessedAttempt("first", "revise")])
     );
-    expect(reviseFlow.availableActivityIds).toEqual(["first"]);
+    expect(reviseFlow.blocks).toHaveLength(5);
+    expect(reviseFlow.availableActivityIds).toEqual(["first", "exit"]);
     expect(reviseFlow.blockedBy?.activityId).toBe("first");
 
     const passFlow = courseLessonFlowState(
       checkpointSession([assessedAttempt("first", "pass")])
     );
-    expect(passFlow.blocks).toHaveLength(4);
+    expect(passFlow.blocks).toHaveLength(5);
     expect(passFlow.availableActivityIds).toEqual(["first", "exit"]);
     expect(passFlow.blockedBy?.activityId).toBe("exit");
   });

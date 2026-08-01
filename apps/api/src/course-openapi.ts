@@ -150,7 +150,7 @@ export function buildCourseOpenApiPaths(): Record<string, unknown> {
       get: {
         summary: "Read a learner-safe immersive lesson session",
         description:
-          "Instructor references, correct option ids, answer explanations, and extension assessment data are removed before serialization.",
+          "Every published lesson and section is available in any order. Forge reports incomplete earlier work as guidance while removing instructor references, correct option ids, answer explanations, and extension assessment data before serialization.",
         tags: ["Courses"],
         parameters: [
           courseIdParameter,
@@ -167,8 +167,7 @@ export function buildCourseOpenApiPaths(): Record<string, unknown> {
             description: "Learner-safe lesson session",
             content: jsonContent({ type: "object" })
           },
-          "404": errorResponse,
-          "409": errorResponse
+          "404": errorResponse
         }
       }
     },
@@ -284,7 +283,7 @@ export function buildCourseOpenApiPaths(): Record<string, unknown> {
             },
             "201": {
               description:
-                "Saved attempt, attempt ordinals, assessment, progress, and next unlocked lesson",
+                "Saved attempt, attempt ordinals, assessment, progress, and suggested next lesson",
               content: jsonContent({ type: "object" })
             },
             "202": {

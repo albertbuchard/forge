@@ -18,7 +18,6 @@ import {
   CircleAlert,
   Clock3,
   Library,
-  Lock,
   Menu,
   MessageSquareText,
   Sparkles,
@@ -186,16 +185,16 @@ export function courseLessonFlowState(
     };
   }
 
-  const blocks: CourseContentBlock[] = [];
-  const availableActivityIds: string[] = [];
+  const blocks = session.lesson.content;
+  const availableActivityIds = session.lesson.activities.map(
+    (activity) => activity.id
+  );
   let blockedBy: Extract<
     CourseContentBlock,
     { type: "checkpoint" }
   > | null = null;
   for (const block of session.lesson.content) {
-    blocks.push(block);
     if (block.type !== "checkpoint") continue;
-    availableActivityIds.push(block.activityId);
     const attempt = attemptFor(block.activityId);
     const remediationAttempt = block.remediationActivityId
       ? attemptFor(block.remediationActivityId)
@@ -214,9 +213,8 @@ export function courseLessonFlowState(
       (block.continuation === "after_pass" && passed) ||
       (block.continuation === "after_remediation" &&
         (passed || remediationPassed));
-    if (!mayContinue) {
+    if (!mayContinue && blockedBy === null) {
       blockedBy = block;
-      break;
     }
   }
   return {
@@ -481,8 +479,14 @@ function CourseOutline({
               </button>
               {open ? (
                 <div className="course-outline__lessons">
-                  {lessons.map((lesson) => (
-                    <button
+                  {lessons.map((lesson) => {
+                    const hasIncompleteEarlierLesson =
+                      session.navigation.some(
+                        (entry) =>
+                          entry.order < lesson.order && !entry.completed
+                      );
+                    return (
+                      <button
                       key={lesson.id}
                       ref={
                         lesson.id === session.lesson.id
@@ -494,14 +498,12 @@ function CourseOutline({
                       }
                       className={cn(
                         "course-outline__lesson",
-                        lesson.id === session.lesson.id && "is-current",
-                        !lesson.unlocked && "is-locked"
+                        lesson.id === session.lesson.id && "is-current"
                       )}
-                      disabled={!lesson.unlocked}
                       aria-label={
-                        lesson.unlocked
-                          ? undefined
-                          : `Week ${lesson.week}, day ${lesson.day}: locked until the preceding day is complete`
+                        hasIncompleteEarlierLesson
+                          ? `Week ${lesson.week}, day ${lesson.day}: earlier lessons are incomplete; open anyway`
+                          : undefined
                       }
                       onClick={() => {
                         onNavigate(lesson.id);
@@ -511,8 +513,8 @@ function CourseOutline({
                       <span className="course-outline__lesson-marker">
                         {lesson.completed ? (
                           <Check className="size-3" />
-                        ) : !lesson.unlocked ? (
-                          <Lock className="size-3" aria-hidden="true" />
+                        ) : hasIncompleteEarlierLesson ? (
+                          <CircleAlert className="size-3" aria-hidden="true" />
                         ) : (
                           lesson.day
                         )}
@@ -521,14 +523,17 @@ function CourseOutline({
                         <span className="block text-[10px] text-[var(--course-outline-ink-subtle)]">
                           Week {lesson.week} · Day {lesson.day}
                           {lesson.id === session.lesson.id ? " · Current" : ""}
-                          {!lesson.unlocked ? " · Locked" : ""}
+                          {hasIncompleteEarlierLesson
+                            ? " · Earlier work incomplete"
+                            : ""}
                         </span>
                         <span className="block truncate text-[11px] text-[var(--course-outline-ink-body)]">
                           {lesson.title.split(" · ")[0]}
                         </span>
                       </span>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
               ) : null}
             </section>
@@ -810,6 +815,12 @@ export function CourseLearnPage() {
     queryFn: () => getForgeLearningSession({ courseId, lessonId, userId })
   });
   const session = query.data;
+  const hasIncompleteEarlierLesson = session
+    ? session.navigation.some(
+        (entry) =>
+          entry.order < session.lesson.order && !entry.completed
+      )
+    : false;
   const lessonFlow = useMemo(
     () => (session ? courseLessonFlowState(session) : null),
     [session]
@@ -1120,6 +1131,16 @@ export function CourseLearnPage() {
               </h1>
               <p className="course-lesson__summary">{session.lesson.summary}</p>
 
+              {hasIncompleteEarlierLesson ? (
+                <div className="course-release-notice" role="status">
+                  <strong>Earlier course work is still incomplete.</strong>
+                  <span>
+                    You can study this day now. Forge keeps the earlier work
+                    visible in your progress so you can return to it when useful.
+                  </span>
+                </div>
+              ) : null}
+
               {session.release.updateAvailable ? (
                 <div className="course-release-notice" role="status">
                   <strong>
@@ -1395,7 +1416,7 @@ export function CourseLearnPage() {
                 <CourseSectionNavigation
                   currentIndex={activeBlockIndex}
                   totalSteps={lessonFlow?.blocks.length ?? 0}
-                  canContinue={Boolean(latestFeedback)}
+                  canContinue
                   continueLabel="Continue to the next section"
                   onPrevious={() =>
                     setActiveBlockIndex((current) =>
@@ -1421,7 +1442,7 @@ export function CourseLearnPage() {
                 </Button>
                 <Button
                   variant="secondary"
-                  disabled={!session.nextLessonId || !lessonFlow?.complete}
+                  disabled={!session.nextLessonId}
                   onClick={() =>
                     session.nextLessonId && navigateLesson(session.nextLessonId)
                   }
@@ -1434,8 +1455,8 @@ export function CourseLearnPage() {
                   className="mt-3 text-center text-xs text-[var(--course-muted)]"
                   role="status"
                 >
-                  Pass every required checkpoint to continue to the next day.
-                  Your saved work remains available for revision.
+                  This day is still incomplete. You can continue now and return
+                  later; Forge will keep the unfinished work visible.
                 </p>
               ) : null}
             </div>

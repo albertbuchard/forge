@@ -395,12 +395,11 @@ function lessonAccessState(
     firstIncompleteIndex === -1
       ? Math.max(0, coursePackage.lessons.length - 1)
       : firstIncompleteIndex;
+  // Course order is guidance, not an access-control boundary. Learners may
+  // inspect and work on any day while Forge keeps the first incomplete lesson
+  // as the recommended frontier.
   const accessibleLessonIds = new Set(
-    coursePackage.lessons.flatMap((lesson, index) =>
-      completedLessonIds.has(lesson.id) || index <= frontierIndex
-        ? [lesson.id]
-        : []
-    )
+    coursePackage.lessons.map((lesson) => lesson.id)
   );
   return {
     completedLessonIds,
@@ -409,23 +408,6 @@ function lessonAccessState(
       coursePackage.lessons[frontierIndex]?.id ??
       coursePackage.course.entryLessonId
   };
-}
-
-function requireAccessibleLesson(
-  coursePackage: ForgeCoursePackage,
-  courseId: string,
-  userId: string,
-  lessonId: string
-) {
-  const access = lessonAccessState(coursePackage, courseId, userId);
-  if (!access.accessibleLessonIds.has(lessonId)) {
-    throw new HttpError(
-      409,
-      "course_lesson_locked",
-      "Complete every required activity in the preceding lesson before opening this lesson."
-    );
-  }
-  return access;
 }
 
 type LearnerAttempt = {
@@ -533,17 +515,15 @@ function learnerLessonFrontier(
       attempt ? [[attempt.activityId, attempt] as const] : []
     )
   );
-  const content: CourseLesson["content"] = [];
-  const availableActivityIds = new Set<string>();
-  const submittableActivityIds = new Set<string>();
+  const availableActivityIds = new Set(
+    lesson.activities.map((activity) => activity.id)
+  );
+  const submittableActivityIds = new Set(
+    lesson.activities.map((activity) => activity.id)
+  );
   let blockedByActivityId: string | null = null;
   for (const block of lesson.content) {
-    content.push(block);
     if (block.type !== "checkpoint") continue;
-    availableActivityIds.add(block.activityId);
-    if (block.remediationActivityId) {
-      availableActivityIds.add(block.remediationActivityId);
-    }
     const attempt = attemptByActivityId.get(block.activityId);
     const remediationAttempt = block.remediationActivityId
       ? attemptByActivityId.get(block.remediationActivityId)
@@ -562,21 +542,14 @@ function learnerLessonFrontier(
       (block.continuation === "after_pass" && passed) ||
       (block.continuation === "after_remediation" &&
         (passed || remediationPassed));
-    if (!mayContinue) {
+    if (!mayContinue && blockedByActivityId === null) {
       blockedByActivityId = block.activityId;
-      submittableActivityIds.add(block.activityId);
-      if (block.remediationActivityId) {
-        submittableActivityIds.add(block.remediationActivityId);
-      }
-      break;
     }
   }
 
   return {
-    content,
-    activities: lesson.activities.filter((activity) =>
-      availableActivityIds.has(activity.id)
-    ),
+    content: lesson.content,
+    activities: lesson.activities,
     availableActivityIds: [...availableActivityIds],
     submittableActivityIds: [...submittableActivityIds],
     blockedByActivityId
@@ -1290,7 +1263,6 @@ export function getLearningSession(
   if (!lesson) {
     throw new HttpError(404, "lesson_not_found", "Lesson not found.");
   }
-  requireAccessibleLesson(coursePackage, courseRow.id, userId, lesson.id);
   const navigationRows = coursePackage.lessons;
   const completedLessonIds = completedLessonIdSet(
     coursePackage,
@@ -1357,7 +1329,7 @@ export function getLearningSession(
       availableActivityIds: frontier.availableActivityIds,
       submittableActivityIds: frontier.submittableActivityIds,
       blockedByActivityId: frontier.blockedByActivityId,
-      disclosure: "checkpoint_frontier"
+      disclosure: "open_navigation_with_guidance"
     },
     resources: coursePackage.resources,
     modules: coursePackage.modules,
@@ -1428,12 +1400,6 @@ export function createVoiceLearningSession(input: {
       `Week ${input.week}, day ${input.day} does not exist in this course.`
     );
   }
-  requireAccessibleLesson(
-    coursePackage,
-    courseRow.id,
-    input.userId,
-    lesson.id
-  );
   const token = randomUUID();
   const createdAt = nowIso();
   const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
@@ -1644,12 +1610,6 @@ export function createCourseAttempt(input: {
   if (!lesson) {
     throw new HttpError(404, "lesson_not_found", "Lesson not found.");
   }
-  requireAccessibleLesson(
-    coursePackage,
-    course.id,
-    input.userId,
-    lesson.id
-  );
   const activity = lesson.activities.find(
     (entry) => entry.id === input.activityId
   );
@@ -1750,13 +1710,6 @@ export function createCourseAttempt(input: {
     lesson,
     latestLessonAttempts(coursePackage, course.id, input.userId, lesson)
   );
-  if (!frontier.submittableActivityIds.includes(activity.id)) {
-    throw new HttpError(
-      409,
-      "course_activity_locked",
-      "Complete the current checkpoint and receive the required review before submitting this activity."
-    );
-  }
   const now = nowIso();
   const created = runInTransaction(() => {
     if (input.idempotencyKey) {
@@ -2335,7 +2288,6 @@ export function getActivityForAssessment(
   if (!lesson) {
     throw new HttpError(404, "lesson_not_found", "Lesson not found.");
   }
-  requireAccessibleLesson(coursePackage, course.id, userId, lesson.id);
   const activity = lesson.activities.find((entry) => entry.id === activityId);
   if (!activity) {
     throw new HttpError(404, "activity_not_found", "Activity not found.");

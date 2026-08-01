@@ -1079,7 +1079,7 @@ test("keeps an enrollment on its immutable release until an explicit audited upg
   }
 });
 
-test("locks future lessons and unlocks exactly the next lesson after required work passes", async () => {
+test("keeps every lesson and activity open while tracking required completion", async () => {
   const dataRoot = await mkdtemp(
     path.join(os.tmpdir(), "forge-course-progression-test-")
   );
@@ -1095,29 +1095,23 @@ test("locks future lessons and unlocks exactly the next lesson after required wo
     const secondLessonId = "term-0-week-1-day-2";
     const thirdLessonId = "term-0-week-1-day-3";
 
-    assert.throws(
-      () => getLearningSession(courseId, userId, secondLessonId),
-      (error: unknown) =>
-        error instanceof Error &&
-        "code" in error &&
-        error.code === "course_lesson_locked"
+    assert.equal(
+      getLearningSession(courseId, userId, secondLessonId).lesson.id,
+      secondLessonId
     );
     const firstSession = getLearningSession(courseId, userId, firstLessonId);
-    const hiddenExitActivityId =
-      "term-0-week-1-day-1-exit-v3";
-    assert.throws(
-      () =>
-        createCourseAttempt({
-          courseId,
-          lessonId: firstLessonId,
-          activityId: hiddenExitActivityId,
-          userId,
-          answerMarkdown: "This tries to skip the first checkpoint."
-        }),
-      (error: unknown) =>
-        error instanceof Error &&
-        "code" in error &&
-        error.code === "course_activity_locked"
+    const laterActivityId = "term-0-week-1-day-1-exit-v3";
+    assert.ok(
+      firstSession.flow.submittableActivityIds.includes(laterActivityId)
+    );
+    assert.equal(
+      getActivityForAssessment(
+        courseId,
+        firstLessonId,
+        laterActivityId,
+        userId
+      ).activity.id,
+      laterActivityId
     );
     let currentSession = firstSession;
     while (currentSession.flow.blockedByActivityId) {
@@ -1156,12 +1150,9 @@ test("locks future lessons and unlocks exactly the next lesson after required wo
       getLearningSession(courseId, userId, secondLessonId).lesson.id,
       secondLessonId
     );
-    assert.throws(
-      () => getLearningSession(courseId, userId, thirdLessonId),
-      (error: unknown) =>
-        error instanceof Error &&
-        "code" in error &&
-        error.code === "course_lesson_locked"
+    assert.equal(
+      getLearningSession(courseId, userId, thirdLessonId).lesson.id,
+      thirdLessonId
     );
     const detail = getCourseDetail(courseId, userId);
     assert.equal(
@@ -1174,7 +1165,7 @@ test("locks future lessons and unlocks exactly the next lesson after required wo
     );
     assert.equal(
       detail.lessons.find((lesson) => lesson.id === thirdLessonId)?.unlocked,
-      false
+      true
     );
   } finally {
     closeDatabase();
@@ -1355,7 +1346,7 @@ test("completes an in-flight attempt from its saved release and activity snapsho
       nextLessonId: context.nextLessonId
     });
     assert.equal(completed.pointsAwarded, originalPoints);
-    assert.equal(completed.nextLessonId, null);
+    assert.equal(completed.nextLessonId, context.nextLessonId);
     assert.equal(getCourseAttemptResult(attempt.attemptId, userId).score, 100);
     const enrollment = getDatabase()
       .prepare(

@@ -261,7 +261,7 @@ export type LearningSession = {
     availableActivityIds: string[];
     submittableActivityIds: string[];
     blockedByActivityId: string | null;
-    disclosure: "checkpoint_frontier";
+    disclosure: "checkpoint_frontier" | "open_navigation_with_guidance";
   };
   resources: CourseResource[];
   modules: CourseModule[];

@@ -9,7 +9,6 @@ import {
   Clock3,
   ExternalLink,
   Library,
-  Lock,
   Trophy
 } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
@@ -19,6 +18,15 @@ import { useForgeShell } from "@/components/shell/app-shell";
 import { Card } from "@/components/ui/card";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { getForgeCourse, upgradeForgeCourseEnrollment } from "@/lib/api";
+
+export function hasIncompleteEarlierCourseWork(
+  lessons: readonly { order: number; completed: boolean }[],
+  targetOrder: number
+) {
+  return lessons.some(
+    (lesson) => lesson.order < targetOrder && !lesson.completed
+  );
+}
 
 export function CourseDetailPage() {
   const { courseId = "" } = useParams();
@@ -72,13 +80,10 @@ export function CourseDetailPage() {
     query.data;
   const startLesson =
     (progress.currentLessonId &&
-    query.data.lessons.some(
-      (lesson) => lesson.id === progress.currentLessonId && lesson.unlocked
-    )
+    query.data.lessons.some((lesson) => lesson.id === progress.currentLessonId)
       ? progress.currentLessonId
-      : query.data.lessons.find((lesson) => lesson.unlocked && !lesson.completed)
-          ?.id) ??
-    query.data.lessons.find((lesson) => lesson.unlocked)?.id ??
+      : query.data.lessons.find((lesson) => !lesson.completed)?.id) ??
+    query.data.lessons[0]?.id ??
     course.entryLessonId;
   return (
     <div>
@@ -223,6 +228,11 @@ export function CourseDetailPage() {
                         const completed = weekLessons.filter(
                           (lesson) => lesson.completed
                         ).length;
+                        const hasIncompleteEarlierLesson =
+                          hasIncompleteEarlierCourseWork(
+                            query.data.lessons,
+                            first.order
+                          );
                         const weekContent = (
                           <>
                             <div className="flex items-center justify-between">
@@ -239,36 +249,27 @@ export function CourseDetailPage() {
                               {first.title.split(" · ").at(-1)}
                             </div>
                             <div className="mt-2 text-xs text-[var(--ui-ink-soft)]">
-                              {first.unlocked ? (
-                                <>
-                                  Open daily work{" "}
-                                  <ArrowRight className="ml-1 inline size-3" />
-                                </>
-                              ) : (
-                                <>
-                                  <Lock className="mr-1 inline size-3" />
-                                  Complete the preceding week first
-                                </>
-                              )}
+                              Open daily work{" "}
+                              <ArrowRight className="ml-1 inline size-3" />
+                              {hasIncompleteEarlierLesson
+                                ? " · Earlier work incomplete"
+                                : ""}
                             </div>
                           </>
                         );
-                        return first.unlocked ? (
+                        return (
                           <Link
                             key={week}
                             to={`/courses/${course.slug}/learn?lesson=${first.id}`}
                             className="course-week-link"
+                            aria-label={
+                              hasIncompleteEarlierLesson
+                                ? `Open week ${week}; earlier work is incomplete`
+                                : undefined
+                            }
                           >
                             {weekContent}
                           </Link>
-                        ) : (
-                          <div
-                            key={week}
-                            className="course-week-link opacity-65"
-                            aria-label={`Week ${week} is locked until the preceding week is complete`}
-                          >
-                            {weekContent}
-                          </div>
                         );
                       })}
                     </div>
