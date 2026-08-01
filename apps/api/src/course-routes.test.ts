@@ -50,7 +50,7 @@ test("course routes expose a learner-safe voice session without locking later le
         .sort((left, right) => left[0].localeCompare(right[0])),
       [
         ["course.cpge-mathematics-concours-fluency", "1.8.0"],
-        ["course.polynomials-etale-triple-covers", "3.0.0"]
+        ["course.polynomials-etale-triple-covers", "3.1.0"]
       ]
     );
 
@@ -81,17 +81,17 @@ test("course routes expose a learner-safe voice session without locking later le
       };
     };
     assert.equal(voice.voice.lessonId, voice.session.lesson.id);
-    assert.equal(
-      voice.session.flow.blockedByActivityId,
-      "term-0-week-1-day-1-function-data"
-    );
+    assert.equal(voice.session.flow.blockedByActivityId, null);
     assert.ok(voice.session.flow.submittableActivityIds.length > 1);
     assert.ok(voice.session.lesson.activities.length > 1);
     assert.equal(
       voice.voice.deliveryPolicy.disclosure,
       "one_block_or_activity_at_a_time"
     );
-    assert.match(voice.voice.deliveryPolicy.persistence, /Do not submit or store audio/u);
+    assert.match(
+      voice.voice.deliveryPolicy.persistence,
+      /Do not submit or store audio/u
+    );
     assert.equal(voice.outline.lessons[0]?.unlocked, true);
     assert.equal(voice.outline.lessons[1]?.unlocked, true);
     const learnerPayload = JSON.stringify(voice.session);

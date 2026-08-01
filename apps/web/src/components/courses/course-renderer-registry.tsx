@@ -123,7 +123,7 @@ export function CourseContentBlockView({
     );
   }
   if (block.type === "markdown") {
-    return <CourseMarkdown markdown={block.markdown} />;
+    return <CourseMarkdown markdown={block.markdown} offsetHeadings />;
   }
   if (block.type === "divider") {
     return (

@@ -19,6 +19,7 @@ type CourseMarkdownProps = {
   markdown: string;
   className?: string;
   renderMode?: "course-content" | "generated-feedback";
+  offsetHeadings?: boolean;
 };
 
 const generatedFeedbackComponents: Components = {
@@ -28,10 +29,18 @@ const generatedFeedbackComponents: Components = {
   )
 };
 
+const offsetHeadingComponents: Components = {
+  h1: ({ node: _node, ...props }) => <h2 {...props} />,
+  h2: ({ node: _node, ...props }) => <h3 {...props} />,
+  h3: ({ node: _node, ...props }) => <h4 {...props} />,
+  h4: ({ node: _node, ...props }) => <h5 {...props} />
+};
+
 export function CourseMarkdown({
   markdown,
   className,
-  renderMode = "course-content"
+  renderMode = "course-content",
+  offsetHeadings = false
 }: CourseMarkdownProps) {
   return (
     <div className={cn("course-markdown", className)}>
@@ -41,7 +50,9 @@ export function CourseMarkdown({
         components={
           renderMode === "generated-feedback"
             ? generatedFeedbackComponents
-            : undefined
+            : offsetHeadings
+              ? offsetHeadingComponents
+              : undefined
         }
       >
         {normalizeCourseMarkdown(markdown)}

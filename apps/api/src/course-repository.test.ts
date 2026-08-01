@@ -136,12 +136,14 @@ function passLessonCheckpointsBefore(
   lessonId: string,
   targetActivityId: string
 ) {
-  let session = getLearningSession(courseId, userId, lessonId);
-  while (
-    session.flow.blockedByActivityId &&
-    session.flow.blockedByActivityId !== targetActivityId
-  ) {
-    const activityId = session.flow.blockedByActivityId;
+  const session = getLearningSession(courseId, userId, lessonId);
+  const targetIndex = session.lesson.activities.findIndex(
+    (activity) => activity.id === targetActivityId
+  );
+  assert.notEqual(targetIndex, -1);
+  for (const activity of session.lesson.activities.slice(0, targetIndex)) {
+    if (!activity.required) continue;
+    const activityId = activity.id;
     const context = getActivityForAssessment(
       courseId,
       lessonId,
@@ -164,9 +166,10 @@ function passLessonCheckpointsBefore(
       model: "test-assessor",
       nextLessonId: context.nextLessonId
     });
-    session = getLearningSession(courseId, userId, lessonId);
   }
-  assert.equal(session.flow.blockedByActivityId, targetActivityId);
+  const updated = getLearningSession(courseId, userId, lessonId);
+  assert.equal(updated.flow.blockedByActivityId, null);
+  assert.ok(updated.flow.submittableActivityIds.includes(targetActivityId));
 }
 
 test("imports a modular course and carries proof evidence into concept mastery", async () => {
@@ -235,7 +238,7 @@ test("imports a modular course and carries proof evidence into concept mastery",
       activity_content_hash: string;
       activity_snapshot_json: string;
     };
-    assert.equal(attemptSnapshot.course_version, "3.0.0");
+    assert.equal(attemptSnapshot.course_version, "3.1.0");
     assert.equal(attemptSnapshot.activity_revision, "3");
     assert.match(attemptSnapshot.activity_content_hash, /^[a-f0-9]{64}$/u);
     assert.equal(
@@ -631,7 +634,7 @@ test("imports a modular course and carries proof evidence into concept mastery",
       .digest("hex");
     const explicitConceptUpgrade = {
       ...researchExport,
-      course: { ...researchExport.course, version: "3.1.0" },
+      course: { ...researchExport.course, version: "3.2.0" },
       concepts: researchExport.concepts.map((concept) =>
         concept.id === upgradedProof.id ? upgradedProof : concept
       ),
@@ -665,7 +668,7 @@ test("imports a modular course and carries proof evidence into concept mastery",
       JSON.parse(revision.definition_json).exampleMarkdown,
       priorProof.exampleMarkdown
     );
-    assert.equal(revision.source_course_version, "3.1.0");
+    assert.equal(revision.source_course_version, "3.2.0");
     assert.equal(revision.replaced_by_content_hash, upgradedProofHash);
     assert.equal(
       revision.reason,
@@ -732,10 +735,7 @@ test("keeps an enrollment on its immutable release until an explicit audited upg
       }>;
     };
     const installedConceptById = new Map(
-      installedCanonicalFixture.concepts.map((entry) => [
-        entry.id,
-        entry
-      ])
+      installedCanonicalFixture.concepts.map((entry) => [entry.id, entry])
     );
     const bundledConceptById = new Map(
       bundledCourse.concepts.map((concept) => [concept.id, concept])
@@ -943,11 +943,10 @@ test("keeps an enrollment on its immutable release until an explicit audited upg
     );
     const packageTestingSharedLink = {
       ...packageWithoutDeclarations,
-      concepts: bundledCourse.concepts.map(
-        (concept) =>
-          concept.id === protectedConceptId
-            ? installedConceptById.get(concept.id)?.definition ?? concept
-            : concept
+      concepts: bundledCourse.concepts.map((concept) =>
+        concept.id === protectedConceptId
+          ? (installedConceptById.get(concept.id)?.definition ?? concept)
+          : concept
       )
     };
     assert.throws(
@@ -1001,12 +1000,10 @@ test("keeps an enrollment on its immutable release until an explicit audited upg
       assert.ok(revision);
       assert.ok(nextDefinition);
       assert.equal(revision.content_hash, entry.contentHash);
-      assert.equal(revision.source_course_version, "3.0.0");
+      assert.equal(revision.source_course_version, "3.1.0");
       assert.equal(
         revision.replaced_by_content_hash,
-        createHash("sha256")
-          .update(stableJson(nextDefinition))
-          .digest("hex")
+        createHash("sha256").update(stableJson(nextDefinition)).digest("hex")
       );
       assert.equal(revision.reason, upgradeById.get(entry.id)?.reason);
     }
@@ -1035,7 +1032,7 @@ test("keeps an enrollment on its immutable release until an explicit audited upg
     const beforeUpgrade = getCourseDetail(courseId, userId);
     assert.deepEqual(beforeUpgrade.release, {
       enrolledVersion: "2.9.0",
-      latestVersion: "3.0.0",
+      latestVersion: "3.1.0",
       updateAvailable: true
     });
     assert.ok(
@@ -1048,14 +1045,14 @@ test("keeps an enrollment on its immutable release until an explicit audited upg
     const receipt = upgradeCourseEnrollment(courseId, userId);
     assert.equal(receipt.upgraded, true);
     assert.equal(receipt.fromVersion, "2.9.0");
-    assert.equal(receipt.toVersion, "3.0.0");
+    assert.equal(receipt.toVersion, "3.1.0");
     assert.ok(receipt.carriedActivityIds.includes(activityId));
     assert.ok(receipt.remainingActivityIds.length > 0);
 
     const afterUpgrade = getCourseDetail(courseId, userId);
     assert.deepEqual(afterUpgrade.release, {
-      enrolledVersion: "3.0.0",
-      latestVersion: "3.0.0",
+      enrolledVersion: "3.1.0",
+      latestVersion: "3.1.0",
       updateAvailable: false
     });
     const upgradedSession = getLearningSession(courseId, userId, lessonId);
@@ -1105,21 +1102,15 @@ test("keeps every lesson and activity open while tracking required completion", 
       firstSession.flow.submittableActivityIds.includes(laterActivityId)
     );
     assert.equal(
-      getActivityForAssessment(
-        courseId,
-        firstLessonId,
-        laterActivityId,
-        userId
-      ).activity.id,
+      getActivityForAssessment(courseId, firstLessonId, laterActivityId, userId)
+        .activity.id,
       laterActivityId
     );
     let currentSession = firstSession;
-    while (currentSession.flow.blockedByActivityId) {
-      const activityId = currentSession.flow.blockedByActivityId;
-      const activity = currentSession.lesson.activities.find(
-        (entry) => entry.id === activityId
-      );
-      assert.ok(activity);
+    for (const activity of currentSession.lesson.activities.filter(
+      (entry) => entry.required
+    )) {
+      const activityId = activity.id;
       const context = getActivityForAssessment(
         courseId,
         firstLessonId,
@@ -1142,8 +1133,8 @@ test("keeps every lesson and activity open while tracking required completion", 
         model: "test-assessor",
         nextLessonId: context.nextLessonId
       });
-      currentSession = getLearningSession(courseId, userId, firstLessonId);
     }
+    currentSession = getLearningSession(courseId, userId, firstLessonId);
     assert.equal(currentSession.progress.completedLessons, 1);
 
     assert.equal(

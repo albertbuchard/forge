@@ -9,6 +9,8 @@ import {
   courseAccentStyle,
   courseDraftStorageKey,
   courseLessonFlowState,
+  feedbackBridgeMarkdown,
+  isFeedbackBridgeBlock,
   parseCourseDraft,
   recallWeekCheckpoints
 } from "./course-learn-page";
@@ -120,9 +122,7 @@ describe("course section navigation", () => {
       />
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Previous section" })
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Previous section" }));
     expect(onPrevious).toHaveBeenCalledOnce();
     expect(onContinue).not.toHaveBeenCalled();
     expect(
@@ -156,10 +156,7 @@ describe("course drafts", () => {
   });
 });
 
-function checkpointActivity(
-  id: string,
-  required = true
-): CourseActivity {
+function checkpointActivity(id: string, required = true): CourseActivity {
   return {
     id,
     title: `Checkpoint ${id}`,
@@ -243,16 +240,56 @@ function checkpointSession(
         secondCheckpoint,
         { type: "markdown", markdown: "Connect this result to tomorrow." }
       ],
-      activities: [
-        checkpointActivity("first"),
-        checkpointActivity("exit")
-      ]
+      activities: [checkpointActivity("first"), checkpointActivity("exit")]
     },
     latestAttempts: attempts
   };
 }
 
 describe("progressive lesson flow", () => {
+  it("keeps feedback instructions out of the teaching flow until feedback exists", () => {
+    expect(
+      isFeedbackBridgeBlock({
+        type: "markdown",
+        markdown:
+          "### Use the feedback before continuing\n\nRepair the first incorrect bound."
+      })
+    ).toBe(true);
+    expect(
+      isFeedbackBridgeBlock({
+        type: "markdown",
+        markdown:
+          "## Shift the telescoping window\n\nRecompute both boundary terms."
+      })
+    ).toBe(false);
+    for (const heading of [
+      "### Correct and retry",
+      "### Complete the guided sequence",
+      "### Submit the complete sitting before assessment feedback"
+    ]) {
+      expect(
+        isFeedbackBridgeBlock({
+          type: "markdown",
+          markdown: `${heading}\n\nTarget-specific repair.`
+        })
+      ).toBe(true);
+    }
+    const explicitBridge: CourseContentBlock = {
+      type: "extension",
+      namespace: "forge",
+      renderer: "feedback-bridge",
+      version: "1",
+      data: {
+        activityId: "first",
+        markdown: "Repair the first incorrect bound, then continue."
+      }
+    };
+    expect(isFeedbackBridgeBlock(explicitBridge)).toBe(true);
+    expect(feedbackBridgeMarkdown(explicitBridge)).toBe(
+      "Repair the first incorrect bound, then continue."
+    );
+  });
+
   it("shows the whole lesson while marking the first unanswered checkpoint", () => {
     const flow = courseLessonFlowState(checkpointSession());
     expect(flow.blocks).toHaveLength(5);

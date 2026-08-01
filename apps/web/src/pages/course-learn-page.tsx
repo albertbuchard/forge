@@ -40,6 +40,7 @@ import { useForgeShell } from "@/components/shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { LoadingState, ErrorState } from "@/components/ui/page-state";
 import { getForgeLearningSession, submitForgeCourseAttempt } from "@/lib/api";
+import { ForgeApiError } from "@/lib/api-error";
 import type {
   AssessmentFeedback,
   CourseActivity,
@@ -189,10 +190,8 @@ export function courseLessonFlowState(
   const availableActivityIds = session.lesson.activities.map(
     (activity) => activity.id
   );
-  let blockedBy: Extract<
-    CourseContentBlock,
-    { type: "checkpoint" }
-  > | null = null;
+  let blockedBy: Extract<CourseContentBlock, { type: "checkpoint" }> | null =
+    null;
   for (const block of session.lesson.content) {
     if (block.type !== "checkpoint") continue;
     const attempt = attemptFor(block.activityId);
@@ -200,8 +199,7 @@ export function courseLessonFlowState(
       ? attemptFor(block.remediationActivityId)
       : null;
     const passed =
-      attempt?.status === "assessed" &&
-      attempt.feedback?.verdict === "pass";
+      attempt?.status === "assessed" && attempt.feedback?.verdict === "pass";
     const remediationPassed =
       remediationAttempt?.status === "assessed" &&
       remediationAttempt.feedback?.verdict === "pass";
@@ -223,6 +221,34 @@ export function courseLessonFlowState(
     blockedBy,
     complete: requiredPassed
   };
+}
+
+export function feedbackBridgeMarkdown(block: CourseContentBlock) {
+  if (
+    block.type === "markdown" &&
+    /^#{1,4}\s+(?:(?:use|apply|inspect|read)\s+(?:the\s+)?feedback\b|correct\s+and\s+retry\b|complete\s+the\s+guided\s+sequence\b|submit\s+the\s+complete\s+sitting\s+before\s+assessment\s+feedback\b)/iu.test(
+      block.markdown.trim()
+    )
+  ) {
+    return block.markdown;
+  }
+  if (
+    block.type === "extension" &&
+    block.namespace === "forge" &&
+    block.renderer === "feedback-bridge" &&
+    typeof block.data === "object" &&
+    block.data !== null &&
+    "markdown" in block.data &&
+    typeof block.data.markdown === "string" &&
+    block.data.markdown.trim().length > 0
+  ) {
+    return block.data.markdown;
+  }
+  return null;
+}
+
+export function isFeedbackBridgeBlock(block: CourseContentBlock) {
+  return feedbackBridgeMarkdown(block) !== null;
 }
 
 export function CourseSectionNavigation({
@@ -480,57 +506,60 @@ function CourseOutline({
               {open ? (
                 <div className="course-outline__lessons">
                   {lessons.map((lesson) => {
-                    const hasIncompleteEarlierLesson =
-                      session.navigation.some(
-                        (entry) =>
-                          entry.order < lesson.order && !entry.completed
-                      );
+                    const hasIncompleteEarlierLesson = session.navigation.some(
+                      (entry) => entry.order < lesson.order && !entry.completed
+                    );
                     return (
                       <button
-                      key={lesson.id}
-                      ref={
-                        lesson.id === session.lesson.id
-                          ? currentLessonRef
-                          : undefined
-                      }
-                      aria-current={
-                        lesson.id === session.lesson.id ? "step" : undefined
-                      }
-                      className={cn(
-                        "course-outline__lesson",
-                        lesson.id === session.lesson.id && "is-current"
-                      )}
-                      aria-label={
-                        hasIncompleteEarlierLesson
-                          ? `Week ${lesson.week}, day ${lesson.day}: earlier lessons are incomplete; open anyway`
-                          : undefined
-                      }
-                      onClick={() => {
-                        onNavigate(lesson.id);
-                        onClose?.();
-                      }}
-                    >
-                      <span className="course-outline__lesson-marker">
-                        {lesson.completed ? (
-                          <Check className="size-3" />
-                        ) : hasIncompleteEarlierLesson ? (
-                          <CircleAlert className="size-3" aria-hidden="true" />
-                        ) : (
-                          lesson.day
+                        key={lesson.id}
+                        ref={
+                          lesson.id === session.lesson.id
+                            ? currentLessonRef
+                            : undefined
+                        }
+                        aria-current={
+                          lesson.id === session.lesson.id ? "step" : undefined
+                        }
+                        className={cn(
+                          "course-outline__lesson",
+                          lesson.id === session.lesson.id && "is-current"
                         )}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block text-[10px] text-[var(--course-outline-ink-subtle)]">
-                          Week {lesson.week} · Day {lesson.day}
-                          {lesson.id === session.lesson.id ? " · Current" : ""}
-                          {hasIncompleteEarlierLesson
-                            ? " · Earlier work incomplete"
-                            : ""}
+                        aria-label={
+                          hasIncompleteEarlierLesson
+                            ? `Week ${lesson.week}, day ${lesson.day}: earlier lessons are incomplete; open anyway`
+                            : undefined
+                        }
+                        onClick={() => {
+                          onNavigate(lesson.id);
+                          onClose?.();
+                        }}
+                      >
+                        <span className="course-outline__lesson-marker">
+                          {lesson.completed ? (
+                            <Check className="size-3" />
+                          ) : hasIncompleteEarlierLesson ? (
+                            <CircleAlert
+                              className="size-3"
+                              aria-hidden="true"
+                            />
+                          ) : (
+                            lesson.day
+                          )}
                         </span>
-                        <span className="block truncate text-[11px] text-[var(--course-outline-ink-body)]">
-                          {lesson.title.split(" · ")[0]}
+                        <span className="min-w-0">
+                          <span className="block text-[10px] text-[var(--course-outline-ink-subtle)]">
+                            Week {lesson.week} · Day {lesson.day}
+                            {lesson.id === session.lesson.id
+                              ? " · Current"
+                              : ""}
+                            {hasIncompleteEarlierLesson
+                              ? " · Earlier work incomplete"
+                              : ""}
+                          </span>
+                          <span className="block truncate text-[11px] text-[var(--course-outline-ink-body)]">
+                            {lesson.title.split(" · ")[0]}
+                          </span>
                         </span>
-                      </span>
                       </button>
                     );
                   })}
@@ -805,49 +834,57 @@ export function CourseLearnPage() {
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [hydratedDraftKey, setHydratedDraftKey] = useState<string | null>(null);
   const [activeActivityId, setActiveActivityId] = useState<string | null>(null);
-  const [activeBlockIndex, setActiveBlockIndex] = useState(0);
-  const [localFeedback, setLocalFeedback] = useState<AssessmentFeedback | null>(
-    null
-  );
+  const [localFeedback, setLocalFeedback] = useState<{
+    activityId: string;
+    feedback: AssessmentFeedback;
+  } | null>(null);
 
   const query = useQuery({
     queryKey: ["forge-course-learn", courseId, lessonId, userId],
-    queryFn: () => getForgeLearningSession({ courseId, lessonId, userId })
+    queryFn: ({ signal }) =>
+      getForgeLearningSession({ courseId, lessonId, userId, signal })
   });
   const session = query.data;
   const hasIncompleteEarlierLesson = session
     ? session.navigation.some(
-        (entry) =>
-          entry.order < session.lesson.order && !entry.completed
+        (entry) => entry.order < session.lesson.order && !entry.completed
       )
     : false;
   const lessonFlow = useMemo(
     () => (session ? courseLessonFlowState(session) : null),
     [session]
   );
-  const activeBlock =
-    lessonFlow?.blocks[
-      Math.min(activeBlockIndex, Math.max(lessonFlow.blocks.length - 1, 0))
-    ];
+  const displayedLessonBlocks = useMemo<CourseContentBlock[]>(() => {
+    if (!session || !lessonFlow) return [];
+    const placedActivityIds = new Set(
+      lessonFlow.blocks.flatMap((block) =>
+        block.type === "checkpoint" ? [block.activityId] : []
+      )
+    );
+    const unplacedCheckpoints = session.lesson.activities
+      .filter((candidate) => !placedActivityIds.has(candidate.id))
+      .map(
+        (candidate): CourseContentBlock => ({
+          type: "checkpoint",
+          activityId: candidate.id,
+          title: candidate.title,
+          introMarkdown: "",
+          continuation: "always"
+        })
+      );
+    return [...lessonFlow.blocks, ...unplacedCheckpoints];
+  }, [lessonFlow, session]);
   const availableActivities =
     session?.lesson.activities.filter((entry) =>
       lessonFlow?.availableActivityIds.includes(entry.id)
     ) ?? [];
   const activity =
-    (activeBlock?.type === "checkpoint"
-      ? availableActivities.find(
-          (entry) => entry.id === activeBlock.activityId
-        )
-      : availableActivities.find((entry) => entry.id === activeActivityId)) ??
+    availableActivities.find((entry) => entry.id === activeActivityId) ??
     availableActivities[0];
 
   useEffect(() => {
     if (!session) {
       setActiveActivityId(null);
-      return;
-    }
-    if (activeBlock?.type === "checkpoint") {
-      setActiveActivityId(activeBlock.activityId);
       return;
     }
     const needsWork = (candidate: CourseActivity) => {
@@ -865,14 +902,12 @@ export function CourseLearnPage() {
       available.find(
         (candidate) => candidate.required && needsWork(candidate)
       ) ?? available.find(needsWork);
-    setActiveActivityId(
-      firstPending?.id ?? available[0]?.id ?? null
+    setActiveActivityId((current) =>
+      current && available.some((candidate) => candidate.id === current)
+        ? current
+        : (firstPending?.id ?? available[0]?.id ?? null)
     );
-  }, [activeBlock, lessonFlow?.availableActivityIds, session]);
-
-  useEffect(() => {
-    setActiveBlockIndex(0);
-  }, [session?.lesson.id]);
+  }, [lessonFlow?.availableActivityIds, session]);
 
   const draftKey = useMemo(() => {
     if (!session || !activity) return null;
@@ -920,17 +955,13 @@ export function CourseLearnPage() {
       if (event.key === "ArrowLeft" && session.previousLessonId) {
         setSearchParams({ lesson: session.previousLessonId });
       }
-      if (
-        event.key === "ArrowRight" &&
-        session.nextLessonId &&
-        lessonFlow?.complete
-      ) {
+      if (event.key === "ArrowRight" && session.nextLessonId) {
         setSearchParams({ lesson: session.nextLessonId });
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [lessonFlow?.complete, session, setSearchParams]);
+  }, [session, setSearchParams]);
 
   const submission = useMutation({
     mutationFn: async () => {
@@ -941,16 +972,20 @@ export function CourseLearnPage() {
           : activity.type === "extension" && activity.responseMode === "none"
             ? "completed"
             : answer;
-      return submitForgeCourseAttempt({
+      const result = await submitForgeCourseAttempt({
         courseId: session.course.id,
         lessonId: session.lesson.id,
         activityId: activity.id,
         userId,
         answerMarkdown
       });
+      return { ...result, activityId: activity.id };
     },
     onSuccess: async (result) => {
-      setLocalFeedback(result.feedback);
+      setLocalFeedback({
+        activityId: result.activityId,
+        feedback: result.feedback
+      });
       await queryClient.invalidateQueries({
         queryKey: ["forge-course-learn", courseId]
       });
@@ -959,7 +994,9 @@ export function CourseLearnPage() {
   });
 
   const latestFeedback =
-    localFeedback ??
+    (localFeedback && localFeedback.activityId === activity?.id
+      ? localFeedback.feedback
+      : null) ??
     session?.latestAttempts.find((entry) => entry?.activityId === activity?.id)
       ?.feedback ??
     null;
@@ -984,6 +1021,13 @@ export function CourseLearnPage() {
   }, [activity, answer, selectedOptions]);
 
   const courseTheme = courseAccentStyle(session?.course.presentation.theme);
+  const distinctObjectives = session
+    ? session.lesson.objectives.filter(
+        (objective) =>
+          objective.trim().toLocaleLowerCase() !==
+          session.lesson.summary.trim().toLocaleLowerCase()
+      )
+    : [];
 
   const navigateLesson = (nextLessonId: string) => {
     setSearchParams({ lesson: nextLessonId });
@@ -1007,6 +1051,9 @@ export function CourseLearnPage() {
     );
   }
   if (query.isError || !session || !activity) {
+    const lockedLesson =
+      query.error instanceof ForgeApiError &&
+      query.error.code === "course_lesson_locked";
     return (
       <div className="course-loading">
         <ErrorState
@@ -1014,6 +1061,26 @@ export function CourseLearnPage() {
           error={query.error}
           onRetry={() => void query.refetch()}
         />
+        {lockedLesson ? (
+          <div className="mx-auto flex w-full max-w-2xl justify-start px-4">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() =>
+                setSearchParams(
+                  (current) => {
+                    const next = new URLSearchParams(current);
+                    next.delete("lesson");
+                    return next;
+                  },
+                  { replace: true }
+                )
+              }
+            >
+              Open current lesson
+            </Button>
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -1136,7 +1203,8 @@ export function CourseLearnPage() {
                   <strong>Earlier course work is still incomplete.</strong>
                   <span>
                     You can study this day now. Forge keeps the earlier work
-                    visible in your progress so you can return to it when useful.
+                    visible in your progress so you can return to it when
+                    useful.
                   </span>
                 </div>
               ) : null}
@@ -1157,277 +1225,334 @@ export function CourseLearnPage() {
                 </div>
               ) : null}
 
-              <div className="course-objectives">
-                <div className="course-kicker">
-                  <Target className="size-3.5" /> Today’s target
+              {distinctObjectives.length > 0 ? (
+                <div className="course-objectives">
+                  <div className="course-kicker">
+                    <Target className="size-3.5" /> Today’s targets
+                  </div>
+                  <ul>
+                    {distinctObjectives.map((objective) => (
+                      <li key={objective}>
+                        <CourseMarkdown markdown={objective} />
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <ul>
-                  {session.lesson.objectives.map((objective) => (
-                    <li key={objective}>
-                      <CourseMarkdown markdown={objective} />
-                    </li>
-                  ))}
-                </ul>
+              ) : null}
+
+              <div className="course-lesson-roadmap" aria-label="Lesson scope">
+                <div>
+                  <span className="course-kicker">Complete lesson</span>
+                  <strong>
+                    {session.lesson.activities.length} written questions
+                  </strong>
+                </div>
+                <div>
+                  <p>
+                    Read the chapter in order or jump directly to any question.
+                    Your unfinished work stays visible, but nothing is locked.
+                  </p>
+                  <nav
+                    className="course-lesson-roadmap__questions"
+                    aria-label="Questions in this lesson"
+                  >
+                    {session.lesson.activities.map(
+                      (lessonActivity, questionIndex) => {
+                        const status = attemptStatusLabel(
+                          session.latestAttempts.find(
+                            (entry) => entry?.activityId === lessonActivity.id
+                          )
+                        );
+                        return (
+                          <button
+                            key={lessonActivity.id}
+                            type="button"
+                            className={cn(
+                              lessonActivity.id === activity.id && "is-active",
+                              status === "Passed" && "is-complete"
+                            )}
+                            aria-label={`Open question ${questionIndex + 1}: ${lessonActivity.title}`}
+                            onClick={() => {
+                              setActiveActivityId(lessonActivity.id);
+                              document
+                                .getElementById(`activity-${lessonActivity.id}`)
+                                ?.scrollIntoView({
+                                  behavior: window.matchMedia(
+                                    "(prefers-reduced-motion: reduce)"
+                                  ).matches
+                                    ? "auto"
+                                    : "smooth",
+                                  block: "start"
+                                });
+                            }}
+                          >
+                            <span>{questionIndex + 1}</span>
+                            {status}
+                          </button>
+                        );
+                      }
+                    )}
+                  </nav>
+                </div>
               </div>
 
-              <section
-                className="course-flow-stage"
-                aria-label="Current lesson section"
+              <article
+                className="course-lesson-sequence"
+                aria-label="Complete lesson"
               >
-                <div className="course-flow-stage__header">
-                  <span>
-                    Today · Step {activeBlockIndex + 1} of{" "}
-                    {lessonFlow?.blocks.length ?? 1}
-                  </span>
-                  <span>One section at a time</span>
-                </div>
-                <div className="course-content-stack">
-                  {activeBlock?.type === "checkpoint" ? (
-                    <div
+                {displayedLessonBlocks.map((block, blockIndex) => {
+                  if (isFeedbackBridgeBlock(block)) return null;
+                  if (block.type !== "checkpoint") {
+                    return (
+                      <section
+                        key={`lesson-block-${blockIndex}`}
+                        className="course-teaching-block"
+                        data-block-index={blockIndex}
+                      >
+                        <CourseContentBlockView
+                          block={block}
+                          index={blockIndex}
+                          resources={session.resources}
+                        />
+                      </section>
+                    );
+                  }
+
+                  const checkpointActivity = session.lesson.activities.find(
+                    (entry) => entry.id === block.activityId
+                  );
+                  if (!checkpointActivity) return null;
+                  const checkpointNumber = displayedLessonBlocks
+                    .slice(0, blockIndex + 1)
+                    .filter((entry) => entry.type === "checkpoint").length;
+                  const checkpointAttempt = session.latestAttempts.find(
+                    (entry) => entry?.activityId === checkpointActivity.id
+                  );
+                  const checkpointStatus =
+                    attemptStatusLabel(checkpointAttempt);
+                  const isActive = checkpointActivity.id === activity.id;
+                  const feedbackBridge = displayedLessonBlocks[blockIndex + 1];
+
+                  return (
+                    <section
+                      key={checkpointActivity.id}
+                      id={`activity-${checkpointActivity.id}`}
                       className={cn(
-                        "course-inline-checkpoint is-active",
-                        attemptStatusLabel(
-                          session.latestAttempts.find(
-                            (attempt) =>
-                              attempt?.activityId === activeBlock.activityId
-                          )
-                        ) === "Passed" && "is-complete"
+                        "course-question",
+                        isActive && "is-active",
+                        checkpointStatus === "Passed" && "is-complete"
                       )}
-                      aria-current="step"
+                      aria-label={`Question ${checkpointNumber}: ${checkpointActivity.title}`}
                     >
-                      <span className="course-inline-checkpoint__marker">
-                        {attemptStatusLabel(
-                          session.latestAttempts.find(
-                            (attempt) =>
-                              attempt?.activityId === activeBlock.activityId
-                          )
-                        ) === "Passed" ? (
-                          <Check className="size-4" aria-hidden="true" />
-                        ) : (
-                          <MessageSquareText
-                            className="size-4"
-                            aria-hidden="true"
-                          />
-                        )}
-                      </span>
-                      <span className="course-inline-checkpoint__copy">
-                        <strong>{activeBlock.title}</strong>
-                        {activeBlock.introMarkdown ? (
-                          <CourseMarkdown
-                            markdown={activeBlock.introMarkdown}
-                          />
-                        ) : null}
-                      </span>
-                      <span className="course-inline-checkpoint__status">
-                        {attemptStatusLabel(
-                          session.latestAttempts.find(
-                            (attempt) =>
-                              attempt?.activityId === activeBlock.activityId
-                          )
-                        )}
-                      </span>
-                    </div>
-                  ) : activeBlock ? (
-                    <CourseContentBlockView
-                      block={activeBlock}
-                      index={activeBlockIndex}
-                      resources={session.resources}
-                    />
-                  ) : null}
-                </div>
-                {activeBlock?.type !== "checkpoint" ? (
-                  <CourseSectionNavigation
-                    currentIndex={activeBlockIndex}
-                    totalSteps={lessonFlow?.blocks.length ?? 0}
-                    canContinue
-                    onPrevious={() =>
-                      setActiveBlockIndex((current) =>
-                        Math.max(0, current - 1)
-                      )
-                    }
-                    onContinue={() =>
-                      setActiveBlockIndex((current) => current + 1)
-                    }
-                  />
-                ) : null}
-              </section>
-
-              {activeBlock?.type === "checkpoint" ? (
-                <section className="course-proof-studio">
-                <div className="course-proof-studio__header">
-                  <div>
-                    <div className="course-kicker">
-                      <MessageSquareText className="size-3.5" />{" "}
-                      {activityLabel(activity.type)}
-                    </div>
-                    <h2 className="mt-2 font-editorial text-[28px] text-[var(--course-navy)]">
-                      {activity.title}
-                    </h2>
-                  </div>
-                  <div className="text-right font-label text-[9px] uppercase tracking-[0.12em] text-[var(--course-muted)]">
-                    <div>
-                      {activity.required ? "Required" : "Optional"} ·{" "}
-                      {attemptStatusLabel(currentAttempt)}
-                    </div>
-                    <div>{activity.points} points</div>
-                    <div className="mt-1">
-                      {activity.estimatedMinutes} min
-                    </div>
-                  </div>
-                </div>
-                <CourseMarkdown
-                  markdown={activity.promptMarkdown}
-                  className="mt-4 text-[15px]"
-                />
-                {recallCheckpoints.length > 0 ? (
-                  <section
-                    className="course-recall-schedule"
-                    aria-label="Spaced retrieval intervals"
-                  >
-                    <div className="course-kicker">Spaced retrieval</div>
-                    <ul>
-                      {recallCheckpoints.map(
-                        ({ intervalWeeks, sourceWeek }) => (
-                          <li key={`${intervalWeeks}-${sourceWeek}`}>
-                            <strong>
-                              {intervalWeeks}{" "}
-                              {intervalWeeks === 1 ? "week" : "weeks"} ago
-                            </strong>
-                            <span>Week {sourceWeek}</span>
-                          </li>
-                        )
-                      )}
-                    </ul>
-                  </section>
-                ) : null}
-
-                {"rubric" in activity && activity.rubric?.length ? (
-                  <details className="course-rubric">
-                    <summary>How this work is graded</summary>
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      {activity.rubric.map((criterion) => (
-                        <div
-                          key={criterion.id}
-                          className="course-rubric__item"
-                        >
-                          <div className="flex justify-between gap-3 font-semibold">
-                            <span>{criterion.label}</span>
-                            <span>{Math.round(criterion.weight * 100)}%</span>
+                      <div className="course-question__header">
+                        <div>
+                          <div className="course-kicker">
+                            <MessageSquareText className="size-3.5" /> Question{" "}
+                            {checkpointNumber} of{" "}
+                            {session.lesson.activities.length}
                           </div>
-                          <p className="mt-1 text-xs leading-5 text-[var(--course-ink-soft)]">
-                            {criterion.description}
-                          </p>
+                          <h2>{checkpointActivity.title}</h2>
                         </div>
-                      ))}
-                    </div>
-                  </details>
-                ) : null}
+                        <div className="course-question__meta">
+                          <span>{checkpointStatus}</span>
+                          <span>{checkpointActivity.estimatedMinutes} min</span>
+                          <span>{checkpointActivity.points} points</span>
+                        </div>
+                      </div>
+                      <CourseMarkdown
+                        markdown={checkpointActivity.promptMarkdown}
+                        className="course-question__prompt"
+                      />
 
-                {activity.type === "extension" ? (
-                  <CourseExtensionActivityView
-                    activity={activity}
-                    response={answer}
-                    onResponseChange={setAnswer}
-                    disabled={submission.isPending}
-                  />
-                ) : activity.type === "multiple_choice" ? (
-                  <div className="mt-5 grid gap-2">
-                    {activity.options.map((option) => {
-                      const selected = selectedOptions.includes(option.id);
-                      return (
-                        <button
-                          key={option.id}
-                          className={cn(
-                            "course-option",
-                            selected && "is-selected"
-                          )}
+                      {!isActive ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="mt-5"
                           onClick={() =>
-                            setSelectedOptions((current) =>
-                              selected
-                                ? current.filter((id) => id !== option.id)
-                                : [...current, option.id]
-                            )
+                            setActiveActivityId(checkpointActivity.id)
                           }
                         >
-                          <span className="course-option__marker">
-                            {selected ? (
-                              <Check className="size-3.5" />
-                            ) : (
-                              option.id.toUpperCase()
-                            )}
-                          </span>
-                          <CourseMarkdown markdown={option.labelMarkdown} />
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="course-answer-wrap">
-                    <div className="course-answer-toolbar">
-                      <span>Write the reasoning in your own words</span>
-                      <span>{answer.length.toLocaleString()} characters</span>
-                    </div>
-                    <textarea
-                      value={answer}
-                      onChange={(event) => setAnswer(event.target.value)}
-                      placeholder={
-                        activity.type === "proof"
-                          ? "State your assumptions, then write the proof step by step…"
-                          : "Show your reasoning, not only the final result…"
-                      }
-                      aria-label="Your solution"
-                    />
-                  </div>
-                )}
+                          {checkpointAttempt
+                            ? "Open answer and feedback"
+                            : "Write your response"}
+                        </Button>
+                      ) : (
+                        <div className="course-question__workbench">
+                          <div className="course-question__answer-heading">
+                            <span>{activityLabel(activity.type)}</span>
+                            <span>
+                              {activity.required ? "Required" : "Optional"} ·{" "}
+                              {attemptStatusLabel(currentAttempt)}
+                            </span>
+                          </div>
+                          {recallCheckpoints.length > 0 ? (
+                            <section
+                              className="course-recall-schedule"
+                              aria-label="Spaced retrieval intervals"
+                            >
+                              <div className="course-kicker">
+                                Spaced retrieval
+                              </div>
+                              <ul>
+                                {recallCheckpoints.map(
+                                  ({ intervalWeeks, sourceWeek }) => (
+                                    <li key={`${intervalWeeks}-${sourceWeek}`}>
+                                      <strong>
+                                        {intervalWeeks}{" "}
+                                        {intervalWeeks === 1 ? "week" : "weeks"}{" "}
+                                        ago
+                                      </strong>
+                                      <span>Week {sourceWeek}</span>
+                                    </li>
+                                  )
+                                )}
+                              </ul>
+                            </section>
+                          ) : null}
 
-                {submission.isError ? (
-                  <p className="mt-3 text-sm text-[var(--course-red)]">
-                    {submission.error instanceof Error
-                      ? submission.error.message
-                      : "The submission could not be saved."}
-                  </p>
-                ) : null}
+                          {"rubric" in activity && activity.rubric?.length ? (
+                            <details className="course-rubric">
+                              <summary>How this work is graded</summary>
+                              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                {activity.rubric.map((criterion) => (
+                                  <div
+                                    key={criterion.id}
+                                    className="course-rubric__item"
+                                  >
+                                    <div className="flex justify-between gap-3 font-semibold">
+                                      <span>{criterion.label}</span>
+                                      <span>
+                                        {Math.round(criterion.weight * 100)}%
+                                      </span>
+                                    </div>
+                                    <p className="mt-1 text-xs leading-5 text-[var(--course-ink-soft)]">
+                                      {criterion.description}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            </details>
+                          ) : null}
 
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                  <p className="max-w-md text-[11px] leading-5 text-[var(--course-muted)]">
-                    {activity.type === "multiple_choice"
-                      ? "Forge checks this answer deterministically and records the result as auditable course evidence."
-                      : "Forge sends written work to your configured model connection. The reference solution remains hidden; your response is saved even if assessment is unavailable."}
-                  </p>
-                  <Button
-                    size="lg"
-                    className="course-submit"
-                    disabled={!canSubmit}
-                    pending={submission.isPending}
-                    pendingLabel="Reviewing carefully…"
-                    onClick={() => submission.mutate()}
-                  >
-                    <Sparkles className="size-4" />
-                    {activitySubmissionLabel(activity.type)}
-                  </Button>
-                </div>
-                </section>
-              ) : null}
+                          {activity.type === "extension" ? (
+                            <CourseExtensionActivityView
+                              activity={activity}
+                              response={answer}
+                              onResponseChange={setAnswer}
+                              disabled={submission.isPending}
+                            />
+                          ) : activity.type === "multiple_choice" ? (
+                            <div className="mt-5 grid gap-2">
+                              {activity.options.map((option) => {
+                                const selected = selectedOptions.includes(
+                                  option.id
+                                );
+                                return (
+                                  <button
+                                    key={option.id}
+                                    className={cn(
+                                      "course-option",
+                                      selected && "is-selected"
+                                    )}
+                                    onClick={() =>
+                                      setSelectedOptions((current) =>
+                                        selected
+                                          ? current.filter(
+                                              (id) => id !== option.id
+                                            )
+                                          : [...current, option.id]
+                                      )
+                                    }
+                                  >
+                                    <span className="course-option__marker">
+                                      {selected ? (
+                                        <Check className="size-3.5" />
+                                      ) : (
+                                        option.id.toUpperCase()
+                                      )}
+                                    </span>
+                                    <CourseMarkdown
+                                      markdown={option.labelMarkdown}
+                                    />
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="course-answer-wrap">
+                              <div className="course-answer-toolbar">
+                                <span>
+                                  Write the reasoning in your own words
+                                </span>
+                                <span>
+                                  {answer.length.toLocaleString()} characters
+                                </span>
+                              </div>
+                              <textarea
+                                value={answer}
+                                onChange={(event) =>
+                                  setAnswer(event.target.value)
+                                }
+                                placeholder={
+                                  activity.type === "proof"
+                                    ? "State your assumptions, then write the proof step by step…"
+                                    : "Show your reasoning, not only the final result…"
+                                }
+                                aria-label="Your solution"
+                              />
+                            </div>
+                          )}
 
-              {activeBlock?.type === "checkpoint" && latestFeedback ? (
-                <FeedbackPanel feedback={latestFeedback} />
-              ) : null}
-              {activeBlock?.type === "checkpoint" ? (
-                <CourseSectionNavigation
-                  currentIndex={activeBlockIndex}
-                  totalSteps={lessonFlow?.blocks.length ?? 0}
-                  canContinue
-                  continueLabel="Continue to the next section"
-                  onPrevious={() =>
-                    setActiveBlockIndex((current) =>
-                      Math.max(0, current - 1)
-                    )
-                  }
-                  onContinue={() =>
-                    setActiveBlockIndex((current) => current + 1)
-                  }
-                />
-              ) : null}
+                          {submission.isError ? (
+                            <p className="mt-3 text-sm text-[var(--course-red)]">
+                              {submission.error instanceof Error
+                                ? submission.error.message
+                                : "The submission could not be saved."}
+                            </p>
+                          ) : null}
+
+                          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                            <p className="max-w-md text-[11px] leading-5 text-[var(--course-muted)]">
+                              {activity.type === "multiple_choice"
+                                ? "Forge checks this answer deterministically and records the result as auditable course evidence."
+                                : "Forge sends written work to your configured model connection. The reference solution remains hidden; your response is saved even if assessment is unavailable."}
+                            </p>
+                            <Button
+                              size="lg"
+                              className="course-submit"
+                              disabled={!canSubmit}
+                              pending={submission.isPending}
+                              pendingLabel="Reviewing carefully…"
+                              onClick={() => submission.mutate()}
+                            >
+                              <Sparkles className="size-4" />
+                              {activitySubmissionLabel(activity.type)}
+                            </Button>
+                          </div>
+                          {latestFeedback ? (
+                            <>
+                              <FeedbackPanel feedback={latestFeedback} />
+                              {feedbackBridge &&
+                              isFeedbackBridgeBlock(feedbackBridge) ? (
+                                <div className="course-feedback-bridge">
+                                  <CourseMarkdown
+                                    markdown={
+                                      feedbackBridgeMarkdown(feedbackBridge) ??
+                                      ""
+                                    }
+                                    offsetHeadings
+                                  />
+                                </div>
+                              ) : null}
+                            </>
+                          ) : null}
+                        </div>
+                      )}
+                    </section>
+                  );
+                })}
+              </article>
 
               <div className="course-lesson-nav">
                 <Button

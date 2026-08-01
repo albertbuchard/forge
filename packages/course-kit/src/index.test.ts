@@ -302,25 +302,29 @@ describe("Forge Course Kit", () => {
     expect(parsed.lessons[0]?.activities[0]?.revision).toBe("1");
   });
 
-  it("rejects required checkpoints that can continue without understanding", () => {
+  it("keeps required work for completion without locking later teaching", () => {
     const fixture = basePackage();
-    expect(() =>
-      defineCoursePackage({
-        ...fixture,
-        schemaVersion: "1.1",
-        lessons: fixture.lessons.map((lesson) => ({
-          ...lesson,
-          content: [
-            {
-              type: "checkpoint" as const,
-              activityId: "proof.one",
-              title: "Required proof",
-              continuation: "after_review" as const
-            }
-          ]
-        }))
-      })
-    ).toThrow(/must use pass-based or remediation-based continuation/iu);
+    const parsed = defineCoursePackage({
+      ...fixture,
+      schemaVersion: "1.1",
+      lessons: fixture.lessons.map((lesson) => ({
+        ...lesson,
+        content: [
+          {
+            type: "checkpoint" as const,
+            activityId: "proof.one",
+            title: "Required proof",
+            continuation: "always" as const
+          }
+        ]
+      }))
+    });
+
+    expect(parsed.lessons[0]?.activities[0]?.required).toBe(true);
+    expect(parsed.lessons[0]?.content[0]).toMatchObject({
+      type: "checkpoint",
+      continuation: "always"
+    });
   });
 
   it("rejects schema 1.1 lessons that omit a required activity checkpoint", () => {

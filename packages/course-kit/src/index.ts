@@ -680,15 +680,6 @@ function assertReferences(coursePackage: ForgeCoursePackage) {
           `Lesson ${lesson.id} checkpoint ${checkpoint.activityId} has invalid remediation activity ${checkpoint.remediationActivityId}.`
         );
       }
-      if (
-        activity.required &&
-        (checkpoint.continuation === "after_review" ||
-          checkpoint.continuation === "always")
-      ) {
-        errors.push(
-          `Required activity ${activity.id} must use pass-based or remediation-based continuation.`
-        );
-      }
     }
     if (coursePackage.schemaVersion === "1.1") {
       for (const activity of lesson.activities.filter(

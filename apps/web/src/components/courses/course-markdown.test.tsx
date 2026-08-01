@@ -35,6 +35,22 @@ describe("CourseMarkdown", () => {
     );
   });
 
+  it("keeps lesson-authored headings below the page title", () => {
+    render(
+      <CourseMarkdown
+        markdown={"# Chapter opening\n\n## First argument"}
+        offsetHeadings
+      />
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Chapter opening" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 3, name: "First argument" })
+    ).toBeInTheDocument();
+  });
+
   it("blocks remote media and hardens links in generated feedback", () => {
     const { container } = render(
       <CourseFeedbackMarkdown
