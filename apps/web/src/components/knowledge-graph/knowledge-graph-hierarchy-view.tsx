@@ -343,7 +343,7 @@ export function KnowledgeGraphHierarchyView({
     setExpandAll(false);
     setExpandedLaneId(focusLaneId);
     setExpandedNodeIds(new Set([focusGraphNode.id]));
-  }, [focusGraphNode?.id, focusLaneId]);
+  }, [focusGraphNode, focusLaneId]);
   const visibleNodeIds = useMemo(() => {
     if (focusGraphNode) {
       return resolveKnowledgeGraphFocusedHierarchyVisibleIds({
@@ -596,6 +596,7 @@ export function KnowledgeGraphHierarchyView({
     expandAll,
     expandedLaneId,
     expandedNodeIds,
+    focusGraphNode,
     focusNodeId,
     focusDescendantIds,
     focusDepthById,
