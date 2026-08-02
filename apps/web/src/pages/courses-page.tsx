@@ -63,6 +63,13 @@ function CourseTabs({ active }: { active: "courses" | "concepts" }) {
 
 export { CourseTabs };
 
+export function resolveCourseStartLessonId(course: {
+  entryLessonId: string;
+  progress: { currentLessonId: string | null };
+}) {
+  return course.progress.currentLessonId ?? course.entryLessonId;
+}
+
 export function CoursesPage() {
   const shell = useForgeShell();
   const userId = shell.selectedUserIds[0];
@@ -200,10 +207,7 @@ export function CoursesPage() {
               </div>
               <div className="mt-4 grid gap-4 xl:grid-cols-2">
                 {courses.data?.courses.map((course) => {
-                  const startLesson =
-                    course.progress.currentLessonId ??
-                    course.featuredLessonId ??
-                    course.entryLessonId;
+                  const startLesson = resolveCourseStartLessonId(course);
                   return (
                     <Card
                       key={course.id}

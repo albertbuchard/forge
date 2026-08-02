@@ -12534,15 +12534,26 @@ export async function buildServer(
     }
   }
 
-  const shouldSkipAutomaticDiagnosticRoute = (url: string | undefined) => {
+  const shouldSkipAutomaticDiagnosticRoute = (
+    url: string | undefined,
+    statusCode?: number
+  ) => {
     if (!url) {
       return false;
     }
-    return (
+    if (
       url.startsWith("/api/v1/diagnostics/logs") ||
       url === "/api/health" ||
       url === "/api/v1/health" ||
-      url.startsWith("/api/v1/events/meta")
+      url.startsWith("/api/v1/events/meta") ||
+      url === "/api/v1/security/dev-session-check"
+    ) {
+      return true;
+    }
+    return (
+      typeof statusCode === "number" &&
+      statusCode < 400 &&
+      !url.startsWith("/api/")
     );
   };
 
@@ -12568,7 +12579,7 @@ export async function buildServer(
 
   app.addHook("onResponse", async (request, reply) => {
     const routeUrl = request.routeOptions.url || request.url;
-    if (shouldSkipAutomaticDiagnosticRoute(routeUrl)) {
+    if (shouldSkipAutomaticDiagnosticRoute(routeUrl, reply.statusCode)) {
       return;
     }
 
@@ -12637,7 +12648,7 @@ export async function buildServer(
           : isBodyTooLarge
             ? 413
             : 500;
-    if (!shouldSkipAutomaticDiagnosticRoute(routeUrl)) {
+    if (!shouldSkipAutomaticDiagnosticRoute(routeUrl, statusCode)) {
       try {
         recordDiagnosticLog({
           level: statusCode >= 500 ? "error" : "warning",

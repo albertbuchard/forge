@@ -3,6 +3,7 @@ export const UI_SOURCE_HEADER = "x-forge-source";
 export const UI_SOURCE_VALUE = "ui";
 
 let browserSessionObservedUsable = false;
+let browserSessionAuthorizationRevision = 0;
 
 export function readBrowserCsrfToken() {
   try {
@@ -23,6 +24,9 @@ export function forgeBrowserRequestHeaders(input?: HeadersInit) {
 }
 
 export function noteBrowserSessionUsable() {
+  if (!browserSessionObservedUsable) {
+    browserSessionAuthorizationRevision += 1;
+  }
   browserSessionObservedUsable = true;
 }
 
@@ -31,7 +35,14 @@ export function noteBrowserSessionRejected() {
 }
 
 export function canPublishBrowserDiagnostics() {
-  return browserSessionObservedUsable && readBrowserCsrfToken() !== null;
+  return browserDiagnosticAuthorizationKey() !== null;
+}
+
+export function browserDiagnosticAuthorizationKey() {
+  const csrfToken = readBrowserCsrfToken();
+  return browserSessionObservedUsable && csrfToken
+    ? `${browserSessionAuthorizationRevision}:${csrfToken}`
+    : null;
 }
 
 export function responseProvesBrowserSession(path: string) {

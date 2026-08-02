@@ -314,6 +314,105 @@ test("gateway rate admission is transparent until a bounded retry response", asy
   }
 });
 
+test("gateway exempts only a verified one-time development proxy assertion from ordinary rate admission", async () => {
+  const app = Fastify({ logger: false });
+  const consumed = new Set<string>();
+  const admissions: Array<{ principalId: string | null }> = [];
+  installAccessGateway(app, {
+    credentials: {
+      authenticate(request) {
+        const assertion = header(request, "x-forge-dev-proxy-assertion");
+        if (typeof assertion === "string") {
+          const target = header(request, "x-forge-dev-proxy-target");
+          if (
+            assertion !== "valid-one-time-assertion" ||
+            target !== "/forge/src/main.tsx" ||
+            consumed.has(assertion)
+          ) {
+            throw new HttpError(
+              401,
+              "gateway_dev_proxy_assertion_invalid",
+              "The development asset assertion is invalid, expired, or already used."
+            );
+          }
+          consumed.add(assertion);
+          return {
+            principal: principal("operator_session", ["*"], "operator"),
+            mode: "dev_proxy_assertion",
+            csrfSatisfied: true
+          };
+        }
+        if (header(request, "cookie") === "forge_test_session=valid") {
+          return {
+            principal: principal("operator_session", ["*"], "operator"),
+            mode: "browser_session",
+            csrfSatisfied: true
+          };
+        }
+        return null;
+      }
+    },
+    rateLimiter: {
+      admit(request) {
+        admissions.push({ principalId: request.principalId });
+        return { allowed: true, remaining: 100 };
+      }
+    }
+  });
+  app.get("/api/v1/security/dev-session-check", async () => ({ ok: true }));
+
+  try {
+    const assertionHeaders = {
+      "x-forge-dev-proxy-assertion": "valid-one-time-assertion",
+      "x-forge-dev-proxy-target": "/forge/src/main.tsx"
+    };
+    const admitted = await app.inject({
+      method: "GET",
+      url: "/api/v1/security/dev-session-check",
+      headers: assertionHeaders
+    });
+    assert.equal(admitted.statusCode, 200, admitted.body);
+    assert.deepEqual(admissions, []);
+
+    const replayed = await app.inject({
+      method: "GET",
+      url: "/api/v1/security/dev-session-check",
+      headers: assertionHeaders
+    });
+    assert.equal(replayed.statusCode, 401, replayed.body);
+    assert.deepEqual(admissions, [{ principalId: null }]);
+
+    const invalid = await app.inject({
+      method: "GET",
+      url: "/api/v1/security/dev-session-check",
+      headers: {
+        ...assertionHeaders,
+        "x-forge-dev-proxy-assertion": "invalid-assertion"
+      }
+    });
+    assert.equal(invalid.statusCode, 401, invalid.body);
+    assert.deepEqual(admissions, [
+      { principalId: null },
+      { principalId: null }
+    ]);
+
+    const browserSession = await app.inject({
+      method: "GET",
+      url: "/api/v1/security/dev-session-check",
+      headers: { cookie: "forge_test_session=valid" }
+    });
+    assert.equal(browserSession.statusCode, 200, browserSession.body);
+    assert.deepEqual(admissions, [
+      { principalId: null },
+      { principalId: null },
+      { principalId: null },
+      { principalId: "verified-owner:owner_gateway_test" }
+    ]);
+  } finally {
+    await app.close();
+  }
+});
+
 test("gateway publishes bounded Retry-After for request, stream, MCP, AI, and machine admission", async () => {
   const app = Fastify({ logger: false });
   const buckets: string[] = [];

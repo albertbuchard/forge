@@ -1,6 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import ReactDOM from "react-dom/client";
 import type { Root } from "react-dom/client";
+import { ForgeApiError } from "./api-error";
 
 export type ForgeRuntimeHost = {
   __forgeQueryClient?: QueryClient;
@@ -35,12 +36,42 @@ export function getOrCreateForgeRuntime(
   return { queryClient, reactRoot };
 }
 
-function createForgeQueryClient() {
+function readErrorStatus(error: unknown) {
+  if (error instanceof ForgeApiError) {
+    return error.status;
+  }
+  if (!error || typeof error !== "object") {
+    return null;
+  }
+  const candidate = error as { status?: unknown; statusCode?: unknown };
+  const value =
+    typeof candidate.status === "number"
+      ? candidate.status
+      : candidate.statusCode;
+  return typeof value === "number" && Number.isInteger(value) ? value : null;
+}
+
+export function shouldRetryForgeQuery(failureCount: number, error: unknown) {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return false;
+  }
+  const status = readErrorStatus(error);
+  if (status !== null && status >= 400 && status < 500) {
+    return false;
+  }
+  return failureCount < 2;
+}
+
+export function createForgeQueryClient() {
   return new QueryClient({
     defaultOptions: {
       queries: {
         staleTime: 20_000,
-        refetchOnWindowFocus: false
+        refetchOnWindowFocus: false,
+        retry: shouldRetryForgeQuery
+      },
+      mutations: {
+        retry: false
       }
     }
   });

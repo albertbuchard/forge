@@ -150,6 +150,7 @@ test("the application gateway denies every protected surface until a credential 
       }
     });
     assert.equal(admittedDevProxy.statusCode, 200, admittedDevProxy.body);
+    assert.deepEqual(admittedDevProxy.json(), { ok: true });
     const replayedDevProxy = await app.inject({
       method: "GET",
       url: "/api/v1/security/dev-session-check",
@@ -170,11 +171,7 @@ test("the application gateway denies every protected surface until a credential 
           clientId: "paired-browser-dev-proxy-test",
           clientType: "browser",
           profile: "trusted_personal_assistant",
-          scopes: [
-            "read",
-            "write",
-            "profile:trusted_personal_assistant"
-          ]
+          scopes: ["read", "write", "profile:trusted_personal_assistant"]
         },
         pairedBrowserDevTarget
       );

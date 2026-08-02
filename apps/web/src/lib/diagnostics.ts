@@ -1,6 +1,7 @@
 import {
-  canPublishBrowserDiagnostics,
-  forgeBrowserRequestHeaders
+  browserDiagnosticAuthorizationKey,
+  forgeBrowserRequestHeaders,
+  noteBrowserSessionRejected
 } from "./browser-request-security";
 import { resolveForgePath } from "./runtime-paths";
 import type { DiagnosticLogLevel, DiagnosticLogSource } from "./types";
@@ -19,6 +20,38 @@ export type PublishDiagnosticLogInput = {
   details?: Record<string, unknown>;
   source?: DiagnosticLogSource;
 };
+
+type DiagnosticPublicationStatus =
+  | "unknown"
+  | "allowed"
+  | "pending"
+  | "cooldown"
+  | "disabled";
+
+type DiagnosticPublicationState = {
+  status: DiagnosticPublicationStatus;
+  cooldownUntil: number;
+};
+
+type DiagnosticPublicationHost = typeof globalThis & {
+  __forgeUiDiagnosticPublicationState?: DiagnosticPublicationState;
+};
+
+const DIAGNOSTIC_PUBLICATION_COOLDOWN_MS = 30_000;
+
+function publicationState() {
+  const host = globalThis as DiagnosticPublicationHost;
+  host.__forgeUiDiagnosticPublicationState ??= {
+    status: "unknown",
+    cooldownUntil: 0
+  };
+  return host.__forgeUiDiagnosticPublicationState;
+}
+
+export function resetUiDiagnosticPublicationStateForTest() {
+  delete (globalThis as DiagnosticPublicationHost)
+    .__forgeUiDiagnosticPublicationState;
+}
 
 function sanitizeValue(value: unknown, depth = 0): unknown {
   if (
@@ -69,14 +102,25 @@ function sanitizeDetails(
   );
 }
 
-export async function publishUiDiagnosticLog(
-  input: PublishDiagnosticLogInput
-) {
-  if (!canPublishBrowserDiagnostics()) {
+export async function publishUiDiagnosticLog(input: PublishDiagnosticLogInput) {
+  const authorizationKey = browserDiagnosticAuthorizationKey();
+  if (!authorizationKey) {
     return;
   }
+  const state = publicationState();
+  if (state.status === "disabled" || state.status === "pending") {
+    return;
+  }
+  if (state.status === "cooldown") {
+    if (Date.now() < state.cooldownUntil) {
+      return;
+    }
+    state.status = "unknown";
+    state.cooldownUntil = 0;
+  }
+  state.status = "pending";
   try {
-    await fetch(resolveForgePath("/api/v1/diagnostics/logs"), {
+    const response = await fetch(resolveForgePath("/api/v1/diagnostics/logs"), {
       method: "POST",
       credentials: "same-origin",
       keepalive: true,
@@ -90,7 +134,22 @@ export async function publishUiDiagnosticLog(
         details: sanitizeDetails(input.details)
       })
     });
+    if (response.status === 401 || response.status === 403) {
+      state.status = "disabled";
+      state.cooldownUntil = 0;
+      noteBrowserSessionRejected();
+      return;
+    }
+    if (response.ok) {
+      state.status = "allowed";
+      state.cooldownUntil = 0;
+      return;
+    }
+    state.status = "cooldown";
+    state.cooldownUntil = Date.now() + DIAGNOSTIC_PUBLICATION_COOLDOWN_MS;
   } catch {
+    state.status = "cooldown";
+    state.cooldownUntil = Date.now() + DIAGNOSTIC_PUBLICATION_COOLDOWN_MS;
     // Diagnostics should never break the user flow.
   }
 }

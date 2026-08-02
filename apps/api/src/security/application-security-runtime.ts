@@ -596,7 +596,7 @@ export async function initializeApplicationSecurityRuntime(input: {
         }
         return {
           principal,
-          mode: "browser_session",
+          mode: "dev_proxy_assertion",
           csrfSatisfied: true
         };
       }

@@ -241,6 +241,7 @@ async function getClientDir() {
 
 type DevWebRuntime = {
   ensureReady(): Promise<URL | null>;
+  invalidateReady?(): void;
   stop(): Promise<void>;
 };
 
@@ -249,6 +250,7 @@ type ManagedDevWebRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
   fetchImpl?: typeof fetch;
   spawnImpl?: typeof spawn;
+  now?: () => number;
 };
 
 type WebRouteOptions = {
@@ -625,9 +627,17 @@ export function createManagedDevWebRuntime(
   const spawnImpl = options.spawnImpl ?? spawn;
   const autostart = shouldAutostartDevWeb(env);
   const waitTimeoutMs = Number(env.FORGE_DEV_WEB_START_TIMEOUT_MS ?? 30_000);
+  const configuredReadyTtlMs = Number(env.FORGE_DEV_WEB_READY_TTL_MS ?? 5_000);
+  const readyTtlMs = Number.isFinite(configuredReadyTtlMs)
+    ? Math.min(10_000, Math.max(250, configuredReadyTtlMs))
+    : 5_000;
   const pollIntervalMs = 500;
+  const now = options.now ?? Date.now;
   let child: ChildProcess | null = null;
   let startupPromise: Promise<URL | null> | null = null;
+  let readinessPromise: Promise<URL | null> | null = null;
+  let readinessGeneration = 0;
+  let readyUntil = 0;
 
   async function probe() {
     if (!origin) {
@@ -641,7 +651,9 @@ export function createManagedDevWebRuntime(
         redirect: "manual",
         signal: controller.signal
       });
-      return response.status < 500 ? origin : null;
+      const readyOrigin = response.status < 500 ? origin : null;
+      await response.body?.cancel();
+      return readyOrigin;
     } catch {
       return null;
     } finally {
@@ -650,9 +662,9 @@ export function createManagedDevWebRuntime(
   }
 
   async function waitUntilReady(processRef: ChildProcess) {
-    const startedAt = Date.now();
-    while (Date.now() - startedAt < waitTimeoutMs) {
-      const readyOrigin = await probe();
+    const startedAt = now();
+    while (now() - startedAt < waitTimeoutMs) {
+      const readyOrigin = await probeOnce();
       if (readyOrigin) {
         return readyOrigin;
       }
@@ -664,11 +676,43 @@ export function createManagedDevWebRuntime(
     return null;
   }
 
+  function invalidateReady() {
+    readyUntil = 0;
+    readinessGeneration += 1;
+    readinessPromise = null;
+  }
+
+  async function probeOnce() {
+    if (origin && now() < readyUntil) {
+      return origin;
+    }
+    if (!readinessPromise) {
+      const probeGeneration = readinessGeneration;
+      const nextReadinessPromise = probe()
+        .then((readyOrigin) => {
+          if (probeGeneration !== readinessGeneration) {
+            return null;
+          }
+          if (readyOrigin) {
+            readyUntil = now() + readyTtlMs;
+          }
+          return readyOrigin;
+        })
+        .finally(() => {
+          if (readinessPromise === nextReadinessPromise) {
+            readinessPromise = null;
+          }
+        });
+      readinessPromise = nextReadinessPromise;
+    }
+    return readinessPromise;
+  }
+
   async function ensureReady() {
     if (!origin) {
       return null;
     }
-    const readyOrigin = await probe();
+    const readyOrigin = await probeOnce();
     if (readyOrigin || !autostart) {
       return readyOrigin;
     }
@@ -693,6 +737,7 @@ export function createManagedDevWebRuntime(
             if (child === nextChild) {
               child = null;
             }
+            invalidateReady();
           });
         }
         const startedOrigin = await waitUntilReady(child);
@@ -707,6 +752,7 @@ export function createManagedDevWebRuntime(
   }
 
   async function stop() {
+    invalidateReady();
     if (!child || child.exitCode !== null) {
       return;
     }
@@ -722,6 +768,7 @@ export function createManagedDevWebRuntime(
 
   return {
     ensureReady,
+    invalidateReady,
     stop
   };
 }
@@ -804,6 +851,7 @@ async function serveAsset(
         assertion
       });
     } catch {
+      options.devWebRuntime.invalidateReady?.();
       reply.header("X-Forge-Web-Fallback", "built");
     }
   }

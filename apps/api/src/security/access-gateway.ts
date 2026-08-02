@@ -5,6 +5,10 @@ import type { FastifyInstance, FastifyRequest, RouteOptions } from "fastify";
 import { HttpError } from "../errors.js";
 import type { VerifiedBrowserSession } from "./browser-session-service.js";
 import type { ForgePrincipal, RouteSecurityContract } from "./contracts.js";
+import {
+  forgeDevProxyAssertionHeader,
+  forgeDevProxyTargetHeader
+} from "./dev-asset-proxy-assertion.js";
 import type { SecurityRateLimiter } from "./security-observability.js";
 import {
   profileAllowsRoute,
@@ -17,6 +21,7 @@ const SECURITY_POLICY_VERSION = "forge-access-gateway/1";
 
 type GatewayAuthenticationMode =
   | "browser_session"
+  | "dev_proxy_assertion"
   | "access_credential"
   | "legacy_agent_token"
   | "verified_protocol";
@@ -121,6 +126,18 @@ function singleHeader(
     );
   }
   return typeof value === "string" ? value : undefined;
+}
+
+function isDevProxyAssertionCandidate(
+  request: FastifyRequest,
+  contract: RouteSecurityContract
+) {
+  return (
+    request.method === "GET" &&
+    contract.routePath === "/api/v1/security/dev-session-check" &&
+    typeof request.headers[forgeDevProxyAssertionHeader] === "string" &&
+    typeof request.headers[forgeDevProxyTargetHeader] === "string"
+  );
 }
 
 function isUnsafeMethod(method: string) {
@@ -566,12 +583,37 @@ export class AccessGatewayController {
 
   async admit(request: FastifyRequest) {
     const contract = contractForRequest(request);
+    const deferDevProxyRateAdmission = isDevProxyAssertionCandidate(
+      request,
+      contract
+    );
     let authentication: GatewayAuthentication | null = null;
+    let authenticatedDevProxyAssertion = false;
     let protocolBodyVerifier:
       | GatewayProtocolAuthentication["verifyBody"]
       | null = null;
+    const authenticate = async () => {
+      const nextAuthentication = await this.options.credentials.authenticate(
+        request,
+        contract
+      );
+      if (
+        deferDevProxyRateAdmission &&
+        nextAuthentication?.mode === "dev_proxy_assertion"
+      ) {
+        authenticatedDevProxyAssertion = true;
+      }
+      return nextAuthentication;
+    };
     try {
-      this.requireRateAdmission(request, contract, null, "pre_authentication");
+      if (!deferDevProxyRateAdmission) {
+        this.requireRateAdmission(
+          request,
+          contract,
+          null,
+          "pre_authentication"
+        );
+      }
       if (
         contract.securityClass !== "public_static_or_health" &&
         !usesSecureApplicationTransport(request)
@@ -588,10 +630,7 @@ export class AccessGatewayController {
         requiresVerifiedProtocol &&
         contract.allowedApplicationPrincipalKinds.length > 0
       ) {
-        authentication = await this.options.credentials.authenticate(
-          request,
-          contract
-        );
+        authentication = await authenticate();
         if (
           authentication &&
           !contract.allowedApplicationPrincipalKinds.includes(
@@ -606,10 +645,7 @@ export class AccessGatewayController {
         }
       }
       if (!contract.allowsAnonymousAdmission && !requiresVerifiedProtocol) {
-        authentication = await this.options.credentials.authenticate(
-          request,
-          contract
-        );
+        authentication = await authenticate();
       }
       if (contract.securityClass === "protected" && !authentication) {
         throw new HttpError(
@@ -645,12 +681,14 @@ export class AccessGatewayController {
         );
       }
       if (authentication) {
-        this.requireRateAdmission(
-          request,
-          contract,
-          authentication,
-          "authenticated"
-        );
+        if (!authenticatedDevProxyAssertion) {
+          this.requireRateAdmission(
+            request,
+            contract,
+            authentication,
+            "authenticated"
+          );
+        }
         await this.options.authorization.authorize({
           request,
           contract,
@@ -681,7 +719,20 @@ export class AccessGatewayController {
             : "gateway_admitted"
         )
       );
-    } catch (error) {
+    } catch (caughtError) {
+      let error = caughtError;
+      if (deferDevProxyRateAdmission && !authenticatedDevProxyAssertion) {
+        try {
+          this.requireRateAdmission(
+            request,
+            contract,
+            null,
+            "pre_authentication"
+          );
+        } catch (rateAdmissionError) {
+          error = rateAdmissionError;
+        }
+      }
       await this.options.audit?.record(
         auditEvent(
           request,

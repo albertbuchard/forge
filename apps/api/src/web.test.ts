@@ -108,6 +108,92 @@ test("managed dev web runtime does not autostart when disabled", async () => {
   assert.equal(spawnCalled, false);
 });
 
+test("managed dev web runtime coalesces an asset burst and caches only a live probe", async () => {
+  let now = 1_000;
+  let probes = 0;
+  const runtime = createManagedDevWebRuntime({
+    env: {
+      FORGE_DEV_WEB_ORIGIN: "http://127.0.0.1:3027/forge/",
+      FORGE_DEV_WEB_AUTOSTART: "0",
+      FORGE_DEV_WEB_READY_TTL_MS: "1000"
+    },
+    now: () => now,
+    fetchImpl: (async () => {
+      probes += 1;
+      await Promise.resolve();
+      return new Response("paired browser required", { status: 401 });
+    }) as typeof fetch
+  });
+
+  const burst = await Promise.all(
+    Array.from({ length: 150 }, () => runtime.ensureReady())
+  );
+  assert.equal(probes, 1);
+  assert.ok(burst.every((entry) => entry?.port === "3027"));
+
+  now = 1_999;
+  assert.equal((await runtime.ensureReady())?.port, "3027");
+  assert.equal(probes, 1);
+
+  now = 2_000;
+  assert.equal((await runtime.ensureReady())?.port, "3027");
+  assert.equal(probes, 2);
+
+  runtime.invalidateReady?.();
+  assert.equal((await runtime.ensureReady())?.port, "3027");
+  assert.equal(probes, 3);
+  await runtime.stop();
+});
+
+test("managed dev web runtime never caches a failed or server-error probe", async () => {
+  let probes = 0;
+  const runtime = createManagedDevWebRuntime({
+    env: {
+      FORGE_DEV_WEB_ORIGIN: "http://127.0.0.1:3027/forge/",
+      FORGE_DEV_WEB_AUTOSTART: "0"
+    },
+    fetchImpl: (async () => {
+      probes += 1;
+      return probes === 1
+        ? new Response("unavailable", { status: 503 })
+        : new Response("ready", { status: 200 });
+    }) as typeof fetch
+  });
+
+  assert.equal(await runtime.ensureReady(), null);
+  assert.equal((await runtime.ensureReady())?.port, "3027");
+  assert.equal(probes, 2);
+  await runtime.stop();
+});
+
+test("managed dev web runtime does not restore readiness from a probe invalidated by stop", async () => {
+  let probes = 0;
+  let releaseFirstProbe!: () => void;
+  const firstProbe = new Promise<void>((resolve) => {
+    releaseFirstProbe = resolve;
+  });
+  const runtime = createManagedDevWebRuntime({
+    env: {
+      FORGE_DEV_WEB_ORIGIN: "http://127.0.0.1:3027/forge/",
+      FORGE_DEV_WEB_AUTOSTART: "0"
+    },
+    fetchImpl: (async () => {
+      probes += 1;
+      if (probes === 1) {
+        await firstProbe;
+      }
+      return new Response("ready", { status: 200 });
+    }) as typeof fetch
+  });
+
+  const pendingProbe = runtime.ensureReady();
+  await runtime.stop();
+  releaseFirstProbe();
+  assert.equal(await pendingProbe, null);
+  assert.equal((await runtime.ensureReady())?.port, "3027");
+  assert.equal(probes, 2);
+});
+
 test("managed dev web runtime infers a direct Vite launch when no explicit command is set", async () => {
   const tempDir = mkdtempSync(path.join(tmpdir(), "forge-web-runtime-"));
   mkdirSync(path.join(tempDir, "node_modules", "vite", "bin"), {
@@ -364,10 +450,7 @@ test("missing built hashed assets return 404 instead of Vite HTML", async () => 
 
     assert.equal(response.statusCode, 404);
     assert.equal(response.json().error, "Asset not found");
-    assert.doesNotMatch(
-      response.headers["content-type"] ?? "",
-      /text\/html/
-    );
+    assert.doesNotMatch(response.headers["content-type"] ?? "", /text\/html/);
     assert.equal(devProxyCalls, 0);
   } finally {
     await app.close();
@@ -568,6 +651,7 @@ test("development-web upgrades require application authentication before contact
 });
 
 test("authenticated same-origin HMR proxy replaces browser secrets with a one-time assertion", async () => {
+  let authorizationChecks = 0;
   let upstreamHeaders:
     | {
         cookie: string | undefined;
@@ -575,6 +659,7 @@ test("authenticated same-origin HMR proxy replaces browser secrets with a one-ti
         assertion: string | undefined;
         target: string | undefined;
         origin: string | undefined;
+        subprotocol: string | undefined;
       }
     | undefined;
   const upstream = createServer();
@@ -586,7 +671,10 @@ test("authenticated same-origin HMR proxy replaces browser secrets with a one-ti
         | string
         | undefined,
       target: request.headers["x-forge-dev-proxy-target"] as string | undefined,
-      origin: request.headers.origin
+      origin: request.headers.origin,
+      subprotocol: request.headers["sec-websocket-protocol"] as
+        | string
+        | undefined
     };
     socket.end(
       "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n"
@@ -604,8 +692,13 @@ test("authenticated same-origin HMR proxy replaces browser secrets with a one-ti
         new URL(`http://127.0.0.1:${upstreamAddress.port}/forge/`),
       stop: async () => {}
     },
-    authorizeUpgrade: async (_request, target) =>
-      target === "/forge/__vite_hmr" ? "hmr-proxy-assertion" : null,
+    authorizeUpgrade: async (request, target) => {
+      authorizationChecks += 1;
+      return target === "/forge/__vite_hmr" &&
+        request.headers.cookie === "forge_session=paired-browser"
+        ? "hmr-proxy-assertion"
+        : null;
+    },
     allowedOrigins: []
   });
   await app.listen({ host: "127.0.0.1", port: 0 });
@@ -621,7 +714,7 @@ test("authenticated same-origin HMR proxy replaces browser secrets with a one-ti
         headers: {
           authorization: "Bearer must-not-reach-vite",
           connection: "Upgrade",
-          cookie: "forge_session=must-not-reach-vite",
+          cookie: "forge_session=paired-browser",
           host: "forge.example.ts.net",
           origin: "https://forge.example.ts.net",
           "sec-websocket-protocol": "vite-hmr",
@@ -641,12 +734,14 @@ test("authenticated same-origin HMR proxy replaces browser secrets with a one-ti
     });
 
     assert.equal(status, 101);
+    assert.equal(authorizationChecks, 1);
     assert.deepEqual(upstreamHeaders, {
       cookie: undefined,
       authorization: undefined,
       assertion: "hmr-proxy-assertion",
       target: "/forge/__vite_hmr",
-      origin: "https://forge.example.ts.net"
+      origin: "https://forge.example.ts.net",
+      subprotocol: "vite-hmr"
     });
   } finally {
     await app.close();
@@ -659,6 +754,63 @@ test("authenticated same-origin HMR proxy replaces browser secrets with a one-ti
         resolve();
       });
     });
+  }
+});
+
+test("authenticated HMR proxy rejects a wrong websocket subprotocol before authorization", async () => {
+  let authorizationChecks = 0;
+  let readinessChecks = 0;
+  const app = fastify();
+  await registerWebRoutes(app, {
+    devWebRuntime: {
+      ensureReady: async () => {
+        readinessChecks += 1;
+        throw new Error("Vite must not be contacted for a wrong subprotocol.");
+      },
+      stop: async () => {}
+    },
+    authorizeUpgrade: async () => {
+      authorizationChecks += 1;
+      return "must-not-be-issued";
+    },
+    allowedOrigins: []
+  });
+  await app.listen({ host: "127.0.0.1", port: 0 });
+
+  try {
+    const address = app.server.address() as AddressInfo;
+    const status = await new Promise<number>((resolve, reject) => {
+      const request = httpRequest({
+        host: "127.0.0.1",
+        port: address.port,
+        method: "GET",
+        path: "/forge/__vite_hmr",
+        headers: {
+          connection: "Upgrade",
+          cookie: "forge_session=paired-browser",
+          host: "forge.example.ts.net",
+          origin: "https://forge.example.ts.net",
+          "sec-websocket-protocol": "not-vite-hmr",
+          upgrade: "websocket"
+        }
+      });
+      request.once("upgrade", (_response, socket) => {
+        socket.destroy();
+        reject(new Error("Wrong-subprotocol upgrade was admitted."));
+      });
+      request.once("response", (response) => {
+        response.resume();
+        response.once("end", () => resolve(response.statusCode ?? 0));
+      });
+      request.once("error", reject);
+      request.end();
+    });
+
+    assert.equal(status, 401);
+    assert.equal(authorizationChecks, 0);
+    assert.equal(readinessChecks, 0);
+  } finally {
+    await app.close();
   }
 });
 

@@ -639,6 +639,14 @@ async function fetchApi(path: string, init?: RequestInit) {
       }
     }
   } catch (error) {
+    if (
+      error !== null &&
+      typeof error === "object" &&
+      "name" in error &&
+      error.name === "AbortError"
+    ) {
+      throw error;
+    }
     if (!isDiagnosticsLogPath(path)) {
       void publishUiDiagnosticLog({
         level: "error",
@@ -6997,13 +7005,15 @@ export function getForgeLearningSession(input: {
   courseId: string;
   lessonId?: string;
   userId?: string;
+  signal?: AbortSignal;
 }) {
   const search = new URLSearchParams();
   if (input.lessonId) search.set("lessonId", input.lessonId);
   if (input.userId) search.set("userId", input.userId);
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<LearningSession>(
-    `/api/v1/courses/${encodeURIComponent(input.courseId)}/learn${suffix}`
+    `/api/v1/courses/${encodeURIComponent(input.courseId)}/learn${suffix}`,
+    { signal: input.signal }
   );
 }
 
