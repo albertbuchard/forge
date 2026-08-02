@@ -1706,10 +1706,6 @@ export function createCourseAttempt(input: {
       );
     }
   }
-  const frontier = learnerLessonFrontier(
-    lesson,
-    latestLessonAttempts(coursePackage, course.id, input.userId, lesson)
-  );
   const now = nowIso();
   const created = runInTransaction(() => {
     if (input.idempotencyKey) {
