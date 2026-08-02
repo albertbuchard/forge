@@ -1076,6 +1076,116 @@ test("keeps an enrollment on its immutable release until an explicit audited upg
   }
 });
 
+test("upgrades a Course C 1.8 enrollment to 1.9 without losing assessed work", async () => {
+  const dataRoot = await mkdtemp(
+    path.join(os.tmpdir(), "forge-course-c-upgrade-test-")
+  );
+  configureDatabase({ dataRoot });
+  configureLegacyWikiAutoImport(false);
+  try {
+    await initializeDatabase();
+    ensureSystemUsers();
+    const researchCourse = JSON.parse(
+      readFileSync(
+        new URL(
+          "./course-catalog/from-polynomials-to-etale-triple-covers.forge-course.json",
+          import.meta.url
+        ),
+        "utf8"
+      )
+    ) as ReturnType<typeof exportCoursePackage>;
+    importCoursePackage(researchCourse);
+    const bundledCourse = JSON.parse(
+      readFileSync(
+        new URL(
+          "./course-catalog/cpge-mathematics-and-concours-fluency.forge-course.json",
+          import.meta.url
+        ),
+        "utf8"
+      )
+    ) as ReturnType<typeof exportCoursePackage>;
+    assert.equal(bundledCourse.course.version, "1.9.0");
+
+    const lessonId = "mpsi-foundations-week-1-day-1";
+    const priorLessons = bundledCourse.lessons.map((lesson) =>
+      lesson.id === lessonId
+        ? {
+            ...lesson,
+            title: `${lesson.title} — 1.8 upgrade fixture`
+          }
+        : lesson
+    );
+    importCoursePackage({
+      ...bundledCourse,
+      course: { ...bundledCourse.course, version: "1.8.0" },
+      lessons: priorLessons,
+      provenance: {
+        ...bundledCourse.provenance,
+        generatedAt: "2026-08-01T00:00:00.000Z",
+        contentHash: ""
+      }
+    });
+
+    const userId = getDefaultUser().id;
+    const courseId = bundledCourse.course.id;
+    const priorSession = getLearningSession(courseId, userId, lessonId);
+    const activity = priorSession.lesson.activities.find(
+      (candidate) => candidate.required
+    );
+    assert.ok(activity);
+    const context = getActivityForAssessment(
+      courseId,
+      lessonId,
+      activity.id,
+      userId
+    );
+    const attempt = createCourseAttempt({
+      courseId,
+      lessonId,
+      activityId: activity.id,
+      userId,
+      answerMarkdown:
+        "I state the index range, expand the terms in order, and check both boundary terms."
+    });
+    completeCourseAttempt({
+      attemptId: attempt.attemptId,
+      userId,
+      activity: context.activity,
+      feedback: passingFeedback(context.activity, 92),
+      provider: "test",
+      model: "test-assessor",
+      nextLessonId: context.nextLessonId
+    });
+
+    importCoursePackage(bundledCourse);
+    assert.deepEqual(getCourseDetail(courseId, userId).release, {
+      enrolledVersion: "1.8.0",
+      latestVersion: "1.9.0",
+      updateAvailable: true
+    });
+
+    const receipt = upgradeCourseEnrollment(courseId, userId);
+    assert.equal(receipt.upgraded, true);
+    assert.equal(receipt.fromVersion, "1.8.0");
+    assert.equal(receipt.toVersion, "1.9.0");
+    assert.ok(receipt.carriedActivityIds.includes(activity.id));
+    assert.deepEqual(getCourseDetail(courseId, userId).release, {
+      enrolledVersion: "1.9.0",
+      latestVersion: "1.9.0",
+      updateAvailable: false
+    });
+    assert.equal(
+      getLearningSession(courseId, userId, lessonId).latestAttempts.find(
+        (candidate) => candidate.activityId === activity.id
+      )?.feedback?.verdict,
+      "pass"
+    );
+  } finally {
+    closeDatabase();
+    await rm(dataRoot, { recursive: true, force: true });
+  }
+});
+
 test("keeps every lesson and activity open while tracking required completion", async () => {
   const dataRoot = await mkdtemp(
     path.join(os.tmpdir(), "forge-course-progression-test-")

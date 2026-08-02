@@ -49,7 +49,7 @@ test("course routes expose a learner-safe voice session without locking later le
         .map((course) => [course.id, course.version])
         .sort((left, right) => left[0].localeCompare(right[0])),
       [
-        ["course.cpge-mathematics-concours-fluency", "1.8.0"],
+        ["course.cpge-mathematics-concours-fluency", "1.9.0"],
         ["course.polynomials-etale-triple-covers", "3.1.0"]
       ]
     );
