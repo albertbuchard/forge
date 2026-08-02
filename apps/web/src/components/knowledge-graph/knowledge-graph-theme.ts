@@ -1,5 +1,103 @@
 import type { RenderedKnowledgeGraphEdge } from "@/lib/knowledge-graph";
+import type { KnowledgeGraphEntityKind } from "@/lib/knowledge-graph-types";
 import { resolveForgeThemeToken } from "@/lib/theme-system";
+
+export type KnowledgeGraphSemanticGroup =
+  | "direction"
+  | "execution"
+  | "knowledge"
+  | "people"
+  | "inner-life"
+  | "workbench";
+
+export const KNOWLEDGE_GRAPH_SEMANTIC_GROUPS = {
+  direction: {
+    label: "Direction",
+    description: "Goals, strategies, and values",
+    token: "--primary",
+    fallback: "#a78bfa"
+  },
+  execution: {
+    label: "Execution",
+    description: "Projects, tasks, habits, and time",
+    token: "--info",
+    fallback: "#38bdf8"
+  },
+  knowledge: {
+    label: "Knowledge",
+    description: "Notes, evidence, tags, and reports",
+    token: "--warning",
+    fallback: "#fbbf24"
+  },
+  people: {
+    label: "People",
+    description: "People connected to the work",
+    token: "--danger",
+    fallback: "#fb7185"
+  },
+  "inner-life": {
+    label: "Inner life",
+    description: "Patterns, beliefs, modes, and emotions",
+    token: "--secondary",
+    fallback: "#2dd4bf"
+  },
+  workbench: {
+    label: "Workbench",
+    description: "Flows, functors, chats, and surfaces",
+    token: "--success",
+    fallback: "#4ade80"
+  }
+} as const satisfies Record<
+  KnowledgeGraphSemanticGroup,
+  { label: string; description: string; token: string; fallback: string }
+>;
+
+export function getKnowledgeGraphSemanticGroup(
+  kind: KnowledgeGraphEntityKind
+): KnowledgeGraphSemanticGroup {
+  if (["goal", "strategy", "value"].includes(kind)) return "direction";
+  if (
+    [
+      "project",
+      "task",
+      "habit",
+      "calendar_event",
+      "work_block",
+      "timebox"
+    ].includes(kind)
+  ) {
+    return "execution";
+  }
+  if (kind === "person") return "people";
+  if (["workbench", "functor", "chat"].includes(kind)) return "workbench";
+  if (
+    [
+      "pattern",
+      "behavior",
+      "belief",
+      "mode",
+      "mode_session",
+      "event_type",
+      "emotion"
+    ].includes(kind)
+  ) {
+    return "inner-life";
+  }
+  return "knowledge";
+}
+
+export function resolveKnowledgeGraphNodeColor({
+  kind,
+  accentToken
+}: {
+  kind: KnowledgeGraphEntityKind;
+  accentToken: string | null | undefined;
+}) {
+  if (accentToken) return resolveKnowledgeGraphThemeColor(accentToken);
+  const group =
+    KNOWLEDGE_GRAPH_SEMANTIC_GROUPS[getKnowledgeGraphSemanticGroup(kind)];
+  return resolveKnowledgeGraphThemeColor(group.token, group.fallback);
+}
 
 export function resolveKnowledgeGraphThemeColor(
   token: string | null | undefined,

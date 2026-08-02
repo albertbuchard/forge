@@ -5,6 +5,90 @@ export type KnowledgeGraphSimulationPhase =
   | "focus-exit"
   | "dragging";
 
+export function shouldPublishKnowledgeGraphPositions({
+  tick,
+  lastPublishedTick,
+  intervalTicks
+}: {
+  tick: number;
+  lastPublishedTick: number;
+  intervalTicks: number;
+}) {
+  return tick - lastPublishedTick >= Math.max(1, Math.trunc(intervalTicks));
+}
+
+export function normalizeKnowledgeGraphSettlementDisplacement(
+  normalizedDisplacement: number,
+  elapsedTicks: number
+) {
+  return normalizedDisplacement / Math.max(1, Math.trunc(elapsedTicks));
+}
+
+export type KnowledgeGraphLayoutActivity =
+  | "graph-change"
+  | "focus"
+  | "drag"
+  | "physics"
+  | "nudge"
+  | "recenter"
+  | "camera";
+
+export function shouldResumeKnowledgeGraphLayout(
+  activity: KnowledgeGraphLayoutActivity
+) {
+  return activity !== "camera";
+}
+
+export function resolveKnowledgeGraphLayoutPublication({
+  positionsDue,
+  settlementEnabled,
+  settled
+}: {
+  positionsDue: boolean;
+  settlementEnabled: boolean;
+  settled: boolean;
+}) {
+  const shouldPause = positionsDue && settlementEnabled && settled;
+  return {
+    publishPositions: positionsDue,
+    publishFinalStats: shouldPause,
+    scheduleNext: !shouldPause
+  };
+}
+
+export function getKnowledgeGraphTransferBuffers(
+  enabled: boolean,
+  arrays: readonly Float32Array[]
+) {
+  return enabled ? arrays.map((array) => array.buffer as ArrayBuffer) : [];
+}
+
+export function advanceKnowledgeGraphSettlement({
+  normalizedDisplacement,
+  candidateSinceMs,
+  nowMs,
+  threshold = 0.002,
+  settleWindowMs = 500
+}: {
+  normalizedDisplacement: number;
+  candidateSinceMs: number | null;
+  nowMs: number;
+  threshold?: number;
+  settleWindowMs?: number;
+}) {
+  if (
+    !Number.isFinite(normalizedDisplacement) ||
+    normalizedDisplacement > threshold
+  ) {
+    return { candidateSinceMs: null, settled: false };
+  }
+  const nextCandidateSinceMs = candidateSinceMs ?? nowMs;
+  return {
+    candidateSinceMs: nextCandidateSinceMs,
+    settled: nowMs - nextCandidateSinceMs >= settleWindowMs
+  };
+}
+
 export type FocusSourceState = {
   nodeId: string;
   index: number;
@@ -58,15 +142,16 @@ export type KnowledgeGraphPhysicsSettings = {
   focusShellSpacing: number;
 };
 
-export const DEFAULT_KNOWLEDGE_GRAPH_PHYSICS_SETTINGS: KnowledgeGraphPhysicsSettings = {
-  focusRepulsion: 2.25,
-  focusDiffusion: 1.95,
-  focusSpringReductionMax: 0.34,
-  focusSpringReductionDiffusion: 1.85,
-  edgeSpringStrength: 1,
-  gravityStrength: 1,
-  focusShellSpacing: 1
-};
+export const DEFAULT_KNOWLEDGE_GRAPH_PHYSICS_SETTINGS: KnowledgeGraphPhysicsSettings =
+  {
+    focusRepulsion: 2.25,
+    focusDiffusion: 1.95,
+    focusSpringReductionMax: 0.34,
+    focusSpringReductionDiffusion: 1.85,
+    edgeSpringStrength: 1,
+    gravityStrength: 1,
+    focusShellSpacing: 1
+  };
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(Math.max(value, minimum), maximum);
@@ -77,12 +162,14 @@ export function sanitizeKnowledgeGraphPhysicsSettings(
 ) {
   return {
     focusRepulsion: clamp(
-      settings?.focusRepulsion ?? DEFAULT_KNOWLEDGE_GRAPH_PHYSICS_SETTINGS.focusRepulsion,
+      settings?.focusRepulsion ??
+        DEFAULT_KNOWLEDGE_GRAPH_PHYSICS_SETTINGS.focusRepulsion,
       0.6,
       KNOWLEDGE_GRAPH_MAX_FOCUS_REPULSION
     ),
     focusDiffusion: clamp(
-      settings?.focusDiffusion ?? DEFAULT_KNOWLEDGE_GRAPH_PHYSICS_SETTINGS.focusDiffusion,
+      settings?.focusDiffusion ??
+        DEFAULT_KNOWLEDGE_GRAPH_PHYSICS_SETTINGS.focusDiffusion,
       0.6,
       KNOWLEDGE_GRAPH_MAX_FOCUS_DIFFUSION
     ),
@@ -150,7 +237,9 @@ export function getKnowledgeGraphHopAttenuation(
   }
   if (hopLevel >= HOP_ATTENUATION.length) {
     const terminal = HOP_ATTENUATION[HOP_ATTENUATION.length - 1] ?? 0;
-    return hopLevel === 0 ? 1 : Math.pow(terminal, 1 / Math.max(diffusion, 0.1));
+    return hopLevel === 0
+      ? 1
+      : Math.pow(terminal, 1 / Math.max(diffusion, 0.1));
   }
   const base = HOP_ATTENUATION[hopLevel] ?? 0;
   return hopLevel === 0 ? base : Math.pow(base, 1 / Math.max(diffusion, 0.1));
@@ -265,8 +354,7 @@ export function advanceKnowledgeGraphFocusSources({
       };
     })
     .filter(
-      (source) =>
-        source.targetStrength > 0 || source.strength > removalEpsilon
+      (source) => source.targetStrength > 0 || source.strength > removalEpsilon
     );
 
   return advanced;
@@ -282,7 +370,8 @@ export function computeKnowledgeGraphFocusPressure({
   settings?: KnowledgeGraphPhysicsSettings;
 }) {
   const pressure = new Float32Array(nodeCount);
-  const historicalWeight = resolveKnowledgeGraphHistoricalSourceWeight(settings);
+  const historicalWeight =
+    resolveKnowledgeGraphHistoricalSourceWeight(settings);
 
   sources.forEach((source, sourceIndex) => {
     const sourceWeight =

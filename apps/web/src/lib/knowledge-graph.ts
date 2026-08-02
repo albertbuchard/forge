@@ -73,7 +73,10 @@ export function getKnowledgeGraphNodeLane(kind: KnowledgeGraphEntityKind) {
   };
 }
 
-function initializeFamilyCounts(): Record<KnowledgeGraphRelationFamily, number> {
+function initializeFamilyCounts(): Record<
+  KnowledgeGraphRelationFamily,
+  number
+> {
   return {
     structural: 0,
     contextual: 0,
@@ -180,26 +183,39 @@ export function buildKnowledgeGraphDatasetSignature(
   edges: KnowledgeGraphEdge[]
 ) {
   const renderedEdges = buildRenderedKnowledgeGraphEdges(edges);
-  const nodeSignature = [...nodes]
-    .sort(
-      (left, right) =>
-        left.id.localeCompare(right.id) ||
-        left.updatedAt?.localeCompare(right.updatedAt ?? "") ||
-        0
-    )
-    .map(
-      (node) =>
-        `${node.id}:${node.title}:${node.size}:${node.importance}:${node.updatedAt ?? ""}`
-    )
-    .join("|");
-  const edgeSignature = renderedEdges
-    .map(
-      (edge) =>
-        `${edge.source}:${edge.target}:${edge.parallelCount}:${edge.label}:${edge.strength.toFixed(3)}`
-    )
-    .join("|");
+  let primaryHash = 0x811c9dc5;
+  let secondaryHash = 0x9e3779b9;
+  const updateHash = (value: string | number) => {
+    const text = `${value}\u001f`;
+    for (let index = 0; index < text.length; index += 1) {
+      const code = text.charCodeAt(index);
+      primaryHash = Math.imul(primaryHash ^ code, 0x01000193);
+      secondaryHash = Math.imul(secondaryHash ^ code, 0x85ebca6b);
+    }
+  };
 
-  return `${nodes.length}/${renderedEdges.length}/${nodeSignature}::${edgeSignature}`;
+  const sortedNodes = [...nodes].sort(
+    (left, right) =>
+      left.id.localeCompare(right.id) ||
+      left.updatedAt?.localeCompare(right.updatedAt ?? "") ||
+      0
+  );
+  for (const node of sortedNodes) {
+    updateHash(node.id);
+    updateHash(node.title);
+    updateHash(node.size);
+    updateHash(node.importance);
+    updateHash(node.updatedAt ?? "");
+  }
+  for (const edge of renderedEdges) {
+    updateHash(edge.source);
+    updateHash(edge.target);
+    updateHash(edge.parallelCount);
+    updateHash(edge.label);
+    updateHash(edge.strength.toFixed(3));
+  }
+
+  return `${nodes.length}/${renderedEdges.length}/${(primaryHash >>> 0).toString(36)}-${(secondaryHash >>> 0).toString(36)}`;
 }
 
 export function filterKnowledgeGraphData(
@@ -265,7 +281,10 @@ export function filterKnowledgeGraphData(
 
   const filteredNodeIds = new Set(filteredNodes.map((node) => node.id));
   const candidateEdges = graph.edges.filter((edge) => {
-    if (!filteredNodeIds.has(edge.source) || !filteredNodeIds.has(edge.target)) {
+    if (
+      !filteredNodeIds.has(edge.source) ||
+      !filteredNodeIds.has(edge.target)
+    ) {
       return false;
     }
     if (
@@ -434,7 +453,10 @@ export function buildKnowledgeGraphFacets(
         label: getEntityVisual(value as KnowledgeGraphEntityKind).label,
         count
       }))
-      .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label)),
+      .sort(
+        (left, right) =>
+          right.count - left.count || left.label.localeCompare(right.label)
+      ),
     relationKinds: Object.entries(relationKinds)
       .map(([value, count]) => ({
         value: value as KnowledgeGraphEdge["relationKind"],
@@ -444,12 +466,18 @@ export function buildKnowledgeGraphFacets(
           ],
         count
       }))
-      .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label)),
+      .sort(
+        (left, right) =>
+          right.count - left.count || left.label.localeCompare(right.label)
+      ),
     tags: Array.from(tags.values()).sort(
-      (left, right) => right.count - left.count || left.label.localeCompare(right.label)
+      (left, right) =>
+        right.count - left.count || left.label.localeCompare(right.label)
     ),
     owners: Array.from(owners.values()).sort(
-      (left, right) => right.count - left.count || left.displayName.localeCompare(right.displayName)
+      (left, right) =>
+        right.count - left.count ||
+        left.displayName.localeCompare(right.displayName)
     ),
     updatedAt: {
       min: minUpdatedAt,
@@ -473,7 +501,8 @@ export function buildKnowledgeGraphHierarchy(
       return layerDelta;
     }
     return (
-      right.importance - left.importance || left.title.localeCompare(right.title)
+      right.importance - left.importance ||
+      left.title.localeCompare(right.title)
     );
   });
 
@@ -518,8 +547,42 @@ export function buildKnowledgeGraphFocusPayload(
   edges: KnowledgeGraphEdge[],
   focusNodeId: string | null
 ): KnowledgeGraphFocusPayload {
+  return buildKnowledgeGraphFocusPayloadFromIndex(
+    buildKnowledgeGraphFocusIndex(nodes, edges),
+    focusNodeId
+  );
+}
+
+export type KnowledgeGraphFocusIndex = {
+  nodeMap: ReadonlyMap<string, KnowledgeGraphNode>;
+  incidentEdgesByNode: ReadonlyMap<string, KnowledgeGraphEdge[]>;
+};
+
+export function buildKnowledgeGraphFocusIndex(
+  nodes: KnowledgeGraphNode[],
+  edges: KnowledgeGraphEdge[]
+): KnowledgeGraphFocusIndex {
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
-  const focusNode = focusNodeId ? nodeMap.get(focusNodeId) ?? null : null;
+  const incidentEdgesByNode = new Map<string, KnowledgeGraphEdge[]>();
+  for (const edge of edges) {
+    const sourceEdges = incidentEdgesByNode.get(edge.source) ?? [];
+    sourceEdges.push(edge);
+    incidentEdgesByNode.set(edge.source, sourceEdges);
+    if (edge.target !== edge.source) {
+      const targetEdges = incidentEdgesByNode.get(edge.target) ?? [];
+      targetEdges.push(edge);
+      incidentEdgesByNode.set(edge.target, targetEdges);
+    }
+  }
+  return { nodeMap, incidentEdgesByNode };
+}
+
+export function buildKnowledgeGraphFocusPayloadFromIndex(
+  index: KnowledgeGraphFocusIndex,
+  focusNodeId: string | null
+): KnowledgeGraphFocusPayload {
+  const { nodeMap, incidentEdgesByNode } = index;
+  const focusNode = focusNodeId ? (nodeMap.get(focusNodeId) ?? null) : null;
   if (!focusNode) {
     return {
       generatedAt: new Date().toISOString(),
@@ -532,9 +595,7 @@ export function buildKnowledgeGraphFocusPayload(
     };
   }
 
-  const neighborhoodEdges = edges.filter(
-    (edge) => edge.source === focusNode.id || edge.target === focusNode.id
-  );
+  const neighborhoodEdges = [...(incidentEdgesByNode.get(focusNode.id) ?? [])];
   const neighborIds = Array.from(
     new Set(
       neighborhoodEdges.flatMap((edge) =>
@@ -548,22 +609,14 @@ export function buildKnowledgeGraphFocusPayload(
   const groupsByRelation = new Map<string, KnowledgeGraphRelationGroup>();
   const relationCounts = initializeFamilyCounts();
   const secondRingCounts = initializeFamilyCounts();
-  const allNeighbors = buildNeighborMap(edges);
-
+  const neighborIdSet = new Set(neighborIds);
   for (const nodeId of neighborIds) {
-    const secondRingPeers = allNeighbors.get(nodeId) ?? new Set<string>();
-    for (const peerId of secondRingPeers) {
-      if (peerId === focusNode.id || neighborIds.includes(peerId)) {
+    for (const edge of incidentEdgesByNode.get(nodeId) ?? []) {
+      const peerId = edge.source === nodeId ? edge.target : edge.source;
+      if (peerId === focusNode.id || neighborIdSet.has(peerId)) {
         continue;
       }
-      const peerEdges = edges.filter(
-        (edge) =>
-          (edge.source === nodeId && edge.target === peerId) ||
-          (edge.target === nodeId && edge.source === peerId)
-      );
-      for (const edge of peerEdges) {
-        secondRingCounts[edge.family] += 1;
-      }
+      secondRingCounts[edge.family] += 1;
     }
   }
 

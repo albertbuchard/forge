@@ -9,9 +9,10 @@ import {
 import { recenterKnowledgeGraphPointsAroundOrigin } from "@/lib/knowledge-graph-dev-diagnostics";
 import type { RenderedKnowledgeGraphEdge } from "@/lib/knowledge-graph";
 import type { KnowledgeGraphNode } from "@/lib/knowledge-graph-types";
+import type { KnowledgeGraphLayoutPositionsMessage } from "@/components/knowledge-graph/knowledge-graph-layout-protocol";
 import {
   buildKnowledgeGraphEdgeStroke,
-  resolveKnowledgeGraphThemeColor
+  resolveKnowledgeGraphNodeColor
 } from "@/components/knowledge-graph/knowledge-graph-theme";
 
 export type SigmaNodeAttributes = Attributes & {
@@ -65,6 +66,22 @@ export type FallbackGraphSnapshot = {
 export type DesiredCameraTarget = CameraState & {
   nodeIds?: string[];
 };
+
+export function isKnowledgeGraphPositionMessageCurrent({
+  message,
+  generation,
+  nodeCount
+}: {
+  message: KnowledgeGraphLayoutPositionsMessage;
+  generation: number;
+  nodeCount: number;
+}) {
+  return (
+    message.generation === generation &&
+    message.x.length === nodeCount &&
+    message.y.length === nodeCount
+  );
+}
 
 let WEBGL_SUPPORT_CACHE: boolean | null = null;
 
@@ -123,7 +140,10 @@ export function createGraphFromData(
       x: seeded?.x ?? 0,
       y: seeded?.y ?? 0,
       size: Math.max(2.5, node.size / 14),
-      color: resolveKnowledgeGraphThemeColor(node.accentToken),
+      color: resolveKnowledgeGraphNodeColor({
+        kind: node.entityKind,
+        accentToken: node.accentToken
+      }),
       label: node.title,
       hidden: false,
       forceLabel: false,
@@ -157,7 +177,10 @@ export function applyKnowledgeGraphThemeColors(
   graph.updateEachNodeAttributes(
     (_nodeId, attributes) => ({
       ...attributes,
-      color: resolveKnowledgeGraphThemeColor(attributes.data.accentToken)
+      color: resolveKnowledgeGraphNodeColor({
+        kind: attributes.data.entityKind,
+        accentToken: attributes.data.accentToken
+      })
     }),
     { attributes: ["color"] }
   );

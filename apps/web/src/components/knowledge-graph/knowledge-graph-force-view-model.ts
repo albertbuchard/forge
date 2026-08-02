@@ -7,9 +7,207 @@ import {
 
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const PHYLLOTAXIS_STEP = 0.48;
-const SIGMA_OVERVIEW_RATIO_SCALE = 0.24;
-const SIGMA_OVERVIEW_RATIO_MIN = 0.58;
-const SIGMA_OVERVIEW_RATIO_MAX = 0.78;
+const SIGMA_OVERVIEW_RATIO_BASE = 0.94;
+const SIGMA_OVERVIEW_RATIO_SCALE = 0.06;
+const SIGMA_OVERVIEW_RATIO_MIN = 1.02;
+const SIGMA_OVERVIEW_RATIO_MAX = 1.14;
+
+export type KnowledgeGraphRenderQuality = "full" | "balanced" | "reduced";
+
+export type KnowledgeGraphAdaptiveQualityState = {
+  quality: KnowledgeGraphRenderQuality;
+  pressuredWindows: number;
+  healthyWindows: number;
+};
+
+export function isKnowledgeGraphPresentationCompletion({
+  beforeKey,
+  requestedKey,
+  renderedKey
+}: {
+  beforeKey: string | null;
+  requestedKey: string | null;
+  renderedKey: string | null;
+}) {
+  return (
+    requestedKey !== null &&
+    requestedKey !== beforeKey &&
+    renderedKey === requestedKey
+  );
+}
+
+export type KnowledgeGraphPresentationRenderState = {
+  requestedKey: string;
+  pendingKey: string | null;
+  renderedKey: string | null;
+};
+
+export function requestKnowledgeGraphPresentation(
+  state: KnowledgeGraphPresentationRenderState,
+  key: string
+): KnowledgeGraphPresentationRenderState {
+  return { ...state, requestedKey: key };
+}
+
+export function beginKnowledgeGraphPresentationRender(
+  state: KnowledgeGraphPresentationRenderState
+): KnowledgeGraphPresentationRenderState {
+  return { ...state, pendingKey: state.requestedKey };
+}
+
+export function completeKnowledgeGraphPresentationRender(
+  state: KnowledgeGraphPresentationRenderState
+): KnowledgeGraphPresentationRenderState {
+  return state.pendingKey === null
+    ? state
+    : { ...state, renderedKey: state.pendingKey, pendingKey: null };
+}
+
+export function advanceKnowledgeGraphAdaptiveQuality(
+  state: KnowledgeGraphAdaptiveQualityState,
+  observation: {
+    frameP95Ms: number;
+    interactionActive: boolean;
+    visibleEdgeCount: number;
+  }
+): KnowledgeGraphAdaptiveQualityState {
+  const requested = resolveKnowledgeGraphRenderQuality({
+    currentQuality: state.quality,
+    ...observation
+  });
+  const rank = { full: 0, balanced: 1, reduced: 2 } as const;
+  if (rank[requested] > rank[state.quality]) {
+    const pressuredWindows = state.pressuredWindows + 1;
+    return pressuredWindows >= 2
+      ? { quality: requested, pressuredWindows: 0, healthyWindows: 0 }
+      : { ...state, pressuredWindows, healthyWindows: 0 };
+  }
+  if (rank[requested] < rank[state.quality]) {
+    const healthyWindows = state.healthyWindows + 1;
+    return healthyWindows >= 3
+      ? { quality: requested, pressuredWindows: 0, healthyWindows: 0 }
+      : { ...state, pressuredWindows: 0, healthyWindows };
+  }
+  return { ...state, pressuredWindows: 0, healthyWindows: 0 };
+}
+
+export function buildKnowledgeGraphViewportNodeIds({
+  nodes,
+  width,
+  height,
+  padding,
+  preserveNodeIds,
+  cullAbove = 240,
+  preserveAll = false
+}: {
+  nodes: Array<{ id: string; viewportX: number; viewportY: number }>;
+  width: number;
+  height: number;
+  padding: number;
+  preserveNodeIds: ReadonlySet<string>;
+  cullAbove?: number;
+  preserveAll?: boolean;
+}) {
+  if (preserveAll || nodes.length <= cullAbove || width <= 0 || height <= 0) {
+    return new Set(nodes.map((node) => node.id));
+  }
+  const visible = new Set(
+    nodes
+      .filter(
+        (node) =>
+          node.viewportX >= -padding &&
+          node.viewportX <= width + padding &&
+          node.viewportY >= -padding &&
+          node.viewportY <= height + padding
+      )
+      .map((node) => node.id)
+  );
+  preserveNodeIds.forEach((nodeId) => visible.add(nodeId));
+  return visible;
+}
+
+export function resolveKnowledgeGraphRenderQuality({
+  currentQuality,
+  frameP95Ms,
+  interactionActive,
+  visibleEdgeCount
+}: {
+  currentQuality: KnowledgeGraphRenderQuality;
+  frameP95Ms: number;
+  interactionActive: boolean;
+  visibleEdgeCount: number;
+}): KnowledgeGraphRenderQuality {
+  if (frameP95Ms > 25) {
+    return "reduced";
+  }
+  if (frameP95Ms > 18 || (interactionActive && visibleEdgeCount > 1_500)) {
+    return "balanced";
+  }
+  if (interactionActive) {
+    return currentQuality;
+  }
+  if (currentQuality === "reduced") {
+    return frameP95Ms <= 16 ? "balanced" : "reduced";
+  }
+  if (currentQuality === "balanced") {
+    return frameP95Ms <= 14 ? "full" : "balanced";
+  }
+  return "full";
+}
+
+function hashKnowledgeGraphRenderId(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  hash ^= hash >>> 16;
+  hash = Math.imul(hash, 0x85ebca6b);
+  hash ^= hash >>> 13;
+  hash = Math.imul(hash, 0xc2b2ae35);
+  hash ^= hash >>> 16;
+  return hash >>> 0;
+}
+
+export function shouldRenderKnowledgeGraphEdgeAtQuality({
+  edge,
+  quality,
+  preserve
+}: {
+  edge: RenderedKnowledgeGraphEdge;
+  quality: KnowledgeGraphRenderQuality;
+  preserve: boolean;
+}) {
+  if (preserve || quality === "full" || edge.structural) {
+    return true;
+  }
+  if (edge.strength >= 1.1) {
+    return true;
+  }
+  const divisor = quality === "balanced" ? 2 : 4;
+  return hashKnowledgeGraphRenderId(edge.id) % divisor === 0;
+}
+
+export function buildVisibleRenderedKnowledgeGraphEdgeIds(
+  renderedEdges: RenderedKnowledgeGraphEdge[],
+  visibleSourceEdgeIds: ReadonlySet<string>
+) {
+  return new Set(
+    renderedEdges
+      .filter((edge) =>
+        edge.data.some((sourceEdge) => visibleSourceEdgeIds.has(sourceEdge.id))
+      )
+      .map((edge) => edge.id)
+  );
+}
+
+export function buildKnowledgeGraphFallbackKeyboardPositions(
+  nodes: Array<{ id: string; viewportX: number; viewportY: number }>
+) {
+  return new Map(
+    nodes.map((node) => [node.id, { x: node.viewportX, y: node.viewportY }])
+  );
+}
 
 export function resolveKnowledgeGraphKeyboardTarget({
   key,
@@ -294,7 +492,9 @@ export function reduceKnowledgeGraphSigmaNodeAttributes({
   relatedNodeIds,
   detailNodeIds,
   hoveredNodeId,
-  draggedNodeId
+  draggedNodeId,
+  presentationVisible = true,
+  ambientLabelVisible = false
 }: {
   nodeId: string;
   attributes: SigmaNodeDisplayAttributesLike;
@@ -304,6 +504,8 @@ export function reduceKnowledgeGraphSigmaNodeAttributes({
   detailNodeIds: Set<string>;
   hoveredNodeId: string | null;
   draggedNodeId?: string | null;
+  presentationVisible?: boolean;
+  ambientLabelVisible?: boolean;
 }): SigmaNodeDisplayAttributesLike {
   const focused = focusNodeId === nodeId;
   const related = relatedNodeIds.has(nodeId);
@@ -315,9 +517,11 @@ export function reduceKnowledgeGraphSigmaNodeAttributes({
 
   return {
     ...attributes,
-    label: focused || hovered || dragged || detailed ? node.title : "",
-    forceLabel: focused || hovered || dragged || detailed,
-    highlighted: focused || hovered || dragged || detailed,
+    hidden: !presentationVisible,
+    label:
+      focused || hovered || dragged || ambientLabelVisible ? node.title : "",
+    forceLabel: focused || hovered || dragged,
+    highlighted: focused || hovered || dragged,
     color: inNeighborhood
       ? baseColor
       : fadeKnowledgeGraphColor(baseColor, 0.34),
@@ -342,7 +546,8 @@ export function reduceKnowledgeGraphSigmaEdgeAttributes({
   focusNodeId,
   detailNodeIds,
   relatedNodeIds,
-  hoveredNodeId
+  hoveredNodeId,
+  presentationVisible = true
 }: {
   attributes: SigmaEdgeDisplayAttributesLike;
   edge: RenderedKnowledgeGraphEdge;
@@ -350,6 +555,7 @@ export function reduceKnowledgeGraphSigmaEdgeAttributes({
   detailNodeIds: Set<string>;
   relatedNodeIds: Set<string>;
   hoveredNodeId?: string | null;
+  presentationVisible?: boolean;
 }): SigmaEdgeDisplayAttributesLike {
   const touchesFocus =
     !!focusNodeId &&
@@ -382,6 +588,7 @@ export function reduceKnowledgeGraphSigmaEdgeAttributes({
 
   return {
     ...attributes,
+    hidden: !presentationVisible,
     color,
     size: touchesFocus
       ? attributes.size * 1.18
@@ -396,49 +603,22 @@ export function buildKnowledgeGraphFocusRings(
   edges: Array<Pick<RenderedKnowledgeGraphEdge, "source" | "target">>,
   focusNodeId: string
 ) {
-  const firstRing = new Set<string>();
-  const secondRing = new Set<string>();
-
-  for (const edge of edges) {
-    if (edge.source === focusNodeId) {
-      firstRing.add(edge.target);
-    } else if (edge.target === focusNodeId) {
-      firstRing.add(edge.source);
-    }
-  }
-
-  for (const edge of edges) {
-    if (edge.source !== focusNodeId && firstRing.has(edge.source)) {
-      secondRing.add(edge.target);
-    }
-    if (edge.target !== focusNodeId && firstRing.has(edge.target)) {
-      secondRing.add(edge.source);
-    }
-  }
-
-  secondRing.delete(focusNodeId);
-  firstRing.forEach((nodeId) => secondRing.delete(nodeId));
-
-  return {
-    firstRing: [...firstRing].sort(),
-    secondRing: [...secondRing].sort()
-  };
+  const nodeIds = Array.from(
+    new Set(edges.flatMap((edge) => [edge.source, edge.target]))
+  );
+  return buildKnowledgeGraphFocusRingsFromAdjacency(
+    buildKnowledgeGraphAdjacency(nodeIds, edges),
+    focusNodeId
+  );
 }
 
-export function buildKnowledgeGraphHopLevels(
+export type KnowledgeGraphAdjacency = ReadonlyMap<string, ReadonlySet<string>>;
+
+export function buildKnowledgeGraphAdjacency(
   nodeIds: string[],
-  edges: Array<Pick<RenderedKnowledgeGraphEdge, "source" | "target">>,
-  focusNodeId: string | null
-) {
-  if (!focusNodeId) {
-    return nodeIds.map(() => -1);
-  }
-
+  edges: Array<Pick<RenderedKnowledgeGraphEdge, "source" | "target">>
+): KnowledgeGraphAdjacency {
   const nodeIdSet = new Set(nodeIds);
-  if (!nodeIdSet.has(focusNodeId)) {
-    return nodeIds.map(() => -1);
-  }
-
   const neighbors = new Map<string, Set<string>>();
   for (const edge of edges) {
     if (!nodeIdSet.has(edge.source) || !nodeIdSet.has(edge.target)) {
@@ -450,6 +630,53 @@ export function buildKnowledgeGraphHopLevels(
     const targetSet = neighbors.get(edge.target) ?? new Set<string>();
     targetSet.add(edge.source);
     neighbors.set(edge.target, targetSet);
+  }
+  return neighbors;
+}
+
+export function buildKnowledgeGraphFocusRingsFromAdjacency(
+  adjacency: KnowledgeGraphAdjacency,
+  focusNodeId: string
+) {
+  const firstRing = new Set(adjacency.get(focusNodeId) ?? []);
+  const secondRing = new Set<string>();
+  for (const firstRingNodeId of firstRing) {
+    for (const neighborId of adjacency.get(firstRingNodeId) ?? []) {
+      if (neighborId !== focusNodeId && !firstRing.has(neighborId)) {
+        secondRing.add(neighborId);
+      }
+    }
+  }
+  return {
+    firstRing: [...firstRing].sort(),
+    secondRing: [...secondRing].sort()
+  };
+}
+
+export function buildKnowledgeGraphHopLevels(
+  nodeIds: string[],
+  edges: Array<Pick<RenderedKnowledgeGraphEdge, "source" | "target">>,
+  focusNodeId: string | null
+) {
+  return buildKnowledgeGraphHopLevelsFromAdjacency(
+    nodeIds,
+    buildKnowledgeGraphAdjacency(nodeIds, edges),
+    focusNodeId
+  );
+}
+
+export function buildKnowledgeGraphHopLevelsFromAdjacency(
+  nodeIds: string[],
+  neighbors: KnowledgeGraphAdjacency,
+  focusNodeId: string | null
+) {
+  if (!focusNodeId) {
+    return nodeIds.map(() => -1);
+  }
+
+  const nodeIdSet = new Set(nodeIds);
+  if (!nodeIdSet.has(focusNodeId)) {
+    return nodeIds.map(() => -1);
   }
 
   const levels = new Map<string, number>([[focusNodeId, 0]]);
@@ -537,15 +764,11 @@ export function buildKnowledgeGraphFocusCameraTarget({
   const ratio =
     neighborhoodPositions.length <= 1
       ? clamp(Math.max(currentRatio, 0.48), 0.38, 0.6)
-      : clamp(
-          (localSpan / globalSpan) * 3.2,
-          0.42,
-          Math.max(currentRatio, 1.12)
-        );
+      : clamp((localSpan / globalSpan) * 1.65, 0.38, 1.45);
 
   return {
-    x: focusPosition.x,
-    y: focusPosition.y,
+    x: (minX + maxX) / 2,
+    y: (minY + maxY) / 2,
     ratio,
     nodeIds: neighborhoodNodeIds
   };
@@ -593,7 +816,8 @@ export function buildKnowledgeGraphSigmaOverviewRatio(
   fittedOverviewRatio: number
 ) {
   return clamp(
-    fittedOverviewRatio * SIGMA_OVERVIEW_RATIO_SCALE,
+    SIGMA_OVERVIEW_RATIO_BASE +
+      fittedOverviewRatio * SIGMA_OVERVIEW_RATIO_SCALE,
     SIGMA_OVERVIEW_RATIO_MIN,
     SIGMA_OVERVIEW_RATIO_MAX
   );

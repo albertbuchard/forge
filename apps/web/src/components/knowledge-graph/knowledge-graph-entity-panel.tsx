@@ -34,7 +34,10 @@ function FocusRelationSection({
   }
 
   return (
-    <section className="grid gap-3 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+    <section
+      data-focus-family={group.family}
+      className="grid gap-3 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
@@ -61,6 +64,7 @@ function FocusRelationSection({
                 <button
                   key={item.id}
                   type="button"
+                  data-focus-item-id={item.id}
                   className="flex min-w-0 items-center justify-between gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] px-3 py-2 text-left transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
                   onClick={() => onSelectNode(item)}
                 >
@@ -132,12 +136,7 @@ export function KnowledgeGraphEntityPanel({
   );
 
   return (
-    <div
-      className={cn(
-        "grid gap-4",
-        className
-      )}
-    >
+    <div className={cn("grid gap-4", className)}>
       <div className="grid gap-4 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 shadow-[var(--ui-shadow-floating)]">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">

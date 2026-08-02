@@ -5,15 +5,23 @@ import {
 } from "@/components/knowledge-graph/knowledge-graph-layout-model";
 import {
   formatKnowledgeGraphFocusValue,
+  KNOWLEDGE_GRAPH_HIERARCHY_ORDER,
+  KNOWLEDGE_GRAPH_RELATION_LABELS,
   parseKnowledgeGraphFocusValue,
   type KnowledgeGraphEntityKind,
   type KnowledgeGraphNode,
+  type KnowledgeGraphPayload,
   type KnowledgeGraphQuery,
   type KnowledgeGraphRelationKind,
   type KnowledgeGraphView
 } from "@/lib/knowledge-graph-types";
-import { buildKnowledgeGraphFocusNodeId } from "@/lib/knowledge-graph";
+import {
+  buildKnowledgeGraphFocusNodeId,
+  filterKnowledgeGraphData,
+  selectKnowledgeGraphVisibleNodeIds
+} from "@/lib/knowledge-graph";
 import { getEntityNotesHref } from "@/lib/note-helpers";
+import type { KnowledgeGraphDisplayMode } from "@/lib/knowledge-graph-visibility-policy";
 import type { UserSummary } from "@/lib/types";
 
 export const DEFAULT_KNOWLEDGE_GRAPH_MAX_NODES = 2000;
@@ -23,12 +31,16 @@ const KNOWLEDGE_GRAPH_PHYSICS_STORAGE_KEY = "forge.knowledge-graph.physics";
 
 export type KnowledgeGraphPageState = {
   selectedView: KnowledgeGraphView;
+  displayMode: KnowledgeGraphDisplayMode;
   focusNodeId: string | null;
   selectedKinds: KnowledgeGraphEntityKind[];
   selectedRelations: KnowledgeGraphRelationKind[];
+  unavailableKinds: string[];
+  unavailableRelations: string[];
   selectedTags: string[];
   selectedOwners: string[];
   showHierarchyCrossLinks: boolean;
+  showAllVisibleEdges: boolean;
   queryText: string;
   updatedFrom: string | null;
   updatedTo: string | null;
@@ -204,18 +216,30 @@ export function parseKnowledgeGraphPageState(searchParamsKey: string) {
   const params = new URLSearchParams(searchParamsKey);
   const selectedView: KnowledgeGraphView =
     params.get("view") === "hierarchy" ? "hierarchy" : "graph";
+  const displayMode: KnowledgeGraphDisplayMode =
+    params.get("display") === "all" ? "all" : "default";
   const focusSpec = parseKnowledgeGraphFocusValue(params.get("focus"));
   const focusNodeId = focusSpec
     ? buildKnowledgeGraphFocusNodeId(focusSpec.entityType, focusSpec.entityId)
     : null;
-  const selectedKinds = readKnowledgeGraphMultiParam(
-    params,
-    "entityKind"
-  ) as KnowledgeGraphEntityKind[];
-  const selectedRelations = readKnowledgeGraphMultiParam(
+  const requestedKinds = readKnowledgeGraphMultiParam(params, "entityKind");
+  const selectedKinds = requestedKinds.filter(
+    (value): value is KnowledgeGraphEntityKind =>
+      KNOWLEDGE_GRAPH_HIERARCHY_ORDER.includes(
+        value as KnowledgeGraphEntityKind
+      )
+  );
+  const requestedRelations = readKnowledgeGraphMultiParam(
     params,
     "relationKind"
-  ) as KnowledgeGraphRelationKind[];
+  );
+  const selectedRelations = requestedRelations.filter(
+    (value): value is KnowledgeGraphRelationKind =>
+      Object.prototype.hasOwnProperty.call(
+        KNOWLEDGE_GRAPH_RELATION_LABELS,
+        value
+      )
+  );
   const selectedTags = readKnowledgeGraphMultiParam(params, "tag");
   const selectedOwners = readKnowledgeGraphMultiParam(params, "owner");
   const queryText = params.get("q") ?? "";
@@ -233,12 +257,21 @@ export function parseKnowledgeGraphPageState(searchParamsKey: string) {
 
   return {
     selectedView,
+    displayMode,
     focusNodeId,
     selectedKinds,
     selectedRelations,
+    unavailableKinds: requestedKinds.filter(
+      (value) => !selectedKinds.includes(value as KnowledgeGraphEntityKind)
+    ),
+    unavailableRelations: requestedRelations.filter(
+      (value) =>
+        !selectedRelations.includes(value as KnowledgeGraphRelationKind)
+    ),
     selectedTags,
     selectedOwners,
     showHierarchyCrossLinks: params.get("cross") === "1",
+    showAllVisibleEdges: params.get("edges") === "all",
     queryText,
     updatedFrom,
     updatedTo,
@@ -260,6 +293,54 @@ export function buildKnowledgeGraphQueryFromPageState(
     limit: state.maxNodes,
     focusNodeId: state.focusNodeId
   } satisfies KnowledgeGraphQuery;
+}
+
+export function buildOptimisticKnowledgeGraphPayload(
+  source: KnowledgeGraphPayload,
+  query: KnowledgeGraphQuery
+): KnowledgeGraphPayload {
+  const filtered = filterKnowledgeGraphData(source, query);
+  const visibleNodeIds = selectKnowledgeGraphVisibleNodeIds({
+    nodes: filtered.nodes,
+    edges: filtered.edges,
+    limit: query.limit,
+    focusNodeId: query.focusNodeId
+  });
+  const nodes = filtered.nodes.filter((node) => visibleNodeIds.has(node.id));
+  const edges = filtered.edges.filter(
+    (edge) =>
+      visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)
+  );
+  const kinds = nodes.reduce<Record<string, number>>((counts, node) => {
+    counts[node.entityKind] = (counts[node.entityKind] ?? 0) + 1;
+    return counts;
+  }, {});
+  const relationKinds = edges.reduce<Record<string, number>>(
+    (counts, edge) => {
+      counts[edge.relationKind] = (counts[edge.relationKind] ?? 0) + 1;
+      return counts;
+    },
+    {}
+  );
+
+  return {
+    ...source,
+    nodes,
+    edges,
+    counts: {
+      ...source.counts,
+      nodeCount: nodes.length,
+      edgeCount: edges.length,
+      filteredNodeCount: filtered.nodes.length,
+      filteredEdgeCount: filtered.edges.length,
+      kinds,
+      relationKinds,
+      limited:
+        source.counts.limited ||
+        nodes.length < filtered.nodes.length ||
+        edges.length < filtered.edges.length
+    }
+  };
 }
 
 export function writeKnowledgeGraphFocusParam(

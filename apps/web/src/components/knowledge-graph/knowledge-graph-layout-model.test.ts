@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   advanceKnowledgeGraphFocusSources,
+  advanceKnowledgeGraphSettlement,
   computeKnowledgeGraphCentroid,
   computeKnowledgeGraphFocusPressure,
   DEFAULT_KNOWLEDGE_GRAPH_PHYSICS_SETTINGS,
@@ -14,15 +15,137 @@ import {
   KNOWLEDGE_GRAPH_MIN_EDGE_SPRING_STRENGTH,
   getKnowledgeGraphSpringReduction,
   getKnowledgeGraphHopAttenuation,
+  getKnowledgeGraphTransferBuffers,
+  normalizeKnowledgeGraphSettlementDisplacement,
   reconcileKnowledgeGraphFocusSources,
   resolveKnowledgeGraphFocusEnterDurationMs,
   resolveKnowledgeGraphFocusExitDurationMs,
   sanitizeKnowledgeGraphPhysicsSettings,
+  shouldResumeKnowledgeGraphLayout,
+  resolveKnowledgeGraphLayoutPublication,
+  shouldPublishKnowledgeGraphPositions,
   stepCriticallyDampedValue,
   type FocusSourceState
 } from "@/components/knowledge-graph/knowledge-graph-layout-model";
 
 describe("knowledge graph layout model", () => {
+  it("publishes final positions and stats before pausing a settled loop", () => {
+    expect(
+      resolveKnowledgeGraphLayoutPublication({
+        positionsDue: true,
+        settlementEnabled: true,
+        settled: true
+      })
+    ).toEqual({
+      publishPositions: true,
+      publishFinalStats: true,
+      scheduleNext: false
+    });
+    expect(
+      resolveKnowledgeGraphLayoutPublication({
+        positionsDue: false,
+        settlementEnabled: true,
+        settled: true
+      })
+    ).toEqual({
+      publishPositions: false,
+      publishFinalStats: false,
+      scheduleNext: true
+    });
+  });
+
+  it("resumes only for graph-affecting activity, never camera motion", () => {
+    for (const activity of [
+      "graph-change",
+      "focus",
+      "drag",
+      "physics",
+      "nudge",
+      "recenter"
+    ] as const) {
+      expect(shouldResumeKnowledgeGraphLayout(activity)).toBe(true);
+    }
+    expect(shouldResumeKnowledgeGraphLayout("camera")).toBe(false);
+  });
+
+  it("transfers worker arrays only when optimized transfer mode is enabled", () => {
+    const x = new Float32Array([1, 2]);
+    const y = new Float32Array([3, 4]);
+    expect(getKnowledgeGraphTransferBuffers(true, [x, y])).toEqual([
+      x.buffer,
+      y.buffer
+    ]);
+    expect(getKnowledgeGraphTransferBuffers(false, [x, y])).toEqual([]);
+  });
+
+  it("normalizes settlement displacement across batched simulation ticks", () => {
+    expect(
+      normalizeKnowledgeGraphSettlementDisplacement(0.0024, 4)
+    ).toBeCloseTo(0.0006);
+    expect(
+      normalizeKnowledgeGraphSettlementDisplacement(0.0024, 0)
+    ).toBeCloseTo(0.0024);
+  });
+
+  it("settles only after a continuous low-displacement window and resets on pressure", () => {
+    const candidate = advanceKnowledgeGraphSettlement({
+      normalizedDisplacement: 0.001,
+      candidateSinceMs: null,
+      nowMs: 100
+    });
+    expect(candidate).toEqual({ candidateSinceMs: 100, settled: false });
+    expect(
+      advanceKnowledgeGraphSettlement({
+        normalizedDisplacement: 0.0015,
+        candidateSinceMs: candidate.candidateSinceMs,
+        nowMs: 599
+      }).settled
+    ).toBe(false);
+    expect(
+      advanceKnowledgeGraphSettlement({
+        normalizedDisplacement: 0.0015,
+        candidateSinceMs: candidate.candidateSinceMs,
+        nowMs: 600
+      }).settled
+    ).toBe(true);
+    expect(
+      advanceKnowledgeGraphSettlement({
+        normalizedDisplacement: 0.003,
+        candidateSinceMs: candidate.candidateSinceMs,
+        nowMs: 610
+      })
+    ).toEqual({ candidateSinceMs: null, settled: false });
+  });
+  it("publishes after the configured tick interval even when a loop skips a multiple", () => {
+    expect(
+      shouldPublishKnowledgeGraphPositions({
+        tick: 3,
+        lastPublishedTick: 0,
+        intervalTicks: 4
+      })
+    ).toBe(false);
+    expect(
+      shouldPublishKnowledgeGraphPositions({
+        tick: 5,
+        lastPublishedTick: 0,
+        intervalTicks: 4
+      })
+    ).toBe(true);
+    expect(
+      shouldPublishKnowledgeGraphPositions({
+        tick: 8,
+        lastPublishedTick: 5,
+        intervalTicks: 4
+      })
+    ).toBe(false);
+    expect(
+      shouldPublishKnowledgeGraphPositions({
+        tick: 9,
+        lastPublishedTick: 5,
+        intervalTicks: 4
+      })
+    ).toBe(true);
+  });
   it("allows the stronger slider ceiling values without clipping them below the UI range", () => {
     const settings = sanitizeKnowledgeGraphPhysicsSettings({
       focusRepulsion: KNOWLEDGE_GRAPH_MAX_FOCUS_REPULSION,
@@ -42,9 +165,13 @@ describe("knowledge graph layout model", () => {
     expect(settings.focusSpringReductionDiffusion).toBe(
       KNOWLEDGE_GRAPH_MAX_FOCUS_SPRING_DIFFUSION
     );
-    expect(settings.edgeSpringStrength).toBe(KNOWLEDGE_GRAPH_MAX_EDGE_SPRING_STRENGTH);
+    expect(settings.edgeSpringStrength).toBe(
+      KNOWLEDGE_GRAPH_MAX_EDGE_SPRING_STRENGTH
+    );
     expect(settings.gravityStrength).toBe(KNOWLEDGE_GRAPH_MAX_GRAVITY_STRENGTH);
-    expect(settings.focusShellSpacing).toBe(KNOWLEDGE_GRAPH_MAX_FOCUS_SHELL_SPACING);
+    expect(settings.focusShellSpacing).toBe(
+      KNOWLEDGE_GRAPH_MAX_FOCUS_SHELL_SPACING
+    );
   });
 
   it("accepts very loose spread settings without clamping away the user controls", () => {
@@ -54,9 +181,13 @@ describe("knowledge graph layout model", () => {
       focusShellSpacing: KNOWLEDGE_GRAPH_MAX_FOCUS_SHELL_SPACING
     });
 
-    expect(settings.edgeSpringStrength).toBe(KNOWLEDGE_GRAPH_MIN_EDGE_SPRING_STRENGTH);
+    expect(settings.edgeSpringStrength).toBe(
+      KNOWLEDGE_GRAPH_MIN_EDGE_SPRING_STRENGTH
+    );
     expect(settings.gravityStrength).toBe(0);
-    expect(settings.focusShellSpacing).toBe(KNOWLEDGE_GRAPH_MAX_FOCUS_SHELL_SPACING);
+    expect(settings.focusShellSpacing).toBe(
+      KNOWLEDGE_GRAPH_MAX_FOCUS_SHELL_SPACING
+    );
   });
 
   it("softens spring constants most strongly at the focus and then falls off by hop distance", () => {
@@ -192,7 +323,13 @@ describe("knowledge graph layout model", () => {
     }
 
     expect(sources).toHaveLength(5);
-    expect(sources.map((source) => source.nodeId)).toEqual(["e", "d", "c", "b", "a"]);
+    expect(sources.map((source) => source.nodeId)).toEqual([
+      "e",
+      "d",
+      "c",
+      "b",
+      "a"
+    ]);
 
     sources = reconcileKnowledgeGraphFocusSources({
       sources,

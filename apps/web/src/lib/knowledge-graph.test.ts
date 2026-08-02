@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   buildKnowledgeGraphDatasetSignature,
-  buildRenderedKnowledgeGraphEdges,
+  buildKnowledgeGraphFocusIndex,
   buildKnowledgeGraphFocusPayload,
+  buildKnowledgeGraphFocusPayloadFromIndex,
   buildKnowledgeGraphHierarchy,
+  buildRenderedKnowledgeGraphEdges,
   filterKnowledgeGraphData,
   selectKnowledgeGraphVisibleNodeIds
 } from "@/lib/knowledge-graph";
@@ -80,7 +82,8 @@ const wikiNode: KnowledgeGraphNode = {
   title: "Architecture Notes",
   subtitle: "knowledge-graph",
   description: "Wiki page attached to the goal",
-  searchText: "Deep implementation notes mention a hidden topological invariant.",
+  searchText:
+    "Deep implementation notes mention a hidden topological invariant.",
   href: "/wiki/page/architecture-notes",
   graphHref: "/knowledge-graph?focus=note%3Anote-1",
   iconName: "StickyNote",
@@ -137,7 +140,9 @@ describe("knowledge graph helpers", () => {
 
   it("resolves canonical graph hrefs for core entity types", () => {
     expect(getKnowledgeGraphEntityHref("goal", "goal-1")).toBe("/goals/goal-1");
-    expect(getKnowledgeGraphEntityHref("tag", "tag-1")).toBe("/tags?focus=tag-1");
+    expect(getKnowledgeGraphEntityHref("tag", "tag-1")).toBe(
+      "/tags?focus=tag-1"
+    );
     expect(getKnowledgeGraphEntityHref("habit", "habit-1")).toBe(
       "/habits?focus=habit-1"
     );
@@ -151,9 +156,9 @@ describe("knowledge graph helpers", () => {
     expect(getKnowledgeGraphEntityHref("workbench_surface", "today")).toBe(
       "/workbench?surface=today"
     );
-    expect(buildKnowledgeGraphFocusHref("task", "task-9", { view: "hierarchy" })).toBe(
-      "/knowledge-graph?focus=task%3Atask-9&view=hierarchy"
-    );
+    expect(
+      buildKnowledgeGraphFocusHref("task", "task-9", { view: "hierarchy" })
+    ).toBe("/knowledge-graph?focus=task%3Atask-9&view=hierarchy");
   });
 
   it("builds deterministic hierarchy layers and marks backward edges as secondary", () => {
@@ -167,12 +172,12 @@ describe("knowledge graph helpers", () => {
       projectNode.id,
       wikiNode.id
     ]);
-    expect(hierarchy.edges.find((edge) => edge.id === "goal-project")?.secondary).toBe(
-      false
-    );
-    expect(hierarchy.edges.find((edge) => edge.id === "wiki-goal")?.secondary).toBe(
-      true
-    );
+    expect(
+      hierarchy.edges.find((edge) => edge.id === "goal-project")?.secondary
+    ).toBe(false);
+    expect(
+      hierarchy.edges.find((edge) => edge.id === "wiki-goal")?.secondary
+    ).toBe(true);
   });
 
   it("builds a focused neighborhood with grouped first-ring relations", () => {
@@ -193,6 +198,84 @@ describe("knowledge graph helpers", () => {
     ]);
     expect(focus.relationCounts.structural).toBe(1);
     expect(focus.relationCounts.contextual).toBe(1);
+  });
+
+  it("counts parallel second-ring families without rescanning unrelated edges", () => {
+    const taskNode = {
+      ...projectNode,
+      id: "task:task-1",
+      entityType: "task" as const,
+      entityId: "task-1",
+      entityKind: "task" as const,
+      title: "Second ring task"
+    } satisfies KnowledgeGraphNode;
+    const focus = buildKnowledgeGraphFocusPayload(
+      [goalNode, projectNode, wikiNode, taskNode],
+      [
+        ...edges,
+        {
+          id: "project-task-structural",
+          source: projectNode.id,
+          target: taskNode.id,
+          relationKind: "project_task",
+          family: "structural",
+          label: "Contains task",
+          strength: 0.9,
+          directional: true,
+          structural: true
+        },
+        {
+          id: "project-task-contextual",
+          source: projectNode.id,
+          target: taskNode.id,
+          relationKind: "entity_link",
+          family: "contextual",
+          label: "References task",
+          strength: 0.6,
+          directional: true,
+          structural: false
+        },
+        {
+          id: "project-wiki-first-ring",
+          source: projectNode.id,
+          target: wikiNode.id,
+          relationKind: "entity_link",
+          family: "contextual",
+          label: "First-ring peer",
+          strength: 0.5,
+          directional: true,
+          structural: false
+        }
+      ],
+      goalNode.id
+    );
+
+    expect(focus.secondRingCounts).toEqual({
+      structural: 1,
+      contextual: 1,
+      taxonomy: 0,
+      workspace: 0
+    });
+  });
+
+  it("reuses one focus index across node selections", () => {
+    const index = buildKnowledgeGraphFocusIndex(
+      [goalNode, projectNode, wikiNode],
+      edges
+    );
+
+    expect(
+      buildKnowledgeGraphFocusPayloadFromIndex(
+        index,
+        goalNode.id
+      ).firstRingNodes.map((node) => node.id)
+    ).toEqual([wikiNode.id, projectNode.id]);
+    expect(
+      buildKnowledgeGraphFocusPayloadFromIndex(
+        index,
+        projectNode.id
+      ).firstRingNodes.map((node) => node.id)
+    ).toEqual([goalNode.id]);
   });
 
   it("filters graph nodes by free text and tags before relation pruning", () => {
@@ -358,15 +441,17 @@ describe("knowledge graph helpers", () => {
       edges
     );
     const secondSignature = buildKnowledgeGraphDatasetSignature(
-      [
-        { ...goalNode },
-        { ...projectNode },
-        { ...wikiNode }
-      ],
+      [{ ...goalNode }, { ...projectNode }, { ...wikiNode }],
       edges.map((edge) => ({ ...edge }))
+    );
+    const changedSignature = buildKnowledgeGraphDatasetSignature(
+      [{ ...goalNode, title: "Changed goal" }, projectNode, wikiNode],
+      edges
     );
 
     expect(secondSignature).toBe(firstSignature);
+    expect(changedSignature).not.toBe(firstSignature);
+    expect(firstSignature.length).toBeLessThan(64);
   });
 
   it("keeps graph helper performance within a generous regression budget", () => {

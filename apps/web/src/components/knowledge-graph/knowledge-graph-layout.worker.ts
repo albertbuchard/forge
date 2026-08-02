@@ -4,21 +4,29 @@ import type {
 } from "./knowledge-graph-layout-protocol";
 import {
   advanceKnowledgeGraphFocusSources,
+  advanceKnowledgeGraphSettlement,
   buildKnowledgeGraphFocusSourceSnapshots,
   computeKnowledgeGraphCentroid,
   computeKnowledgeGraphFocusPressure,
   DEFAULT_KNOWLEDGE_GRAPH_PHYSICS_SETTINGS,
   getKnowledgeGraphSpringReduction,
+  getKnowledgeGraphTransferBuffers,
+  normalizeKnowledgeGraphSettlementDisplacement,
   reconcileKnowledgeGraphFocusSources,
   resolveKnowledgeGraphFocusEnterDurationMs,
   resolveKnowledgeGraphFocusExitDurationMs,
   sanitizeKnowledgeGraphPhysicsSettings,
+  shouldResumeKnowledgeGraphLayout,
+  resolveKnowledgeGraphLayoutPublication,
+  shouldPublishKnowledgeGraphPositions,
+  type KnowledgeGraphLayoutActivity,
   type FocusSourceState,
   type KnowledgeGraphPhysicsSettings,
   type KnowledgeGraphSimulationPhase
 } from "./knowledge-graph-layout-model";
 
 type LayoutState = {
+  generation: number;
   nodeIds: string[];
   nodeIndexById: Map<string, number>;
   x: Float32Array;
@@ -50,6 +58,14 @@ type LayoutState = {
   tick: number;
   accumulatorSeconds: number;
   lastFrameTimeMs: number;
+  lastPublishedTick: number;
+  positionPublishIntervalTicks: number;
+  transferBuffers: boolean;
+  lastPublishedX: Float32Array;
+  lastPublishedY: Float32Array;
+  settledCandidateSinceMs: number | null;
+  settled: boolean;
+  reducedMotion: boolean;
 };
 
 type QuadNode = {
@@ -61,7 +77,9 @@ type QuadNode = {
   massX: number;
   massY: number;
   point: number;
-  children: [QuadNode | null, QuadNode | null, QuadNode | null, QuadNode | null] | null;
+  children:
+    | [QuadNode | null, QuadNode | null, QuadNode | null, QuadNode | null]
+    | null;
 };
 
 const THETA = 0.55;
@@ -75,7 +93,11 @@ const GRAVITY_K = 0.18;
 const CENTROID_RESTORE_K = 0.09;
 const FOCUS_REST_GAIN = 0.35;
 const MAX_SPEED = 10.0;
-const PUBLISH_POSITIONS_EVERY_TICKS = 1;
+// The simulation remains at 120 Hz, but visual consumers do not benefit from
+// receiving a complete graph snapshot on every display-loop pass. Four ticks
+// gives the renderer a stable 30 Hz position stream while preserving the
+// higher-frequency integration used by the force model.
+const DEFAULT_PUBLISH_POSITIONS_INTERVAL_TICKS = 4;
 const PUBLISH_STATS_EVERY_TICKS = 12;
 const COLLISION_PADDING = 0.16;
 const FOCUS_SHELL_BASE_RADIUS = 1.4;
@@ -96,6 +118,18 @@ function clearLoop() {
 function scheduleLoop() {
   clearLoop();
   loopHandle = self.setTimeout(runLoop, 16) as unknown as number;
+}
+
+function resumeLoop(activity: KnowledgeGraphLayoutActivity) {
+  if (!state || !shouldResumeKnowledgeGraphLayout(activity)) return;
+  state.settled = false;
+  state.settledCandidateSinceMs = null;
+  state.lastPublishedX.set(state.x);
+  state.lastPublishedY.set(state.y);
+  state.lastFrameTimeMs = performance.now();
+  if (loopHandle === null) {
+    scheduleLoop();
+  }
 }
 
 function clamp(value: number, minimum: number, maximum: number) {
@@ -137,7 +171,12 @@ function criticalDampedForce({
   };
 }
 
-function createQuad(minX: number, minY: number, maxX: number, maxY: number): QuadNode {
+function createQuad(
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number
+): QuadNode {
   return {
     minX,
     minY,
@@ -187,7 +226,11 @@ function insertPoint(current: LayoutState, node: QuadNode, index: number) {
   if (node.point !== -1) {
     const existing = node.point;
     node.point = -1;
-    const existingQuadrant = quadrantFor(node, current.x[existing]!, current.y[existing]!);
+    const existingQuadrant = quadrantFor(
+      node,
+      current.x[existing]!,
+      current.y[existing]!
+    );
     insertPoint(current, children[existingQuadrant]!, existing);
   }
 
@@ -195,7 +238,10 @@ function insertPoint(current: LayoutState, node: QuadNode, index: number) {
   insertPoint(current, children[nextQuadrant]!, index);
 }
 
-function accumulateQuad(current: LayoutState, node: QuadNode): { mass: number; x: number; y: number } {
+function accumulateQuad(
+  current: LayoutState,
+  node: QuadNode
+): { mass: number; x: number; y: number } {
   if (!node.children) {
     if (node.point === -1) {
       node.mass = 0;
@@ -206,7 +252,10 @@ function accumulateQuad(current: LayoutState, node: QuadNode): { mass: number; x
     const pointIndex = node.point;
     const effectiveMass =
       current.mass[pointIndex]! *
-      (1 + current.focusPressure[pointIndex]! * current.physics.focusRepulsion * 0.35);
+      (1 +
+        current.focusPressure[pointIndex]! *
+          current.physics.focusRepulsion *
+          0.35);
     const x = current.x[pointIndex]!;
     const y = current.y[pointIndex]!;
     node.mass = effectiveMass;
@@ -258,7 +307,12 @@ function buildQuadtree(current: LayoutState) {
 
   const span = Math.max(maxX - minX, maxY - minY, 1);
   const padding = span * 0.1 + 1;
-  const root = createQuad(minX - padding, minY - padding, maxX + padding, maxY + padding);
+  const root = createQuad(
+    minX - padding,
+    minY - padding,
+    maxX + padding,
+    maxY + padding
+  );
 
   for (let index = 0; index < current.x.length; index += 1) {
     insertPoint(current, root, index);
@@ -283,8 +337,11 @@ function applyRepulsion(current: LayoutState, quad: QuadNode, index: number) {
   const size = Math.max(quad.maxX - quad.minX, quad.maxY - quad.minY);
 
   if (!quad.children || size / distance < THETA) {
-    const stressGain = 1 + current.focusPressure[index]! * current.physics.focusRepulsion;
-    const force = (REPULSION_K * stressGain * current.mass[index]! * quad.mass) / distanceSq;
+    const stressGain =
+      1 + current.focusPressure[index]! * current.physics.focusRepulsion;
+    const force =
+      (REPULSION_K * stressGain * current.mass[index]! * quad.mass) /
+      distanceSq;
     current.fx[index]! += (dx / distance) * force;
     current.fy[index]! += (dy / distance) * force;
     return;
@@ -303,7 +360,11 @@ function applySpringAttraction(current: LayoutState) {
   const primaryStrength = primarySource?.strength ?? 0;
   const hopLevels = primarySource?.hopLevels;
 
-  for (let edgeIndex = 0; edgeIndex < current.edgeSource.length; edgeIndex += 1) {
+  for (
+    let edgeIndex = 0;
+    edgeIndex < current.edgeSource.length;
+    edgeIndex += 1
+  ) {
     const source = current.edgeSource[edgeIndex]!;
     const target = current.edgeTarget[edgeIndex]!;
     const dx = current.x[target]! - current.x[source]!;
@@ -326,7 +387,9 @@ function applySpringAttraction(current: LayoutState) {
           : Math.min(sourceHopLevel, targetHopLevel);
     const restLength =
       current.edgeRestLength0[edgeIndex]! *
-      (1 + averageStress * (FOCUS_REST_GAIN + (current.physics.focusRepulsion - 1) * 0.16));
+      (1 +
+        averageStress *
+          (FOCUS_REST_GAIN + (current.physics.focusRepulsion - 1) * 0.16));
     const stretch = distance - restLength;
     const springReduction =
       primaryStrength > 0
@@ -431,18 +494,18 @@ function applyFocusShellForces(current: LayoutState, focusGain: number) {
     const ux = dx / distance;
     const uy = dy / distance;
     const desiredRadius =
-      (FOCUS_SHELL_BASE_RADIUS * current.physics.focusShellSpacing) +
+      FOCUS_SHELL_BASE_RADIUS * current.physics.focusShellSpacing +
       (Math.min(hopLevel, 6) - 1) *
-        (
-          FOCUS_SHELL_RADIUS_STEP *
+        (FOCUS_SHELL_RADIUS_STEP *
           current.physics.focusShellSpacing *
-          (0.92 + current.physics.focusDiffusion * 0.24)
-        ) +
-      current.focusPressure[index]! * (0.42 + current.physics.focusRepulsion * 0.12);
+          (0.92 + current.physics.focusDiffusion * 0.24)) +
+      current.focusPressure[index]! *
+        (0.42 + current.physics.focusRepulsion * 0.12);
     const targetX = focusX + ux * desiredRadius;
     const targetY = focusY + uy * desiredRadius;
     const shellStrength =
-      ((FOCUS_SHELL_STIFFNESS * (0.92 + current.physics.focusDiffusion * 0.18)) /
+      ((FOCUS_SHELL_STIFFNESS *
+        (0.92 + current.physics.focusDiffusion * 0.18)) /
         Math.max(1, hopLevel)) *
       focusGain;
     const shellForce = criticalDampedForce({
@@ -490,7 +553,10 @@ function applyCollision(current: LayoutState) {
             const dx = current.x[right]! - current.x[left]!;
             const dy = current.y[right]! - current.y[left]!;
             const distance = Math.max(0.001, Math.hypot(dx, dy));
-            const minimum = current.radius[left]! + current.radius[right]! + COLLISION_PADDING;
+            const minimum =
+              current.radius[left]! +
+              current.radius[right]! +
+              COLLISION_PADDING;
             if (distance >= minimum) {
               continue;
             }
@@ -519,8 +585,12 @@ function integrate(current: LayoutState) {
       current.vy[index] = 0;
       continue;
     }
-    current.vx[index]! = (current.vx[index]! + (current.fx[index]! / current.mass[index]!) * DT) * dragFactor;
-    current.vy[index]! = (current.vy[index]! + (current.fy[index]! / current.mass[index]!) * DT) * dragFactor;
+    current.vx[index]! =
+      (current.vx[index]! + (current.fx[index]! / current.mass[index]!) * DT) *
+      dragFactor;
+    current.vy[index]! =
+      (current.vy[index]! + (current.fy[index]! / current.mass[index]!) * DT) *
+      dragFactor;
     const speed = Math.hypot(current.vx[index]!, current.vy[index]!);
     if (speed > MAX_SPEED) {
       const scale = MAX_SPEED / speed;
@@ -612,39 +682,110 @@ function publishPositions(current: LayoutState) {
   const y = current.y.slice();
   const message: KnowledgeGraphLayoutWorkerResponse = {
     type: "positions",
+    generation: current.generation,
     x,
     y,
     tick: current.tick
   };
-  self.postMessage(message);
+  const transferBuffers = getKnowledgeGraphTransferBuffers(
+    current.transferBuffers,
+    [x, y]
+  );
+  if (transferBuffers.length > 0) {
+    (
+      self.postMessage as unknown as (
+        value: KnowledgeGraphLayoutWorkerResponse,
+        transfer: Transferable[]
+      ) => void
+    )(message, transferBuffers);
+  } else {
+    self.postMessage(message);
+  }
 }
 
 function publishStats(current: LayoutState) {
   const message: KnowledgeGraphLayoutWorkerResponse = {
     type: "stats",
+    generation: current.generation,
     tick: current.tick,
     phase: current.phase,
     primaryFocusedNodeId:
-      current.focusIndex >= 0 ? current.nodeIds[current.focusIndex] ?? null : null,
+      current.focusIndex >= 0
+        ? (current.nodeIds[current.focusIndex] ?? null)
+        : null,
     focusSources: buildKnowledgeGraphFocusSourceSnapshots(current.focusSources),
     focusPressure: current.focusPressure.slice(),
     centroid: computeKnowledgeGraphCentroid({
       x: current.x,
       y: current.y,
       mass: current.mass
-    })
+    }),
+    settled: current.settled
   };
-  self.postMessage(message);
+  const focusPressure = message.focusPressure;
+  const transferBuffers = getKnowledgeGraphTransferBuffers(
+    current.transferBuffers,
+    [focusPressure]
+  );
+  if (transferBuffers.length > 0) {
+    (
+      self.postMessage as unknown as (
+        value: KnowledgeGraphLayoutWorkerResponse,
+        transfer: Transferable[]
+      ) => void
+    )(message, transferBuffers);
+  } else {
+    self.postMessage(message);
+  }
+}
+
+function updateSettlement(current: LayoutState, nowMs: number) {
+  let squaredDisplacement = 0;
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (let index = 0; index < current.x.length; index += 1) {
+    const x = current.x[index]!;
+    const y = current.y[index]!;
+    squaredDisplacement +=
+      (x - current.lastPublishedX[index]!) ** 2 +
+      (y - current.lastPublishedY[index]!) ** 2;
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  const graphDiagonal = Math.max(Math.hypot(maxX - minX, maxY - minY), 1);
+  const normalizedDisplacement = normalizeKnowledgeGraphSettlementDisplacement(
+    Math.sqrt(squaredDisplacement / Math.max(current.x.length, 1)) /
+      graphDiagonal,
+    current.tick - current.lastPublishedTick
+  );
+  current.lastPublishedX.set(current.x);
+  current.lastPublishedY.set(current.y);
+  const next = advanceKnowledgeGraphSettlement({
+    normalizedDisplacement,
+    candidateSinceMs: current.settledCandidateSinceMs,
+    nowMs
+  });
+  current.settledCandidateSinceMs = next.candidateSinceMs;
+  current.settled = next.settled;
 }
 
 function runLoop() {
+  loopHandle = null;
   if (!state) {
     clearLoop();
     return;
   }
 
   const nowMs = performance.now();
-  const deltaSeconds = clamp((nowMs - state.lastFrameTimeMs) / 1000, 0, DT * MAX_FRAME_CATCHUP);
+  const deltaSeconds = clamp(
+    (nowMs - state.lastFrameTimeMs) / 1000,
+    0,
+    DT * MAX_FRAME_CATCHUP
+  );
   state.lastFrameTimeMs = nowMs;
   state.accumulatorSeconds += deltaSeconds;
 
@@ -655,8 +796,33 @@ function runLoop() {
     steps += 1;
   }
 
-  if (steps > 0 && state.tick % PUBLISH_POSITIONS_EVERY_TICKS === 0) {
+  const positionsDue =
+    steps > 0 &&
+    shouldPublishKnowledgeGraphPositions({
+      tick: state.tick,
+      lastPublishedTick: state.lastPublishedTick,
+      intervalTicks: state.positionPublishIntervalTicks
+    });
+  if (positionsDue) {
+    if (state.transferBuffers) {
+      updateSettlement(state, nowMs);
+    }
+  }
+  const publication = resolveKnowledgeGraphLayoutPublication({
+    positionsDue,
+    settlementEnabled: state.transferBuffers,
+    settled: state.settled
+  });
+  if (publication.publishPositions) {
     publishPositions(state);
+    state.lastPublishedTick = state.tick;
+  }
+  if (publication.publishFinalStats) {
+    publishStats(state);
+  }
+  if (!publication.scheduleNext) {
+    clearLoop();
+    return;
   }
 
   if (steps > 0 && state.tick % PUBLISH_STATS_EVERY_TICKS === 0) {
@@ -666,7 +832,10 @@ function runLoop() {
   scheduleLoop();
 }
 
-function buildAdjacency(edges: { source: number; target: number; weight: number }[], nodeCount: number) {
+function buildAdjacency(
+  edges: { source: number; target: number; weight: number }[],
+  nodeCount: number
+) {
   const degree = new Uint32Array(nodeCount);
   for (const edge of edges) {
     degree[edge.source]! += 1;
@@ -699,10 +868,13 @@ function buildAdjacency(edges: { source: number; target: number; weight: number 
   };
 }
 
-function initializeState(message: Extract<KnowledgeGraphLayoutWorkerMessage, { type: "init-graph" }>) {
+function initializeState(
+  message: Extract<KnowledgeGraphLayoutWorkerMessage, { type: "init-graph" }>
+) {
   const nodeIds = message.nodes.map((node) => node.id);
   const adjacency = buildAdjacency(message.edges, message.nodes.length);
   state = {
+    generation: message.generation,
     nodeIds,
     nodeIndexById: new Map(nodeIds.map((id, index) => [id, index])),
     x: new Float32Array(message.nodes.map((node) => node.x)),
@@ -712,7 +884,9 @@ function initializeState(message: Extract<KnowledgeGraphLayoutWorkerMessage, { t
     fx: new Float32Array(message.nodes.length),
     fy: new Float32Array(message.nodes.length),
     mass: new Float32Array(message.nodes.map((node) => Math.max(1, node.mass))),
-    radius: new Float32Array(message.nodes.map((node) => Math.max(0.35, node.size * 0.12))),
+    radius: new Float32Array(
+      message.nodes.map((node) => Math.max(0.35, node.size * 0.12))
+    ),
     importance: new Float32Array(message.nodes.map((node) => node.importance)),
     focusPressure: new Float32Array(message.nodes.length),
     rowPtr: adjacency.rowPtr,
@@ -723,8 +897,14 @@ function initializeState(message: Extract<KnowledgeGraphLayoutWorkerMessage, { t
     edgeWeight: new Float32Array(message.edges.map((edge) => edge.weight)),
     edgeRestLength0: new Float32Array(
       message.edges.map((edge) => {
-        const sourceRadius = Math.max(0.35, message.nodes[edge.source]!.size * 0.12);
-        const targetRadius = Math.max(0.35, message.nodes[edge.target]!.size * 0.12);
+        const sourceRadius = Math.max(
+          0.35,
+          message.nodes[edge.source]!.size * 0.12
+        );
+        const targetRadius = Math.max(
+          0.35,
+          message.nodes[edge.target]!.size * 0.12
+        );
         return 0.8 + sourceRadius + targetRadius;
       })
     ),
@@ -743,7 +923,21 @@ function initializeState(message: Extract<KnowledgeGraphLayoutWorkerMessage, { t
     phase: message.focusNodeId ? "focus-enter" : "global",
     tick: 0,
     accumulatorSeconds: 0,
-    lastFrameTimeMs: performance.now()
+    lastFrameTimeMs: performance.now(),
+    lastPublishedTick: 0,
+    positionPublishIntervalTicks: Math.max(
+      1,
+      Math.trunc(
+        message.positionPublishIntervalTicks ??
+          DEFAULT_PUBLISH_POSITIONS_INTERVAL_TICKS
+      )
+    ),
+    transferBuffers: message.transferBuffers !== false,
+    lastPublishedX: new Float32Array(message.nodes.map((node) => node.x)),
+    lastPublishedY: new Float32Array(message.nodes.map((node) => node.y)),
+    settledCandidateSinceMs: null,
+    settled: false,
+    reducedMotion: false
   };
 
   if (state.focusIndex >= 0) {
@@ -770,12 +964,14 @@ function initializeState(message: Extract<KnowledgeGraphLayoutWorkerMessage, { t
   scheduleLoop();
 }
 
-function setFocus(message: Extract<KnowledgeGraphLayoutWorkerMessage, { type: "set-focus" }>) {
+function setFocus(
+  message: Extract<KnowledgeGraphLayoutWorkerMessage, { type: "set-focus" }>
+) {
   if (!state) {
     return;
   }
   state.focusIndex = message.focusNodeId
-    ? state.nodeIndexById.get(message.focusNodeId) ?? -1
+    ? (state.nodeIndexById.get(message.focusNodeId) ?? -1)
     : -1;
   state.focusSources = reconcileKnowledgeGraphFocusSources({
     sources: state.focusSources,
@@ -793,10 +989,14 @@ function setFocus(message: Extract<KnowledgeGraphLayoutWorkerMessage, { type: "s
   } else {
     state.phase = "focus-exit";
   }
+  resumeLoop("focus");
 }
 
 function updatePhysics(
-  message: Extract<KnowledgeGraphLayoutWorkerMessage, { type: "update-physics" }>
+  message: Extract<
+    KnowledgeGraphLayoutWorkerMessage,
+    { type: "update-physics" }
+  >
 ) {
   if (!state) {
     return;
@@ -807,9 +1007,12 @@ function updatePhysics(
     sources: state.focusSources,
     settings: state.physics
   });
+  resumeLoop("physics");
 }
 
-function dragStart(message: Extract<KnowledgeGraphLayoutWorkerMessage, { type: "drag-start" }>) {
+function dragStart(
+  message: Extract<KnowledgeGraphLayoutWorkerMessage, { type: "drag-start" }>
+) {
   if (!state) {
     return;
   }
@@ -825,6 +1028,7 @@ function dragStart(message: Extract<KnowledgeGraphLayoutWorkerMessage, { type: "
   state.vx[index] = 0;
   state.vy[index] = 0;
   state.phase = "dragging";
+  resumeLoop("drag");
 }
 
 function dragMove(
@@ -854,9 +1058,12 @@ function dragMove(
     state.focusAnchorX = message.x;
     state.focusAnchorY = message.y;
   }
+  resumeLoop(message.type === "nudge-node" ? "nudge" : "drag");
 }
 
-function dragEnd(message: Extract<KnowledgeGraphLayoutWorkerMessage, { type: "drag-end" }>) {
+function dragEnd(
+  message: Extract<KnowledgeGraphLayoutWorkerMessage, { type: "drag-end" }>
+) {
   if (!state) {
     return;
   }
@@ -866,10 +1073,14 @@ function dragEnd(message: Extract<KnowledgeGraphLayoutWorkerMessage, { type: "dr
   }
   state.dragIndex = -1;
   state.phase = state.focusIndex >= 0 ? "focus-enter" : "global";
+  resumeLoop("drag");
 }
 
 function recenterGraph(
-  message: Extract<KnowledgeGraphLayoutWorkerMessage, { type: "recenter-graph" }>
+  message: Extract<
+    KnowledgeGraphLayoutWorkerMessage,
+    { type: "recenter-graph" }
+  >
 ) {
   if (!state) {
     return;
@@ -889,6 +1100,7 @@ function recenterGraph(
     state.focusAnchorX -= message.offsetX;
     state.focusAnchorY -= message.offsetY;
   }
+  resumeLoop("recenter");
   publishPositions(state);
   publishStats(state);
 }
@@ -905,6 +1117,15 @@ self.onmessage = (event: MessageEvent<KnowledgeGraphLayoutWorkerMessage>) => {
       return;
     case "update-physics":
       updatePhysics(message);
+      return;
+    case "update-presentation":
+      if (state) {
+        state.positionPublishIntervalTicks = Math.max(
+          1,
+          Math.trunc(message.positionPublishIntervalTicks)
+        );
+        state.reducedMotion = message.reducedMotion;
+      }
       return;
     case "drag-start":
       dragStart(message);

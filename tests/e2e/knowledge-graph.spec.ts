@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 import { installE2eStorageGuards, waitForForge } from "./helpers";
 
 test.beforeEach(async ({ page }, testInfo) => {
@@ -60,6 +61,9 @@ type GraphPageDiagnostics = {
   mobileSheetOpen: boolean;
   focusNodeId: string | null;
   selectedView: "graph" | "hierarchy";
+  displayMode: "default" | "all";
+  presentationNodeBudget: number;
+  presentationNodeCount: number;
   selectNodeById?: (nodeId: string | null) => void;
   activateFocusedNode?: () => void;
 };
@@ -260,21 +264,43 @@ test("desktop focus keeps the focused node anchored on screen while the neighbor
   await waitForForge(page);
   await waitForDiagnostics(page);
 
-  const before = (await readDiagnostics(page)) as GraphDiagnostics;
   const focusedNodeId = await clickVisibleNode(page);
-  const beforeScreenPosition = before.nodeScreenPositions[focusedNodeId];
-  expect(beforeScreenPosition).toBeTruthy();
+  await page.waitForFunction(
+    (nodeId) =>
+      window.__FORGE_KNOWLEDGE_GRAPH_PERFORMANCE__
+        ?.renderedSettledFocusNodeId === nodeId &&
+      window.__FORGE_KNOWLEDGE_GRAPH_PERFORMANCE__
+        ?.focusCameraSettledNodeId === nodeId &&
+      Boolean(
+        window.__FORGE_KNOWLEDGE_GRAPH_DIAGNOSTICS__?.nodeScreenPositions[
+          nodeId
+        ]
+      ),
+    focusedNodeId
+  );
+  const focused = (await readDiagnostics(page)) as GraphDiagnostics;
+  const focusedScreenPosition = focused.nodeScreenPositions[focusedNodeId];
+  expect(focusedScreenPosition).toBeTruthy();
 
   await page.waitForTimeout(900);
+  await page.waitForFunction(
+    (nodeId) =>
+      Boolean(
+        window.__FORGE_KNOWLEDGE_GRAPH_DIAGNOSTICS__?.nodeScreenPositions[
+          nodeId
+        ]
+      ),
+    focusedNodeId
+  );
 
   const settled = (await readDiagnostics(page)) as GraphDiagnostics;
   const settledScreenPosition = settled.nodeScreenPositions[focusedNodeId];
   expect(settledScreenPosition).toBeTruthy();
   expect(
-    Math.abs(settledScreenPosition.x - beforeScreenPosition.x)
+    Math.abs(settledScreenPosition.x - focusedScreenPosition.x)
   ).toBeLessThan(28);
   expect(
-    Math.abs(settledScreenPosition.y - beforeScreenPosition.y)
+    Math.abs(settledScreenPosition.y - focusedScreenPosition.y)
   ).toBeLessThan(28);
   expect(Math.abs(settled.graphCentroid?.x ?? 0)).toBeLessThan(6);
   expect(Math.abs(settled.graphCentroid?.y ?? 0)).toBeLessThan(6);
@@ -336,6 +362,98 @@ test("mobile knowledge graph keeps first tap in focus mode and opens details on 
   await expect
     .poll(async () => (await readPageDiagnostics(page))?.mobileSheetOpen)
     .toBe(true);
+});
+
+test("mobile disclosure control meets its touch target without horizontal overflow", async ({
+  page
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "pixel-7",
+    "Pixel 7 responsive control test"
+  );
+
+  await page.goto("knowledge-graph?limit=40&graphDiagnostics=1");
+  await waitForForge(page);
+  await page.getByRole("button", { name: "Open graph filters" }).click();
+
+  const disclosureButton = page.getByRole("button", {
+    name: "Show all types"
+  });
+  const box = await disclosureButton.boundingBox();
+  expect(box).toBeTruthy();
+  expect(box!.height).toBeGreaterThanOrEqual(44);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth
+    )
+  ).toBe(true);
+
+  await disclosureButton.click();
+  await expect
+    .poll(async () => (await readPageDiagnostics(page))?.displayMode)
+    .toBe("all");
+  const pageState = await readPageDiagnostics(page);
+  expect(pageState?.isMobile).toBe(true);
+  expect(pageState?.presentationNodeBudget).toBe(280);
+});
+
+test("knowledge graph honors reduced motion in camera and layout presentation", async ({
+  page
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.addInitScript(() => {
+    (
+      window as Window & { __FORGE_ENABLE_GRAPH_DIAGNOSTICS__?: boolean }
+    ).__FORGE_ENABLE_GRAPH_DIAGNOSTICS__ = true;
+  });
+  await page.goto("knowledge-graph?limit=40&graphDiagnostics=1");
+  await waitForForge(page);
+  await page.waitForFunction(
+    () =>
+      (
+        window as Window & {
+          __FORGE_KNOWLEDGE_GRAPH_PERFORMANCE__?: {
+            reducedMotion?: boolean;
+            positionPublishIntervalTicks?: number;
+          };
+        }
+      ).__FORGE_KNOWLEDGE_GRAPH_PERFORMANCE__?.reducedMotion === true
+  );
+  const presentation = await page.evaluate(
+    () =>
+      (
+        window as Window & {
+          __FORGE_KNOWLEDGE_GRAPH_PERFORMANCE__?: {
+            reducedMotion?: boolean;
+            positionPublishIntervalTicks?: number;
+          };
+        }
+      ).__FORGE_KNOWLEDGE_GRAPH_PERFORMANCE__
+  );
+  expect(presentation?.positionPublishIntervalTicks).toBe(10);
+});
+
+test("knowledge graph has no serious or critical accessibility violations", async ({
+  page
+}) => {
+  await page.goto("knowledge-graph?limit=40");
+  await waitForForge(page);
+  await expect(page.getByLabel("Knowledge graph canvas")).toBeVisible();
+  const results = await new AxeBuilder({ page })
+    .include('[data-testid="knowledge-graph-page"]')
+    .analyze();
+  const blocking = results.violations.filter(
+    (violation) =>
+      violation.impact === "serious" || violation.impact === "critical"
+  );
+  expect(
+    blocking.map((violation) => ({
+      id: violation.id,
+      impact: violation.impact,
+      help: violation.help,
+      targets: violation.nodes.flatMap((node) => node.target)
+    }))
+  ).toEqual([]);
 });
 
 test("desktop graph test api can move a node without rebuilding the layout shell", async ({

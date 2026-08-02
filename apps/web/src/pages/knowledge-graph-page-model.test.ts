@@ -154,6 +154,7 @@ describe("knowledge graph URL and query model", () => {
     const state = parseKnowledgeGraphPageState(
       [
         "view=hierarchy",
+        "display=all",
         "focus=goal%3Agoal-1",
         "entityKind=goal,project",
         "entityKind=task",
@@ -164,12 +165,14 @@ describe("knowledge graph URL and query model", () => {
         "updatedFrom=2026-01-01",
         "updatedTo=2026-02-01",
         "limit=99999",
-        "cross=1"
+        "cross=1",
+        "edges=all"
       ].join("&")
     );
 
     expect(state).toMatchObject({
       selectedView: "hierarchy",
+      displayMode: "all",
       focusNodeId: "goal:goal-1",
       selectedKinds: ["goal", "project", "task"],
       selectedRelations: ["goal_project"],
@@ -179,19 +182,20 @@ describe("knowledge graph URL and query model", () => {
       updatedFrom: "2026-01-01",
       updatedTo: "2026-02-01",
       showHierarchyCrossLinks: true,
+      showAllVisibleEdges: true,
       maxNodes: MAX_KNOWLEDGE_GRAPH_MAX_NODES
     });
   });
 
   it("builds a stable API query from parsed page state", () => {
     const state = parseKnowledgeGraphPageState(
-      "q=  graph  &focus=tag%3Atag-vitality&entityKind=task&entityKind=goal&tag=b&tag=a&owner=user-2&relationKind=task_note"
+      "q=  graph  &focus=tag%3Atag-vitality&entityKind=task&entityKind=goal&tag=b&tag=a&owner=user-2&relationKind=goal_task"
     );
 
     expect(buildKnowledgeGraphQueryFromPageState(state)).toEqual({
       q: "graph",
       entityKinds: ["goal", "task"],
-      relationKinds: ["task_note"],
+      relationKinds: ["goal_task"],
       tags: ["a", "b"],
       owners: ["user-2"],
       updatedFrom: null,
@@ -199,6 +203,23 @@ describe("knowledge graph URL and query model", () => {
       limit: 2000,
       focusNodeId: "tag:tag-vitality"
     });
+  });
+
+  it("keeps display policy out of the data query and defaults invalid values safely", () => {
+    const state = parseKnowledgeGraphPageState(
+      "display=unexpected&entityKind=retired_kind&relationKind=old_relation"
+    );
+    expect(state.displayMode).toBe("default");
+    expect(state.selectedKinds).toEqual([]);
+    expect(state.selectedRelations).toEqual([]);
+    expect(state.unavailableKinds).toEqual(["retired_kind"]);
+    expect(state.unavailableRelations).toEqual(["old_relation"]);
+    expect(buildKnowledgeGraphQueryFromPageState(state)).not.toHaveProperty(
+      "displayMode"
+    );
+    expect(buildKnowledgeGraphQueryFromPageState(state)).not.toHaveProperty(
+      "showAllVisibleEdges"
+    );
   });
 
   it("round-trips quick filter ids by facet family", () => {

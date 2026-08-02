@@ -8,13 +8,16 @@ import {
   useState,
   type ReactNode
 } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  ArrowLeft,
   Bug,
   Crosshair,
   Minus,
+  Network,
   Plus,
+  RefreshCw,
   Rows3,
   ScanSearch,
   Settings2,
@@ -22,12 +25,15 @@ import {
 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { KnowledgeGraphEntityPanel } from "@/components/knowledge-graph/knowledge-graph-entity-panel";
-import { GamificationMiniHud } from "@/components/gamification/gamification-widgets";
 import {
   KnowledgeGraphForceView,
   type KnowledgeGraphForceViewHandle
 } from "@/components/knowledge-graph/knowledge-graph-force-view";
 import { KnowledgeGraphHierarchyView } from "@/components/knowledge-graph/knowledge-graph-hierarchy-view";
+import {
+  getKnowledgeGraphSemanticGroup,
+  KNOWLEDGE_GRAPH_SEMANTIC_GROUPS
+} from "@/components/knowledge-graph/knowledge-graph-theme";
 import { SheetScaffold } from "@/components/experience/sheet-scaffold";
 import { EntityLinkMultiSelect } from "@/components/psyche/entity-link-multiselect";
 import {
@@ -44,11 +50,22 @@ import { UserBadge } from "@/components/ui/user-badge";
 import { getKnowledgeGraph } from "@/lib/api";
 import {
   KNOWLEDGE_GRAPH_HIERARCHY_ORDER,
+  KNOWLEDGE_GRAPH_RELATION_LABELS,
   type KnowledgeGraphNode,
   type KnowledgeGraphQuery,
   type KnowledgeGraphView
 } from "@/lib/knowledge-graph-types";
-import { buildKnowledgeGraphFocusPayload } from "@/lib/knowledge-graph";
+import {
+  DEFAULT_KNOWLEDGE_GRAPH_DESKTOP_NODE_BUDGET,
+  DEFAULT_KNOWLEDGE_GRAPH_MOBILE_NODE_BUDGET,
+  KNOWLEDGE_GRAPH_NODE_VISIBILITY_POLICY,
+  KNOWLEDGE_GRAPH_RELATION_VISIBILITY_POLICY,
+  resolveKnowledgeGraphPresentation
+} from "@/lib/knowledge-graph-visibility-policy";
+import {
+  buildKnowledgeGraphFocusIndex,
+  buildKnowledgeGraphFocusPayloadFromIndex
+} from "@/lib/knowledge-graph";
 import {
   DEFAULT_KNOWLEDGE_GRAPH_PHYSICS_SETTINGS,
   KNOWLEDGE_GRAPH_MAX_EDGE_SPRING_STRENGTH,
@@ -76,6 +93,7 @@ import {
   MIN_KNOWLEDGE_GRAPH_MAX_NODES,
   buildKnowledgeGraphQueryFromPageState,
   buildKnowledgeGraphQuickFilterSelectionIds,
+  buildOptimisticKnowledgeGraphPayload,
   findKnowledgeGraphUserSummary,
   formatKnowledgeGraphDateInput,
   getKnowledgeGraphNodeNotesHref,
@@ -131,6 +149,7 @@ const graphDialogPillClass =
   "rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-1 text-xs text-[var(--ui-ink-soft)]";
 const graphDialogNoticeClass =
   "rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-info-soft)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-soft)]";
+const semanticLegendEntries = Object.values(KNOWLEDGE_GRAPH_SEMANTIC_GROUPS);
 
 declare global {
   interface Window {
@@ -140,8 +159,14 @@ declare global {
       mobileSheetOpen: boolean;
       focusNodeId: string | null;
       selectedView: KnowledgeGraphView;
+      displayMode: "default" | "all";
+      presentationNodeBudget: number;
+      presentationNodeCount: number;
+      explorationAnchorNodeIds: string[];
       selectNodeById?: (nodeId: string | null) => void;
       activateFocusedNode?: () => void;
+      refetchGraph?: () => void;
+      zoomIn?: () => void;
     };
   }
 }
@@ -191,6 +216,7 @@ class KnowledgeGraphRendererBoundary extends Component<
 }
 
 export function KnowledgeGraphPage() {
+  const queryClient = useQueryClient();
   const shell = useForgeShell();
   const dispatch = useAppDispatch();
   const knowledgeGraphDiagnostics = useAppSelector(
@@ -222,6 +248,9 @@ export function KnowledgeGraphPage() {
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [appearanceDialogOpen, setAppearanceDialogOpen] = useState(false);
   const [draftQueryText, setDraftQueryText] = useState("");
+  const [explorationAnchorNodeIds, setExplorationAnchorNodeIds] = useState<
+    string[]
+  >([]);
   const [physicsSettings, setPhysicsSettings] =
     useState<KnowledgeGraphPhysicsSettings>(() =>
       loadKnowledgeGraphPhysicsSettings()
@@ -320,12 +349,16 @@ export function KnowledgeGraphPage() {
 
   const {
     selectedView,
+    displayMode,
     focusNodeId,
     selectedKinds,
     selectedRelations,
+    unavailableKinds,
+    unavailableRelations,
     selectedTags,
     selectedOwners,
     showHierarchyCrossLinks,
+    showAllVisibleEdges,
     queryText,
     updatedFrom,
     updatedTo,
@@ -345,13 +378,20 @@ export function KnowledgeGraphPage() {
     [parsedPageState, queryFocusNodeId]
   );
 
+  const hasExplicitGraphQuery =
+    queryText.trim().length > 0 ||
+    selectedKinds.length > 0 ||
+    selectedRelations.length > 0 ||
+    selectedTags.length > 0 ||
+    selectedOwners.length > 0 ||
+    Boolean(updatedFrom) ||
+    Boolean(updatedTo);
+  const queryScopeKey = shell.selectedUserIds.join("\u001f");
+  const queryFingerprint = JSON.stringify(query);
+
   const queryKey = useMemo(
-    () => [
-      "forge-knowledge-graph",
-      ...shell.selectedUserIds,
-      JSON.stringify(query)
-    ],
-    [query, shell.selectedUserIds]
+    () => ["forge-knowledge-graph", ...shell.selectedUserIds, queryFingerprint],
+    [queryFingerprint, shell.selectedUserIds]
   );
 
   const graphQuery = useQuery({
@@ -362,7 +402,100 @@ export function KnowledgeGraphPage() {
     refetchOnWindowFocus: false
   });
 
-  const graph = graphQuery.data;
+  const serverGraph = graphQuery.data;
+  const refetchGraph = graphQuery.refetch;
+  useEffect(() => {
+    if (
+      !serverGraph ||
+      graphQuery.isPlaceholderData ||
+      hasExplicitGraphQuery ||
+      focusNodeId
+    ) {
+      return;
+    }
+    queryClient.removeQueries({
+      predicate: (candidate) => {
+        const candidateKey = candidate.queryKey;
+        if (
+          candidateKey[0] !== "forge-knowledge-graph" ||
+          candidateKey.length < 2 ||
+          candidate.state.fetchStatus !== "idle"
+        ) {
+          return false;
+        }
+        const candidateScopeKey = candidateKey
+          .slice(1, -1)
+          .map(String)
+          .join("\u001f");
+        return (
+          candidateScopeKey === queryScopeKey &&
+          candidateKey.at(-1) !== queryFingerprint
+        );
+      }
+    });
+  }, [
+    focusNodeId,
+    graphQuery.isPlaceholderData,
+    hasExplicitGraphQuery,
+    queryClient,
+    queryFingerprint,
+    queryScopeKey,
+    serverGraph
+  ]);
+  const broadGraphRef = useRef<{
+    scopeKey: string;
+    graph: NonNullable<typeof serverGraph>;
+  } | null>(null);
+  if (
+    serverGraph &&
+    !graphQuery.isPlaceholderData &&
+    !hasExplicitGraphQuery &&
+    !focusNodeId
+  ) {
+    broadGraphRef.current = { scopeKey: queryScopeKey, graph: serverGraph };
+  }
+  const optimisticGraph = useMemo(() => {
+    const broadGraph = broadGraphRef.current;
+    if (
+      !graphQuery.isPlaceholderData ||
+      !broadGraph ||
+      broadGraph.scopeKey !== queryScopeKey
+    ) {
+      return null;
+    }
+    return buildOptimisticKnowledgeGraphPayload(broadGraph.graph, query);
+  }, [graphQuery.isPlaceholderData, query, queryScopeKey]);
+  const graph = optimisticGraph ?? serverGraph;
+  const resolvedPresentationKeyRef = useRef("unresolved");
+  if (optimisticGraph) {
+    resolvedPresentationKeyRef.current = `optimistic:${queryScopeKey}:${searchParamsKey}:${optimisticGraph.nodes.length}:${optimisticGraph.edges.length}`;
+  } else if (graph && !graphQuery.isPlaceholderData) {
+    resolvedPresentationKeyRef.current = `${searchParamsKey}:${graph.generatedAt}:${graph.nodes.length}:${graph.edges.length}`;
+  }
+  const resolvedPresentationKey = resolvedPresentationKeyRef.current;
+  const presentationNodeBudget = isMobile
+    ? DEFAULT_KNOWLEDGE_GRAPH_MOBILE_NODE_BUDGET
+    : DEFAULT_KNOWLEDGE_GRAPH_DESKTOP_NODE_BUDGET;
+  const presentation = useMemo(
+    () =>
+      resolveKnowledgeGraphPresentation({
+        nodes: graph?.nodes ?? [],
+        edges: graph?.edges ?? [],
+        displayMode,
+        hasExplicitQuery: hasExplicitGraphQuery,
+        focusNodeId,
+        nodeBudget: presentationNodeBudget,
+        edgeBudget: showAllVisibleEdges ? graph?.edges.length : undefined
+      }),
+    [
+      displayMode,
+      focusNodeId,
+      graph,
+      hasExplicitGraphQuery,
+      presentationNodeBudget,
+      showAllVisibleEdges
+    ]
+  );
   const arrivalSearchRef = useRef(searchParams.toString());
 
   useEffect(() => {
@@ -462,16 +595,44 @@ export function KnowledgeGraphPage() {
     }
   }, [focusNodeId, isMobile, mobilePanelOpen]);
 
-  const focusPayload = useMemo(() => {
-    if (!graph || !focusNodeId) {
-      return buildKnowledgeGraphFocusPayload([], [], null);
+  const focusIndex = useMemo(
+    () => buildKnowledgeGraphFocusIndex(graph?.nodes ?? [], graph?.edges ?? []),
+    [graph]
+  );
+  const focusPayload = useMemo(
+    () => buildKnowledgeGraphFocusPayloadFromIndex(focusIndex, focusNodeId),
+    [focusIndex, focusNodeId]
+  );
+  const focusPanelLinkedItemCount = useMemo(
+    () =>
+      new Set(
+        focusPayload.familyGroups.flatMap((group) =>
+          group.relations.flatMap((relation) =>
+            relation.items.map((item) => item.id)
+          )
+        )
+      ).size,
+    [focusPayload.familyGroups]
+  );
+
+  useEffect(() => {
+    if (!focusPayload.focusNode) {
+      setExplorationAnchorNodeIds([]);
+      return;
     }
-    return buildKnowledgeGraphFocusPayload(
-      graph.nodes,
-      graph.edges,
-      focusNodeId
-    );
-  }, [focusNodeId, graph]);
+    setExplorationAnchorNodeIds((current) => {
+      if (current.includes(focusPayload.focusNode!.id)) {
+        return current;
+      }
+      if (current.length > 0) {
+        return [...current.slice(-9), focusPayload.focusNode!.id];
+      }
+      return [
+        focusPayload.focusNode!.id,
+        ...focusPayload.firstRingNodes.slice(0, 9).map((node) => node.id)
+      ];
+    });
+  }, [focusPayload.firstRingNodes, focusPayload.focusNode]);
 
   useEffect(() => {
     const overlaySync = resolveKnowledgeGraphOverlaySyncAction({
@@ -537,6 +698,10 @@ export function KnowledgeGraphPage() {
       mobileSheetOpen: mobilePanelOpen,
       focusNodeId,
       selectedView,
+      displayMode,
+      presentationNodeBudget,
+      presentationNodeCount: presentation.visibleNodeIds.size,
+      explorationAnchorNodeIds,
       selectNodeById: (nodeId) => {
         if (!graph) {
           return;
@@ -553,14 +718,37 @@ export function KnowledgeGraphPage() {
         const nextNode =
           graph.nodes.find((node) => node.id === focusNodeId) ?? null;
         if (nextNode) {
-          handleFocusNodeRef.current(nextNode);
+          if (isMobile) {
+            handleFocusNodeRef.current(nextNode);
+          } else {
+            dispatch(setKnowledgeGraphOverlayFocus(focusPayload));
+          }
         }
+      },
+      refetchGraph: () => {
+        void refetchGraph();
+      },
+      zoomIn: () => {
+        graphViewRef.current?.zoomIn();
       }
     };
     return () => {
       delete window.__FORGE_KNOWLEDGE_GRAPH_PAGE_TEST__;
     };
-  }, [focusNodeId, graph, isMobile, mobilePanelOpen, selectedView]);
+  }, [
+    displayMode,
+    dispatch,
+    focusNodeId,
+    focusPayload,
+    graph,
+    refetchGraph,
+    explorationAnchorNodeIds,
+    isMobile,
+    mobilePanelOpen,
+    presentation.visibleNodeIds.size,
+    presentationNodeBudget,
+    selectedView
+  ]);
 
   const setParam = (mutate: (next: URLSearchParams) => void) => {
     setSearchParams(
@@ -571,6 +759,14 @@ export function KnowledgeGraphPage() {
       },
       { replace: true }
     );
+  };
+
+  const setFocusParam = (node: KnowledgeGraphNode | null) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      writeKnowledgeGraphFocusParam(next, node);
+      return next;
+    });
   };
 
   const submitGraphSearch = (value: string) => {
@@ -599,9 +795,7 @@ export function KnowledgeGraphPage() {
       return;
     }
 
-    setParam((next) => {
-      writeKnowledgeGraphFocusParam(next, node);
-    });
+    setFocusParam(node);
     if (isMobile) {
       setMobileFiltersOpen(false);
     }
@@ -652,6 +846,7 @@ export function KnowledgeGraphPage() {
         "owner",
         "updatedFrom",
         "updatedTo",
+        "display",
         "focus"
       ].forEach((key) => next.delete(key));
       next.set("limit", String(DEFAULT_KNOWLEDGE_GRAPH_MAX_NODES));
@@ -690,18 +885,36 @@ export function KnowledgeGraphPage() {
     const visual = getEntityVisual(kind);
     const facet = entityKindFacetCounts.get(kind);
     const count = facet?.count ?? 0;
+    const policy = KNOWLEDGE_GRAPH_NODE_VISIBILITY_POLICY[kind];
     return {
       value: kind,
       label: facet?.label ?? visual.label,
-      description: count === 1 ? "1 node" : `${count} nodes`,
+      description: `${count} ${count === 1 ? "node" : "nodes"} · ${
+        policy.defaultVisible ? "shown by default" : "available on demand"
+      }`,
       kind
     };
   });
-  const relationOptions = graph.facets.relationKinds.map((entry) => ({
-    value: entry.value,
-    label: entry.label,
-    description: `${entry.count} links`
-  }));
+  const relationFacetCounts = new Map(
+    graph.facets.relationKinds.map(
+      (entry) => [entry.value, entry.count] as const
+    )
+  );
+  const relationOptions = Object.entries(
+    KNOWLEDGE_GRAPH_RELATION_VISIBILITY_POLICY
+  ).map(([value, policy]) => {
+    const count =
+      relationFacetCounts.get(
+        value as keyof typeof KNOWLEDGE_GRAPH_RELATION_LABELS
+      ) ?? 0;
+    return {
+      value,
+      label: policy.label,
+      description: `${count} ${count === 1 ? "link" : "links"} · ${
+        policy.defaultVisible ? "shown by default" : "available on demand"
+      }`
+    };
+  });
   const tagOptions = graph.facets.tags.map((entry) => ({
     value: entry.id,
     label: entry.label,
@@ -772,15 +985,25 @@ export function KnowledgeGraphPage() {
     owners: selectedOwners
   });
 
-  const summaryBadge = graph.counts.limited
-    ? `${graph.counts.nodeCount}/${graph.counts.filteredNodeCount} nodes`
-    : `${graph.counts.nodeCount}n · ${graph.counts.edgeCount}e`;
-  const summaryBadgeTitle = graph.counts.limited
-    ? `${graph.counts.nodeCount} visible nodes from ${graph.counts.filteredNodeCount} filtered matches`
-    : `${graph.counts.nodeCount} nodes and ${graph.counts.edgeCount} edges`;
-  const mobileSummaryBadge = graph.counts.limited
-    ? `${graph.counts.nodeCount}/${graph.counts.filteredNodeCount}`
-    : `${graph.counts.nodeCount}n · ${graph.counts.edgeCount}e`;
+  const shownNodeCount = presentation.visibleNodeIds.size;
+  const shownEdgeCount = presentation.visibleEdgeIds.size;
+  const presentationIsReduced =
+    presentation.hiddenNodeCount > 0 || presentation.hiddenEdgeCount > 0;
+  const summaryBadge = presentationIsReduced
+    ? `${shownNodeCount}/${graph.counts.nodeCount} nodes`
+    : graph.counts.limited
+      ? `${graph.counts.nodeCount}/${graph.counts.filteredNodeCount} nodes`
+      : `${graph.counts.nodeCount}n · ${graph.counts.edgeCount}e`;
+  const summaryBadgeTitle = presentationIsReduced
+    ? `${shownNodeCount} of ${graph.counts.nodeCount} retained nodes and ${shownEdgeCount} of ${graph.counts.edgeCount} retained relations are visible. Parallel relations may share one rendered line. Search, focus, or choose All types to reveal more.`
+    : graph.counts.limited
+      ? `${graph.counts.nodeCount} visible nodes from ${graph.counts.filteredNodeCount} filtered matches`
+      : `${graph.counts.nodeCount} nodes and ${graph.counts.edgeCount} edges`;
+  const mobileSummaryBadge = presentationIsReduced
+    ? `${shownNodeCount}/${graph.counts.nodeCount}`
+    : graph.counts.limited
+      ? `${graph.counts.nodeCount}/${graph.counts.filteredNodeCount}`
+      : `${graph.counts.nodeCount}n · ${graph.counts.edgeCount}e`;
   const filtersActive =
     queryText.trim().length > 0 ||
     selectedKinds.length > 0 ||
@@ -789,16 +1012,100 @@ export function KnowledgeGraphPage() {
     selectedOwners.length > 0 ||
     Boolean(updatedFrom) ||
     Boolean(updatedTo) ||
+    unavailableKinds.length > 0 ||
+    unavailableRelations.length > 0 ||
+    displayMode === "all" ||
     maxNodes !== DEFAULT_KNOWLEDGE_GRAPH_MAX_NODES;
+  const resultNarrowingFiltersActive =
+    queryText.trim().length > 0 ||
+    selectedKinds.length > 0 ||
+    selectedRelations.length > 0 ||
+    selectedTags.length > 0 ||
+    selectedOwners.length > 0 ||
+    Boolean(updatedFrom) ||
+    Boolean(updatedTo);
+
+  const toggleDisplayMode = () => {
+    setParam((next) => {
+      if (displayMode === "all") {
+        next.delete("display");
+      } else {
+        next.set("display", "all");
+      }
+    });
+  };
+
+  const toggleVisibleEdges = () => {
+    setParam((next) => {
+      if (showAllVisibleEdges) {
+        next.delete("edges");
+      } else {
+        next.set("edges", "all");
+      }
+    });
+  };
 
   const showDesktopGraphChrome = !isMobile;
+  const desktopFocusPanelInsetClass =
+    !isMobile && shellOverlayFocusNodeId ? "xl:pr-[26rem] 2xl:pr-[28rem]" : "";
+  const presentationNodes = graph.nodes.filter((node) =>
+    presentation.visibleNodeIds.has(node.id)
+  );
+  const presentationEdges = graph.edges.filter((edge) =>
+    presentation.visibleEdgeIds.has(edge.id)
+  );
+  const hierarchyRevealsAll = displayMode === "all" || hasExplicitGraphQuery;
+  const hierarchyVisibleNodeIds = focusNodeId
+    ? new Set(graph.nodes.map((node) => node.id))
+    : new Set(
+        graph.nodes
+          .filter(
+            (node) =>
+              hierarchyRevealsAll ||
+              presentation.visibleNodeIds.has(node.id) ||
+              KNOWLEDGE_GRAPH_NODE_VISIBILITY_POLICY[node.entityKind]
+                .defaultVisible
+          )
+          .map((node) => node.id)
+      );
+  const hierarchyNodes = graph.nodes.filter((node) =>
+    hierarchyVisibleNodeIds.has(node.id)
+  );
+  const hierarchyEdges = focusNodeId
+    ? graph.edges
+    : graph.edges.filter((edge) => {
+        if (
+          !hierarchyVisibleNodeIds.has(edge.source) ||
+          !hierarchyVisibleNodeIds.has(edge.target)
+        ) {
+          return false;
+        }
+        return (
+          hierarchyRevealsAll ||
+          KNOWLEDGE_GRAPH_RELATION_VISIBILITY_POLICY[edge.relationKind]
+            .defaultVisible
+        );
+      });
+  const explorationAnchorNodes = explorationAnchorNodeIds
+    .map((nodeId) => graph.nodes.find((node) => node.id === nodeId) ?? null)
+    .filter((node): node is KnowledgeGraphNode => node !== null);
+  const unavailableFilterValues = [
+    ...unavailableKinds.map((value) => `entity type “${value}”`),
+    ...unavailableRelations.map((value) => `relation type “${value}”`)
+  ];
   const graphSurfaceResetKey = `${selectedView}:${graph.nodes
     .map((node) => node.id)
     .join("|")}::${graph.edges.map((edge) => edge.id).join("|")}`;
 
   return (
-    <div className="h-[calc(100dvh-var(--forge-mobile-nav-clearance)-5.25rem)] overflow-hidden lg:-mt-3 lg:h-[calc(100dvh-10rem)]">
+    <div
+      data-testid="knowledge-graph-page"
+      className="h-[calc(100dvh-var(--forge-mobile-nav-clearance)-5.25rem)] overflow-hidden lg:-mt-3 lg:h-[calc(100dvh-10rem)]"
+    >
       <div className="relative h-full bg-[var(--ui-surface-0)]">
+        <span className="sr-only" aria-live="polite" aria-atomic="true">
+          {summaryBadgeTitle}
+        </span>
         {graphQuery.isError ? (
           <div
             role="alert"
@@ -818,9 +1125,6 @@ export function KnowledgeGraphPage() {
             </Button>
           </div>
         ) : null}
-        <div className="pointer-events-auto absolute right-3 top-3 z-30 hidden md:block">
-          <GamificationMiniHud metrics={shell.snapshot.metrics} />
-        </div>
         <KnowledgeGraphRendererBoundary
           resetKey={graphSurfaceResetKey}
           fallback={(error) => (
@@ -866,30 +1170,282 @@ export function KnowledgeGraphPage() {
             </div>
           )}
         >
-          {selectedView === "graph" ? (
+          {graph.nodes.length === 0 ? (
+            <div className="grid h-full place-items-center px-5 py-20 text-center">
+              <div
+                role="status"
+                className="grid max-w-md gap-4 rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-6 shadow-[var(--ui-shadow-soft)]"
+              >
+                <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-info-soft)] text-[var(--primary)]">
+                  <ScanSearch className="size-5" aria-hidden="true" />
+                </div>
+                <div className="grid gap-2">
+                  <h2 className="text-lg font-semibold text-[var(--ui-ink-strong)]">
+                    {resultNarrowingFiltersActive
+                      ? "No knowledge matches this view"
+                      : "Your knowledge graph is ready to grow"}
+                  </h2>
+                  <p className="text-sm leading-6 text-[var(--ui-ink-soft)]">
+                    {resultNarrowingFiltersActive
+                      ? "Try a broader search, remove a filter, or return to the calm default view."
+                      : "Forge will connect goals, projects, notes, insights, people, and other knowledge here as they are created."}
+                  </p>
+                </div>
+                {resultNarrowingFiltersActive ? (
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={resetFilters}
+                    >
+                      Reset graph filters
+                    </Button>
+                    {displayMode !== "all" ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={toggleDisplayMode}
+                      >
+                        Show all knowledge types
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : selectedView === "graph" ? (
             <KnowledgeGraphForceView
               ref={graphViewRef}
-              nodes={graph.nodes}
-              edges={graph.edges}
+              nodes={presentationNodes}
+              edges={presentationEdges}
+              sourceNodeCount={graph.nodes.length}
+              sourceEdgeCount={graph.edges.length}
+              visibleNodeIds={presentation.visibleNodeIds}
+              visibleEdgeIds={presentation.visibleEdgeIds}
+              preserveVisibleEdges={hasExplicitGraphQuery}
+              presentationKey={resolvedPresentationKey}
               focusNodeId={focusNodeId}
               physicsSettings={physicsSettings}
               onSelectNode={handleFocusNode}
             />
           ) : (
-            <div className="h-full overflow-y-auto px-4 py-4 lg:px-6">
+            <div
+              className={`h-full overflow-hidden px-3 pb-3 pt-16 md:px-4 md:pb-4 md:pt-[4.75rem] lg:px-6 ${desktopFocusPanelInsetClass}`}
+            >
               <KnowledgeGraphHierarchyView
-                nodes={graph.nodes}
-                edges={graph.edges}
+                nodes={hierarchyNodes}
+                edges={hierarchyEdges}
                 focusNodeId={focusNodeId}
+                focusPanelLinkedItemCount={focusPanelLinkedItemCount}
                 showSecondaryEdges={showHierarchyCrossLinks}
                 isMobile={isMobile}
                 onSelectNode={handleFocusNode}
+                onClearFocus={() => handleFocusNode(null)}
                 onOpenNode={handleFocusNode}
                 onNavigateNode={handleNavigateNode}
               />
             </div>
           )}
         </KnowledgeGraphRendererBoundary>
+
+        {selectedView === "graph" && !focusNodeId ? (
+          <aside
+            aria-label="How to read the knowledge graph"
+            className="pointer-events-none absolute left-3 top-16 z-10 w-[min(19rem,calc(100%-1.5rem))] rounded-[22px] border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--ui-surface-1)_88%,transparent)] px-3.5 py-3 shadow-[var(--ui-shadow-soft)] backdrop-blur-xl md:left-6 md:top-20 md:w-[22rem] md:px-4 md:py-3.5"
+          >
+            <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--ui-ink-faint)]">
+              Living map
+            </div>
+            <p className="mt-1 text-xs leading-5 text-[var(--ui-ink-soft)] md:text-[13px]">
+              See what guides your work, what moves it, and the knowledge around
+              it. Select any point to open its local world.
+            </p>
+            <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1.5">
+              {semanticLegendEntries.map((group) => (
+                <span
+                  key={group.label}
+                  className="inline-flex items-center gap-1.5 text-[10px] text-[var(--ui-ink-faint)]"
+                  title={group.description}
+                >
+                  <span
+                    className="size-2 rounded-full shadow-[0_0_10px_currentColor]"
+                    style={{
+                      background: `var(${group.token}, ${group.fallback})`,
+                      color: `var(${group.token}, ${group.fallback})`
+                    }}
+                    aria-hidden="true"
+                  />
+                  {group.label}
+                </span>
+              ))}
+            </div>
+            {presentationIsReduced ? (
+              <p className="mt-2 text-[10px] leading-4 text-[var(--ui-ink-faint)]">
+                {presentation.hiddenNodeCount} more nodes and{" "}
+                {presentation.hiddenEdgeCount} more relationships remain
+                available through search, filters, keyboard navigation, and
+                focus. Lines show the strongest local structure first.
+              </p>
+            ) : null}
+            <div className="pointer-events-auto mt-2.5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="min-h-9 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-[10px] font-medium text-[var(--ui-ink-soft)] transition hover:border-[var(--ui-border-strong)] hover:text-[var(--ui-ink-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/55"
+                onClick={toggleVisibleEdges}
+                aria-pressed={showAllVisibleEdges}
+              >
+                {showAllVisibleEdges
+                  ? "Show strongest links"
+                  : "Show every shown-node link"}
+              </button>
+              <button
+                type="button"
+                className="min-h-9 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-[10px] font-medium text-[var(--ui-ink-soft)] transition hover:border-[var(--ui-border-strong)] hover:text-[var(--ui-ink-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/55"
+                onClick={() => graphViewRef.current?.reflow()}
+              >
+                Reflow layout
+              </button>
+            </div>
+          </aside>
+        ) : null}
+
+        {selectedView === "graph" && focusPayload.focusNode ? (
+          <aside
+            aria-label="Selected knowledge"
+            className="pointer-events-auto absolute left-3 top-14 z-20 w-[min(24rem,calc(100%-1.5rem))] rounded-[22px] border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--ui-surface-1)_94%,transparent)] p-3 shadow-[var(--ui-shadow-floating)] backdrop-blur-xl md:left-6 md:top-16 md:p-3.5"
+          >
+            <button
+              type="button"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-[10px] font-medium text-[var(--ui-ink-soft)] transition hover:border-[var(--ui-border-strong)] hover:text-[var(--ui-ink-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/55"
+              onClick={() => handleFocusNode(null)}
+            >
+              <ArrowLeft className="size-3" aria-hidden="true" />
+              Back to overview
+            </button>
+            <div className="mt-2.5 flex items-start gap-2.5">
+              <span
+                className="mt-1 size-2.5 shrink-0 rounded-full"
+                style={{
+                  background: `var(${KNOWLEDGE_GRAPH_SEMANTIC_GROUPS[getKnowledgeGraphSemanticGroup(focusPayload.focusNode.entityKind)].token}, ${KNOWLEDGE_GRAPH_SEMANTIC_GROUPS[getKnowledgeGraphSemanticGroup(focusPayload.focusNode.entityKind)].fallback})`
+                }}
+                aria-hidden="true"
+              />
+              <div className="min-w-0">
+                <div className="text-[9px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+                  Selected ·{" "}
+                  {
+                    KNOWLEDGE_GRAPH_NODE_VISIBILITY_POLICY[
+                      focusPayload.focusNode.entityKind
+                    ].label
+                  }
+                </div>
+                <h2 className="mt-0.5 truncate text-sm font-semibold text-[var(--ui-ink-strong)]">
+                  {focusPayload.focusNode.title}
+                </h2>
+                <p className="mt-1 text-[10px] leading-4 text-[var(--ui-ink-faint)]">
+                  {focusPayload.firstRingNodes.length} directly connected{" "}
+                  {focusPayload.firstRingNodes.length === 1 ? "item" : "items"}.
+                  All direct relationships are shown in this focused view.
+                </p>
+              </div>
+            </div>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="min-h-9 rounded-full px-3 text-[10px]"
+                onClick={() => {
+                  if (isMobile) {
+                    setMobilePanelOpen(true);
+                  } else {
+                    dispatch(setKnowledgeGraphOverlayFocus(focusPayload));
+                  }
+                }}
+              >
+                Open details
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="min-h-9 rounded-full px-3 text-[10px]"
+                onClick={() => graphViewRef.current?.reflow()}
+              >
+                <RefreshCw className="size-3" aria-hidden="true" />
+                Reflow
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="min-h-9 rounded-full px-3 text-[10px]"
+                onClick={toggleVisibleEdges}
+                aria-pressed={showAllVisibleEdges}
+                title={
+                  showAllVisibleEdges
+                    ? "Return to the strongest structural and local relationships"
+                    : "Draw every relationship whose two nodes are currently shown"
+                }
+              >
+                <Network className="size-3" aria-hidden="true" />
+                {showAllVisibleEdges ? "Strongest links" : "All shown links"}
+              </Button>
+            </div>
+            <p className="mt-2 text-[9px] leading-4 text-[var(--ui-ink-faint)]">
+              The layout settles after arranging itself so labels stay readable.
+              Reflow starts a fresh arrangement without changing any knowledge.
+            </p>
+          </aside>
+        ) : null}
+
+        {selectedView === "graph" &&
+        focusNodeId &&
+        explorationAnchorNodes.length > 0 ? (
+          <aside
+            aria-label="Exploration working set"
+            className="pointer-events-auto absolute inset-x-3 bottom-16 z-20 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--ui-surface-1)_92%,transparent)] px-3 py-2.5 shadow-[var(--ui-shadow-floating)] backdrop-blur-xl md:left-6 md:right-[29rem] md:bottom-16 md:px-3.5"
+          >
+            <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
+              <div className="mr-1 shrink-0">
+                <div className="text-[9px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+                  Working set
+                </div>
+                <div className="text-[10px] text-[var(--ui-ink-soft)]">
+                  Compare without losing your place
+                </div>
+              </div>
+              {explorationAnchorNodes.map((node) => {
+                const group =
+                  KNOWLEDGE_GRAPH_SEMANTIC_GROUPS[
+                    getKnowledgeGraphSemanticGroup(node.entityKind)
+                  ];
+                return (
+                  <button
+                    key={node.id}
+                    type="button"
+                    className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border px-3 text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/55 ${
+                      node.id === focusNodeId
+                        ? "border-[var(--ui-border-strong)] bg-[var(--ui-surface-selected)] text-[var(--ui-ink-strong)]"
+                        : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] hover:border-[var(--ui-border-strong)] hover:text-[var(--ui-ink-strong)]"
+                    }`}
+                    aria-pressed={node.id === focusNodeId}
+                    onClick={() => handleFocusNode(node)}
+                  >
+                    <span
+                      className="size-2 rounded-full"
+                      style={{
+                        background: `var(${group.token}, ${group.fallback})`
+                      }}
+                      aria-hidden="true"
+                    />
+                    <span>{node.title}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+        ) : null}
 
         {isMobile ? (
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 px-3 pt-2 lg:hidden">
@@ -1018,6 +1574,35 @@ export function KnowledgeGraphPage() {
               <Button
                 variant="secondary"
                 size="sm"
+                className={`h-11 px-3 text-xs ${graphFloatingButtonClass}`}
+                onClick={toggleDisplayMode}
+                aria-pressed={displayMode === "all"}
+                title={
+                  displayMode === "all"
+                    ? "Return to the calm default set of knowledge types"
+                    : "Include every retained node and relationship type within the progressive view"
+                }
+              >
+                {displayMode === "all" ? "Calm view" : "All types"}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                className={`h-11 px-3 text-xs ${graphFloatingButtonClass}`}
+                onClick={toggleVisibleEdges}
+                aria-pressed={showAllVisibleEdges}
+                title={
+                  showAllVisibleEdges
+                    ? "Return to the strongest structural and local relationships"
+                    : "Draw every relationship whose two nodes are currently shown"
+                }
+              >
+                <Network className="size-3.5" aria-hidden="true" />
+                {showAllVisibleEdges ? "Strongest links" : "All shown links"}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
                 className={`h-7 px-2 text-[10px] ${graphFloatingButtonClass}`}
                 onClick={() => setAdvancedFiltersOpen((current) => !current)}
               >
@@ -1045,6 +1630,16 @@ export function KnowledgeGraphPage() {
                   transition={{ duration: 0.18, ease: "easeOut" }}
                   className="pointer-events-auto mt-2 ml-auto max-w-[min(54rem,calc(100%-3.5rem))] rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 shadow-[var(--ui-shadow-floating)] backdrop-blur"
                 >
+                  {unavailableFilterValues.length > 0 ? (
+                    <div
+                      role="status"
+                      className="mb-3 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-warning-soft)] px-3 py-2 text-xs leading-5 text-[var(--ui-ink-soft)]"
+                    >
+                      This saved link includes unavailable filters:{" "}
+                      {unavailableFilterValues.join(", ")}. They remain in the
+                      address but are ignored until you reset or replace them.
+                    </div>
+                  ) : null}
                   <div className="grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(17rem,1fr)]">
                     <div className="grid gap-3">
                       <EntityLinkMultiSelect
@@ -1329,7 +1924,12 @@ export function KnowledgeGraphPage() {
 
       <SheetScaffold
         open={mobilePanelOpen && Boolean(focusPayload.focusNode)}
-        onOpenChange={setMobilePanelOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            pendingMobileSheetNodeIdRef.current = null;
+          }
+          setMobilePanelOpen(open);
+        }}
         eyebrow="Knowledge Graph"
         title={focusPayload.focusNode?.title ?? "Focus node"}
         description={
@@ -1337,23 +1937,35 @@ export function KnowledgeGraphPage() {
           "Inspect the selected node and move deeper into the graph."
         }
       >
-        <KnowledgeGraphEntityPanel
-          focus={focusPayload}
-          onOpenPage={(node) => {
-            setMobilePanelOpen(false);
-            handleNavigateNode(node);
-          }}
-          onOpenNotes={(node) => {
-            setMobilePanelOpen(false);
-            handleOpenNotes(node);
-          }}
-          onOpenHierarchy={(node) => {
-            setMobilePanelOpen(false);
-            handleOpenHierarchy(node);
-          }}
-          onSelectNode={handleFocusNode}
-          className="border-0 bg-transparent p-0 shadow-none"
-        />
+        <div className="grid gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="w-fit min-h-10 rounded-full px-3 text-xs"
+            onClick={() => handleFocusNode(null)}
+          >
+            <ArrowLeft className="size-3.5" aria-hidden="true" />
+            Back to overview
+          </Button>
+          <KnowledgeGraphEntityPanel
+            focus={focusPayload}
+            onOpenPage={(node) => {
+              setMobilePanelOpen(false);
+              handleNavigateNode(node);
+            }}
+            onOpenNotes={(node) => {
+              setMobilePanelOpen(false);
+              handleOpenNotes(node);
+            }}
+            onOpenHierarchy={(node) => {
+              setMobilePanelOpen(false);
+              handleOpenHierarchy(node);
+            }}
+            onSelectNode={handleFocusNode}
+            className="border-0 bg-transparent p-0 shadow-none"
+          />
+        </div>
       </SheetScaffold>
 
       <SheetScaffold
@@ -1364,6 +1976,51 @@ export function KnowledgeGraphPage() {
         description="Search the visible graph and adjust the focus cap without covering the canvas all the time."
       >
         <div className="grid gap-4 pb-2">
+          {unavailableFilterValues.length > 0 ? (
+            <div
+              role="status"
+              className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-warning-soft)] px-3 py-2 text-xs leading-5 text-[var(--ui-ink-soft)]"
+            >
+              This saved link includes unavailable filters:{" "}
+              {unavailableFilterValues.join(", ")}. They remain in the address
+              but are ignored until you reset or replace them.
+            </div>
+          ) : null}
+          <div className="grid gap-2 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
+                  {displayMode === "all" ? "All types" : "Calm overview"}
+                </div>
+                <p className="mt-1 text-xs leading-5 text-[var(--ui-ink-faint)]">
+                  {displayMode === "all"
+                    ? "Every retained graph type is drawn."
+                    : `${presentation.hiddenNodeCount} nodes and ${presentation.hiddenEdgeCount} links are retained and available through search, filters, or focus.`}
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="min-h-11"
+                onClick={toggleDisplayMode}
+                aria-pressed={displayMode === "all"}
+              >
+                {displayMode === "all" ? "Use calm view" : "Show all types"}
+              </Button>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="min-h-11 w-full"
+              onClick={toggleVisibleEdges}
+              aria-pressed={showAllVisibleEdges}
+            >
+              <Network className="size-4" aria-hidden="true" />
+              {showAllVisibleEdges
+                ? "Show strongest relationships"
+                : "Show all links between shown nodes"}
+            </Button>
+          </div>
           <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3">
             <FacetedTokenSearch
               title=""

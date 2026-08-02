@@ -8,8 +8,9 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ComponentProps, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { KnowledgeGraphPage } from "@/pages/knowledge-graph-page";
+import { buildOptimisticKnowledgeGraphPayload } from "@/pages/knowledge-graph-page-model";
 import type {
   KnowledgeGraphNode,
   KnowledgeGraphPayload
@@ -107,11 +108,13 @@ vi.mock("framer-motion", () => ({
 vi.mock("@/components/knowledge-graph/knowledge-graph-force-view", () => ({
   KnowledgeGraphForceView: ({
     nodes,
+    visibleNodeIds,
     focusNodeId,
     physicsSettings,
     onSelectNode
   }: {
     nodes: KnowledgeGraphNode[];
+    visibleNodeIds: ReadonlySet<string>;
     focusNodeId: string | null;
     physicsSettings: {
       focusRepulsion: number;
@@ -125,6 +128,7 @@ vi.mock("@/components/knowledge-graph/knowledge-graph-force-view", () => ({
     return (
       <div aria-label="Knowledge graph canvas">
         <div>{`nodes:${nodes.length}`}</div>
+        <div>{`visible:${[...visibleNodeIds].join(",")}`}</div>
         <div>{focusNodeId ? `focus:${focusNodeId}` : "focus:none"}</div>
         <div>{`physics:${physicsSettings.focusRepulsion.toFixed(2)}:${physicsSettings.focusDiffusion.toFixed(2)}`}</div>
         <button type="button" onClick={() => onSelectNode(nodes[0] ?? null)}>
@@ -133,6 +137,11 @@ vi.mock("@/components/knowledge-graph/knowledge-graph-force-view", () => ({
         <button type="button" onClick={() => onSelectNode(nodes[1] ?? null)}>
           Focus second node
         </button>
+        {nodes[2] ? (
+          <button type="button" onClick={() => onSelectNode(nodes[2] ?? null)}>
+            Focus hidden task
+          </button>
+        ) : null}
         <button type="button" onClick={() => onSelectNode(null)}>
           Clear focused node
         </button>
@@ -164,20 +173,41 @@ vi.mock("@/components/knowledge-graph/knowledge-graph-focus-drawer", () => ({
 
 vi.mock("@/components/knowledge-graph/knowledge-graph-entity-panel", () => ({
   KnowledgeGraphEntityPanel: ({
-    focus
+    focus,
+    onOpenPage
   }: {
     focus: { focusNode: KnowledgeGraphNode | null };
-  }) => <div>{`Entity panel: ${focus.focusNode?.title ?? "empty"}`}</div>
+    onOpenPage: (node: KnowledgeGraphNode) => void;
+  }) => (
+    <div>
+      <div>{`Entity panel: ${focus.focusNode?.title ?? "empty"}`}</div>
+      {focus.focusNode ? (
+        <button type="button" onClick={() => onOpenPage(focus.focusNode!)}>
+          Open focused entity
+        </button>
+      ) : null}
+    </div>
+  )
 }));
 
 vi.mock("@/components/experience/sheet-scaffold", () => ({
   SheetScaffold: ({
     open,
+    onOpenChange,
     children
   }: {
     open: boolean;
+    onOpenChange: (open: boolean) => void;
     children: ReactNode;
-  }) => (open ? <div data-testid="mobile-sheet">{children}</div> : null)
+  }) =>
+    open ? (
+      <div data-testid="mobile-sheet">
+        <button type="button" onClick={() => onOpenChange(false)}>
+          Close mobile sheet
+        </button>
+        {children}
+      </div>
+    ) : null
 }));
 
 const graphFixture: KnowledgeGraphPayload = {
@@ -299,6 +329,133 @@ const graphFixture: KnowledgeGraphPayload = {
     limited: false
   }
 };
+
+const emptyGraphFixture: KnowledgeGraphPayload = {
+  ...graphFixture,
+  nodes: [],
+  edges: [],
+  counts: {
+    ...graphFixture.counts,
+    nodeCount: 0,
+    edgeCount: 0,
+    totalNodeCount: 0,
+    totalEdgeCount: 0,
+    filteredNodeCount: 0,
+    filteredEdgeCount: 0,
+    kinds: {},
+    relationKinds: {},
+    limited: false
+  },
+  facets: {
+    ...graphFixture.facets,
+    entityKinds: [],
+    relationKinds: [],
+    tags: [],
+    owners: [],
+    updatedAt: {
+      min: null,
+      max: null
+    }
+  }
+};
+
+describe("buildOptimisticKnowledgeGraphPayload", () => {
+  it("shows a matching retained node immediately without changing source truth", () => {
+    const optimistic = buildOptimisticKnowledgeGraphPayload(graphFixture, {
+      q: "execution layer",
+      limit: 40
+    });
+
+    expect(optimistic.nodes.map((node) => node.id)).toEqual([
+      "project:project-1"
+    ]);
+    expect(optimistic.edges).toEqual([]);
+    expect(optimistic.counts).toMatchObject({
+      nodeCount: 1,
+      edgeCount: 0,
+      totalNodeCount: 2,
+      totalEdgeCount: 1,
+      filteredNodeCount: 1,
+      filteredEdgeCount: 0,
+      kinds: { project: 1 },
+      relationKinds: {}
+    });
+    expect(graphFixture.nodes).toHaveLength(2);
+    expect(optimistic.facets).toBe(graphFixture.facets);
+  });
+
+  it("keeps the source limitation visible while the authoritative query refreshes", () => {
+    const source = {
+      ...graphFixture,
+      counts: { ...graphFixture.counts, limited: true }
+    };
+
+    expect(
+      buildOptimisticKnowledgeGraphPayload(source, { q: "north star" })
+        .counts.limited
+    ).toBe(true);
+  });
+});
+
+function buildHiddenTaskGraphFixture(): KnowledgeGraphPayload {
+  const hiddenTask = {
+    ...graphFixture.nodes[1]!,
+    id: "task:task-hidden",
+    entityType: "task" as const,
+    entityId: "task-hidden",
+    entityKind: "task" as const,
+    title: "Hidden task",
+    subtitle: "Detailed execution",
+    description: "Hidden from the calm overview but available on demand.",
+    href: "/tasks/task-hidden",
+    graphHref: "/knowledge-graph?focus=task%3Atask-hidden",
+    graphStats: {
+      degree: 1,
+      structuralDegree: 1,
+      contextualDegree: 0,
+      taxonomyDegree: 0,
+      workspaceDegree: 0
+    }
+  } satisfies KnowledgeGraphNode;
+  const projectTask = {
+    id: "project-task-hidden",
+    source: "project:project-1",
+    target: hiddenTask.id,
+    relationKind: "project_task" as const,
+    family: "structural" as const,
+    label: "Contains task",
+    strength: 0.8,
+    directional: true,
+    structural: true
+  };
+  return {
+    ...graphFixture,
+    nodes: [...graphFixture.nodes, hiddenTask],
+    edges: [...graphFixture.edges, projectTask],
+    facets: {
+      ...graphFixture.facets,
+      entityKinds: [
+        ...graphFixture.facets.entityKinds,
+        { value: "task", label: "Task", count: 1 }
+      ],
+      relationKinds: [
+        ...graphFixture.facets.relationKinds,
+        { value: "project_task", label: "Project → Task", count: 1 }
+      ]
+    },
+    counts: {
+      ...graphFixture.counts,
+      nodeCount: 3,
+      edgeCount: 2,
+      totalNodeCount: 3,
+      totalEdgeCount: 2,
+      filteredNodeCount: 3,
+      filteredEdgeCount: 2,
+      kinds: { goal: 1, project: 1, task: 1 },
+      relationKinds: { goal_project: 1, project_task: 1 }
+    }
+  };
+}
 
 function createSnapshot(): ForgeSnapshot {
   return {
@@ -430,6 +587,18 @@ function createSnapshot(): ForgeSnapshot {
   };
 }
 
+function TaskDestination() {
+  const navigate = useNavigate();
+  return (
+    <div>
+      <div>Task destination</div>
+      <button type="button" onClick={() => navigate(-1)}>
+        Return to graph
+      </button>
+    </div>
+  );
+}
+
 function renderPage(initialEntry = "/knowledge-graph") {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -439,15 +608,17 @@ function renderPage(initialEntry = "/knowledge-graph") {
     }
   });
 
-  return render(
+  const rendered = render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
           <Route path="/knowledge-graph" element={<KnowledgeGraphPage />} />
+          <Route path="/tasks/:taskId" element={<TaskDestination />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
   );
+  return { ...rendered, queryClient };
 }
 
 describe("KnowledgeGraphPage", () => {
@@ -644,6 +815,61 @@ describe("KnowledgeGraphPage", () => {
     );
   });
 
+  it("reveals a hidden task through search and preserves focus across entity navigation", async () => {
+    vi.mocked(window.matchMedia).mockImplementation(() => ({
+      matches: true,
+      media: "(max-width: 1023px)",
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn()
+    }));
+    getKnowledgeGraphMock.mockResolvedValue(buildHiddenTaskGraphFixture());
+
+    renderPage();
+    await screen.findByText("visible:goal:goal-1,project:project-1");
+    expect(screen.getByText("nodes:2")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open graph filters" }));
+    const searchInput = screen.getByPlaceholderText(
+      "Type a graph search, then press Enter or the search button"
+    );
+    fireEvent.change(searchInput, { target: { value: "Hidden task" } });
+    fireEvent.keyDown(searchInput, { key: "Enter" });
+
+    await screen.findByText(
+      "visible:goal:goal-1,project:project-1,task:task-hidden"
+    );
+    expect(screen.getByText("nodes:3")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Focus hidden task" }));
+    expect(
+      await screen.findByText("focus:task:task-hidden")
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("mobile-sheet")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Focus hidden task" }));
+    expect(
+      await screen.findByText("Entity panel: Hidden task")
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open focused entity" })
+    );
+    expect(await screen.findByText("Task destination")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Return to graph" }));
+    expect(
+      await screen.findByText("focus:task:task-hidden")
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "visible:goal:goal-1,project:project-1,task:task-hidden"
+      )
+    ).toBeInTheDocument();
+  });
+
   it("opens the graph appearance dialog and pushes physics slider changes into the graph view", async () => {
     renderPage();
     await waitFor(() =>
@@ -837,6 +1063,10 @@ describe("KnowledgeGraphPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Focus first node" }));
     expect(await screen.findByTestId("mobile-sheet")).toBeInTheDocument();
     expect(screen.getByText("Entity panel: North Star")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close mobile sheet" })
+    );
+    expect(screen.queryByTestId("mobile-sheet")).not.toBeInTheDocument();
   });
 
   it("exposes a page diagnostics activation hook that reopens the focused mobile sheet", async () => {
@@ -912,6 +1142,118 @@ describe("KnowledgeGraphPage", () => {
       expect(screen.getByText("focus:goal:goal-1")).toBeInTheDocument()
     );
     expect(getKnowledgeGraphMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes inactive search variants after returning to the calm graph", async () => {
+    const { queryClient } = renderPage();
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Loading the Forge world model")
+      ).not.toBeInTheDocument()
+    );
+    const searchInput = screen.getByPlaceholderText(
+      "Type a graph search, then press Enter or the search button"
+    );
+    fireEvent.change(searchInput, { target: { value: "North Star" } });
+    fireEvent.keyDown(searchInput, { key: "Enter" });
+    await waitFor(() =>
+      expect(getKnowledgeGraphMock).toHaveBeenLastCalledWith(
+        ["user_operator"],
+        expect.objectContaining({ q: "North Star" })
+      )
+    );
+
+    fireEvent.change(searchInput, { target: { value: "" } });
+    fireEvent.keyDown(searchInput, { key: "Enter" });
+    await waitFor(() =>
+      expect(
+        queryClient
+          .getQueryCache()
+          .getAll()
+          .filter(
+            (candidate) =>
+              candidate.queryKey[0] === "forge-knowledge-graph"
+          )
+      ).toHaveLength(1)
+    );
+  });
+
+  it("names the selected node and provides a direct return to the overview", async () => {
+    renderPage();
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Loading the Forge world model")
+      ).not.toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Focus first node" }));
+    expect(
+      screen.getByRole("heading", { name: "North Star" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("1 directly connected item. All direct relationships are shown in this focused view.")
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Back to overview" })
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("focus:goal:goal-1")).not.toBeInTheDocument()
+    );
+  });
+
+  it("explains an empty repository without offering a meaningless reset", async () => {
+    getKnowledgeGraphMock.mockResolvedValue(emptyGraphFixture);
+
+    renderPage();
+
+    expect(
+      await screen.findByText("Your knowledge graph is ready to grow")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Reset graph filters" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText(
+        "Type a graph search, then press Enter or the search button"
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("offers to reset a filtered view with no matches", async () => {
+    getKnowledgeGraphMock.mockResolvedValue(emptyGraphFixture);
+
+    renderPage("/knowledge-graph?q=missing");
+
+    expect(
+      await screen.findByText("No knowledge matches this view")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Show all knowledge types" })
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Reset graph filters" })
+    );
+
+    await waitFor(() =>
+      expect(getKnowledgeGraphMock).toHaveBeenLastCalledWith(
+        ["user_operator"],
+        expect.objectContaining({ q: null })
+      )
+    );
+  });
+
+  it("does not describe display and limit preferences as filtering an empty repository", async () => {
+    getKnowledgeGraphMock.mockResolvedValue(emptyGraphFixture);
+
+    renderPage("/knowledge-graph?display=all&limit=40&entityKind=stale_kind");
+
+    expect(
+      await screen.findByText("Your knowledge graph is ready to grow")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("No knowledge matches this view")
+    ).not.toBeInTheDocument();
   });
 
   it("shows a sturdy fallback when the graph renderer throws", async () => {

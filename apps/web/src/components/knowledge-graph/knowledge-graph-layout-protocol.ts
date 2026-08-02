@@ -17,6 +17,9 @@ export type KnowledgeGraphLayoutEdgeInit = {
 
 export type KnowledgeGraphLayoutInitMessage = {
   type: "init-graph";
+  generation: number;
+  positionPublishIntervalTicks?: number;
+  transferBuffers?: boolean;
   nodes: KnowledgeGraphLayoutNodeInit[];
   edges: KnowledgeGraphLayoutEdgeInit[];
   focusNodeId: string | null;
@@ -33,6 +36,12 @@ export type KnowledgeGraphLayoutFocusMessage = {
 export type KnowledgeGraphLayoutPhysicsMessage = {
   type: "update-physics";
   physics: KnowledgeGraphPhysicsSettings;
+};
+
+export type KnowledgeGraphLayoutPresentationMessage = {
+  type: "update-presentation";
+  positionPublishIntervalTicks: number;
+  reducedMotion: boolean;
 };
 
 export type KnowledgeGraphLayoutDragStartMessage = {
@@ -73,6 +82,7 @@ export type KnowledgeGraphLayoutWorkerMessage =
   | KnowledgeGraphLayoutInitMessage
   | KnowledgeGraphLayoutFocusMessage
   | KnowledgeGraphLayoutPhysicsMessage
+  | KnowledgeGraphLayoutPresentationMessage
   | KnowledgeGraphLayoutDragStartMessage
   | KnowledgeGraphLayoutDragMoveMessage
   | KnowledgeGraphLayoutDragEndMessage
@@ -82,6 +92,7 @@ export type KnowledgeGraphLayoutWorkerMessage =
 
 export type KnowledgeGraphLayoutPositionsMessage = {
   type: "positions";
+  generation: number;
   x: Float32Array;
   y: Float32Array;
   tick: number;
@@ -89,6 +100,7 @@ export type KnowledgeGraphLayoutPositionsMessage = {
 
 export type KnowledgeGraphLayoutStatsMessage = {
   type: "stats";
+  generation: number;
   tick: number;
   phase: "global" | "focus-enter" | "focused" | "focus-exit" | "dragging";
   primaryFocusedNodeId: string | null;
@@ -103,6 +115,7 @@ export type KnowledgeGraphLayoutStatsMessage = {
     x: number;
     y: number;
   };
+  settled: boolean;
 };
 
 export type KnowledgeGraphLayoutWorkerResponse =

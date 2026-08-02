@@ -12,14 +12,24 @@ import Sigma from "sigma";
 import type { CameraState } from "sigma/types";
 import {
   buildKnowledgeGraphFramedGraphPosition,
+  buildKnowledgeGraphFallbackKeyboardPositions,
+  buildKnowledgeGraphAdjacency,
+  advanceKnowledgeGraphAdaptiveQuality,
+  buildKnowledgeGraphViewportNodeIds,
+  beginKnowledgeGraphPresentationRender,
+  completeKnowledgeGraphPresentationRender,
   buildKnowledgeGraphFocusCameraTarget,
-  buildKnowledgeGraphFocusRings,
-  buildKnowledgeGraphHopLevels,
+  buildKnowledgeGraphFocusRingsFromAdjacency,
+  buildKnowledgeGraphHopLevelsFromAdjacency,
   buildKnowledgeGraphOverviewCameraTarget,
   buildKnowledgeGraphSigmaOverviewRatio,
+  buildVisibleRenderedKnowledgeGraphEdgeIds,
   resolveKnowledgeGraphKeyboardTarget,
   reduceKnowledgeGraphSigmaEdgeAttributes,
-  reduceKnowledgeGraphSigmaNodeAttributes
+  reduceKnowledgeGraphSigmaNodeAttributes,
+  requestKnowledgeGraphPresentation,
+  shouldRenderKnowledgeGraphEdgeAtQuality,
+  type KnowledgeGraphRenderQuality
 } from "@/components/knowledge-graph/knowledge-graph-force-view-model";
 import type { KnowledgeGraphPhysicsSettings } from "@/components/knowledge-graph/knowledge-graph-layout-model";
 import type {
@@ -41,6 +51,7 @@ import {
   findNearestViewportNode,
   getFallbackOverviewCamera,
   isContainerReady,
+  isKnowledgeGraphPositionMessageCurrent,
   projectFallbackNode,
   recenterGraphAroundOrigin,
   recenterPositionArraysAroundOrigin,
@@ -94,11 +105,63 @@ import {
 } from "@/store/slices/knowledge-graph-diagnostics-slice";
 import { useAppDispatch, useAppSelector } from "@/store/typed-hooks";
 
+type KnowledgeGraphPerformanceSnapshot = {
+  workerPositionMessageCount: number;
+  positionCommitCount: number;
+  rendererRefreshCount: number;
+  rejectedPositionMessageCount: number;
+  retainedNodeCount: number;
+  retainedEdgeCount: number;
+  renderedNodeCount: number;
+  renderedNodeIds: string[];
+  forcedLabelNodeIds: string[];
+  displayedLabelNodeIds: string[];
+  renderedEdgeCount: number;
+  minimumRenderedEdgeCount: number;
+  adaptiveQuality: KnowledgeGraphRenderQuality;
+  adaptiveQualityChangeCount: number;
+  mostConstrainedQuality: KnowledgeGraphRenderQuality;
+  observedFrameP95Ms: number | null;
+  reducedMotion: boolean;
+  positionPublishIntervalTicks: number;
+  requestedPresentationKey: string;
+  renderedPresentationKey: string | null;
+  lastNormalizedRmsDisplacement: number | null;
+  layoutStartedAt: number | null;
+  initialLayoutSettledAt: number | null;
+  stableLayoutAt: number | null;
+  settledFocusNodeId: string | null;
+  focusSettledAt: number | null;
+  layoutGeneration: number;
+  committedPositionTick: number | null;
+  workerSettledGeneration: number | null;
+  workerSettledTick: number | null;
+  renderedSettledGeneration: number | null;
+  renderedSettledTick: number | null;
+  renderedSettledFocusNodeId: string | null;
+  focusCameraSettledNodeId: string | null;
+  lastCameraAnimationDurationMs: number | null;
+  firstUsefulGraphAt: number | null;
+  lastRenderAt: number | null;
+  focusNodeId: string | null;
+  camera: CameraState | null;
+};
+
+declare global {
+  interface Window {
+    __FORGE_KG_POSITION_MODE__?: "baseline" | "optimized";
+    __FORGE_KG_ADAPTIVE_MODE__?: "off" | "on";
+    __FORGE_KG_FORCE_FALLBACK__?: boolean;
+    __FORGE_KNOWLEDGE_GRAPH_PERFORMANCE__?: KnowledgeGraphPerformanceSnapshot;
+  }
+}
+
 export type KnowledgeGraphForceViewHandle = {
   zoomIn: () => void;
   zoomOut: () => void;
   fit: () => void;
   recenterOnFocus: () => void;
+  reflow: () => void;
 };
 
 export const KnowledgeGraphForceView = forwardRef<
@@ -106,15 +169,35 @@ export const KnowledgeGraphForceView = forwardRef<
   {
     nodes: KnowledgeGraphNode[];
     edges: KnowledgeGraphEdge[];
+    sourceNodeCount?: number;
+    sourceEdgeCount?: number;
+    visibleNodeIds: ReadonlySet<string>;
+    visibleEdgeIds: ReadonlySet<string>;
+    preserveVisibleEdges: boolean;
+    presentationKey: string;
     focusNodeId: string | null;
     physicsSettings: KnowledgeGraphPhysicsSettings;
     onSelectNode: (node: KnowledgeGraphNode | null) => void;
   }
 >(function KnowledgeGraphForceView(
-  { nodes, edges, focusNodeId, physicsSettings, onSelectNode },
+  {
+    nodes,
+    edges,
+    sourceNodeCount = nodes.length,
+    sourceEdgeCount = edges.length,
+    visibleNodeIds,
+    visibleEdgeIds,
+    preserveVisibleEdges,
+    presentationKey,
+    focusNodeId,
+    physicsSettings,
+    onSelectNode
+  },
   ref
 ) {
   const dispatch = useAppDispatch();
+  const [layoutRevision, setLayoutRevision] = useState(0);
+  const processedLayoutRevisionRef = useRef(0);
   const diagnosticsPanelOpen = useAppSelector(
     (state) => state.knowledgeGraphDiagnostics.panelOpen
   );
@@ -124,12 +207,81 @@ export const KnowledgeGraphForceView = forwardRef<
     SigmaEdgeAttributes
   > | null>(null);
   const workerRef = useRef<Worker | null>(null);
+  const pendingPositionMessageRef = useRef<Extract<
+    KnowledgeGraphLayoutWorkerResponse,
+    { type: "positions" }
+  > | null>(null);
+  const positionCommitFrameRef = useRef<number | null>(null);
+  const lastPositionCacheAtRef = useRef(0);
+  const stableCandidateSinceRef = useRef<number | null>(null);
+  const performanceSnapshotRef = useRef<KnowledgeGraphPerformanceSnapshot>({
+    workerPositionMessageCount: 0,
+    positionCommitCount: 0,
+    rendererRefreshCount: 0,
+    rejectedPositionMessageCount: 0,
+    retainedNodeCount: sourceNodeCount,
+    retainedEdgeCount: sourceEdgeCount,
+    renderedNodeCount: visibleNodeIds.size,
+    renderedNodeIds: [...visibleNodeIds].sort(),
+    forcedLabelNodeIds: [],
+    displayedLabelNodeIds: [],
+    renderedEdgeCount: visibleEdgeIds.size,
+    minimumRenderedEdgeCount: visibleEdgeIds.size,
+    adaptiveQuality: "full",
+    adaptiveQualityChangeCount: 0,
+    mostConstrainedQuality: "full",
+    observedFrameP95Ms: null,
+    reducedMotion: false,
+    positionPublishIntervalTicks: 4,
+    requestedPresentationKey: presentationKey,
+    renderedPresentationKey: null,
+    lastNormalizedRmsDisplacement: null,
+    layoutStartedAt: null,
+    initialLayoutSettledAt: null,
+    stableLayoutAt: null,
+    settledFocusNodeId: null,
+    focusSettledAt: null,
+    layoutGeneration: 0,
+    committedPositionTick: null,
+    workerSettledGeneration: null,
+    workerSettledTick: null,
+    renderedSettledGeneration: null,
+    renderedSettledTick: null,
+    renderedSettledFocusNodeId: null,
+    focusCameraSettledNodeId: null,
+    lastCameraAnimationDurationMs: null,
+    firstUsefulGraphAt: null,
+    lastRenderAt: null,
+    focusNodeId,
+    camera: null
+  });
   const graphRef = useRef<Graph<
     SigmaNodeAttributes,
     SigmaEdgeAttributes
   > | null>(null);
   const positionCacheRef = useRef<Map<string, PositionSnapshot>>(new Map());
+  const workerSettlementRef = useRef<{
+    generation: number;
+    tick: number;
+    focusNodeId: string | null;
+  } | null>(null);
+  const pendingRenderedSettlementRef = useRef<{
+    generation: number;
+    tick: number;
+    focusNodeId: string | null;
+  } | null>(null);
+  const presentationRenderStateRef = useRef({
+    requestedKey: presentationKey,
+    pendingKey: null as string | null,
+    renderedKey: null as string | null
+  });
+  presentationRenderStateRef.current = requestKnowledgeGraphPresentation(
+    presentationRenderStateRef.current,
+    presentationKey
+  );
+  performanceSnapshotRef.current.requestedPresentationKey = presentationKey;
   const cameraStateCacheRef = useRef<Map<string, CameraState>>(new Map());
+  const previousFocusNodeIdRef = useRef<string | null>(focusNodeId);
   const nodeMapRef = useRef<Map<string, KnowledgeGraphNode>>(new Map());
   const onSelectNodeRef = useRef(onSelectNode);
   const focusNodeIdRef = useRef<string | null>(focusNodeId);
@@ -140,6 +292,7 @@ export const KnowledgeGraphForceView = forwardRef<
   const previousPanningEnabledRef = useRef(true);
   const desiredCameraRef = useRef<DesiredCameraTarget | null>(null);
   const manualRatioHoldUntilRef = useRef(0);
+  const cameraInteractionUntilRef = useRef(0);
   const simulationPhaseRef =
     useRef<KnowledgeGraphDiagnosticsPayload["simulationPhase"]>("global");
   const primaryFocusedNodeIdRef = useRef<string | null>(null);
@@ -167,6 +320,19 @@ export const KnowledgeGraphForceView = forwardRef<
   );
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
+  const [sigmaReadyEpoch, setSigmaReadyEpoch] = useState(0);
+  const [renderQuality, setRenderQuality] =
+    useState<KnowledgeGraphRenderQuality>("full");
+  const renderQualityRef = useRef<KnowledgeGraphRenderQuality>("full");
+  const adaptiveQualityStateRef = useRef({
+    quality: "full" as KnowledgeGraphRenderQuality,
+    pressuredWindows: 0,
+    healthyWindows: 0
+  });
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const [viewportVisibleNodeIds, setViewportVisibleNodeIds] = useState(
+    () => new Set(visibleNodeIds)
+  );
   const [fallbackReason, setFallbackReason] = useState<string | null>(null);
   const [fallbackCamera, setFallbackCamera] = useState<CameraState>({
     x: 0,
@@ -231,6 +397,19 @@ export const KnowledgeGraphForceView = forwardRef<
     () => buildRenderedKnowledgeGraphEdges(edges),
     [edges]
   );
+  const visibleRenderedEdgeIds = useMemo(
+    () =>
+      buildVisibleRenderedKnowledgeGraphEdgeIds(renderedEdges, visibleEdgeIds),
+    [renderedEdges, visibleEdgeIds]
+  );
+  const graphAdjacency = useMemo(
+    () =>
+      buildKnowledgeGraphAdjacency(
+        nodes.map((node) => node.id),
+        renderedEdges
+      ),
+    [nodes, renderedEdges]
+  );
   const datasetSignature = useMemo(
     () => buildKnowledgeGraphDatasetSignature(nodes, edges),
     [edges, nodes]
@@ -238,9 +417,12 @@ export const KnowledgeGraphForceView = forwardRef<
   const focusRings = useMemo(
     () =>
       focusNodeId
-        ? buildKnowledgeGraphFocusRings(renderedEdges, focusNodeId)
+        ? buildKnowledgeGraphFocusRingsFromAdjacency(
+            graphAdjacency,
+            focusNodeId
+          )
         : null,
-    [focusNodeId, renderedEdges]
+    [focusNodeId, graphAdjacency]
   );
   const detailNodeIds = useMemo(() => {
     if (!focusNodeId) {
@@ -248,6 +430,145 @@ export const KnowledgeGraphForceView = forwardRef<
     }
     return new Set<string>([focusNodeId, ...(focusRings?.firstRing ?? [])]);
   }, [focusNodeId, focusRings]);
+  const adaptiveRenderedEdgeCount = useMemo(
+    () =>
+      renderedEdges.filter((edge) => {
+        if (!visibleRenderedEdgeIds.has(edge.id)) {
+          return false;
+        }
+        if (
+          !viewportVisibleNodeIds.has(edge.source) ||
+          !viewportVisibleNodeIds.has(edge.target)
+        ) {
+          return false;
+        }
+        const preserve =
+          preserveVisibleEdges ||
+          (!!focusNodeId &&
+            (edge.source === focusNodeId || edge.target === focusNodeId)) ||
+          detailNodeIds.has(edge.source) ||
+          detailNodeIds.has(edge.target);
+        return shouldRenderKnowledgeGraphEdgeAtQuality({
+          edge,
+          quality: renderQuality,
+          preserve
+        });
+      }).length,
+    [
+      detailNodeIds,
+      focusNodeId,
+      preserveVisibleEdges,
+      renderQuality,
+      renderedEdges,
+      visibleRenderedEdgeIds,
+      viewportVisibleNodeIds
+    ]
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const sync = () => setReducedMotion(media.matches);
+    sync();
+    media.addEventListener?.("change", sync);
+    return () => media.removeEventListener?.("change", sync);
+  }, []);
+
+  useEffect(() => {
+    if (window.__FORGE_KG_ADAPTIVE_MODE__ === "off") {
+      renderQualityRef.current = "full";
+      adaptiveQualityStateRef.current = {
+        quality: "full",
+        pressuredWindows: 0,
+        healthyWindows: 0
+      };
+      setRenderQuality("full");
+      return;
+    }
+    let frameId = 0;
+    let lastFrameAt = performance.now();
+    let interactionObserved = false;
+    let frameIntervals: number[] = [];
+
+    const observeFrame = (now: number) => {
+      const interval = now - lastFrameAt;
+      lastFrameAt = now;
+      if (
+        document.visibilityState === "visible" &&
+        interval > 0 &&
+        interval < 100
+      ) {
+        frameIntervals.push(interval);
+      }
+      interactionObserved ||=
+        now < cameraInteractionUntilRef.current ||
+        dragStateRef.current !== null;
+
+      if (frameIntervals.length >= 60) {
+        const ordered = [...frameIntervals].sort((left, right) => left - right);
+        const frameP95Ms =
+          ordered[
+            Math.min(ordered.length - 1, Math.floor(ordered.length * 0.95))
+          ] ?? 0;
+        const nextState = advanceKnowledgeGraphAdaptiveQuality(
+          adaptiveQualityStateRef.current,
+          {
+            frameP95Ms,
+            interactionActive: interactionObserved,
+            visibleEdgeCount: visibleRenderedEdgeIds.size
+          }
+        );
+        adaptiveQualityStateRef.current = nextState;
+        const nextQuality = nextState.quality;
+        performanceSnapshotRef.current.observedFrameP95Ms = frameP95Ms;
+        performanceSnapshotRef.current.adaptiveQuality = nextQuality;
+        window.__FORGE_KNOWLEDGE_GRAPH_PERFORMANCE__ = {
+          ...performanceSnapshotRef.current
+        };
+        if (nextQuality !== renderQualityRef.current) {
+          performanceSnapshotRef.current.adaptiveQualityChangeCount += 1;
+          if (
+            nextQuality === "reduced" ||
+            (nextQuality === "balanced" &&
+              performanceSnapshotRef.current.mostConstrainedQuality === "full")
+          ) {
+            performanceSnapshotRef.current.mostConstrainedQuality = nextQuality;
+          }
+          renderQualityRef.current = nextQuality;
+          setRenderQuality(nextQuality);
+        }
+        frameIntervals = [];
+        interactionObserved = false;
+      }
+      frameId = window.requestAnimationFrame(observeFrame);
+    };
+
+    frameId = window.requestAnimationFrame(observeFrame);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [visibleRenderedEdgeIds.size]);
+
+  useEffect(() => {
+    const positionPublishIntervalTicks =
+      window.__FORGE_KG_POSITION_MODE__ === "baseline"
+        ? 1
+        : reducedMotion
+          ? 10
+          : renderQuality === "full"
+            ? 4
+            : renderQuality === "balanced"
+              ? 6
+              : 10;
+    workerRef.current?.postMessage({
+      type: "update-presentation",
+      positionPublishIntervalTicks,
+      reducedMotion
+    } satisfies KnowledgeGraphLayoutWorkerMessage);
+    performanceSnapshotRef.current.reducedMotion = reducedMotion;
+    performanceSnapshotRef.current.positionPublishIntervalTicks =
+      positionPublishIntervalTicks;
+    window.__FORGE_KNOWLEDGE_GRAPH_PERFORMANCE__ = {
+      ...performanceSnapshotRef.current
+    };
+  }, [reducedMotion, renderQuality]);
   const relatedNodeIds = useMemo(() => {
     if (!focusNodeId) {
       return new Set<string>();
@@ -271,6 +592,10 @@ export const KnowledgeGraphForceView = forwardRef<
       return false;
     }
     try {
+      performanceSnapshotRef.current.rendererRefreshCount += 1;
+      window.__FORGE_KNOWLEDGE_GRAPH_PERFORMANCE__ = {
+        ...performanceSnapshotRef.current
+      };
       if (resize) {
         sigmaRef.current.resize();
       }
@@ -775,10 +1100,22 @@ export const KnowledgeGraphForceView = forwardRef<
       return;
     }
     const positions = buildPositionMapFromGraph(currentGraph);
-    const rings = buildKnowledgeGraphFocusRings(
-      renderedEdges,
+    const rings = buildKnowledgeGraphFocusRingsFromAdjacency(
+      graphAdjacency,
       focusNodeIdRef.current
     );
+    const cachedCamera = datasetSignatureRef.current
+      ? cameraStateCacheRef.current.get(
+          `${datasetSignatureRef.current}::focus:${focusNodeIdRef.current}`
+        )
+      : null;
+    if (cachedCamera) {
+      desiredCameraRef.current = {
+        ...cachedCamera,
+        nodeIds: [focusNodeIdRef.current, ...rings.firstRing]
+      };
+      return;
+    }
     const currentRatio = sigmaRef.current
       ? sigmaRef.current.getCamera().getState().ratio
       : fallbackCamera.ratio;
@@ -786,7 +1123,7 @@ export const KnowledgeGraphForceView = forwardRef<
       positions,
       focusNodeId: focusNodeIdRef.current,
       firstRingNodeIds: rings.firstRing,
-      secondRingNodeIds: rings.secondRing,
+      secondRingNodeIds: [],
       currentRatio
     });
     const sigmaTarget =
@@ -801,7 +1138,14 @@ export const KnowledgeGraphForceView = forwardRef<
         : null;
     desiredCameraRef.current = target
       ? {
-          x: sigmaTarget?.x ?? target.x,
+          x: Math.min(
+            1,
+            Math.max(
+              0,
+              (sigmaTarget?.x ?? target.x) +
+                (containerSize.width >= 900 ? 0.18 : 0)
+            )
+          ),
           y: sigmaTarget?.y ?? target.y,
           angle: 0,
           ratio: target.ratio,
@@ -810,25 +1154,38 @@ export const KnowledgeGraphForceView = forwardRef<
       : null;
   };
 
-  const animateCameraToDesired = (duration = 220) => {
+  const animateCameraToDesired = async (duration = 220) => {
     if (!desiredCameraRef.current) {
       return;
     }
     const target = desiredCameraRef.current;
+    const targetFocusNodeId = focusNodeIdRef.current;
     if (sigmaRef.current) {
       const camera = sigmaRef.current.getCamera();
       const current = camera.getState();
       const shouldRespectManualRatio =
         Date.now() < manualRatioHoldUntilRef.current;
-      void camera.animate(
+      const cameraAnimationDurationMs = reducedMotion ? 0 : duration;
+      performanceSnapshotRef.current.lastCameraAnimationDurationMs =
+        cameraAnimationDurationMs;
+      await camera.animate(
         {
           x: target.x,
           y: target.y,
           ratio: shouldRespectManualRatio ? current.ratio : target.ratio,
           angle: 0
         },
-        { duration }
+        { duration: cameraAnimationDurationMs }
       );
+      if (focusNodeIdRef.current === targetFocusNodeId) {
+        performanceSnapshotRef.current.focusCameraSettledNodeId =
+          targetFocusNodeId;
+        performanceSnapshotRef.current.camera = camera.getState();
+        window.__FORGE_KNOWLEDGE_GRAPH_PERFORMANCE__ = {
+          ...performanceSnapshotRef.current
+        };
+        lifecycleCallbacksRef.current.publishCurrentDiagnostics();
+      }
       return;
     }
     setFallbackCamera((current) => ({
@@ -840,7 +1197,72 @@ export const KnowledgeGraphForceView = forwardRef<
           ? current.ratio
           : target.ratio
     }));
+    performanceSnapshotRef.current.lastCameraAnimationDurationMs = 0;
+    performanceSnapshotRef.current.focusCameraSettledNodeId = targetFocusNodeId;
   };
+
+  useEffect(() => {
+    const sigma = sigmaRef.current;
+    const graph = graphRef.current;
+    if (!sigma || !graph) {
+      setViewportVisibleNodeIds(new Set(visibleNodeIds));
+      return;
+    }
+    let frameId: number | null = null;
+    const update = () => {
+      frameId = null;
+      const preserve = new Set<string>([
+        ...(focusNodeId ? [focusNodeId] : []),
+        ...detailNodeIds,
+        ...(hoveredNodeId ? [hoveredNodeId] : []),
+        ...(draggedNodeId ? [draggedNodeId] : [])
+      ]);
+      const viewportNodes = [...visibleNodeIds]
+        .filter((nodeId) => graph.hasNode(nodeId))
+        .map((nodeId) => {
+          const point = sigma.graphToViewport({
+            x: graph.getNodeAttribute(nodeId, "x"),
+            y: graph.getNodeAttribute(nodeId, "y")
+          });
+          return { id: nodeId, viewportX: point.x, viewportY: point.y };
+        });
+      setViewportVisibleNodeIds(
+        buildKnowledgeGraphViewportNodeIds({
+          nodes: viewportNodes,
+          width: containerSize.width,
+          height: containerSize.height,
+          padding:
+            renderQuality === "full"
+              ? 140
+              : renderQuality === "balanced"
+                ? 90
+                : 48,
+          preserveNodeIds: preserve,
+          preserveAll: preserveVisibleEdges || Boolean(focusNodeId)
+        })
+      );
+    };
+    const schedule = () => {
+      if (frameId === null) frameId = window.requestAnimationFrame(update);
+    };
+    sigma.getCamera().on("updated", schedule);
+    schedule();
+    return () => {
+      sigma.getCamera().off("updated", schedule);
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+    };
+  }, [
+    containerSize.height,
+    containerSize.width,
+    detailNodeIds,
+    draggedNodeId,
+    focusNodeId,
+    hoveredNodeId,
+    renderQuality,
+    preserveVisibleEdges,
+    sigmaReadyEpoch,
+    visibleNodeIds
+  ]);
 
   const lifecycleCallbacksRef = useRef({
     animateCameraToDesired,
@@ -876,6 +1298,23 @@ export const KnowledgeGraphForceView = forwardRef<
   useEffect(() => {
     focusNodeIdRef.current = focusNodeId;
     desiredCameraRef.current = null;
+    pendingPositionMessageRef.current = null;
+    if (positionCommitFrameRef.current !== null) {
+      window.cancelAnimationFrame(positionCommitFrameRef.current);
+      positionCommitFrameRef.current = null;
+    }
+    stableCandidateSinceRef.current = null;
+    performanceSnapshotRef.current.settledFocusNodeId = null;
+    performanceSnapshotRef.current.focusSettledAt = null;
+    performanceSnapshotRef.current.workerSettledGeneration = null;
+    performanceSnapshotRef.current.workerSettledTick = null;
+    performanceSnapshotRef.current.renderedSettledGeneration = null;
+    performanceSnapshotRef.current.renderedSettledTick = null;
+    performanceSnapshotRef.current.renderedSettledFocusNodeId = null;
+    performanceSnapshotRef.current.focusCameraSettledNodeId = null;
+    performanceSnapshotRef.current.lastCameraAnimationDurationMs = null;
+    workerSettlementRef.current = null;
+    pendingRenderedSettlementRef.current = null;
   }, [focusNodeId]);
 
   useEffect(() => {
@@ -942,7 +1381,7 @@ export const KnowledgeGraphForceView = forwardRef<
               ratio: current.ratio,
               angle: current.angle
             },
-            { duration: 140 }
+            { duration: reducedMotion ? 0 : 80 }
           );
           return;
         }
@@ -956,7 +1395,7 @@ export const KnowledgeGraphForceView = forwardRef<
     return () => {
       delete window.__FORGE_KNOWLEDGE_GRAPH_TEST_API__;
     };
-  }, [renderedEdges]);
+  }, [reducedMotion, renderedEdges]);
 
   useEffect(() => {
     if (!containerRef.current || typeof ResizeObserver === "undefined") {
@@ -989,7 +1428,7 @@ export const KnowledgeGraphForceView = forwardRef<
         if (sigmaRef.current) {
           void sigmaRef.current.getCamera().animatedZoom({
             factor: 1.25,
-            duration: 160
+            duration: reducedMotion ? 0 : 160
           });
           return;
         }
@@ -1003,7 +1442,7 @@ export const KnowledgeGraphForceView = forwardRef<
         if (sigmaRef.current) {
           void sigmaRef.current.getCamera().animatedUnzoom({
             factor: 1.25,
-            duration: 160
+            duration: reducedMotion ? 0 : 160
           });
           return;
         }
@@ -1019,7 +1458,7 @@ export const KnowledgeGraphForceView = forwardRef<
             .getCamera()
             .animate(
               lifecycleCallbacksRef.current.buildSigmaOverviewCameraState(),
-              { duration: 220 }
+              { duration: reducedMotion ? 0 : 220 }
             );
           return;
         }
@@ -1033,9 +1472,12 @@ export const KnowledgeGraphForceView = forwardRef<
           return;
         }
         lifecycleCallbacksRef.current.animateCameraToDesired(220);
+      },
+      reflow: () => {
+        setLayoutRevision((current) => current + 1);
       }
     }),
-    [fallbackSnapshot]
+    [fallbackSnapshot, reducedMotion]
   );
 
   useEffect(() => {
@@ -1056,6 +1498,11 @@ export const KnowledgeGraphForceView = forwardRef<
       } satisfies KnowledgeGraphLayoutWorkerMessage);
       workerRef.current?.terminate();
       workerRef.current = null;
+      pendingPositionMessageRef.current = null;
+      if (positionCommitFrameRef.current !== null) {
+        window.cancelAnimationFrame(positionCommitFrameRef.current);
+        positionCommitFrameRef.current = null;
+      }
       if (diagnosticsEnabled) {
         lifecycleCallbacksRef.current.recordDiagnosticsEvent({
           level: "debug",
@@ -1090,8 +1537,10 @@ export const KnowledgeGraphForceView = forwardRef<
     const sameDataset =
       datasetSignatureRef.current === datasetSignature &&
       graphRef.current !== null;
+    const reflowRequested =
+      processedLayoutRevisionRef.current !== layoutRevision;
 
-    if (sameDataset) {
+    if (sameDataset && !reflowRequested) {
       safeRefreshSigma({ resize: true });
       if (diagnosticsEnabled) {
         recordDiagnosticsEvent({
@@ -1111,6 +1560,7 @@ export const KnowledgeGraphForceView = forwardRef<
       publishCurrentDiagnostics();
       return;
     }
+    processedLayoutRevisionRef.current = layoutRevision;
 
     startupPhaseRef.current = "boot";
     startupCorrectionAppliedRef.current = false;
@@ -1153,6 +1603,50 @@ export const KnowledgeGraphForceView = forwardRef<
     nodeMapRef.current = new Map(nodes.map((node) => [node.id, node]));
     datasetSignatureRef.current = datasetSignature;
     layoutGenerationRef.current += 1;
+    performanceSnapshotRef.current = {
+      workerPositionMessageCount: 0,
+      positionCommitCount: 0,
+      rendererRefreshCount: 0,
+      rejectedPositionMessageCount: 0,
+      retainedNodeCount: sourceNodeCount,
+      retainedEdgeCount: sourceEdgeCount,
+      renderedNodeCount: visibleNodeIds.size,
+      renderedNodeIds: [...visibleNodeIds].sort(),
+      forcedLabelNodeIds: [],
+      displayedLabelNodeIds: [],
+      renderedEdgeCount: adaptiveRenderedEdgeCount,
+      minimumRenderedEdgeCount: adaptiveRenderedEdgeCount,
+      adaptiveQuality: renderQualityRef.current,
+      adaptiveQualityChangeCount: 0,
+      mostConstrainedQuality: renderQualityRef.current,
+      observedFrameP95Ms: performanceSnapshotRef.current.observedFrameP95Ms,
+      reducedMotion,
+      positionPublishIntervalTicks: reducedMotion ? 10 : 4,
+      requestedPresentationKey: presentationKey,
+      renderedPresentationKey: null,
+      lastNormalizedRmsDisplacement: null,
+      layoutStartedAt: null,
+      initialLayoutSettledAt: null,
+      stableLayoutAt: null,
+      settledFocusNodeId: null,
+      focusSettledAt: null,
+      layoutGeneration: layoutGenerationRef.current,
+      committedPositionTick: null,
+      workerSettledGeneration: null,
+      workerSettledTick: null,
+      renderedSettledGeneration: null,
+      renderedSettledTick: null,
+      renderedSettledFocusNodeId: null,
+      focusCameraSettledNodeId: null,
+      lastCameraAnimationDurationMs: null,
+      firstUsefulGraphAt: null,
+      lastRenderAt: null,
+      focusNodeId,
+      camera: null
+    };
+    window.__FORGE_KNOWLEDGE_GRAPH_PERFORMANCE__ = {
+      ...performanceSnapshotRef.current
+    };
     setFallbackSnapshot(buildFallbackSnapshot(nextGraph, renderedEdges));
     startupPhaseRef.current = "graph_built";
     recordDiagnosticsEvent({
@@ -1165,7 +1659,7 @@ export const KnowledgeGraphForceView = forwardRef<
       }
     });
 
-    if (!canUseWebGL()) {
+    if (window.__FORGE_KG_FORCE_FALLBACK__ || !canUseWebGL()) {
       sigmaRef.current?.kill();
       sigmaRef.current = null;
       setFallbackReason("WebGL is unavailable in this browser context.");
@@ -1192,11 +1686,14 @@ export const KnowledgeGraphForceView = forwardRef<
             ),
             minCameraRatio: 0.08,
             maxCameraRatio: 4,
-            autoRescale: false,
+            autoRescale: true,
             autoCenter: false,
             enableEdgeEvents: false,
             enableCameraPanning: true,
             zIndex: true
+          });
+          sigmaRef.current.getCamera().on("updated", () => {
+            cameraInteractionUntilRef.current = performance.now() + 80;
           });
           recordDiagnosticsEvent({
             level: "info",
@@ -1367,6 +1864,58 @@ export const KnowledgeGraphForceView = forwardRef<
             setHoveredNodeId(null);
           });
           sigmaRef.current.on("afterRender", () => {
+            const renderedSettlement = pendingRenderedSettlementRef.current;
+            if (
+              renderedSettlement &&
+              renderedSettlement.generation === layoutGenerationRef.current &&
+              renderedSettlement.tick ===
+                performanceSnapshotRef.current.committedPositionTick &&
+              renderedSettlement.focusNodeId === focusNodeIdRef.current
+            ) {
+              performanceSnapshotRef.current.renderedSettledGeneration =
+                renderedSettlement.generation;
+              performanceSnapshotRef.current.renderedSettledTick =
+                renderedSettlement.tick;
+              performanceSnapshotRef.current.renderedSettledFocusNodeId =
+                renderedSettlement.focusNodeId;
+              pendingRenderedSettlementRef.current = null;
+              if (renderedSettlement.focusNodeId) {
+                const focusToFrame = renderedSettlement.focusNodeId;
+                window.requestAnimationFrame(() => {
+                  if (focusNodeIdRef.current !== focusToFrame) {
+                    return;
+                  }
+                  lifecycleCallbacksRef.current.updateDesiredCameraFromGraph();
+                  void lifecycleCallbacksRef.current.animateCameraToDesired(
+                    240
+                  );
+                });
+              }
+            }
+            performanceSnapshotRef.current.lastRenderAt = performance.now();
+            performanceSnapshotRef.current.camera =
+              sigmaRef.current?.getCamera().getState() ?? null;
+            performanceSnapshotRef.current.displayedLabelNodeIds = [
+              ...(sigmaRef.current?.getNodeDisplayedLabels() ?? [])
+            ].sort();
+            presentationRenderStateRef.current =
+              completeKnowledgeGraphPresentationRender(
+                presentationRenderStateRef.current
+              );
+            performanceSnapshotRef.current.requestedPresentationKey =
+              presentationRenderStateRef.current.requestedKey;
+            performanceSnapshotRef.current.renderedPresentationKey =
+              presentationRenderStateRef.current.renderedKey;
+            window.__FORGE_KNOWLEDGE_GRAPH_PERFORMANCE__ = {
+              ...performanceSnapshotRef.current
+            };
+            if (performanceSnapshotRef.current.firstUsefulGraphAt === null) {
+              performanceSnapshotRef.current.firstUsefulGraphAt =
+                performance.now();
+              window.__FORGE_KNOWLEDGE_GRAPH_PERFORMANCE__ = {
+                ...performanceSnapshotRef.current
+              };
+            }
             if (!startupFirstFrameHandledRef.current) {
               startupFirstFrameHandledRef.current = true;
               startupPhaseRef.current = "first_frame";
@@ -1400,6 +1949,7 @@ export const KnowledgeGraphForceView = forwardRef<
         sigmaRef.current
           .getCamera()
           .setState(buildSigmaOverviewCameraState(nextGraph));
+        setSigmaReadyEpoch((epoch) => epoch + 1);
       } catch (error) {
         sigmaRef.current?.kill();
         sigmaRef.current = null;
@@ -1431,47 +1981,33 @@ export const KnowledgeGraphForceView = forwardRef<
         new URL("./knowledge-graph-layout.worker.ts", import.meta.url),
         { type: "module" }
       );
-      workerRef.current.onmessage = (
-        event: MessageEvent<KnowledgeGraphLayoutWorkerResponse>
+      const applyPositionMessage = (
+        pendingMessage: Extract<
+          KnowledgeGraphLayoutWorkerResponse,
+          { type: "positions" }
+        >
       ) => {
-        if (!graphRef.current) {
-          return;
-        }
-        const message = event.data;
-        if (message.type === "stats") {
-          simulationPhaseRef.current = message.phase;
-          primaryFocusedNodeIdRef.current = message.primaryFocusedNodeId;
-          focusSourcesRef.current = message.focusSources;
-          focusPressureRef.current = message.focusPressure;
-          centroidRef.current = message.centroid;
-          if (!startupWorkerVerificationHandledRef.current) {
-            startupWorkerVerificationHandledRef.current = true;
-            startupPhaseRef.current = "worker_started";
-            recordDiagnosticsEvent({
-              level: "info",
-              eventKey: "worker_started",
-              message:
-                "Knowledge graph worker reported its first simulation stats.",
-              details: {
-                datasetSignature: datasetSignatureRef.current,
-                phase: message.phase
-              }
-            });
-            verifyStartupInvariant({
-              phase: "worker_started",
-              allowCorrection: true,
-              publishBackendOnFailure: true
-            });
-          }
-          return;
-        }
         const currentGraph = graphRef.current;
-        let nextX = message.x;
-        let nextY = message.y;
+        if (
+          !currentGraph ||
+          !isKnowledgeGraphPositionMessageCurrent({
+            message: pendingMessage,
+            generation: layoutGenerationRef.current,
+            nodeCount: currentGraph.order
+          })
+        ) {
+          performanceSnapshotRef.current.rejectedPositionMessageCount += 1;
+          window.__FORGE_KNOWLEDGE_GRAPH_PERFORMANCE__ = {
+            ...performanceSnapshotRef.current
+          };
+          return;
+        }
+        let nextX = pendingMessage.x;
+        let nextY = pendingMessage.y;
         if (startupPhaseRef.current !== "startup_verified") {
           const recentered = recenterPositionArraysAroundOrigin({
-            x: message.x,
-            y: message.y
+            x: pendingMessage.x,
+            y: pendingMessage.y
           });
           if (recentered.changed) {
             nextX = recentered.x;
@@ -1497,15 +2033,28 @@ export const KnowledgeGraphForceView = forwardRef<
           }
         }
         let nodeIndex = 0;
+        let squaredDisplacement = 0;
+        let minX = Number.POSITIVE_INFINITY;
+        let maxX = Number.NEGATIVE_INFINITY;
+        let minY = Number.POSITIVE_INFINITY;
+        let maxY = Number.NEGATIVE_INFINITY;
         currentGraph.updateEachNodeAttributes(
-          (nodeId, attributes) => ({
-            ...attributes,
-            x: nextX[nodeIndex],
-            y: nextY[nodeIndex++]
-          }),
-          {
-            attributes: ["x", "y"]
-          }
+          (_nodeId, attributes) => {
+            const x = nextX[nodeIndex]!;
+            const y = nextY[nodeIndex++]!;
+            squaredDisplacement +=
+              (x - attributes.x) ** 2 + (y - attributes.y) ** 2;
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y);
+            maxY = Math.max(maxY, y);
+            return {
+              ...attributes,
+              x,
+              y
+            };
+          },
+          { attributes: ["x", "y"] }
         );
         if (
           dragStateRef.current &&
@@ -1517,14 +2066,146 @@ export const KnowledgeGraphForceView = forwardRef<
             y: dragStateRef.current.currentY
           });
         }
-        rememberGraphPositions(currentGraph, positionCacheRef.current);
+        const now = performance.now();
+        const graphDiagonal = Math.max(Math.hypot(maxX - minX, maxY - minY), 1);
+        const normalizedRms =
+          Math.sqrt(squaredDisplacement / Math.max(currentGraph.order, 1)) /
+          graphDiagonal;
+        performanceSnapshotRef.current.positionCommitCount += 1;
+        performanceSnapshotRef.current.committedPositionTick =
+          pendingMessage.tick;
+        performanceSnapshotRef.current.lastNormalizedRmsDisplacement =
+          normalizedRms;
+        if (normalizedRms <= 0.002) {
+          stableCandidateSinceRef.current ??= now;
+          if (
+            performanceSnapshotRef.current.stableLayoutAt === null &&
+            now - stableCandidateSinceRef.current >= 500
+          ) {
+            performanceSnapshotRef.current.stableLayoutAt = now;
+            performanceSnapshotRef.current.initialLayoutSettledAt ??= now;
+          }
+        } else {
+          stableCandidateSinceRef.current = null;
+          performanceSnapshotRef.current.stableLayoutAt = null;
+        }
+        const baselineMode = window.__FORGE_KG_POSITION_MODE__ === "baseline";
+        if (baselineMode || now - lastPositionCacheAtRef.current >= 250) {
+          rememberGraphPositions(currentGraph, positionCacheRef.current);
+          lastPositionCacheAtRef.current = now;
+        }
         if (sigmaRef.current) {
+          const settledMarker = workerSettlementRef.current;
+          if (
+            settledMarker?.generation === pendingMessage.generation &&
+            settledMarker.tick === pendingMessage.tick &&
+            settledMarker.focusNodeId === focusNodeIdRef.current
+          ) {
+            pendingRenderedSettlementRef.current = settledMarker;
+          }
           safeRefreshSigma();
         } else {
           setFallbackSnapshot(
             buildFallbackSnapshot(currentGraph, renderedEdges)
           );
         }
+        window.__FORGE_KNOWLEDGE_GRAPH_PERFORMANCE__ = {
+          ...performanceSnapshotRef.current
+        };
+      };
+      workerRef.current.onmessage = (
+        event: MessageEvent<KnowledgeGraphLayoutWorkerResponse>
+      ) => {
+        if (!graphRef.current) {
+          return;
+        }
+        const message = event.data;
+        if (message.generation !== layoutGenerationRef.current) {
+          performanceSnapshotRef.current.rejectedPositionMessageCount += 1;
+          return;
+        }
+        if (message.type === "stats") {
+          simulationPhaseRef.current = message.phase;
+          primaryFocusedNodeIdRef.current = message.primaryFocusedNodeId;
+          focusSourcesRef.current = message.focusSources;
+          focusPressureRef.current = message.focusPressure;
+          centroidRef.current = message.centroid;
+          if (message.settled) {
+            const settledAt = performance.now();
+            performanceSnapshotRef.current.stableLayoutAt ??= settledAt;
+            performanceSnapshotRef.current.initialLayoutSettledAt ??= settledAt;
+            performanceSnapshotRef.current.settledFocusNodeId =
+              message.primaryFocusedNodeId;
+            performanceSnapshotRef.current.focusSettledAt = settledAt;
+            performanceSnapshotRef.current.workerSettledGeneration =
+              message.generation;
+            performanceSnapshotRef.current.workerSettledTick = message.tick;
+            const settledMarker = {
+              generation: message.generation,
+              tick: message.tick,
+              focusNodeId: message.primaryFocusedNodeId
+            };
+            workerSettlementRef.current = settledMarker;
+            if (
+              performanceSnapshotRef.current.committedPositionTick ===
+                message.tick &&
+              message.primaryFocusedNodeId === focusNodeIdRef.current
+            ) {
+              pendingRenderedSettlementRef.current = settledMarker;
+              safeRefreshSigma();
+            }
+            window.__FORGE_KNOWLEDGE_GRAPH_PERFORMANCE__ = {
+              ...performanceSnapshotRef.current
+            };
+          }
+          if (!startupWorkerVerificationHandledRef.current) {
+            startupWorkerVerificationHandledRef.current = true;
+            startupPhaseRef.current = "worker_started";
+            recordDiagnosticsEvent({
+              level: "info",
+              eventKey: "worker_started",
+              message:
+                "Knowledge graph worker reported its first simulation stats.",
+              details: {
+                datasetSignature: datasetSignatureRef.current,
+                phase: message.phase
+              }
+            });
+            verifyStartupInvariant({
+              phase: "worker_started",
+              allowCorrection: true,
+              publishBackendOnFailure: true
+            });
+          }
+          return;
+        }
+        performanceSnapshotRef.current.workerPositionMessageCount += 1;
+        if (window.__FORGE_KG_POSITION_MODE__ === "baseline") {
+          applyPositionMessage(message);
+          return;
+        }
+        const commitPendingPositionFrame = () => {
+          positionCommitFrameRef.current = null;
+          if (performance.now() < cameraInteractionUntilRef.current) {
+            positionCommitFrameRef.current = window.requestAnimationFrame(
+              commitPendingPositionFrame
+            );
+            return;
+          }
+          const pendingMessage = pendingPositionMessageRef.current;
+          pendingPositionMessageRef.current = null;
+          if (!pendingMessage) {
+            return;
+          }
+          applyPositionMessage(pendingMessage);
+        };
+        pendingPositionMessageRef.current = message;
+        if (positionCommitFrameRef.current !== null) {
+          return;
+        }
+        positionCommitFrameRef.current = window.requestAnimationFrame(
+          commitPendingPositionFrame
+        );
       };
     }
 
@@ -1532,13 +2213,18 @@ export const KnowledgeGraphForceView = forwardRef<
     const nodeIndexById = new Map(
       nodeOrder.map((nodeId, index) => [nodeId, index])
     );
-    const hopLevels = buildKnowledgeGraphHopLevels(
+    const hopLevels = buildKnowledgeGraphHopLevelsFromAdjacency(
       nodeOrder,
-      renderedEdges,
+      graphAdjacency,
       focusNodeId
     );
+    performanceSnapshotRef.current.layoutStartedAt = performance.now();
     workerRef.current.postMessage({
       type: "init-graph",
+      generation: layoutGenerationRef.current,
+      positionPublishIntervalTicks:
+        window.__FORGE_KG_POSITION_MODE__ === "baseline" ? 1 : 4,
+      transferBuffers: window.__FORGE_KG_POSITION_MODE__ !== "baseline",
       nodes: nodeOrder.map((nodeId) => {
         const attributes = nextGraph.getNodeAttributes(nodeId);
         return {
@@ -1575,13 +2261,21 @@ export const KnowledgeGraphForceView = forwardRef<
       }
     });
   }, [
+    adaptiveRenderedEdgeCount,
     containerSize,
     datasetSignature,
     diagnosticsEnabled,
     focusNodeId,
+    graphAdjacency,
+    layoutRevision,
     nodes,
     physicsSettings,
-    renderedEdges
+    presentationKey,
+    reducedMotion,
+    renderedEdges,
+    sourceEdgeCount,
+    sourceNodeCount,
+    visibleNodeIds
   ]);
 
   useEffect(() => {
@@ -1607,12 +2301,31 @@ export const KnowledgeGraphForceView = forwardRef<
 
   useEffect(() => {
     const { recordDiagnosticsEvent } = lifecycleCallbacksRef.current;
+    const previousFocusNodeId = previousFocusNodeIdRef.current;
+    if (
+      previousFocusNodeId !== focusNodeId &&
+      sigmaRef.current &&
+      datasetSignatureRef.current
+    ) {
+      const cache = cameraStateCacheRef.current;
+      const key = `${datasetSignatureRef.current}::focus:${previousFocusNodeId ?? "overview"}`;
+      cache.delete(key);
+      cache.set(key, sigmaRef.current.getCamera().getState());
+      while (cache.size > 48) {
+        const oldestKey = cache.keys().next().value;
+        if (!oldestKey) {
+          break;
+        }
+        cache.delete(oldestKey);
+      }
+    }
+    previousFocusNodeIdRef.current = focusNodeId;
     if (!workerRef.current || !graphRef.current) {
       return;
     }
-    const hopLevels = buildKnowledgeGraphHopLevels(
+    const hopLevels = buildKnowledgeGraphHopLevelsFromAdjacency(
       graphRef.current.nodes(),
-      renderedEdges,
+      graphAdjacency,
       focusNodeId
     );
     workerRef.current.postMessage({
@@ -1632,7 +2345,7 @@ export const KnowledgeGraphForceView = forwardRef<
     if (!focusNodeId) {
       desiredCameraRef.current = null;
     }
-  }, [focusNodeId, renderedEdges]);
+  }, [focusNodeId, graphAdjacency]);
 
   useEffect(() => {
     if (!workerRef.current) {
@@ -1676,6 +2389,11 @@ export const KnowledgeGraphForceView = forwardRef<
         nodeId,
         "data"
       ) as KnowledgeGraphNode;
+      const cameraRatio = sigmaRef.current?.getCamera().getState().ratio ?? 1;
+      const ambientLabelVisible =
+        renderQuality === "full" &&
+        (node.importance >= 90 ||
+          (cameraRatio <= 0.32 && node.importance >= 70));
       return reduceKnowledgeGraphSigmaNodeAttributes({
         nodeId,
         attributes: attributes as SigmaNodeAttributes,
@@ -1684,7 +2402,10 @@ export const KnowledgeGraphForceView = forwardRef<
         relatedNodeIds,
         detailNodeIds,
         hoveredNodeId,
-        draggedNodeId
+        draggedNodeId,
+        presentationVisible:
+          visibleNodeIds.has(nodeId) && viewportVisibleNodeIds.has(nodeId),
+        ambientLabelVisible
       });
     });
     sigmaRef.current.setSetting("edgeReducer", (edgeId, attributes) => {
@@ -1692,22 +2413,73 @@ export const KnowledgeGraphForceView = forwardRef<
         edgeId,
         "data"
       ) as RenderedKnowledgeGraphEdge;
+      const preserveAdaptiveEdge =
+        preserveVisibleEdges ||
+        (!!focusNodeId &&
+          (edge.source === focusNodeId || edge.target === focusNodeId)) ||
+        (!!hoveredNodeId &&
+          (edge.source === hoveredNodeId || edge.target === hoveredNodeId)) ||
+        detailNodeIds.has(edge.source) ||
+        detailNodeIds.has(edge.target);
       return reduceKnowledgeGraphSigmaEdgeAttributes({
         attributes: attributes as SigmaEdgeAttributes,
         edge,
         focusNodeId,
         detailNodeIds,
         relatedNodeIds,
-        hoveredNodeId
+        hoveredNodeId,
+        presentationVisible:
+          visibleRenderedEdgeIds.has(edgeId) &&
+          viewportVisibleNodeIds.has(edge.source) &&
+          viewportVisibleNodeIds.has(edge.target) &&
+          shouldRenderKnowledgeGraphEdgeAtQuality({
+            edge,
+            quality: renderQuality,
+            preserve: preserveAdaptiveEdge
+          })
       });
     });
+    performanceSnapshotRef.current.focusNodeId = focusNodeId;
+    performanceSnapshotRef.current.renderedNodeCount =
+      viewportVisibleNodeIds.size;
+    performanceSnapshotRef.current.renderedNodeIds = [
+      ...viewportVisibleNodeIds
+    ].sort();
+    performanceSnapshotRef.current.forcedLabelNodeIds = [
+      ...viewportVisibleNodeIds
+    ]
+      .filter(
+        (nodeId) =>
+          nodeId === focusNodeId ||
+          nodeId === hoveredNodeId ||
+          nodeId === draggedNodeId
+      )
+      .sort();
+    performanceSnapshotRef.current.renderedEdgeCount =
+      adaptiveRenderedEdgeCount;
+    performanceSnapshotRef.current.minimumRenderedEdgeCount = Math.min(
+      performanceSnapshotRef.current.minimumRenderedEdgeCount,
+      adaptiveRenderedEdgeCount
+    );
+    performanceSnapshotRef.current.adaptiveQuality = renderQuality;
+    presentationRenderStateRef.current = beginKnowledgeGraphPresentationRender(
+      presentationRenderStateRef.current
+    );
     safeRefreshSigma();
   }, [
     detailNodeIds,
+    adaptiveRenderedEdgeCount,
     draggedNodeId,
     focusNodeId,
     hoveredNodeId,
-    relatedNodeIds
+    preserveVisibleEdges,
+    presentationKey,
+    relatedNodeIds,
+    renderQuality,
+    sigmaReadyEpoch,
+    visibleRenderedEdgeIds,
+    visibleNodeIds,
+    viewportVisibleNodeIds
   ]);
 
   useEffect(() => {
@@ -1824,13 +2596,49 @@ export const KnowledgeGraphForceView = forwardRef<
     fallbackSnapshot
   ]);
 
+  const fallbackViewportNodeIds = useMemo(
+    () =>
+      buildKnowledgeGraphViewportNodeIds({
+        nodes: fallbackProjectedNodes.filter((node) =>
+          visibleNodeIds.has(node.id)
+        ),
+        width: containerSize.width,
+        height: containerSize.height,
+        padding: renderQuality === "full" ? 140 : 64,
+        preserveNodeIds: new Set([
+          ...(focusNodeId ? [focusNodeId] : []),
+          ...detailNodeIds,
+          ...(hoveredNodeId ? [hoveredNodeId] : [])
+        ]),
+        preserveAll: preserveVisibleEdges
+      }),
+    [
+      containerSize.height,
+      containerSize.width,
+      detailNodeIds,
+      fallbackProjectedNodes,
+      focusNodeId,
+      hoveredNodeId,
+      renderQuality,
+      preserveVisibleEdges,
+      visibleNodeIds
+    ]
+  );
+  const visibleFallbackProjectedNodes = useMemo(
+    () =>
+      fallbackProjectedNodes.filter((node) =>
+        fallbackViewportNodeIds.has(node.id)
+      ),
+    [fallbackProjectedNodes, fallbackViewportNodeIds]
+  );
+
   const fallbackNodeMap = useMemo(
     () => new Map(fallbackProjectedNodes.map((node) => [node.id, node])),
     [fallbackProjectedNodes]
   );
 
   const handleKeyboardNavigation = (event: KeyboardEvent<HTMLDivElement>) => {
-    const nodePositions = new Map<string, { x: number; y: number }>();
+    let nodePositions = new Map<string, { x: number; y: number }>();
     if (sigmaRef.current && graphRef.current) {
       graphRef.current.forEachNode((nodeId, attributes) => {
         nodePositions.set(
@@ -1842,12 +2650,9 @@ export const KnowledgeGraphForceView = forwardRef<
         );
       });
     } else {
-      for (const node of fallbackProjectedNodes) {
-        nodePositions.set(node.id, {
-          x: node.viewportX,
-          y: node.viewportY
-        });
-      }
+      nodePositions = buildKnowledgeGraphFallbackKeyboardPositions(
+        fallbackProjectedNodes
+      );
     }
     const target = resolveKnowledgeGraphKeyboardTarget({
       key: event.key,
@@ -1877,13 +2682,15 @@ export const KnowledgeGraphForceView = forwardRef<
         className="h-full w-full touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--primary)]/45"
         role="application"
         tabIndex={0}
-        aria-label={`Knowledge graph canvas, ${nodes.length} nodes${focusedNode ? `, focused on ${focusedNode.title}` : ""}`}
+        aria-label={`Knowledge graph canvas, ${visibleNodeIds.size} of ${nodes.length} retained nodes drawn${focusedNode ? `, focused on ${focusedNode.title}` : ""}`}
         aria-describedby="knowledge-graph-canvas-help"
         onKeyDown={handleKeyboardNavigation}
       >
         <span id="knowledge-graph-canvas-help" className="sr-only">
           Use arrow keys to move between nodes, Home or End to jump, Enter or
-          Space to inspect the focused node, and Escape to clear focus.
+          Space to inspect the focused node, and Escape to clear focus. Keyboard
+          navigation includes retained nodes that the calm overview has not
+          drawn yet; focusing one reveals it and its direct context.
         </span>
         <span className="sr-only" aria-live="polite" aria-atomic="true">
           {focusedNode
@@ -1905,65 +2712,88 @@ export const KnowledgeGraphForceView = forwardRef<
               fill="transparent"
               onClick={() => onSelectNodeRef.current(null)}
             />
-            {fallbackSnapshot.edges.map((edge) => {
-              const source = fallbackNodeMap.get(edge.source);
-              const target = fallbackNodeMap.get(edge.target);
-              if (!source || !target) {
-                return null;
-              }
-              const touchesFocus =
-                !!focusNodeId &&
-                (edge.source === focusNodeId || edge.target === focusNodeId);
-              const touchesHover =
-                !!hoveredNodeId &&
-                (edge.source === hoveredNodeId ||
-                  edge.target === hoveredNodeId);
-              const sourceDistance = !focusNodeId
-                ? 0
-                : edge.source === focusNodeId
+            {fallbackSnapshot.edges
+              .filter((edge) => {
+                const preserveAdaptiveEdge =
+                  preserveVisibleEdges ||
+                  (!!focusNodeId &&
+                    (edge.source === focusNodeId ||
+                      edge.target === focusNodeId)) ||
+                  (!!hoveredNodeId &&
+                    (edge.source === hoveredNodeId ||
+                      edge.target === hoveredNodeId)) ||
+                  detailNodeIds.has(edge.source) ||
+                  detailNodeIds.has(edge.target);
+                return (
+                  visibleRenderedEdgeIds.has(edge.id) &&
+                  fallbackViewportNodeIds.has(edge.source) &&
+                  fallbackViewportNodeIds.has(edge.target) &&
+                  shouldRenderKnowledgeGraphEdgeAtQuality({
+                    edge,
+                    quality: renderQuality,
+                    preserve: preserveAdaptiveEdge
+                  })
+                );
+              })
+              .map((edge) => {
+                const source = fallbackNodeMap.get(edge.source);
+                const target = fallbackNodeMap.get(edge.target);
+                if (!source || !target) {
+                  return null;
+                }
+                const touchesFocus =
+                  !!focusNodeId &&
+                  (edge.source === focusNodeId || edge.target === focusNodeId);
+                const touchesHover =
+                  !!hoveredNodeId &&
+                  (edge.source === hoveredNodeId ||
+                    edge.target === hoveredNodeId);
+                const sourceDistance = !focusNodeId
                   ? 0
-                  : detailNodeIds.has(edge.source)
-                    ? 1
-                    : relatedNodeIds.has(edge.source)
-                      ? 2
-                      : 3;
-              const targetDistance = !focusNodeId
-                ? 0
-                : edge.target === focusNodeId
+                  : edge.source === focusNodeId
+                    ? 0
+                    : detailNodeIds.has(edge.source)
+                      ? 1
+                      : relatedNodeIds.has(edge.source)
+                        ? 2
+                        : 3;
+                const targetDistance = !focusNodeId
                   ? 0
-                  : detailNodeIds.has(edge.target)
-                    ? 1
-                    : relatedNodeIds.has(edge.target)
-                      ? 2
-                      : 3;
-              const edgeDistance = focusNodeId
-                ? Math.max(sourceDistance, targetDistance)
-                : 0;
-              return (
-                <line
-                  key={edge.id}
-                  x1={source.viewportX}
-                  y1={source.viewportY}
-                  x2={target.viewportX}
-                  y2={target.viewportY}
-                  stroke={
-                    touchesFocus
-                      ? buildKnowledgeGraphEdgeStroke(edge, 0.24)
-                      : touchesHover
-                        ? buildKnowledgeGraphEdgeStroke(edge, 0.14)
-                        : !focusNodeId
-                          ? buildKnowledgeGraphEdgeStroke(edge, 0.055)
-                          : edgeDistance <= 1
-                            ? buildKnowledgeGraphEdgeStroke(edge, 0.09)
-                            : edgeDistance === 2
-                              ? buildKnowledgeGraphEdgeStroke(edge, 0.05)
-                              : buildKnowledgeGraphEdgeStroke(edge, 0.016)
-                  }
-                  strokeWidth={touchesFocus ? 1.7 : touchesHover ? 1.3 : 0.95}
-                />
-              );
-            })}
-            {fallbackProjectedNodes.map((node) => {
+                  : edge.target === focusNodeId
+                    ? 0
+                    : detailNodeIds.has(edge.target)
+                      ? 1
+                      : relatedNodeIds.has(edge.target)
+                        ? 2
+                        : 3;
+                const edgeDistance = focusNodeId
+                  ? Math.max(sourceDistance, targetDistance)
+                  : 0;
+                return (
+                  <line
+                    key={edge.id}
+                    x1={source.viewportX}
+                    y1={source.viewportY}
+                    x2={target.viewportX}
+                    y2={target.viewportY}
+                    stroke={
+                      touchesFocus
+                        ? buildKnowledgeGraphEdgeStroke(edge, 0.24)
+                        : touchesHover
+                          ? buildKnowledgeGraphEdgeStroke(edge, 0.14)
+                          : !focusNodeId
+                            ? buildKnowledgeGraphEdgeStroke(edge, 0.055)
+                            : edgeDistance <= 1
+                              ? buildKnowledgeGraphEdgeStroke(edge, 0.09)
+                              : edgeDistance === 2
+                                ? buildKnowledgeGraphEdgeStroke(edge, 0.05)
+                                : buildKnowledgeGraphEdgeStroke(edge, 0.016)
+                    }
+                    strokeWidth={touchesFocus ? 1.7 : touchesHover ? 1.3 : 0.95}
+                  />
+                );
+              })}
+            {visibleFallbackProjectedNodes.map((node) => {
               const focused = focusNodeId === node.id;
               const related = relatedNodeIds.has(node.id);
               const detailed = detailNodeIds.has(node.id);
@@ -2006,7 +2836,11 @@ export const KnowledgeGraphForceView = forwardRef<
                     }
                     strokeWidth={focused ? 2 : 1}
                   />
-                  {(focused || hovered || detailed) && (
+                  {(focused ||
+                    hovered ||
+                    node.data.importance >= 90 ||
+                    (fallbackCamera.ratio <= 0.65 &&
+                      node.data.importance >= 70)) && (
                     <text
                       x={node.viewportSize * 1.5}
                       y={4}
@@ -2022,6 +2856,20 @@ export const KnowledgeGraphForceView = forwardRef<
           </svg>
         ) : null}
       </div>
+      {fallbackReason ? (
+        <div
+          role="status"
+          className="pointer-events-none absolute right-3 top-16 z-10 max-w-[15rem] rounded-[16px] border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--ui-surface-1)_92%,transparent)] px-3 py-2 shadow-[var(--ui-shadow-soft)] backdrop-blur-xl md:right-6 md:top-20"
+        >
+          <div className="text-[9px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+            Reduced graphics mode
+          </div>
+          <p className="mt-1 text-[10px] leading-4 text-[var(--ui-ink-soft)]">
+            The full graph remains searchable and keyboard accessible while
+            Forge uses the compatible renderer.
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 });

@@ -1,20 +1,35 @@
 import { describe, expect, it } from "vitest";
 import {
+  advanceKnowledgeGraphAdaptiveQuality,
+  beginKnowledgeGraphPresentationRender,
   buildKnowledgeGraphFramedGraphPosition,
+  buildKnowledgeGraphFallbackKeyboardPositions,
+  buildKnowledgeGraphAdjacency,
   buildKnowledgeGraphFocusCameraTarget,
   buildKnowledgeGraphFocusRings,
+  buildKnowledgeGraphFocusRingsFromAdjacency,
   buildKnowledgeGraphHopLevels,
+  buildKnowledgeGraphHopLevelsFromAdjacency,
   buildKnowledgeGraphOverviewCameraTarget,
   buildKnowledgeGraphSeedPositions,
   buildKnowledgeGraphSigmaOverviewRatio,
+  buildKnowledgeGraphViewportNodeIds,
+  buildVisibleRenderedKnowledgeGraphEdgeIds,
+  completeKnowledgeGraphPresentationRender,
+  isKnowledgeGraphPresentationCompletion,
+  resolveKnowledgeGraphRenderQuality,
   resolveKnowledgeGraphKeyboardTarget,
   reduceKnowledgeGraphSigmaEdgeAttributes,
-  reduceKnowledgeGraphSigmaNodeAttributes
+  reduceKnowledgeGraphSigmaNodeAttributes,
+  requestKnowledgeGraphPresentation,
+  shouldRenderKnowledgeGraphEdgeAtQuality
 } from "@/components/knowledge-graph/knowledge-graph-force-view-model";
 import {
   createGraphFromData,
-  getFallbackOverviewCamera
+  getFallbackOverviewCamera,
+  isKnowledgeGraphPositionMessageCurrent
 } from "@/components/knowledge-graph/knowledge-graph-renderer-model";
+import { buildRenderedKnowledgeGraphEdges } from "@/lib/knowledge-graph";
 import type { KnowledgeGraphNode } from "@/lib/knowledge-graph-types";
 
 const baseNode: KnowledgeGraphNode = {
@@ -45,6 +60,268 @@ const baseNode: KnowledgeGraphNode = {
 };
 
 describe("KnowledgeGraphForceView reducers", () => {
+  it("maps visible source relation IDs onto coalesced renderer edge IDs", () => {
+    const sourceEdges = [
+      {
+        id: "structural",
+        source: "goal:1",
+        target: "project:1",
+        relationKind: "goal_project" as const,
+        family: "structural" as const,
+        label: "Supports",
+        strength: 1,
+        directional: true,
+        structural: true
+      },
+      {
+        id: "contextual",
+        source: "goal:1",
+        target: "project:1",
+        relationKind: "entity_link" as const,
+        family: "contextual" as const,
+        label: "Related",
+        strength: 0.8,
+        directional: true,
+        structural: false
+      }
+    ];
+    const renderedEdges = buildRenderedKnowledgeGraphEdges(sourceEdges);
+
+    expect(renderedEdges).toHaveLength(1);
+    expect(
+      buildVisibleRenderedKnowledgeGraphEdgeIds(
+        renderedEdges,
+        new Set(["contextual"])
+      )
+    ).toEqual(new Set([renderedEdges[0]!.id]));
+    expect(
+      buildVisibleRenderedKnowledgeGraphEdgeIds(renderedEdges, new Set())
+    ).toEqual(new Set());
+  });
+
+  it("adapts presentation quality from observed frame pressure with hysteresis", () => {
+    expect(
+      resolveKnowledgeGraphRenderQuality({
+        currentQuality: "full",
+        frameP95Ms: 26,
+        interactionActive: true,
+        visibleEdgeCount: 4_000
+      })
+    ).toBe("reduced");
+    expect(
+      resolveKnowledgeGraphRenderQuality({
+        currentQuality: "reduced",
+        frameP95Ms: 15,
+        interactionActive: false,
+        visibleEdgeCount: 4_000
+      })
+    ).toBe("balanced");
+    expect(
+      resolveKnowledgeGraphRenderQuality({
+        currentQuality: "balanced",
+        frameP95Ms: 13,
+        interactionActive: false,
+        visibleEdgeCount: 4_000
+      })
+    ).toBe("full");
+    expect(
+      resolveKnowledgeGraphRenderQuality({
+        currentQuality: "full",
+        frameP95Ms: 10,
+        interactionActive: true,
+        visibleEdgeCount: 4_000
+      })
+    ).toBe("balanced");
+  });
+
+  it("requires sustained pressure and sustained health before changing quality", () => {
+    const initial = {
+      quality: "full" as const,
+      pressuredWindows: 0,
+      healthyWindows: 0
+    };
+    const pressuredOnce = advanceKnowledgeGraphAdaptiveQuality(initial, {
+      frameP95Ms: 27,
+      interactionActive: true,
+      visibleEdgeCount: 4_000
+    });
+    expect(pressuredOnce.quality).toBe("full");
+    const pressuredTwice = advanceKnowledgeGraphAdaptiveQuality(pressuredOnce, {
+      frameP95Ms: 27,
+      interactionActive: true,
+      visibleEdgeCount: 4_000
+    });
+    expect(pressuredTwice.quality).toBe("reduced");
+    const healthyOnce = advanceKnowledgeGraphAdaptiveQuality(pressuredTwice, {
+      frameP95Ms: 12,
+      interactionActive: false,
+      visibleEdgeCount: 4_000
+    });
+    const healthyTwice = advanceKnowledgeGraphAdaptiveQuality(healthyOnce, {
+      frameP95Ms: 12,
+      interactionActive: false,
+      visibleEdgeCount: 4_000
+    });
+    const healthyThrice = advanceKnowledgeGraphAdaptiveQuality(healthyTwice, {
+      frameP95Ms: 12,
+      interactionActive: false,
+      visibleEdgeCount: 4_000
+    });
+    expect(healthyOnce.quality).toBe("reduced");
+    expect(healthyTwice.quality).toBe("reduced");
+    expect(healthyThrice.quality).toBe("balanced");
+  });
+
+  it("does not accept an unrelated render as presentation completion", () => {
+    expect(
+      isKnowledgeGraphPresentationCompletion({
+        beforeKey: "query:old",
+        requestedKey: "query:old",
+        renderedKey: "query:old"
+      })
+    ).toBe(false);
+    expect(
+      isKnowledgeGraphPresentationCompletion({
+        beforeKey: "query:old",
+        requestedKey: "query:new",
+        renderedKey: "query:old"
+      })
+    ).toBe(false);
+    expect(
+      isKnowledgeGraphPresentationCompletion({
+        beforeKey: "query:old",
+        requestedKey: "query:new",
+        renderedKey: "query:new"
+      })
+    ).toBe(true);
+  });
+
+  it("does not seal a synchronous setGraph render before new reducers begin", () => {
+    const oldState = {
+      requestedKey: "query:old",
+      pendingKey: null,
+      renderedKey: "query:old"
+    };
+    const requested = requestKnowledgeGraphPresentation(oldState, "query:new");
+    const synchronousSetGraphRender =
+      completeKnowledgeGraphPresentationRender(requested);
+    expect(synchronousSetGraphRender.renderedKey).toBe("query:old");
+
+    const reducerReady = beginKnowledgeGraphPresentationRender(
+      synchronousSetGraphRender
+    );
+    const completed = completeKnowledgeGraphPresentationRender(reducerReady);
+    expect(completed.renderedKey).toBe("query:new");
+    expect(completed.pendingKey).toBeNull();
+  });
+
+  it("culls offscreen nodes while preserving selected context", () => {
+    const nodes = Array.from({ length: 300 }, (_, index) => ({
+      id: `node:${index}`,
+      viewportX: index < 10 ? index * 10 : 2_000 + index,
+      viewportY: 100
+    }));
+    const visible = buildKnowledgeGraphViewportNodeIds({
+      nodes,
+      width: 800,
+      height: 600,
+      padding: 40,
+      preserveNodeIds: new Set(["node:299"])
+    });
+    expect(visible.size).toBe(11);
+    expect(visible.has("node:299")).toBe(true);
+    expect(visible.has("node:150")).toBe(false);
+
+    const searchResults = buildKnowledgeGraphViewportNodeIds({
+      nodes,
+      width: 800,
+      height: 600,
+      padding: 40,
+      preserveNodeIds: new Set(),
+      preserveAll: true
+    });
+    expect(searchResults.size).toBe(300);
+    expect(searchResults.has("node:299")).toBe(true);
+  });
+
+  it("samples only nonessential edges as quality falls", () => {
+    const edges = Array.from({ length: 32 }, (_, index) => ({
+      id: `contextual-${index}`,
+      source: "goal:1",
+      target: `note:${index}`,
+      relationKind: "entity_link" as const,
+      family: "contextual" as const,
+      label: "Related",
+      strength: 0.6,
+      directional: true,
+      structural: false,
+      parallelCount: 1,
+      data: []
+    }));
+    const balancedCount = edges.filter((edge) =>
+      shouldRenderKnowledgeGraphEdgeAtQuality({
+        edge,
+        quality: "balanced",
+        preserve: false
+      })
+    ).length;
+    const reducedCount = edges.filter((edge) =>
+      shouldRenderKnowledgeGraphEdgeAtQuality({
+        edge,
+        quality: "reduced",
+        preserve: false
+      })
+    ).length;
+
+    expect(balancedCount).toBeGreaterThan(0);
+    expect(balancedCount).toBeLessThan(edges.length);
+    expect(reducedCount).toBeLessThanOrEqual(balancedCount);
+    expect(
+      shouldRenderKnowledgeGraphEdgeAtQuality({
+        edge: edges[0]!,
+        quality: "reduced",
+        preserve: true
+      })
+    ).toBe(true);
+    expect(
+      shouldRenderKnowledgeGraphEdgeAtQuality({
+        edge: { ...edges[0]!, structural: true },
+        quality: "reduced",
+        preserve: false
+      })
+    ).toBe(true);
+  });
+
+  it("rejects a queued position update after the graph generation or node order changes", () => {
+    const message = {
+      type: "positions" as const,
+      generation: 4,
+      tick: 12,
+      x: new Float32Array([1, 2]),
+      y: new Float32Array([3, 4])
+    };
+    expect(
+      isKnowledgeGraphPositionMessageCurrent({
+        message,
+        generation: 4,
+        nodeCount: 2
+      })
+    ).toBe(true);
+    expect(
+      isKnowledgeGraphPositionMessageCurrent({
+        message,
+        generation: 5,
+        nodeCount: 2
+      })
+    ).toBe(false);
+    expect(
+      isKnowledgeGraphPositionMessageCurrent({
+        message,
+        generation: 4,
+        nodeCount: 3
+      })
+    ).toBe(false);
+  });
   it("supports bounded keyboard traversal and activation across dense graph nodes", () => {
     const nodeIds = ["goal:1", "project:1", "task:1"];
 
@@ -83,6 +360,23 @@ describe("KnowledgeGraphForceView reducers", () => {
         focusNodeId: "project:1"
       }).handled
     ).toBe(false);
+  });
+
+  it("keeps presentation-hidden fallback nodes in the keyboard position map", () => {
+    const positions = buildKnowledgeGraphFallbackKeyboardPositions([
+      { id: "goal:visible", viewportX: 0, viewportY: 0 },
+      { id: "task:hidden", viewportX: 20, viewportY: 0 }
+    ]);
+
+    expect(positions.has("task:hidden")).toBe(true);
+    expect(
+      resolveKnowledgeGraphKeyboardTarget({
+        key: "ArrowRight",
+        nodeIds: ["goal:visible", "task:hidden"],
+        focusNodeId: "goal:visible",
+        nodePositions: positions
+      }).targetNodeId
+    ).toBe("task:hidden");
   });
 
   it("uses screen-space direction instead of array order for arrow navigation", () => {
@@ -247,6 +541,62 @@ describe("KnowledgeGraphForceView reducers", () => {
     expect(reduced.zIndex).toBe(4);
   });
 
+  it("exposes important ambient labels without forcing collision overlap", () => {
+    const reduced = reduceKnowledgeGraphSigmaNodeAttributes({
+      nodeId: baseNode.id,
+      node: baseNode,
+      focusNodeId: null,
+      relatedNodeIds: new Set(),
+      detailNodeIds: new Set(),
+      hoveredNodeId: null,
+      ambientLabelVisible: true,
+      attributes: {
+        x: 0,
+        y: 0,
+        size: 8,
+        color: "rgb(10, 20, 30)",
+        label: "",
+        hidden: false,
+        forceLabel: false,
+        highlighted: false,
+        zIndex: 0,
+        data: baseNode
+      }
+    });
+
+    expect(reduced.label).toBe(baseNode.title);
+    expect(reduced.forceLabel).toBe(false);
+    expect(reduced.highlighted).toBe(false);
+  });
+
+  it("keeps contextual nodes visually present without turning every neighbor into a label", () => {
+    const reduced = reduceKnowledgeGraphSigmaNodeAttributes({
+      nodeId: baseNode.id,
+      node: baseNode,
+      focusNodeId: "project:project-1",
+      relatedNodeIds: new Set([baseNode.id]),
+      detailNodeIds: new Set([baseNode.id]),
+      hoveredNodeId: null,
+      attributes: {
+        x: 0,
+        y: 0,
+        size: 8,
+        color: "rgb(10, 20, 30)",
+        label: "",
+        hidden: false,
+        forceLabel: false,
+        highlighted: false,
+        zIndex: 0,
+        data: baseNode
+      }
+    });
+
+    expect(reduced.label).toBe("");
+    expect(reduced.forceLabel).toBe(false);
+    expect(reduced.highlighted).toBe(false);
+    expect(reduced.size).toBeGreaterThan(8);
+  });
+
   it("preserves sigma edge metadata while styling focused relationships", () => {
     document.body.style.setProperty("--info", "#0369a1");
     const reduced = reduceKnowledgeGraphSigmaEdgeAttributes({
@@ -358,13 +708,15 @@ describe("KnowledgeGraphForceView reducers", () => {
     expect(overview.x).toBe(0);
     expect(overview.y).toBe(0);
     expect(overview.ratio).toBeGreaterThan(1);
-    expect(buildKnowledgeGraphSigmaOverviewRatio(overview.ratio)).toBe(0.58);
+    expect(buildKnowledgeGraphSigmaOverviewRatio(overview.ratio)).toBeCloseTo(
+      1.07125
+    );
   });
 
   it("bounds Sigma overview framing so the graph is visible without clipping extremes", () => {
-    expect(buildKnowledgeGraphSigmaOverviewRatio(0.72)).toBe(0.58);
-    expect(buildKnowledgeGraphSigmaOverviewRatio(2.8)).toBeCloseTo(0.672);
-    expect(buildKnowledgeGraphSigmaOverviewRatio(8)).toBe(0.78);
+    expect(buildKnowledgeGraphSigmaOverviewRatio(0.72)).toBe(1.02);
+    expect(buildKnowledgeGraphSigmaOverviewRatio(2.8)).toBeCloseTo(1.108);
+    expect(buildKnowledgeGraphSigmaOverviewRatio(8)).toBe(1.14);
   });
 
   it("fits the fallback renderer to the available viewport", () => {
@@ -484,26 +836,31 @@ describe("KnowledgeGraphForceView reducers", () => {
   });
 
   it("builds deterministic first-ring and second-ring neighborhoods for focus mode", () => {
-    const rings = buildKnowledgeGraphFocusRings(
-      [
-        {
-          source: baseNode.id,
-          target: "project:project-1"
-        },
-        {
-          source: "project:project-1",
-          target: "task:task-1"
-        },
-        {
-          source: "note:note-1",
-          target: baseNode.id
-        }
-      ],
-      baseNode.id
+    const focusEdges = [
+      {
+        source: baseNode.id,
+        target: "project:project-1"
+      },
+      {
+        source: "project:project-1",
+        target: "task:task-1"
+      },
+      {
+        source: "note:note-1",
+        target: baseNode.id
+      }
+    ];
+    const rings = buildKnowledgeGraphFocusRings(focusEdges, baseNode.id);
+    const adjacency = buildKnowledgeGraphAdjacency(
+      [baseNode.id, "project:project-1", "task:task-1", "note:note-1"],
+      focusEdges
     );
 
     expect(rings.firstRing).toEqual(["note:note-1", "project:project-1"]);
     expect(rings.secondRing).toEqual(["task:task-1"]);
+    expect(
+      buildKnowledgeGraphFocusRingsFromAdjacency(adjacency, baseNode.id)
+    ).toEqual(rings);
   });
 
   it("builds hop levels across the visible graph for focus-priority layout shells", () => {
@@ -533,6 +890,33 @@ describe("KnowledgeGraphForceView reducers", () => {
     );
 
     expect(levels).toEqual([0, 1, 2, -1, 3]);
+    const adjacency = buildKnowledgeGraphAdjacency(
+      [
+        baseNode.id,
+        "project:project-1",
+        "task:task-1",
+        "note:note-1",
+        "goal:goal-2"
+      ],
+      [
+        { source: baseNode.id, target: "project:project-1" },
+        { source: "project:project-1", target: "task:task-1" },
+        { source: "task:task-1", target: "goal:goal-2" }
+      ]
+    );
+    expect(
+      buildKnowledgeGraphHopLevelsFromAdjacency(
+        [
+          baseNode.id,
+          "project:project-1",
+          "task:task-1",
+          "note:note-1",
+          "goal:goal-2"
+        ],
+        adjacency,
+        baseNode.id
+      )
+    ).toEqual(levels);
   });
 
   it("fits the focus camera to the visible neighborhood instead of using a hardcoded zoom", () => {
@@ -550,10 +934,10 @@ describe("KnowledgeGraphForceView reducers", () => {
       currentRatio: 1
     });
 
-    expect(target?.x).toBeCloseTo(0);
-    expect(target?.y).toBeCloseTo(0);
+    expect(target?.x).toBeCloseTo(0.8);
+    expect(target?.y).toBeCloseTo(0.125);
     expect(target?.ratio).toBeGreaterThanOrEqual(0.38);
-    expect(target?.ratio).toBeLessThanOrEqual(1.2);
+    expect(target?.ratio).toBeLessThanOrEqual(1.45);
     expect(target?.nodeIds).toEqual([
       baseNode.id,
       "note:note-1",
@@ -562,7 +946,7 @@ describe("KnowledgeGraphForceView reducers", () => {
     ]);
   });
 
-  it("uses the focused node position for camera centering instead of the neighborhood centroid", () => {
+  it("centers the focused neighborhood so direct context stays in view", () => {
     const target = buildKnowledgeGraphFocusCameraTarget({
       positions: new Map([
         [baseNode.id, { x: 5.2, y: -1.4 }],
@@ -576,7 +960,8 @@ describe("KnowledgeGraphForceView reducers", () => {
       currentRatio: 0.9
     });
 
-    expect(target?.x).toBeCloseTo(5.2);
-    expect(target?.y).toBeCloseTo(-1.4);
+    expect(target?.x).toBeCloseTo(8.8);
+    expect(target?.y).toBeCloseTo(1.05);
+    expect(target?.ratio).toBeCloseTo(1.45);
   });
 });

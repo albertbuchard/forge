@@ -1960,6 +1960,70 @@ body {
   fill: currentColor;
 }
 
+.knowledge-graph-hierarchy-controls {
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--ui-surface-1) 92%, transparent);
+  box-shadow: var(--ui-shadow-floating);
+  backdrop-filter: blur(18px);
+}
+
+.knowledge-graph-hierarchy-control-button {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-right: 1px solid var(--ui-border-subtle);
+  background: var(--ui-surface-1);
+  color: var(--ui-ink-medium);
+  cursor: pointer;
+}
+
+.knowledge-graph-hierarchy-control-button:last-child {
+  border-right: 0;
+}
+
+.knowledge-graph-hierarchy-control-button:hover {
+  background: var(--ui-surface-active);
+  color: var(--ui-ink-strong);
+}
+
+.knowledge-graph-hierarchy-control-button:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+
+.knowledge-graph-hierarchy-control-button svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+}
+
+.knowledge-graph-hierarchy-flow .react-flow__attribution {
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ui-surface-1) 88%, transparent);
+  color: var(--ui-ink-faint);
+  backdrop-filter: blur(16px);
+}
+
+.knowledge-graph-hierarchy-flow .react-flow__attribution a {
+  background: transparent;
+  color: inherit;
+}
+
+.knowledge-graph-hierarchy-flow .react-flow__attribution a:hover {
+  color: var(--ui-ink-medium);
+}
+
 .user-relationship-flow .react-flow__attribution {
   border: 1px solid var(--ui-border-subtle);
   border-radius: 999px;
