@@ -1,7 +1,24 @@
-import { AiSurfaceWorkspace } from "@/components/customization/ai-surface-workspace";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
+  Compass,
+  HeartPulse,
+  History,
+  LayoutDashboard,
+  Library,
+  Search,
+  Settings,
+  Target,
+  Wrench,
+  type LucideIcon
+} from "lucide-react";
+import { AiSurfaceWorkspace } from "@/components/customization/ai-surface-workspace";
 import { type SurfaceWidgetDefinition } from "@/components/customization/editable-surface";
 import {
   MiniCalendarWidget,
@@ -10,37 +27,32 @@ import {
   TimeWidget,
   WeatherWidget
 } from "@/components/customization/utility-widgets";
-import { FlagshipSignalDeck } from "@/components/experience/flagship-signal-deck";
+import { CreateMenu, useForgeCreateActions } from "@/components/create-menu";
 import { GamificationOverviewWidget } from "@/components/gamification/gamification-widgets";
 import { LifeForceOverviewWorkspace } from "@/components/life-force/life-force-workspace";
-import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
-import { EmptyState } from "@/components/ui/page-state";
 import { ProgressMeter } from "@/components/ui/progress-meter";
-import { EntityBadge } from "@/components/ui/entity-badge";
-import { EntityName } from "@/components/ui/entity-name";
 import {
+  getAttentionInbox,
   getFitnessView,
   getMovementDay,
   getSleepView,
   getVitalsView
 } from "@/lib/api";
-import { useGetXpMetricsQuery } from "@/store/api/forge-api";
 import {
   getReadableActivityDescription,
   getReadableActivityTitle
 } from "@/lib/activity-copy";
+import { getRuntimeTimeZone } from "@/lib/date-keys";
+import { getActivityEventHref } from "@/lib/entity-links";
 import {
   formatLifeForceAp,
   formatLifeForceRate
 } from "@/lib/life-force-display";
-import { getEntityNotesSummary } from "@/lib/note-helpers";
-import { useI18n } from "@/lib/i18n";
-import { getRuntimeTimeZone } from "@/lib/date-keys";
 import type {
   ForgeSnapshot,
   MovementDayData,
@@ -49,18 +61,336 @@ import type {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { normalizeOverviewLayout } from "@/pages/overview-layout";
+import {
+  useGetForgeDoctorQuery,
+  useGetXpMetricsQuery
+} from "@/store/api/forge-api";
+
+type OverviewDestination = {
+  label: string;
+  href: string;
+  detail: string;
+};
+
+type OverviewGroup = {
+  id: string;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  destinations: OverviewDestination[];
+  advanced?: {
+    label: string;
+    destinations: OverviewDestination[];
+  };
+};
+
+export const FORGE_OVERVIEW_GROUPS: OverviewGroup[] = [
+  {
+    id: "now",
+    title: "Now and review",
+    description: "See current obligations, time, changes, and decisions.",
+    icon: Clock3,
+    destinations: [
+      {
+        label: "Attention",
+        href: "/attention",
+        detail: "Items that need a decision or follow-up"
+      },
+      { label: "Today", href: "/today", detail: "Today’s work and habits" },
+      { label: "Calendar", href: "/calendar", detail: "Scheduled commitments" },
+      {
+        label: "Life Events",
+        href: "/life-events",
+        detail: "Important events and dates"
+      },
+      {
+        label: "Activity",
+        href: "/activity",
+        detail: "Recent changes across Forge"
+      },
+      {
+        label: "Insights",
+        href: "/insights",
+        detail: "Patterns ready for review"
+      },
+      {
+        label: "Weekly Review",
+        href: "/review/weekly",
+        detail: "Reflect on the past week"
+      }
+    ]
+  },
+  {
+    id: "direction",
+    title: "Direction and work",
+    description: "Move from long-range direction to work you can finish.",
+    icon: Target,
+    destinations: [
+      { label: "Goals", href: "/goals", detail: "Long-range outcomes" },
+      {
+        label: "Strategies",
+        href: "/strategies",
+        detail: "Choices that guide goals and projects"
+      },
+      { label: "Projects", href: "/projects", detail: "Owned bodies of work" },
+      {
+        label: "Full hierarchy",
+        href: "/projects/hierarchy",
+        detail: "Goals, strategies, projects, and work together"
+      },
+      {
+        label: "Work board",
+        href: "/kanban",
+        detail: "Issues, tasks, and subtasks"
+      },
+      { label: "Habits", href: "/habits", detail: "Recurring commitments" },
+      {
+        label: "Workbench",
+        href: "/workbench",
+        detail: "Structured working flows"
+      }
+    ]
+  },
+  {
+    id: "knowledge",
+    title: "Knowledge and learning",
+    description: "Capture memory, inspect evidence, and continue learning.",
+    icon: Library,
+    destinations: [
+      {
+        label: "Notes",
+        href: "/notes",
+        detail: "Captured thoughts and evidence"
+      },
+      { label: "Wiki", href: "/wiki", detail: "Durable pages and references" },
+      {
+        label: "Knowledge Graph",
+        href: "/knowledge-graph",
+        detail: "Explore connections across records"
+      },
+      {
+        label: "Artifacts",
+        href: "/artifacts",
+        detail: "Trusted files and source material"
+      },
+      {
+        label: "Courses",
+        href: "/courses",
+        detail: "Learning paths and progress"
+      },
+      {
+        label: "Concepts",
+        href: "/concepts",
+        detail: "Reusable ideas and mastery"
+      }
+    ],
+    advanced: {
+      label: "Wiki tools",
+      destinations: [
+        {
+          label: "Wiki ingestion history",
+          href: "/wiki/ingest-history",
+          detail: "Review imported knowledge"
+        }
+      ]
+    }
+  },
+  {
+    id: "health",
+    title: "Health, capacity, and self-understanding",
+    description:
+      "Review capacity, recovery, health evidence, and personal patterns.",
+    icon: HeartPulse,
+    destinations: [
+      {
+        label: "Life Force",
+        href: "/life-force",
+        detail: "Capacity and Action Point planning"
+      },
+      {
+        label: "Movement",
+        href: "/movement",
+        detail: "Places, trips, and movement"
+      },
+      { label: "Sleep", href: "/sleep", detail: "Sleep history and recovery" },
+      {
+        label: "Sports",
+        href: "/sports",
+        detail: "Workouts and training sessions"
+      },
+      {
+        label: "Training Load",
+        href: "/training-load",
+        detail: "Training strain and recovery"
+      },
+      {
+        label: "Vitals",
+        href: "/vitals",
+        detail: "Body measurements over time"
+      },
+      {
+        label: "Weight Loss",
+        href: "/weight-loss",
+        detail: "Weight goals and progress"
+      },
+      {
+        label: "Psyche",
+        href: "/psyche",
+        detail: "Values, patterns, and reflection"
+      },
+      {
+        label: "Preferences",
+        href: "/preferences",
+        detail: "Personal preferences and defaults"
+      }
+    ],
+    advanced: {
+      label: "Psyche areas",
+      destinations: [
+        {
+          label: "Metrics",
+          href: "/psyche/metrics",
+          detail: "Psyche measurements"
+        },
+        {
+          label: "Flashcards",
+          href: "/psyche/flashcards",
+          detail: "Reflection cards"
+        },
+        { label: "Values", href: "/psyche/values", detail: "Guiding values" },
+        {
+          label: "Patterns",
+          href: "/psyche/patterns",
+          detail: "Recurring patterns"
+        },
+        {
+          label: "Questionnaires",
+          href: "/psyche/questionnaires",
+          detail: "Structured questionnaires"
+        },
+        {
+          label: "Self-observation",
+          href: "/psyche/self-observation",
+          detail: "Personal observations"
+        },
+        {
+          label: "Screen time",
+          href: "/psyche/screen-time",
+          detail: "Screen-use evidence"
+        },
+        {
+          label: "Behaviors",
+          href: "/psyche/behaviors",
+          detail: "Behaviors and change"
+        },
+        {
+          label: "Reports",
+          href: "/psyche/reports",
+          detail: "Reflection reports"
+        },
+        {
+          label: "Goal map",
+          href: "/psyche/goal-map",
+          detail: "Goals and psychological context"
+        },
+        {
+          label: "Schemas and beliefs",
+          href: "/psyche/schemas-beliefs",
+          detail: "Beliefs and schemas"
+        },
+        { label: "Modes", href: "/psyche/modes", detail: "Current modes" },
+        {
+          label: "Modes guide",
+          href: "/psyche/modes/guide",
+          detail: "Help understanding modes"
+        }
+      ]
+    }
+  },
+  {
+    id: "system",
+    title: "People, connections, and system",
+    description: "See who and what is connected, then inspect system health.",
+    icon: Settings,
+    destinations: [
+      {
+        label: "People",
+        href: "/people",
+        detail: "People represented in Forge"
+      },
+      {
+        label: "Settings and system health",
+        href: "/settings",
+        detail: "Configuration and Doctor checks"
+      },
+      {
+        label: "Data",
+        href: "/settings/data",
+        detail: "Data location and integrity"
+      },
+      {
+        label: "Users",
+        href: "/settings/users",
+        detail: "User scope and access"
+      },
+      {
+        label: "Calendar integrations",
+        href: "/settings/calendar",
+        detail: "Calendar connections and sync"
+      },
+      {
+        label: "Mobile companion",
+        href: "/settings/mobile",
+        detail: "Mobile connection and sync"
+      },
+      {
+        label: "Models",
+        href: "/settings/models",
+        detail: "Model connections"
+      },
+      {
+        label: "Agents",
+        href: "/settings/agents",
+        detail: "Agents, tokens, and approvals"
+      },
+      {
+        label: "Reward settings",
+        href: "/settings/rewards",
+        detail: "Progression rules and art"
+      },
+      {
+        label: "Wiki settings",
+        href: "/settings/wiki",
+        detail: "Wiki configuration and index health"
+      },
+      {
+        label: "Runtime logs",
+        href: "/settings/logs",
+        detail: "Runtime diagnostics"
+      },
+      {
+        label: "Deleted records",
+        href: "/settings/bin",
+        detail: "Recoverable deleted items"
+      },
+      {
+        label: "Trophy Hall",
+        href: "/rewards",
+        detail: "Achievements and unlocks"
+      }
+    ]
+  }
+];
 
 const OVERVIEW_METRIC_HELP: Record<string, string> = {
   "Life Force":
-    "Life Force compares today's spent Action Points with the modeled daily budget. It is Forge's local capacity planning layer, not a medical score.",
+    "Life Force compares today’s spent Action Points with the modeled daily budget. It supports capacity planning and is not a medical score.",
   Momentum:
-    "Momentum summarizes recent execution, XP, streak context, and movement across Forge records. Use it as an attention signal.",
-  Instant:
-    "Instant AP/hour estimates current headroom from the Life Force drain model. Higher values mean Forge thinks the next block can absorb more effort.",
+    "Momentum summarizes recent execution, XP, and streak context. Treat it as an attention cue, not a ranking.",
   Level:
-    "Level comes from the XP ledger. It represents accumulated meaningful Forge activity for the selected user scope.",
+    "Level comes from the XP ledger and represents accumulated meaningful Forge activity for the selected user scope.",
   "Weekly XP":
-    "Weekly XP is recent reward-ledger movement. It helps separate a genuinely active week from old accumulated progress."
+    "Weekly XP shows recent reward-ledger activity rather than old accumulated progress."
 };
 
 export function buildOverviewXpFallback(
@@ -123,138 +453,281 @@ export function buildOverviewXpFallback(
 }
 
 function localDateKey(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 function formatCompactDuration(seconds: number) {
   if (seconds >= 3_600) {
     const hours = seconds / 3_600;
-    if (hours >= 10 || Number.isInteger(hours)) {
-      return `${Math.round(hours)}h`;
-    }
-    return `${hours.toFixed(1)}h`;
+    return `${hours >= 10 || Number.isInteger(hours) ? Math.round(hours) : hours.toFixed(1)}h`;
   }
   return `${Math.max(1, Math.round(seconds / 60))}m`;
 }
 
-function formatCompactDistance(distanceMeters: number) {
-  if (distanceMeters >= 1_000) {
-    return `${(distanceMeters / 1_000).toFixed(1)} km`;
-  }
-  return `${Math.round(distanceMeters)} m`;
-}
-
 function buildMovementPlaceBreakdown(day: MovementDayData | undefined) {
-  if (!day) {
-    return [];
-  }
+  if (!day) return [];
   const totals = new Map<string, number>();
   for (const segment of day.segments) {
-    if (segment.kind !== "stay" || segment.durationSeconds <= 0) {
-      continue;
-    }
+    if (segment.kind !== "stay" || segment.durationSeconds <= 0) continue;
     const label = segment.label.trim() || "Unlabeled stay";
     totals.set(label, (totals.get(label) ?? 0) + segment.durationSeconds);
   }
   return [...totals.entries()]
     .map(([label, seconds]) => ({ label, seconds }))
     .sort((left, right) => right.seconds - left.seconds)
-    .slice(0, 3);
+    .slice(0, 2);
 }
 
 function buildVitalsHighlightRows(vitals: VitalsViewData | undefined) {
-  if (!vitals) {
-    return [];
-  }
-  const desiredMetrics = [
-    "restingHeartRate",
-    "heartRateVariabilitySDNN",
-    "vo2Max",
-    "oxygenSaturation"
-  ] as const;
-  return desiredMetrics
+  if (!vitals) return [];
+  const desired = ["restingHeartRate", "heartRateVariabilitySDNN", "vo2Max"];
+  return desired
     .map((key) => vitals.metrics.find((metric) => metric.metric === key))
     .filter((metric): metric is VitalsViewData["metrics"][number] =>
       Boolean(metric)
-    )
-    .slice(0, 3);
+    );
 }
 
-function formatVitalOverviewValue(metric: VitalsViewData["metrics"][number]) {
-  if (metric.latestValue == null) {
-    return "No reading";
+function formatVitalValue(metric: VitalsViewData["metrics"][number]) {
+  if (metric.latestValue == null) return "No reading";
+  return `${metric.latestValue.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${metric.unit}`;
+}
+
+function WidgetHeading({
+  eyebrow,
+  title,
+  description,
+  action
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
+        <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+          {eyebrow}
+        </div>
+        <h2 className="mt-1 text-xl font-semibold text-[var(--ui-ink-strong)]">
+          {title}
+        </h2>
+        <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--ui-ink-soft)]">
+          {description}
+        </p>
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function DestinationLink({
+  destination,
+  showDetail = false
+}: {
+  destination: OverviewDestination;
+  showDetail?: boolean;
+}) {
+  if (!showDetail) {
+    return (
+      <Link
+        to={destination.href}
+        title={destination.detail}
+        aria-label={`${destination.label}: ${destination.detail}`}
+        className="min-h-11 min-w-0 rounded-[14px] px-3 py-3 text-sm font-medium text-[var(--ui-ink-strong)] transition hover:bg-[var(--ui-surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+      >
+        {destination.label}
+      </Link>
+    );
   }
-  const digits =
-    metric.unit === "steps" ||
-    metric.unit === "flights" ||
-    metric.unit === "kcal" ||
-    metric.unit === "min"
-      ? 0
-      : 1;
-  return `${metric.latestValue.toLocaleString(undefined, {
-    maximumFractionDigits: digits,
-    minimumFractionDigits: digits === 0 ? 0 : metric.latestValue >= 100 ? 0 : 1
-  })} ${metric.unit}`;
+  return (
+    <Link
+      to={destination.href}
+      className="group flex min-h-11 min-w-0 items-start justify-between gap-3 rounded-[16px] px-3 py-2.5 transition hover:bg-[var(--ui-surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+    >
+      <span className="min-w-0">
+        <span className="block text-sm font-medium text-[var(--ui-ink-strong)]">
+          {destination.label}
+        </span>
+        <span className="mt-0.5 block text-xs leading-5 text-[var(--ui-ink-faint)]">
+          {destination.detail}
+        </span>
+      </span>
+    </Link>
+  );
+}
+
+function StatusTile({
+  to,
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone = "neutral"
+}: {
+  to: string;
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  detail: string;
+  tone?: "neutral" | "warning" | "good";
+}) {
+  return (
+    <Link
+      to={to}
+      className="group min-w-0 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div
+          className={cn(
+            "rounded-full p-2",
+            tone === "warning"
+              ? "bg-[var(--ui-warning-soft)] text-[var(--warning)]"
+              : tone === "good"
+                ? "bg-[var(--ui-success-soft)] text-[var(--success)]"
+                : "bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
+          )}
+        >
+          <Icon aria-hidden="true" className="size-4" />
+        </div>
+        <ArrowRight
+          aria-hidden="true"
+          className="size-3.5 text-[var(--ui-ink-faint)] transition group-hover:translate-x-0.5"
+        />
+      </div>
+      <div className="mt-3 text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+        {label}
+      </div>
+      <div className="mt-1 text-lg font-semibold text-[var(--ui-ink-strong)]">
+        {value}
+      </div>
+      <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-soft)]">
+        {detail}
+      </div>
+    </Link>
+  );
+}
+
+function HealthLink({
+  to,
+  label,
+  value,
+  detail,
+  loading,
+  error
+}: {
+  to: string;
+  label: string;
+  value: string;
+  detail: string;
+  loading?: boolean;
+  error?: boolean;
+}) {
+  return (
+    <Link
+      to={to}
+      className="group min-w-0 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 transition hover:bg-[var(--ui-surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium text-[var(--ui-ink-strong)]">
+          {label}
+        </span>
+        <ArrowRight
+          aria-hidden="true"
+          className="size-3.5 text-[var(--ui-ink-faint)] transition group-hover:translate-x-0.5"
+        />
+      </div>
+      <div className="mt-3 text-lg font-semibold text-[var(--ui-ink-strong)]">
+        {loading ? "Loading…" : error ? "Unavailable" : value}
+      </div>
+      <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-soft)]">
+        {error
+          ? `${label} could not be loaded. Open the full page to try again.`
+          : detail}
+      </div>
+    </Link>
+  );
 }
 
 export function OverviewPage() {
-  const { t } = useI18n();
   const shell = useForgeShell();
   const snapshot = shell.snapshot;
-  const selectedUserIds = Array.isArray(shell.selectedUserIds)
-    ? shell.selectedUserIds
-    : [];
+  const selectedUserIds = shell.selectedUserIds ?? [];
+  const [createTarget, setCreateTarget] = useState<HTMLDivElement | null>(null);
 
   const todayDateKey = localDateKey();
-  const sleepQuery =
-    useQuery({
-      queryKey: ["forge-overview-sleep", ...selectedUserIds],
-      queryFn: async () => (await getSleepView(selectedUserIds)).sleep,
-      staleTime: 60_000
-    }) ?? {};
-  const fitnessQuery =
-    useQuery({
-      queryKey: ["forge-overview-fitness", ...selectedUserIds],
-      queryFn: async () =>
-        (await getFitnessView(selectedUserIds, { compact: true })).fitness,
-      staleTime: 60_000
-    }) ?? {};
-  const movementDayQuery =
-    useQuery({
-      queryKey: [
-        "forge-overview-movement-day",
-        todayDateKey,
-        ...selectedUserIds
-      ],
-      queryFn: async () =>
-        (
-          await getMovementDay({
-            date: todayDateKey,
-            userIds: selectedUserIds
-          })
-        ).movement,
-      staleTime: 60_000
-    }) ?? {};
-  const vitalsQuery =
-    useQuery({
-      queryKey: ["forge-overview-vitals", ...selectedUserIds],
-      queryFn: async () => (await getVitalsView(selectedUserIds)).vitals,
-      staleTime: 60_000
-    }) ?? {};
+  const sleepQuery = useQuery({
+    queryKey: ["forge-overview-sleep", ...selectedUserIds],
+    queryFn: async () => (await getSleepView(selectedUserIds)).sleep,
+    staleTime: 60_000
+  });
+  const fitnessQuery = useQuery({
+    queryKey: ["forge-overview-fitness", ...selectedUserIds],
+    queryFn: async () =>
+      (await getFitnessView(selectedUserIds, { compact: true })).fitness,
+    staleTime: 60_000
+  });
+  const movementDayQuery = useQuery({
+    queryKey: ["forge-overview-movement-day", todayDateKey, ...selectedUserIds],
+    queryFn: async () =>
+      (await getMovementDay({ date: todayDateKey, userIds: selectedUserIds }))
+        .movement,
+    staleTime: 60_000
+  });
+  const vitalsQuery = useQuery({
+    queryKey: ["forge-overview-vitals", ...selectedUserIds],
+    queryFn: async () => (await getVitalsView(selectedUserIds)).vitals,
+    staleTime: 60_000
+  });
+  const attentionQuery = useQuery({
+    queryKey: ["forge-overview-attention", ...selectedUserIds],
+    queryFn: () =>
+      getAttentionInbox({
+        state: "active",
+        limit: 6,
+        userIds: selectedUserIds
+      }),
+    staleTime: 30_000
+  });
+  const isOperator = shell.operatorSession.profile === "operator";
+  const doctorQuery = useGetForgeDoctorQuery(undefined, { skip: !isOperator });
   const xpMetricsQuery = useGetXpMetricsQuery(selectedUserIds);
-  const nextMilestone =
-    snapshot.dashboard.milestoneRewards.find((reward) => !reward.completed) ??
-    snapshot.dashboard.milestoneRewards[0] ??
-    null;
-  const topTask = snapshot.overview.topTasks[0] ?? null;
+  const createActions = useForgeCreateActions({
+    goals: snapshot.dashboard.goals,
+    projects: snapshot.dashboard.projects,
+    tags: snapshot.tags,
+    users: snapshot.users,
+    defaultUserId: selectedUserIds.length === 1 ? selectedUserIds[0] : null,
+    onCreateGoal: shell.createGoal,
+    onCreateProject: shell.createProject,
+    onCreateTask: shell.createTask
+  });
+
+  const topTask =
+    snapshot.overview.topTasks[0] ?? snapshot.today.directive.task ?? null;
   const topHabit = snapshot.overview.dueHabits[0] ?? null;
-  const latestEvidence = snapshot.overview.recentEvidence[0] ?? null;
-  const projectLookup = new Map(
-    snapshot.projects.map((project) => [project.id, project])
-  );
+  const activeRun = snapshot.activeTaskRuns[0] ?? null;
+  const currentWorkHref = activeRun
+    ? `/tasks/${activeRun.taskId}`
+    : topTask
+      ? `/tasks/${topTask.id}`
+      : "/today";
+  const currentWorkTitle =
+    activeRun?.taskTitle ?? topTask?.title ?? "Nothing selected";
+  const recentActivity = snapshot.overview.recentEvidence.slice(0, 3);
+  const attention = attentionQuery.data;
+  const doctor = doctorQuery.data?.doctor;
+  const riskCount = new Set([
+    ...snapshot.risk.blockedTasks.map((task) => task.id),
+    ...snapshot.risk.overdueTasks.map((task) => task.id)
+  ]).size;
+  const scopeLabel =
+    snapshot.userScope.selectedUsers.length === 1
+      ? (snapshot.userScope.selectedUsers[0]?.displayName ?? "1 user")
+      : snapshot.userScope.selectedUsers.length > 1
+        ? `${snapshot.userScope.selectedUsers.length} users`
+        : "Current scope";
   const heroStatus =
     snapshot.metrics.momentumScore >= 80
       ? "Strong"
@@ -264,153 +737,27 @@ export function OverviewPage() {
   const sleepSummary = sleepQuery.data?.summary ?? null;
   const fitnessSummary = fitnessQuery.data?.summary ?? null;
   const movementDay = movementDayQuery.data;
-  const vitalsSummary = vitalsQuery.data ?? null;
-  const vitalsHighlightRows = buildVitalsHighlightRows(
-    vitalsSummary ?? undefined
-  );
-  const movementPlaceBreakdown = buildMovementPlaceBreakdown(movementDay);
-  const hasSleepData =
-    sleepSummary !== null && sleepSummary.totalSleepSeconds > 0;
-  const hasFitnessData =
-    fitnessSummary !== null && fitnessSummary.workoutCount > 0;
-  const hasVitalsData =
-    vitalsSummary !== null && vitalsSummary.summary.metricCount > 0;
-  const hasHealthData = hasSleepData || hasFitnessData || hasVitalsData;
-  const hasMovementData =
-    movementDay !== undefined &&
-    (movementDay.summary.tripCount > 0 ||
-      movementDay.summary.stayCount > 0 ||
-      movementDay.summary.totalMovingSeconds > 0 ||
-      movementPlaceBreakdown.length > 0);
-  const hasGamificationData = true;
-  const hasOverviewData =
-    hasGamificationData ||
-    snapshot.lifeForce !== undefined ||
-    snapshot.overview.activeGoals.length > 0 ||
-    snapshot.overview.projects.length > 0 ||
-    snapshot.overview.topTasks.length > 0 ||
-    snapshot.overview.recentEvidence.length > 0 ||
-    snapshot.overview.dueHabits.length > 0 ||
-    snapshot.overview.neglectedGoals.length > 0 ||
-    sleepQuery.isLoading ||
-    fitnessQuery.isLoading ||
-    movementDayQuery.isLoading ||
-    vitalsQuery.isLoading ||
-    hasHealthData ||
-    hasMovementData;
-  const summaryMetrics = snapshot.lifeForce
-    ? [
-        {
-          label: "Life Force",
-          value: `${Math.round(snapshot.lifeForce.spentTodayAp)} / ${Math.round(snapshot.lifeForce.dailyBudgetAp)} AP`,
-          detail: `Remaining ${formatLifeForceAp(snapshot.lifeForce.remainingAp)}`,
-          help: OVERVIEW_METRIC_HELP["Life Force"]
-        },
-        {
-          label: "Momentum",
-          value: `${snapshot.metrics.momentumScore}`,
-          detail: `${heroStatus} · ${snapshot.metrics.streakDays} day streak`,
-          help: OVERVIEW_METRIC_HELP.Momentum
-        },
-        {
-          label: "Instant",
-          value: formatLifeForceRate(snapshot.lifeForce.instantFreeApPerHour),
-          detail:
-            snapshot.lifeForce.overloadApPerHour > 0
-              ? `${formatLifeForceRate(snapshot.lifeForce.overloadApPerHour)} overload`
-              : "Headroom right now",
-          help: OVERVIEW_METRIC_HELP.Instant
-        },
-        {
-          label: "Level",
-          value: `L${snapshot.metrics.level}`,
-          detail: `${snapshot.metrics.currentLevelXp} XP in level`,
-          help: OVERVIEW_METRIC_HELP.Level
-        },
-        {
-          label: "Weekly XP",
-          value: `${snapshot.metrics.weeklyXp}`,
-          detail: `${snapshot.metrics.totalXp} total XP`,
-          help: OVERVIEW_METRIC_HELP["Weekly XP"]
-        }
-      ]
-    : [
-        {
-          label: "Level",
-          value: `L${snapshot.metrics.level}`,
-          detail: `${snapshot.metrics.currentLevelXp} XP in level`,
-          help: OVERVIEW_METRIC_HELP.Level
-        },
-        {
-          label: "Weekly XP",
-          value: `${snapshot.metrics.weeklyXp}`,
-          detail: `${snapshot.metrics.totalXp} total XP`,
-          help: OVERVIEW_METRIC_HELP["Weekly XP"]
-        },
-        {
-          label: "Momentum",
-          value: `${snapshot.metrics.momentumScore}`,
-          detail: `${heroStatus} · ${snapshot.metrics.streakDays} day streak`,
-          help: OVERVIEW_METRIC_HELP.Momentum
-        }
-      ];
+  const vitals = vitalsQuery.data;
+  const movementPlaces = buildMovementPlaceBreakdown(movementDay);
+  const vitalRows = buildVitalsHighlightRows(vitals);
 
-  function activityLink(
-    event: (typeof snapshot.overview.recentEvidence)[number]
-  ) {
-    if (event.entityType === "goal") {
-      return `/goals/${event.entityId}`;
-    }
-    if (event.entityType === "project") {
-      return `/projects/${event.entityId}`;
-    }
-    if (event.entityType === "task") {
-      return `/tasks/${event.entityId}`;
-    }
-    if (event.entityType === "habit") {
-      return "/habits";
-    }
-    if (
-      event.entityType === "task_run" &&
-      typeof event.metadata.taskId === "string"
-    ) {
-      return `/tasks/${event.metadata.taskId}`;
-    }
-    return `/activity?eventId=${event.id}`;
-  }
-
-  if (!hasOverviewData) {
-    return (
-      <div className="grid min-w-0 gap-4">
-        <PageHero
-          title="Overview"
-          titleText="Overview"
-          description="See your main goals, active projects, top tasks, and recent activity in one place."
-          badge="0 live signals"
-        />
-        <EmptyState
-          eyebrow={t("common.overview.heroEyebrow")}
-          title={t("common.overview.emptyTitle")}
-          description={t("common.overview.emptyDescription")}
-          action={
-            <Link
-              to="/goals"
-              className="inline-flex min-h-10 min-w-0 max-w-full items-center justify-center rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-medium whitespace-nowrap text-[var(--ui-ink-on-accent)] transition hover:opacity-90"
-            >
-              {t("common.overview.emptyAction")}
-            </Link>
-          }
-        />
-      </div>
+  const openSearch = () => {
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "k",
+        code: "KeyK",
+        metaKey: true,
+        ctrlKey: true,
+        bubbles: true
+      })
     );
-  }
+  };
 
   const widgets: SurfaceWidgetDefinition[] = [
     {
       id: "hero",
       title: "Overview",
-      description:
-        "The route header stays movable like any other surface block.",
+      description: "The front door to every part of Forge.",
       defaultWidth: 12,
       defaultHeight: 2,
       removable: false,
@@ -423,116 +770,657 @@ export function OverviewPage() {
         <PageHero
           title="Overview"
           titleText="Overview"
-          description={`${heroStatus}. Current capacity, progress, goals, work, health, and movement.`}
-          badge={`Momentum ${snapshot.metrics.momentumScore}`}
+          description="See what needs attention, continue current work, or open any part of Forge."
+          badge={scopeLabel}
+          actions={
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={openSearch}
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 text-sm font-medium text-[var(--ui-ink-strong)] transition hover:bg-[var(--ui-surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+              >
+                <Search aria-hidden="true" className="size-4" /> Search Forge
+              </button>
+              <div
+                ref={setCreateTarget}
+                className="min-h-11"
+                aria-label="Create in Forge"
+              />
+              <Link
+                to="/attention"
+                className="inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium text-[var(--ui-ink-medium)] hover:text-[var(--ui-ink-strong)]"
+              >
+                Attention
+              </Link>
+              <Link
+                to="/workbench"
+                className="inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium text-[var(--ui-ink-medium)] hover:text-[var(--ui-ink-strong)]"
+              >
+                Continue work
+              </Link>
+              <a
+                href="#forge-map"
+                className="inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium text-[var(--ui-ink-medium)] hover:text-[var(--ui-ink-strong)]"
+              >
+                Explore Forge
+              </a>
+              <CreateMenu
+                actions={createActions.actions}
+                mobileTriggerTarget={createTarget}
+                desktopTriggerTarget={createTarget}
+              />
+            </div>
+          }
         />
       )
     },
     {
       id: "gamification",
       title: "Forge Smith",
-      description: "Selected-user level, XP, streak, trophy, and unlock state.",
+      description: "Level, XP, streak, trophy, and unlock state.",
       defaultWidth: 4,
       defaultHeight: 3,
-      defaultHidden: false,
       minWidth: 4,
       minHeight: 3,
       removable: false,
       surfaceChrome: "none",
       defaultTitleVisible: false,
       defaultDescriptionVisible: false,
-      render: () =>
-        xpMetricsQuery.data ? (
-          <GamificationOverviewWidget
-            metrics={xpMetricsQuery.data.metrics}
-            compact
-            statusMessage={
-              xpMetricsQuery.isError
-                ? "Could not refresh progression. Showing the latest overview snapshot."
-                : undefined
-            }
-          />
-        ) : (
-          <GamificationOverviewWidget
-            metrics={buildOverviewXpFallback(snapshot)}
-            compact
-            statusMessage={
-              xpMetricsQuery.isError
-                ? "Could not refresh progression. Showing the latest overview snapshot."
+      render: () => (
+        <GamificationOverviewWidget
+          metrics={
+            xpMetricsQuery.data?.metrics ?? buildOverviewXpFallback(snapshot)
+          }
+          compact
+          statusMessage={
+            xpMetricsQuery.isError
+              ? "Progression could not be refreshed. The latest Overview snapshot is shown."
+              : xpMetricsQuery.data
+                ? undefined
                 : "Refreshing progression from the reward ledger."
-            }
-          />
-        )
+          }
+        />
+      )
     },
     {
-      id: "summary",
-      title: "Momentum summary",
-      description:
-        "Smaller titles and denser metrics free space for the widgets themselves.",
+      id: "what-matters",
+      title: "What matters now",
+      description: "Current attention, work, habits, and system health.",
       defaultWidth: 8,
+      defaultHeight: 3,
+      minWidth: 6,
+      minHeight: 3,
+      removable: false,
+      defaultTitleVisible: false,
+      defaultDescriptionVisible: false,
+      render: () => (
+        <div className="min-w-0">
+          <WidgetHeading
+            eyebrow="Start here"
+            title="What matters now"
+            description="Open the work, decision, or system area that needs attention."
+          />
+          <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <StatusTile
+              to="/attention"
+              icon={
+                attentionQuery.isLoading
+                  ? Clock3
+                  : attentionQuery.isError
+                    ? AlertTriangle
+                    : attention?.summary.activeCount
+                      ? AlertTriangle
+                      : CheckCircle2
+              }
+              label="Attention"
+              value={
+                attentionQuery.isLoading
+                  ? "Loading…"
+                  : attentionQuery.isError
+                    ? "Unavailable"
+                    : `${attention?.summary.activeCount ?? 0} active`
+              }
+              detail={
+                attentionQuery.isLoading
+                  ? "Checking current attention"
+                  : attentionQuery.isError
+                    ? "Attention could not be loaded. Other Forge areas are still available."
+                    : attention?.summary.activeCount
+                      ? `${attention.summary.blockingCount} blocking and ${attention.summary.importantCount} important`
+                      : "No items need attention"
+              }
+              tone={
+                attentionQuery.isError || attention?.summary.activeCount
+                  ? "warning"
+                  : attentionQuery.isLoading
+                    ? "neutral"
+                    : "good"
+              }
+            />
+            <StatusTile
+              to={currentWorkHref}
+              icon={LayoutDashboard}
+              label="Current work"
+              value={currentWorkTitle}
+              detail={
+                activeRun
+                  ? `${snapshot.activeTaskRuns.length} ${snapshot.activeTaskRuns.length === 1 ? "run is" : "runs are"} active`
+                  : topTask
+                    ? "Open the clearest current task"
+                    : "Choose work from Today"
+              }
+            />
+            <StatusTile
+              to={riskCount ? "/kanban" : "/habits"}
+              icon={riskCount ? AlertTriangle : CalendarDays}
+              label={riskCount ? "Work risks" : "Due habits"}
+              value={
+                riskCount
+                  ? `${riskCount} need review`
+                  : `${snapshot.overview.dueHabits.length} due`
+              }
+              detail={
+                riskCount
+                  ? `${snapshot.risk.blockedTasks.length} blocked and ${snapshot.risk.overdueTasks.length} overdue`
+                  : topHabit
+                    ? topHabit.title
+                    : "No habits are due"
+              }
+              tone={riskCount ? "warning" : "neutral"}
+            />
+            <StatusTile
+              to="/settings"
+              icon={Wrench}
+              label="System health"
+              value={
+                !isOperator
+                  ? "Permission required"
+                  : doctorQuery.isLoading
+                    ? "Checking…"
+                    : doctorQuery.isError
+                      ? "Unavailable"
+                      : doctor
+                        ? `${doctor.integrity.score}/100`
+                        : "No report"
+              }
+              detail={
+                !isOperator
+                  ? "Doctor details require local-operator access"
+                  : doctorQuery.isError
+                    ? "Health details could not be loaded"
+                    : (doctor?.integrity.headline ??
+                      "System health is being checked")
+              }
+              tone={
+                doctor?.integrity.status === "healthy"
+                  ? "good"
+                  : doctor?.integrity.status || doctorQuery.isError
+                    ? "warning"
+                    : "neutral"
+              }
+            />
+          </div>
+          {attentionQuery.isError ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-[var(--ui-ink-soft)]">
+              <span>Attention is unavailable on this page.</span>
+              <button
+                type="button"
+                onClick={() => void attentionQuery.refetch()}
+                className="min-h-10 rounded-full px-3 font-medium text-[var(--primary)] hover:bg-[var(--ui-accent-soft)]"
+              >
+                Try again
+              </button>
+            </div>
+          ) : attention?.items.length ? (
+            <div
+              className="mt-3 flex min-w-0 flex-wrap gap-2"
+              aria-label="Leading attention items"
+            >
+              {attention.items.slice(0, 3).map((item) => (
+                <Link
+                  key={item.id}
+                  to={item.target.href}
+                  className="inline-flex min-h-10 min-w-0 max-w-full items-center gap-2 rounded-full bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                >
+                  <span className="truncate">{item.title}</span>
+                  <ArrowRight
+                    aria-hidden="true"
+                    className="size-3.5 shrink-0"
+                  />
+                </Link>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      )
+    },
+    {
+      id: "signals",
+      title: "Continue where you left off",
+      description: "Return to current work or recent evidence.",
+      defaultWidth: 12,
       defaultHeight: 3,
       minWidth: 6,
       defaultTitleVisible: false,
       defaultDescriptionVisible: false,
       render: ({ compact }) => (
         <div className="min-w-0">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                Momentum summary
-              </div>
-              <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
-                Current state
-              </div>
-              {!compact ? (
-                <div className="mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                  Capacity and recent progress across Forge.
-                </div>
-              ) : null}
-            </div>
-            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
-              {heroStatus}
-            </Badge>
-          </div>
+          <WidgetHeading
+            eyebrow="Continue"
+            title="Continue where you left off"
+            description="Return to an active task, the current daily direction, or recent evidence."
+            action={
+              <Link
+                to="/activity"
+                className="inline-flex min-h-10 items-center gap-2 rounded-full px-3 text-sm font-medium text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+              >
+                All activity{" "}
+                <ArrowRight aria-hidden="true" className="size-3.5" />
+              </Link>
+            }
+          />
           <div
             className={cn(
               "mt-4 grid gap-3",
-              compact ? "grid-cols-2" : "sm:grid-cols-2 xl:grid-cols-5"
+              compact ? "grid-cols-1" : "md:grid-cols-3"
             )}
           >
-            {summaryMetrics.map((metric) => (
-              <div
-                key={metric.label}
-                className="min-w-0 border-l border-[var(--ui-border-subtle)] py-1 pl-3"
-              >
-                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                  <span>{metric.label}</span>
-                  <InfoTooltip
-                    label={`Explain ${metric.label}`}
-                    title={metric.label}
-                    content={metric.help}
-                    panelClassName="normal-case tracking-normal"
-                  />
-                </div>
-                <div className="mt-1 text-lg font-semibold text-[var(--ui-ink-strong)]">
-                  {metric.value}
-                </div>
-                {!compact ? (
-                  <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-faint)]">
+            <DestinationLink
+              showDetail
+              destination={{
+                label: activeRun ? "Active task run" : "Current work",
+                href: currentWorkHref,
+                detail: activeRun
+                  ? activeRun.taskTitle
+                  : (topTask?.title ?? "Choose a task from Today")
+              }}
+            />
+            <DestinationLink
+              showDetail
+              destination={{
+                label: "Today’s direction",
+                href: "/today",
+                detail:
+                  snapshot.today.directive.task?.title ??
+                  snapshot.today.directive.sessionLabel ??
+                  "Review today’s work"
+              }}
+            />
+            {recentActivity[0] ? (
+              <DestinationLink
+                showDetail
+                destination={{
+                  label: getReadableActivityTitle(recentActivity[0]),
+                  href:
+                    getActivityEventHref(recentActivity[0]) ??
+                    `/activity?eventId=${recentActivity[0].id}`,
+                  detail: getReadableActivityDescription(recentActivity[0])
+                }}
+              />
+            ) : (
+              <DestinationLink
+                showDetail
+                destination={{
+                  label: "Recent activity",
+                  href: "/activity",
+                  detail: "No recent activity for this user scope"
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )
+    },
+    {
+      id: "forge-map",
+      title: "Everything in Forge",
+      description: "A complete map of Forge’s supported areas.",
+      defaultWidth: 12,
+      defaultHeight: 7,
+      minWidth: 6,
+      minHeight: 4,
+      removable: false,
+      defaultTitleVisible: false,
+      defaultDescriptionVisible: false,
+      render: () => (
+        <div id="forge-map" className="min-w-0 scroll-mt-24">
+          <WidgetHeading
+            eyebrow="Find any area"
+            title="Everything in Forge"
+            description="Choose an area by what you want to understand or do. Every destination below opens an existing Forge page."
+          />
+          <div className="mt-5 grid min-w-0 gap-4 xl:grid-cols-2">
+            {FORGE_OVERVIEW_GROUPS.map((group) => {
+              const Icon = group.icon;
+              return (
+                <section
+                  key={group.id}
+                  aria-labelledby={`forge-map-${group.id}`}
+                  className={cn(
+                    "min-w-0 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3",
+                    group.id === "system" && "xl:col-span-2"
+                  )}
+                >
+                  <div className="flex items-start gap-3 px-2 pb-2 pt-1">
+                    <div className="rounded-full bg-[var(--ui-surface-2)] p-2 text-[var(--ui-ink-medium)]">
+                      <Icon aria-hidden="true" className="size-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3
+                        id={`forge-map-${group.id}`}
+                        className="text-base font-semibold text-[var(--ui-ink-strong)]"
+                      >
+                        {group.title}
+                      </h3>
+                      <p className="mt-1 text-sm leading-5 text-[var(--ui-ink-soft)]">
+                        {group.description}
+                      </p>
+                    </div>
+                  </div>
+                  <div
+                    className={cn(
+                      "grid min-w-0 grid-cols-2",
+                      group.id === "system" && "xl:grid-cols-3"
+                    )}
+                  >
+                    {group.destinations.map((destination) => (
+                      <DestinationLink
+                        key={destination.href}
+                        destination={destination}
+                      />
+                    ))}
+                  </div>
+                  {group.advanced ? (
+                    <details className="mt-2 border-t border-[var(--ui-border-subtle)] px-2 pt-2">
+                      <summary className="min-h-11 cursor-pointer rounded-[14px] px-2 py-3 text-sm font-medium text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]">
+                        {group.advanced.label}
+                      </summary>
+                      <div className="grid min-w-0 grid-cols-2 pb-1 xl:grid-cols-3">
+                        {group.advanced.destinations.map((destination) => (
+                          <DestinationLink
+                            key={destination.href}
+                            destination={destination}
+                          />
+                        ))}
+                      </div>
+                    </details>
+                  ) : null}
+                </section>
+              );
+            })}
+          </div>
+        </div>
+      )
+    },
+    {
+      id: "body-signals",
+      title: "Health and capacity",
+      description: "Recent health evidence and capacity context.",
+      defaultWidth: 12,
+      defaultHeight: 4,
+      minWidth: 6,
+      defaultDescriptionVisible: false,
+      render: () => (
+        <div className="min-w-0">
+          <WidgetHeading
+            eyebrow="Capacity"
+            title="Health and capacity"
+            description="Recent imported evidence can help plan effort. It is not medical advice or a diagnosis."
+          />
+          <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <HealthLink
+              to="/life-force"
+              label="Life Force"
+              value={
+                snapshot.lifeForce
+                  ? formatLifeForceAp(snapshot.lifeForce.remainingAp)
+                  : "Not configured"
+              }
+              detail={
+                snapshot.lifeForce
+                  ? `Remaining from ${formatLifeForceAp(snapshot.lifeForce.dailyBudgetAp)} today`
+                  : "Set up a capacity profile to begin"
+              }
+            />
+            <HealthLink
+              to="/sleep"
+              label="Sleep"
+              loading={sleepQuery.isLoading}
+              error={sleepQuery.isError}
+              value={
+                sleepSummary?.totalSleepSeconds
+                  ? formatCompactDuration(sleepSummary.averageSleepSeconds)
+                  : "No recent data"
+              }
+              detail={
+                sleepSummary?.totalSleepSeconds
+                  ? `Average sleep score ${Math.round(sleepSummary.averageSleepScore)}`
+                  : "Sleep summaries appear after an import"
+              }
+            />
+            <HealthLink
+              to="/sports"
+              label="Sports"
+              loading={fitnessQuery.isLoading}
+              error={fitnessQuery.isError}
+              value={
+                fitnessSummary?.workoutCount
+                  ? `${fitnessSummary.workoutCount} workouts`
+                  : "No recent data"
+              }
+              detail={
+                fitnessSummary?.workoutCount
+                  ? `${Math.round(fitnessSummary.exerciseMinutes)} exercise minutes`
+                  : "Workout summaries appear after an import"
+              }
+            />
+            <HealthLink
+              to="/vitals"
+              label="Vitals"
+              loading={vitalsQuery.isLoading}
+              error={vitalsQuery.isError}
+              value={
+                vitals?.summary.metricCount
+                  ? `${vitals.summary.metricCount} metrics`
+                  : "No recent data"
+              }
+              detail={
+                vitalRows[0]
+                  ? `${vitalRows[0].label}: ${formatVitalValue(vitalRows[0])}`
+                  : "Vitals appear after an import"
+              }
+            />
+            <HealthLink
+              to="/movement"
+              label="Movement"
+              loading={movementDayQuery.isLoading}
+              error={movementDayQuery.isError}
+              value={
+                movementDay?.summary.totalMovingSeconds
+                  ? formatCompactDuration(
+                      movementDay.summary.totalMovingSeconds
+                    )
+                  : "No movement today"
+              }
+              detail={
+                movementPlaces[0]
+                  ? `${formatCompactDuration(movementPlaces[0].seconds)} at ${movementPlaces[0].label}`
+                  : "Places and trips appear after companion sync"
+              }
+            />
+          </div>
+        </div>
+      )
+    },
+    {
+      id: "summary",
+      title: "Progress snapshot",
+      description: "Optional capacity and progression details.",
+      defaultWidth: 12,
+      defaultHeight: 2,
+      defaultHidden: true,
+      defaultTitleVisible: false,
+      defaultDescriptionVisible: false,
+      render: () => {
+        const metrics = [
+          {
+            label: "Momentum",
+            value: `${snapshot.metrics.momentumScore}`,
+            detail: heroStatus,
+            help: OVERVIEW_METRIC_HELP.Momentum
+          },
+          {
+            label: "Level",
+            value: `L${snapshot.metrics.level}`,
+            detail: `${snapshot.metrics.currentLevelXp} XP in this level`,
+            help: OVERVIEW_METRIC_HELP.Level
+          },
+          {
+            label: "Weekly XP",
+            value: `${snapshot.metrics.weeklyXp}`,
+            detail: `${snapshot.metrics.totalXp} total XP`,
+            help: OVERVIEW_METRIC_HELP["Weekly XP"]
+          },
+          {
+            label: "Life Force",
+            value: snapshot.lifeForce
+              ? formatLifeForceRate(snapshot.lifeForce.instantFreeApPerHour)
+              : "Not set",
+            detail: "Current free capacity",
+            help: OVERVIEW_METRIC_HELP["Life Force"]
+          }
+        ];
+        return (
+          <div className="min-w-0">
+            <WidgetHeading
+              eyebrow="Optional detail"
+              title="Progress snapshot"
+              description="Capacity and progression for the selected user scope."
+            />
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {metrics.map((metric) => (
+                <div
+                  key={metric.label}
+                  className="border-l border-[var(--ui-border-subtle)] pl-3"
+                >
+                  <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+                    {metric.label}
+                    <InfoTooltip
+                      label={`Explain ${metric.label}`}
+                      title={metric.label}
+                      content={metric.help}
+                    />
+                  </div>
+                  <div className="mt-1 text-lg font-semibold text-[var(--ui-ink-strong)]">
+                    {metric.value}
+                  </div>
+                  <div className="mt-1 text-xs text-[var(--ui-ink-soft)]">
                     {metric.detail}
                   </div>
-                ) : null}
-              </div>
-            ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+    },
+    {
+      id: "pipeline",
+      title: "Work details",
+      description: "Optional counts for projects, habits, and tasks.",
+      defaultWidth: 12,
+      defaultHeight: 2,
+      defaultHidden: true,
+      defaultDescriptionVisible: false,
+      render: () => (
+        <div className="min-w-0">
+          <WidgetHeading
+            eyebrow="Optional detail"
+            title="Work details"
+            description="Open the complete list for each kind of work."
+          />
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <StatusTile
+              to="/projects"
+              icon={Compass}
+              label="Projects"
+              value={`${snapshot.projects.length}`}
+              detail="Open all projects"
+            />
+            <StatusTile
+              to="/habits"
+              icon={History}
+              label="Habits"
+              value={`${snapshot.habits.length}`}
+              detail="Open all habits"
+            />
+            <StatusTile
+              to="/kanban"
+              icon={LayoutDashboard}
+              label="Issues and tasks"
+              value={`${snapshot.tasks.length}`}
+              detail="Open the work board"
+            />
+          </div>
+        </div>
+      )
+    },
+    {
+      id: "goals",
+      title: "Goals",
+      description: "Optional long-range direction.",
+      defaultWidth: 12,
+      defaultHeight: 3,
+      defaultHidden: true,
+      defaultDescriptionVisible: false,
+      render: ({ compact }) => (
+        <div className="min-w-0">
+          <WidgetHeading
+            eyebrow="Optional detail"
+            title="Goals"
+            description="Long-range outcomes remain available without defining the whole Overview."
+            action={
+              <Link
+                to="/goals"
+                className="inline-flex min-h-10 items-center gap-2 rounded-full px-3 text-sm font-medium text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)]"
+              >
+                All goals <ArrowRight aria-hidden="true" className="size-3.5" />
+              </Link>
+            }
+          />
+          <div className={cn("mt-4 grid gap-3", !compact && "md:grid-cols-2")}>
+            {snapshot.overview.activeGoals
+              .slice(0, compact ? 2 : 4)
+              .map((goal) => (
+                <Link
+                  key={goal.id}
+                  to={`/goals/${goal.id}`}
+                  className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 transition hover:bg-[var(--ui-surface-hover)]"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-[var(--ui-ink-strong)]">
+                      {goal.title}
+                    </span>
+                    <Badge>{goal.progress}%</Badge>
+                  </div>
+                  <div className="mt-3">
+                    <ProgressMeter value={goal.progress} />
+                  </div>
+                </Link>
+              ))}
+            {snapshot.overview.activeGoals.length === 0 ? (
+              <p className="text-sm text-[var(--ui-ink-soft)]">
+                No active goals for this user scope.
+              </p>
+            ) : null}
           </div>
         </div>
       )
     },
     {
       id: "life-force",
-      title: "Life Force",
-      description:
-        "Dynamic Action Points, the editable capacity curve, current drains, and stat growth all live here.",
+      title: "Life Force details",
+      description: "Optional capacity curve and drains.",
       defaultWidth: 12,
       defaultHeight: 7,
       minWidth: 6,
@@ -548,474 +1436,10 @@ export function OverviewPage() {
             showEditor={false}
           />
         ) : (
-          <Card className="rounded-[24px] border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-5 text-sm leading-6 text-[var(--ui-ink-soft)]">
-            Life Force is not configured for this user yet. Once a profile
-            exists, the full capacity curve, drains, and recommendations will
-            appear here.
+          <Card className="rounded-[24px] p-5 text-sm text-[var(--ui-ink-soft)]">
+            Life Force is not configured for this user yet.
           </Card>
         )
-    },
-    {
-      id: "body-signals",
-      title: "Life, health, movement",
-      description:
-        "Health imports and movement context make the overview feel like a real daily operating page.",
-      defaultWidth: 12,
-      defaultHeight: 4,
-      minWidth: 6,
-      defaultDescriptionVisible: false,
-      render: ({ compact }) => (
-        <div className="grid min-w-0 gap-4 xl:grid-cols-3">
-          <Card className="rounded-[24px] border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                  Life Force
-                </div>
-                <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
-                  {snapshot.lifeForce
-                    ? `${Math.round(snapshot.lifeForce.remainingAp)} AP remaining`
-                    : "No Life Force profile yet"}
-                </div>
-              </div>
-              {snapshot.lifeForce ? (
-                <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
-                  {formatLifeForceRate(snapshot.lifeForce.instantFreeApPerHour)}
-                </Badge>
-              ) : null}
-            </div>
-            <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
-              {snapshot.lifeForce
-                ? compact
-                  ? `${Math.round(snapshot.lifeForce.spentTodayAp)} / ${Math.round(snapshot.lifeForce.dailyBudgetAp)} AP spent today.`
-                  : `${Math.round(snapshot.lifeForce.spentTodayAp)} / ${Math.round(snapshot.lifeForce.dailyBudgetAp)} AP spent today. Remaining ${formatLifeForceAp(snapshot.lifeForce.remainingAp)} with ${formatLifeForceRate(snapshot.lifeForce.currentDrainApPerHour)} current drain.`
-                : "Once Life Force is configured, this block will show today's budget, remaining headroom, and live drain."}
-            </div>
-          </Card>
-
-          <Card className="rounded-[24px] border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                  Body signals
-                </div>
-                <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
-                  {hasHealthData
-                    ? "Recovery, training, and vitals"
-                    : "No health data yet"}
-                </div>
-              </div>
-              {hasVitalsData && vitalsSummary ? (
-                <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
-                  {vitalsSummary.summary.metricCount} metrics
-                </Badge>
-              ) : null}
-            </div>
-            {sleepQuery.isLoading ||
-            fitnessQuery.isLoading ||
-            vitalsQuery.isLoading ? (
-              <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                Loading recent sleep, workout, and body-signal metrics…
-              </div>
-            ) : hasHealthData ? (
-              <div className="mt-3 grid gap-2 text-sm text-[var(--ui-ink-soft)]">
-                {hasSleepData && sleepSummary ? (
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span>Average sleep</span>
-                    <span className="font-medium text-[var(--ui-ink-strong)]">
-                      {formatCompactDuration(sleepSummary.averageSleepSeconds)}
-                    </span>
-                  </div>
-                ) : null}
-                {hasSleepData && sleepSummary ? (
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span>Sleep score</span>
-                    <span className="font-medium text-[var(--ui-ink-strong)]">
-                      {Math.round(sleepSummary.averageSleepScore)}
-                    </span>
-                  </div>
-                ) : null}
-                {hasFitnessData && fitnessSummary && !compact ? (
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span>Exercise</span>
-                    <span className="font-medium text-[var(--ui-ink-strong)]">
-                      {Math.round(fitnessSummary.exerciseMinutes)} min
-                    </span>
-                  </div>
-                ) : null}
-                {hasFitnessData && fitnessSummary && !compact ? (
-                  <div className="text-xs leading-5 text-[var(--ui-ink-faint)]">
-                    {fitnessSummary.topWorkoutType
-                      ? `${fitnessSummary.topWorkoutType} is the top workout type right now.`
-                      : "Workout imports are available when Apple Health or habit-generated sessions exist."}
-                  </div>
-                ) : null}
-                {vitalsHighlightRows.length > 0 ? (
-                  <div className="mt-1 grid gap-2">
-                    {vitalsHighlightRows
-                      .slice(0, compact ? 1 : vitalsHighlightRows.length)
-                      .map((metric) => (
-                        <div
-                          key={metric.metric}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2"
-                        >
-                          <span>{metric.label}</span>
-                          <span className="font-medium text-[var(--ui-ink-strong)]">
-                            {formatVitalOverviewValue(metric)}
-                          </span>
-                        </div>
-                      ))}
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                Sleep, workout, and vitals summaries appear here as soon as
-                Forge has recent HealthKit records.
-              </div>
-            )}
-          </Card>
-
-          <Card className="rounded-[24px] border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                  Movement
-                </div>
-                <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
-                  {hasMovementData
-                    ? "Today's place balance"
-                    : "No movement timeline yet"}
-                </div>
-              </div>
-              {hasMovementData ? (
-                <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
-                  {formatCompactDuration(
-                    movementDay?.summary.totalMovingSeconds ?? 0
-                  )}{" "}
-                  moving
-                </Badge>
-              ) : null}
-            </div>
-            {movementDayQuery.isLoading ? (
-              <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                Loading today's stays, trips, and place balance…
-              </div>
-            ) : hasMovementData ? (
-              <div className="mt-3 grid gap-2">
-                <div className="flex flex-wrap gap-2">
-                  {movementPlaceBreakdown.map((entry) => (
-                    <Badge
-                      key={entry.label}
-                      className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
-                    >
-                      {formatCompactDuration(entry.seconds)} at {entry.label}
-                    </Badge>
-                  ))}
-                  {(movementDay?.summary.totalMovingSeconds ?? 0) > 0 ? (
-                    <Badge className="bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_74%,var(--ui-ink-strong)_26%)]">
-                      {formatCompactDuration(
-                        movementDay?.summary.totalMovingSeconds ?? 0
-                      )}{" "}
-                      moving
-                    </Badge>
-                  ) : null}
-                </div>
-                <div className="text-sm leading-6 text-[var(--ui-ink-soft)]">
-                  {movementDay?.summary.tripCount ?? 0} trip
-                  {(movementDay?.summary.tripCount ?? 0) === 1
-                    ? ""
-                    : "s"} and{" "}
-                  {formatCompactDistance(
-                    movementDay?.summary.totalDistanceMeters ?? 0
-                  )}{" "}
-                  tracked today.
-                </div>
-              </div>
-            ) : (
-              <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                Movement summaries appear here once the companion has synced
-                stays, trips, or known places.
-              </div>
-            )}
-          </Card>
-        </div>
-      )
-    },
-    {
-      id: "signals",
-      title: "Next actions",
-      description: "Open the work, reward, or evidence that needs attention.",
-      defaultWidth: 12,
-      defaultHeight: 4,
-      minWidth: 6,
-      defaultTitleVisible: false,
-      defaultDescriptionVisible: false,
-      render: ({ compact }) => (
-        <FlagshipSignalDeck
-          eyebrow="Actions"
-          title="Next actions"
-          description="Open the top task, next reward, or latest recorded activity."
-          compact={compact}
-          items={[
-            {
-              id: "top-task",
-              label: topTask
-                ? "Top task"
-                : topHabit
-                  ? "Due habit"
-                  : "Recovery lane",
-              title:
-                topTask?.title ?? topHabit?.title ?? "Get a real task moving",
-              detail:
-                topTask?.description ||
-                topHabit?.description ||
-                "There is no single top task yet, so use this surface to choose one clean next move.",
-              badge: topTask
-                ? `${topTask.points} xp`
-                : topHabit
-                  ? `${topHabit.rewardXp} xp`
-                  : `${snapshot.metrics.weeklyXp} weekly xp`,
-              href: topTask
-                ? `/tasks/${topTask.id}`
-                : topHabit
-                  ? "/habits"
-                  : "/today",
-              actionLabel: topTask
-                ? "Open task"
-                : topHabit
-                  ? "Open habits"
-                  : "Open today"
-            },
-            {
-              id: "reward",
-              label: "Next reward",
-              title: nextMilestone?.title ?? "Keep the streak alive",
-              detail:
-                nextMilestone?.progressLabel ??
-                `Level ${snapshot.metrics.level} is active. ${snapshot.metrics.weeklyXp} weekly XP is already logged.`,
-              badge:
-                nextMilestone?.rewardLabel ??
-                `${snapshot.metrics.comboMultiplier.toFixed(2)}x combo`,
-              href: "/rewards",
-              actionLabel: "Open rewards"
-            },
-            {
-              id: "recent-activity",
-              label: "Recent activity",
-              title: latestEvidence
-                ? getReadableActivityTitle(latestEvidence)
-                : "No recent evidence",
-              detail: latestEvidence
-                ? getReadableActivityDescription(latestEvidence)
-                : "The next work closeout or note will appear here.",
-              badge: latestEvidence?.source ?? "activity",
-              href: latestEvidence ? activityLink(latestEvidence) : "/activity",
-              actionLabel: "Open"
-            }
-          ]}
-        />
-      )
-    },
-    {
-      id: "goals",
-      title: "Goals",
-      description:
-        "Long-range direction stays visible without taking over the whole page.",
-      defaultWidth: 12,
-      defaultHeight: 5,
-      minWidth: 6,
-      defaultDescriptionVisible: false,
-      render: ({ compact }) => (
-        <div className={cn("grid gap-3", !compact && "xl:grid-cols-2")}>
-          {snapshot.overview.activeGoals
-            .slice(0, compact ? 2 : 4)
-            .map((goal) => (
-              <div
-                key={goal.id}
-                className="group relative rounded-[20px] bg-[var(--ui-surface-1)] p-4 transition hover:bg-[var(--ui-surface-hover)]"
-              >
-                <Link
-                  to={`/goals/${goal.id}`}
-                  className="absolute inset-0 rounded-[20px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
-                  aria-label={`Open goal ${goal.title}`}
-                />
-                <div className="pointer-events-none relative z-10">
-                  <div className="flex min-w-0 items-center justify-between gap-3">
-                    <EntityBadge
-                      kind="goal"
-                      label={goal.tags[0]?.name ?? goal.horizon}
-                      compact
-                      gradient={false}
-                    />
-                    <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                      {goal.progress}%
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <EntityName
-                      kind="goal"
-                      label={goal.title}
-                      variant="heading"
-                      size={compact ? "md" : "lg"}
-                      lines={2}
-                      className="max-w-full"
-                      labelClassName="[overflow-wrap:anywhere]"
-                    />
-                  </div>
-                  {!compact ? (
-                    <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                      {goal.description}
-                    </p>
-                  ) : null}
-                  <div className="mt-3">
-                    <ProgressMeter value={goal.progress} />
-                  </div>
-                </div>
-                <div className="relative z-20 mt-3">
-                  <EntityNoteCountLink
-                    entityType="goal"
-                    entityId={goal.id}
-                    count={
-                      getEntityNotesSummary(
-                        snapshot.dashboard.notesSummaryByEntity,
-                        "goal",
-                        goal.id
-                      ).count
-                    }
-                  />
-                </div>
-              </div>
-            ))}
-        </div>
-      )
-    },
-    {
-      id: "pipeline",
-      title: "Projects, habits, tasks",
-      description:
-        "Execution blocks can shrink while keeping the useful subtitles visible.",
-      defaultWidth: 12,
-      defaultHeight: 5,
-      minWidth: 6,
-      defaultDescriptionVisible: false,
-      render: ({ compact }) => (
-        <div className="min-w-0">
-          <div className="grid min-w-0 gap-4 xl:grid-cols-3">
-            <div className="grid min-w-0 content-start gap-3">
-              <div className="text-[12px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                Projects
-              </div>
-              {snapshot.overview.projects
-                .slice(0, compact ? 2 : 3)
-                .map((project) => (
-                  <Link
-                    key={project.id}
-                    to={`/projects/${project.id}`}
-                    className="block min-w-0 max-w-full rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3 transition hover:bg-[var(--ui-surface-hover)]"
-                  >
-                    <div className="flex min-w-0 items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-[var(--ui-ink-strong)]">
-                          {project.title}
-                        </div>
-                        <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-                          {projectLookup.get(project.id)?.status ?? "active"}
-                        </div>
-                      </div>
-                      <Badge wrap className="max-w-[7rem] shrink-0">
-                        {project.earnedPoints} xp
-                      </Badge>
-                    </div>
-                    {!compact ? (
-                      <div className="mt-2 line-clamp-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                        {project.description}
-                      </div>
-                    ) : null}
-                  </Link>
-                ))}
-            </div>
-            <div className="grid min-w-0 content-start gap-3">
-              <div className="text-[12px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                Due habits
-              </div>
-              {snapshot.overview.dueHabits
-                .slice(0, compact ? 2 : 3)
-                .map((habit) => (
-                  <Link
-                    key={habit.id}
-                    to="/habits"
-                    aria-label={`Open habit ${habit.title}`}
-                    className="block min-w-0 max-w-full rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3 transition hover:bg-[var(--ui-surface-hover)]"
-                  >
-                    <div className="flex min-w-0 items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-[var(--ui-ink-strong)]">
-                          {habit.title}
-                        </div>
-                        {!compact ? (
-                          <div className="mt-1 line-clamp-2 text-sm text-[var(--ui-ink-soft)]">
-                            {habit.description}
-                          </div>
-                        ) : null}
-                      </div>
-                      <Badge
-                        wrap
-                        className="max-w-[7rem] shrink-0 bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_74%,var(--ui-ink-strong)_26%)]"
-                      >
-                        {habit.rewardXp} xp
-                      </Badge>
-                    </div>
-                  </Link>
-                ))}
-            </div>
-            <div className="grid min-w-0 content-start gap-3">
-              <div className="text-[12px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                Top tasks
-              </div>
-              {snapshot.overview.topTasks
-                .slice(0, compact ? 2 : 3)
-                .map((task) => (
-                  <Link
-                    key={task.id}
-                    to={`/tasks/${task.id}`}
-                    className="block min-w-0 max-w-full rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3 transition hover:bg-[var(--ui-surface-hover)]"
-                  >
-                    <div className="flex min-w-0 items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-[var(--ui-ink-strong)]">
-                          {task.title}
-                        </div>
-                        <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-                          {task.status.replaceAll("_", " ")}
-                        </div>
-                      </div>
-                      <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
-                        {task.points} xp
-                      </Badge>
-                    </div>
-                  </Link>
-                ))}
-            </div>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-[var(--ui-border-subtle)] pt-3">
-            {[
-              ["All projects", "/projects"],
-              ["All habits", "/habits"],
-              ["All tasks", "/kanban"]
-            ].map(([label, href]) => (
-              <Link
-                key={href}
-                to={href}
-                className="inline-flex min-h-10 items-center gap-2 text-sm font-medium text-[var(--ui-ink-medium)] transition hover:text-[var(--ui-ink-strong)]"
-              >
-                {label}
-                <ArrowRight className="size-3.5" />
-              </Link>
-            ))}
-          </div>
-        </div>
-      )
     },
     {
       id: "time",
@@ -1056,7 +1480,7 @@ export function OverviewPage() {
     {
       id: "quick-capture",
       title: "Quick capture",
-      description: "Save a standalone note or wiki draft from any dashboard.",
+      description: "Save a note or Wiki draft.",
       defaultWidth: 5,
       defaultHeight: 3,
       defaultHidden: true,
@@ -1070,10 +1494,13 @@ export function OverviewPage() {
   ];
 
   return (
-    <AiSurfaceWorkspace
-      surfaceId="overview"
-      baseWidgets={widgets}
-      normalizeLayout={normalizeOverviewLayout}
-    />
+    <>
+      <AiSurfaceWorkspace
+        surfaceId="overview"
+        baseWidgets={widgets}
+        normalizeLayout={normalizeOverviewLayout}
+      />
+      {createActions.dialogs}
+    </>
   );
 }

@@ -1787,9 +1787,9 @@ export function KnowledgeGraphPage() {
                           onClick={() =>
                             setParam((next) => {
                               if (showHierarchyCrossLinks) {
-                                next.delete("cross");
+                                next.set("cross", "0");
                               } else {
-                                next.set("cross", "1");
+                                next.delete("cross");
                               }
                             })
                           }

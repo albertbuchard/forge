@@ -4,29 +4,42 @@ import { normalizeOverviewLayout } from "@/pages/overview-layout";
 
 function layout(
   order: string[],
-  updatedAt = new Date(0).toISOString(),
-  widgets: SurfaceLayoutPayload["widgets"] = {}
+  widgets: SurfaceLayoutPayload["widgets"] = {},
+  updatedAt = "2026-08-01T12:00:00.000Z"
 ): SurfaceLayoutPayload {
-  return {
-    surfaceId: "overview",
-    order,
-    widgets,
-    updatedAt
-  };
+  return { surfaceId: "overview", order, widgets, updatedAt };
 }
 
 describe("normalizeOverviewLayout", () => {
-  it("keeps the Forge Smith and its trophy before the metric summary", () => {
+  it("keeps the exact generated information hierarchy", () => {
+    const generated = layout([
+      "hero",
+      "gamification",
+      "what-matters",
+      "signals",
+      "forge-map",
+      "body-signals",
+      "summary",
+      "pipeline",
+      "goals",
+      "life-force",
+      "time"
+    ]);
+
+    expect(normalizeOverviewLayout(generated)).toBe(generated);
+  });
+
+  it("repairs a persisted core order and keeps optional order", () => {
     const normalized = normalizeOverviewLayout(
       layout([
         "hero",
         "gamification",
         "summary",
-        "life-force",
-        "body-signals",
         "signals",
-        "goals",
         "pipeline",
+        "body-signals",
+        "goals",
+        "life-force",
         "weather"
       ])
     );
@@ -34,211 +47,101 @@ describe("normalizeOverviewLayout", () => {
     expect(normalized.order).toEqual([
       "hero",
       "gamification",
-      "summary",
+      "what-matters",
       "signals",
-      "pipeline",
+      "forge-map",
       "body-signals",
+      "summary",
+      "pipeline",
       "goals",
       "life-force",
       "weather"
     ]);
   });
 
-  it("migrates the former default core order and preserves utilities", () => {
+  it("preserves every preference and the relative order of optional widgets", () => {
+    const widgets: SurfaceLayoutPayload["widgets"] = {
+      signals: {
+        hidden: true,
+        fullWidth: true,
+        titleVisible: true,
+        descriptionVisible: false
+      },
+      goals: {
+        hidden: true,
+        fullWidth: false,
+        titleVisible: false,
+        descriptionVisible: true
+      },
+      hero: {
+        hidden: false,
+        fullWidth: true,
+        titleVisible: true,
+        descriptionVisible: true
+      }
+    };
     const normalized = normalizeOverviewLayout(
       layout(
-        [
-          "hero",
-          "signals",
-          "summary",
-          "goals",
-          "pipeline",
-          "time",
-          "weather",
-          "gamification",
-          "life-force",
-          "body-signals"
-        ],
-        "2026-04-07T17:59:05.413Z",
-        {
-          summary: {
-            hidden: false,
-            fullWidth: false,
-            titleVisible: true,
-            descriptionVisible: true
-          },
-          signals: {
-            hidden: false,
-            fullWidth: false,
-            titleVisible: true,
-            descriptionVisible: true
-          },
-          pipeline: {
-            hidden: false,
-            fullWidth: true,
-            titleVisible: true,
-            descriptionVisible: true
-          }
-        }
+        ["goals", "hero", "signals", "gamification", "weather", "summary"],
+        widgets
       )
     );
 
     expect(normalized.order).toEqual([
       "hero",
       "gamification",
-      "summary",
+      "what-matters",
       "signals",
-      "pipeline",
+      "forge-map",
       "body-signals",
       "goals",
-      "life-force",
-      "time",
-      "weather"
+      "weather",
+      "summary"
     ]);
-    expect(normalized.widgets.summary).toMatchObject({
+    expect(normalized.widgets.signals).toEqual(widgets.signals);
+    expect(normalized.widgets.goals).toEqual(widgets.goals);
+    expect(normalized.widgets.hero).toEqual(widgets.hero);
+  });
+
+  it("restores exactly the four required widgets", () => {
+    const hidden = {
+      hidden: true,
+      fullWidth: false,
       titleVisible: false,
       descriptionVisible: false
-    });
-    expect(normalized.widgets.signals).toMatchObject({
-      titleVisible: false,
-      descriptionVisible: false
-    });
-    expect(normalized.widgets.pipeline).toMatchObject({
-      titleVisible: true,
-      descriptionVisible: false
-    });
-  });
-
-  it("does not override a deliberately customized current layout", () => {
-    const customized = layout(
-      ["hero", "goals", "summary", "signals", "body-signals", "pipeline"],
-      "2026-07-09T20:00:00.000Z"
-    );
-
-    expect(normalizeOverviewLayout(customized)).toBe(customized);
-  });
-
-  it("does not mistake an unsaved custom order for the generated default", () => {
-    const customized = layout([
-      "hero",
-      "goals",
-      "summary",
-      "signals",
-      "pipeline",
-      "body-signals"
-    ]);
-
-    expect(normalizeOverviewLayout(customized)).toBe(customized);
-  });
-
-  it("migrates a known legacy order with an invalid stored timestamp", () => {
-    const legacy = layout(
-      ["hero", "signals", "summary", "goals", "pipeline", "weather"],
-      "invalid-legacy-timestamp"
-    );
-
-    expect(normalizeOverviewLayout(legacy).order).toEqual([
-      "hero",
-      "summary",
-      "signals",
-      "pipeline",
-      "goals",
-      "weather"
-    ]);
-  });
-
-  it("is idempotent once the operational order is active", () => {
-    const current = layout([
-      "hero",
-      "gamification",
-      "summary",
-      "signals",
-      "pipeline",
-      "body-signals",
-      "goals",
-      "life-force"
-    ]);
-
-    expect(normalizeOverviewLayout(current)).toBe(current);
-  });
-
-  it("repairs the regressed order that hid the Forge Smith below the fold", () => {
-    const regressed = layout(
-      [
-        "hero",
-        "summary",
-        "gamification",
-        "signals",
-        "pipeline",
-        "body-signals",
-        "goals",
-        "life-force",
-        "weather"
-      ],
-      "2026-07-10T08:00:00.000Z"
-    );
-
-    expect(normalizeOverviewLayout(regressed).order).toEqual([
-      "hero",
-      "gamification",
-      "summary",
-      "signals",
-      "pipeline",
-      "body-signals",
-      "goals",
-      "life-force",
-      "weather"
-    ]);
-  });
-
-  it("preserves a deliberate direct reorder after the migration cutover", () => {
-    const customized = layout(
-      [
-        "hero",
-        "summary",
-        "gamification",
-        "signals",
-        "pipeline",
-        "body-signals",
-        "goals",
-        "life-force"
-      ],
-      "2026-07-11T09:30:00.000Z"
-    );
-
-    expect(normalizeOverviewLayout(customized)).toBe(customized);
-  });
-
-  it("restores required overview widgets without disturbing custom order", () => {
-    const customized = layout(
-      ["hero", "goals", "gamification", "summary"],
-      "2026-07-10T08:00:00.000Z",
-      {
-        hero: {
-          hidden: true,
-          fullWidth: false,
-          titleVisible: false,
-          descriptionVisible: false
-        },
-        gamification: {
-          hidden: true,
-          fullWidth: false,
-          titleVisible: false,
-          descriptionVisible: false
+    };
+    const normalized = normalizeOverviewLayout(
+      layout(
+        [
+          "hero",
+          "gamification",
+          "what-matters",
+          "signals",
+          "forge-map",
+          "goals"
+        ],
+        {
+          hero: hidden,
+          gamification: hidden,
+          "what-matters": hidden,
+          "forge-map": hidden,
+          signals: hidden,
+          goals: hidden
         }
-      }
+      )
     );
 
-    expect(normalizeOverviewLayout(customized)).toMatchObject({
-      order: customized.order,
-      widgets: {
-        hero: {
-          hidden: false
-        },
-        gamification: {
-          hidden: false
-        }
-      }
-    });
+    for (const id of ["hero", "gamification", "what-matters", "forge-map"]) {
+      expect(normalized.widgets[id]?.hidden).toBe(false);
+    }
+    expect(normalized.widgets.signals?.hidden).toBe(true);
+    expect(normalized.widgets.goals?.hidden).toBe(true);
+  });
+
+  it("is idempotent after normalization", () => {
+    const first = normalizeOverviewLayout(
+      layout(["hero", "signals", "gamification", "body-signals"])
+    );
+    expect(normalizeOverviewLayout(first)).toBe(first);
   });
 });

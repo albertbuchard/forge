@@ -66,7 +66,7 @@ Forge-to-Forge sharing is an optional peer protocol between independently operat
 
 - `concept` is a first-class Forge entity with a stable id and slug, canonical definition, example, nonexample, prerequisites, related concepts, tags, cross-course appearances, and per-user mastery evidence.
 - `course` is a versioned path through concepts. A portable `.forge-course.json` package contains course metadata, concepts, ordered modules, daily lessons, content blocks, activities, rubrics, references, and deterministic provenance.
-- A lesson may place checkpoint blocks between teaching sections. Required continuation uses a successful pass or successful remediation and retry. Optional reflection may continue after usable review, but missing or invalid model feedback never counts as understanding.
+- A lesson may place checkpoint blocks between teaching sections. The full lesson remains visible as one continuous chapter, and every checkpoint stays attached to the teaching it tests. A failed, unanswered, or unavailable assessment remains visible as guidance and incomplete work; it never hides later sections or prevents the learner from opening another day. Missing or invalid model feedback never counts as understanding.
 - Every proof checkpoint follows a worked proof or explicit proof-construction section. Course packages may declare the relationship between a checkpoint, its remediation branch, and the content it unlocks without supplying executable code.
 - The shared TypeScript/Zod course kit under `packages/course-kit` is the authoring and validation contract. Course authors can keep source content outside Forge and export a validated package for import and sharing.
 - A package separates canonical concept definitions from `conceptRefs`. References link an installed concept without redefining it; conflicting definitions are rejected instead of becoming import-order-dependent.
@@ -83,7 +83,7 @@ Forge-to-Forge sharing is an optional peer protocol between independently operat
 - Learner responses are untrusted prompt content. Assessment instructions must reject embedded role changes, grading demands, or exfiltration requests.
 - Learner read models remove proof references, correct option ids, answer explanations, and extension assessment data before serialization. Proof assessment returns criterion scores, and Forge computes rubric-weighted totals and grades server-side.
 - If no model connection is available or structured assessment fails, Forge saves the attempt with `needs_review`, awards no points, and does not invent a score.
-- The production learner view renders interleaved teaching, locked sections, remediation, checkpoint status, response-specific feedback, and several preserved drafts on desktop, mobile, narrow screens, zoomed layouts, light and dark themes, keyboard, touch, and reduced motion.
+- The production learner view renders the complete interleaved lesson as a calm, continuous study-book page with teaching, worked examples, embedded response areas, remediation, checkpoint status, response-specific feedback, and several preserved drafts. It supports desktop, mobile, narrow screens, zoomed layouts, light and dark themes, keyboard, touch, and reduced motion. Incomplete prerequisites are advisory markers rather than access locks.
 - The production stack for this subsystem is React 19, TypeScript 5.8, Vite 6, Tailwind CSS 4, TanStack Query, React Markdown, KaTeX, Fastify 5, SQLite, Zod 3, and the existing Forge `LlmManager` provider layer.
 
 ### 1. Project Management Hierarchy

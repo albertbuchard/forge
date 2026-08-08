@@ -5,19 +5,26 @@ test.beforeEach(async ({ page }, testInfo) => {
   await installE2eStorageGuards(page, testInfo.testId);
 });
 
-test("overview exposes momentum, rewards, and next actions", async ({
-  page
-}) => {
+test("overview is a clear front door to Forge", async ({ page }) => {
   await page.goto("");
   await waitForForge(page);
   await expect(page).toHaveURL(/\/forge\/overview$/);
-  await expect(page.locator("body")).toContainText("Momentum summary");
+  const main = page.locator("main");
+  await expect(main).toContainText(
+    "See what needs attention, continue current work, or open any part of Forge."
+  );
   await expect(
-    page.getByRole("heading", { name: "Next actions" })
+    main.getByRole("heading", { name: "What matters now" })
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: /Open rewards/ })).toBeVisible();
-  await expect(page.locator("body")).toContainText("Projects, habits, tasks");
-  await expect(page.locator("body")).toContainText("Life Force");
+  await expect(
+    main.getByRole("heading", { name: "Everything in Forge" })
+  ).toBeVisible();
+  await expect(
+    main.getByRole("button", { name: "Search Forge" })
+  ).toBeVisible();
+  await expect(main.getByRole("link", { name: "Explore Forge" })).toBeVisible();
+  await expect(main).toContainText("Knowledge and learning");
+  await expect(main).toContainText("People, connections, and system");
 
   const rewardPreview = page.getByTestId("forge-smith-featured-trophy");
   await expect(rewardPreview).toBeVisible();

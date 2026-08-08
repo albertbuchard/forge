@@ -150,6 +150,15 @@ describe("resolveKnowledgeGraphOverlaySyncAction", () => {
 });
 
 describe("knowledge graph URL and query model", () => {
+  it("shows every hierarchy link by default while preserving an explicit reduced-link URL", () => {
+    expect(parseKnowledgeGraphPageState("view=hierarchy")).toMatchObject({
+      showHierarchyCrossLinks: true
+    });
+    expect(
+      parseKnowledgeGraphPageState("view=hierarchy&cross=0")
+    ).toMatchObject({ showHierarchyCrossLinks: false });
+  });
+
   it("parses search params into bounded page state", () => {
     const state = parseKnowledgeGraphPageState(
       [

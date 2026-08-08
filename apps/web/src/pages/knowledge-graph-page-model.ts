@@ -270,7 +270,7 @@ export function parseKnowledgeGraphPageState(searchParamsKey: string) {
     ),
     selectedTags,
     selectedOwners,
-    showHierarchyCrossLinks: params.get("cross") === "1",
+    showHierarchyCrossLinks: params.get("cross") !== "0",
     showAllVisibleEdges: params.get("edges") === "all",
     queryText,
     updatedFrom,

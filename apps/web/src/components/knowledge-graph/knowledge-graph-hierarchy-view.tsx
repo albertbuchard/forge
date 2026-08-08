@@ -1,10 +1,13 @@
 import {
   Background,
+  BaseEdge,
   Handle,
   MarkerType,
   Position,
   ReactFlow,
   type Edge,
+  type EdgeProps,
+  type EdgeTypes,
   type Node,
   type NodeProps,
   type NodeTypes,
@@ -25,8 +28,10 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   buildKnowledgeGraphHierarchyModel,
   getKnowledgeGraphHierarchyAncestors,
-  getKnowledgeGraphHierarchyPrimaryDescendants,
+  getKnowledgeGraphHierarchyConnectedNodeIds,
+  getKnowledgeGraphHierarchyDirectLinkedNodeIds,
   resolveKnowledgeGraphFocusedHierarchyVisibleIds,
+  resolveKnowledgeGraphHierarchyVisibleEdges,
   resolveKnowledgeGraphHierarchyVisibleIds,
   toggleKnowledgeGraphHierarchyBranch
 } from "@/components/knowledge-graph/knowledge-graph-hierarchy-model";
@@ -60,6 +65,7 @@ type HierarchyEntityCardData = {
   kind: "entity";
   graphNode: KnowledgeGraphNode;
   childCount: number;
+  countNoun: "child item" | "linked item";
   focused: boolean;
   highlighted: boolean;
   expanded: boolean;
@@ -81,6 +87,36 @@ type HierarchyLaneCardData = {
 type HierarchyCardData = HierarchyEntityCardData | HierarchyLaneCardData;
 
 type HierarchyFlowNode = Node<HierarchyCardData, "hierarchyCard">;
+
+type HierarchyEdgeData = {
+  parallelOffset: number;
+};
+
+function HierarchyRelationshipEdge({
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  markerEnd,
+  style,
+  data
+}: EdgeProps<Edge<HierarchyEdgeData>>) {
+  const horizontalDistance = Math.abs(targetX - sourceX);
+  const controlDistance = Math.max(56, horizontalDistance * 0.42);
+  const direction = targetX >= sourceX ? 1 : -1;
+  const parallelOffset = data?.parallelOffset ?? 0;
+  const path = [
+    `M ${sourceX} ${sourceY}`,
+    `C ${sourceX + controlDistance * direction} ${sourceY + parallelOffset},`,
+    `${targetX - controlDistance * direction} ${targetY + parallelOffset},`,
+    `${targetX} ${targetY}`
+  ].join(" ");
+  return <BaseEdge path={path} markerEnd={markerEnd} style={style} />;
+}
+
+const edgeTypes = {
+  hierarchyRelationship: HierarchyRelationshipEdge
+} satisfies EdgeTypes;
 
 const HierarchyCardNode = memo(function HierarchyCardNode({
   data
@@ -130,6 +166,7 @@ const HierarchyCardNode = memo(function HierarchyCardNode({
   const {
     graphNode,
     childCount,
+    countNoun,
     focused,
     highlighted,
     expanded,
@@ -201,7 +238,7 @@ const HierarchyCardNode = memo(function HierarchyCardNode({
           event.stopPropagation();
           data.onOpen();
         }}
-        aria-label={`${graphNode.title}, ${graphNode.entityKind.replaceAll("_", " ")}${childCount > 0 ? `, ${childCount} child ${childCount === 1 ? "item" : "items"}, ${expanded ? "expanded" : "collapsed"}` : ""}`}
+        aria-label={`${graphNode.title}, ${graphNode.entityKind.replaceAll("_", " ")}${childCount > 0 ? `, ${childCount} ${countNoun}${childCount === 1 ? "" : "s"}, ${expanded ? "expanded" : "collapsed"}` : ""}`}
         aria-expanded={childCount > 0 ? expanded : undefined}
         aria-pressed={focused}
       >
@@ -322,19 +359,27 @@ export function KnowledgeGraphHierarchyView({
   const focusLaneId = focusGraphNode
     ? getKnowledgeGraphSemanticGroup(focusGraphNode.entityKind)
     : null;
-  const focusDirectChildIds = useMemo(
+  const focusDirectLinkedIds = useMemo(
     () =>
       focusGraphNode
-        ? new Set(model.primaryChildrenById.get(focusGraphNode.id) ?? [])
+        ? getKnowledgeGraphHierarchyDirectLinkedNodeIds(
+            model,
+            focusGraphNode.id,
+            showSecondaryEdges
+          )
         : new Set<string>(),
-    [focusGraphNode, model]
+    [focusGraphNode, model, showSecondaryEdges]
   );
-  const focusAllDescendantIds = useMemo(
+  const focusAllConnectedIds = useMemo(
     () =>
       focusGraphNode
-        ? getKnowledgeGraphHierarchyPrimaryDescendants(model, focusGraphNode.id)
+        ? getKnowledgeGraphHierarchyConnectedNodeIds(
+            model,
+            focusGraphNode.id,
+            showSecondaryEdges
+          )
         : new Set<string>(),
-    [focusGraphNode, model]
+    [focusGraphNode, model, showSecondaryEdges]
   );
   useEffect(() => {
     if (!focusGraphNode || focusLaneId === null) {
@@ -349,7 +394,8 @@ export function KnowledgeGraphHierarchyView({
       return resolveKnowledgeGraphFocusedHierarchyVisibleIds({
         model,
         focusNodeId: focusGraphNode.id,
-        expandAll
+        expandAll,
+        includeSecondary: showSecondaryEdges
       });
     }
     const candidateIds = resolveKnowledgeGraphHierarchyVisibleIds({
@@ -393,7 +439,8 @@ export function KnowledgeGraphHierarchyView({
     focusGraphNode,
     focusLaneId,
     focusNodeId,
-    model
+    model,
+    showSecondaryEdges
   ]);
   const highlightedIds = useMemo(
     () =>
@@ -419,17 +466,21 @@ export function KnowledgeGraphHierarchyView({
     if (!focusGraphNode) return depthById;
     depthById.set(focusGraphNode.id, 0);
     const queue = [focusGraphNode.id];
-    while (queue.length > 0) {
-      const sourceId = queue.shift()!;
+    for (let index = 0; index < queue.length; index += 1) {
+      const sourceId = queue[index]!;
       const sourceDepth = depthById.get(sourceId) ?? 0;
-      for (const childId of model.primaryChildrenById.get(sourceId) ?? []) {
-        if (!visibleNodeIds.has(childId) || depthById.has(childId)) continue;
-        depthById.set(childId, sourceDepth + 1);
-        queue.push(childId);
+      for (const linkedId of getKnowledgeGraphHierarchyDirectLinkedNodeIds(
+        model,
+        sourceId,
+        showSecondaryEdges
+      )) {
+        if (!visibleNodeIds.has(linkedId) || depthById.has(linkedId)) continue;
+        depthById.set(linkedId, sourceDepth + 1);
+        queue.push(linkedId);
       }
     }
     return depthById;
-  }, [focusGraphNode, model.primaryChildrenById, visibleNodeIds]);
+  }, [focusGraphNode, model, showSecondaryEdges, visibleNodeIds]);
   const focusParentNode = focusGraphNode
     ? (model.nodeById.get(model.parentById.get(focusGraphNode.id) ?? "") ??
       null)
@@ -438,9 +489,9 @@ export function KnowledgeGraphHierarchyView({
     .map((nodeId) => model.nodeById.get(nodeId)?.title ?? null)
     .filter((title): title is string => Boolean(title))
     .join(" → ");
-  const focusStructuralChildLabel = expandAll
-    ? `${focusDescendantIds.size} subtree descendant${focusDescendantIds.size === 1 ? "" : "s"}`
-    : `${focusDirectChildIds.size} direct ${focusDirectChildIds.size === 1 ? "child" : "children"}`;
+  const focusLinkedItemLabel = expandAll
+    ? `${focusDescendantIds.size} connected item${focusDescendantIds.size === 1 ? "" : "s"}`
+    : `${focusDirectLinkedIds.size} directly linked item${focusDirectLinkedIds.size === 1 ? "" : "s"}`;
   const focusRelatedLabel = `${focusPanelLinkedItemCount} unique linked item${focusPanelLinkedItemCount === 1 ? "" : "s"} in Focus panel`;
   const focusPathTailLabel =
     focusAncestorIds.length > 0
@@ -532,11 +583,14 @@ export function KnowledgeGraphHierarchyView({
           data: {
             kind: "entity",
             graphNode: node,
-            childCount:
-              (focusGraphNode
-                ? model.primaryChildrenById.get(node.id)
-                : model.childrenById.get(node.id)
-              )?.length ?? 0,
+            childCount: focusGraphNode
+              ? getKnowledgeGraphHierarchyDirectLinkedNodeIds(
+                  model,
+                  node.id,
+                  showSecondaryEdges
+                ).size
+              : (model.childrenById.get(node.id)?.length ?? 0),
+            countNoun: focusGraphNode ? "linked item" : "child item",
             focused,
             highlighted:
               !focusNodeId ||
@@ -544,9 +598,7 @@ export function KnowledgeGraphHierarchyView({
               focusDescendantIds.has(node.id),
             expanded: expandAll || expandedNodeIds.has(node.id),
             hasParent: focusGraphNode
-              ? (model.primaryParentsById.get(node.id) ?? []).some((parentId) =>
-                  visibleNodeIds.has(parentId)
-                )
+              ? node.id !== focusGraphNode.id
               : model.parentById.has(node.id),
             stackedMobile: isMobile && Boolean(focusGraphNode),
             showBothSideHandles: showSecondaryEdges,
@@ -634,69 +686,76 @@ export function KnowledgeGraphHierarchyView({
     [flowNodes]
   );
   const flowEdges = useMemo((): Edge[] => {
-    const primaryEdgeIds = new Set(
-      [...model.primaryEdgeByPair.values()].map((edge) => edge.id)
-    );
-    return model.edges
-      .filter(
-        (edge) =>
-          renderedFlowNodeIds.has(edge.source) &&
-          renderedFlowNodeIds.has(edge.target) &&
-          (showSecondaryEdges || primaryEdgeIds.has(edge.id))
-      )
-      .map((edge): Edge => {
-        const sourceX = renderedFlowNodeById.get(edge.source)?.position.x ?? 0;
-        const targetX = renderedFlowNodeById.get(edge.target)?.position.x ?? 0;
-        const travelsLeft = showSecondaryEdges && sourceX > targetX;
-        const highlighted =
-          !focusNodeId ||
-          edge.source === focusNodeId ||
-          edge.target === focusNodeId ||
-          (focusDescendantIds.has(edge.source) &&
-            focusDescendantIds.has(edge.target));
-        return {
-          id: edge.id,
-          source: edge.source,
-          target: edge.target,
-          sourceHandle: travelsLeft ? "source-left" : "source-right",
-          targetHandle:
-            focusGraphNode && isMobile && !showSecondaryEdges
+    const visibleEdges = resolveKnowledgeGraphHierarchyVisibleEdges({
+      model,
+      visibleNodeIds: renderedFlowNodeIds,
+      includeSecondary: showSecondaryEdges
+    });
+    const pairCountByKey = new Map<string, number>();
+    for (const edge of visibleEdges) {
+      const pairKey = [edge.source, edge.target].sort().join("\u0000");
+      pairCountByKey.set(pairKey, (pairCountByKey.get(pairKey) ?? 0) + 1);
+    }
+    const pairIndexByKey = new Map<string, number>();
+    return visibleEdges.map((edge): Edge => {
+      const pairKey = [edge.source, edge.target].sort().join("\u0000");
+      const pairCount = pairCountByKey.get(pairKey) ?? 1;
+      const pairIndex = pairIndexByKey.get(pairKey) ?? 0;
+      pairIndexByKey.set(pairKey, pairIndex + 1);
+      const sourceX = renderedFlowNodeById.get(edge.source)?.position.x ?? 0;
+      const targetX = renderedFlowNodeById.get(edge.target)?.position.x ?? 0;
+      const travelsLeft = showSecondaryEdges && sourceX > targetX;
+      const highlighted =
+        !focusNodeId ||
+        edge.source === focusNodeId ||
+        edge.target === focusNodeId ||
+        (focusDescendantIds.has(edge.source) &&
+          focusDescendantIds.has(edge.target));
+      return {
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: travelsLeft ? "source-left" : "source-right",
+        targetHandle:
+          focusGraphNode && isMobile && !showSecondaryEdges
+            ? "target-right"
+            : travelsLeft
               ? "target-right"
-              : travelsLeft
-                ? "target-right"
-                : "target-left",
-          type: "smoothstep",
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            color: edge.secondary
-              ? "var(--ui-border-subtle)"
-              : "var(--ui-border-strong)"
-          },
-          style: {
-            opacity: highlighted ? 0.9 : 0.16,
-            stroke: edge.secondary
-              ? "var(--ui-border-subtle)"
-              : edge.family === "taxonomy"
-                ? "var(--success)"
-                : edge.family === "structural"
-                  ? "var(--ui-border-strong)"
-                  : "var(--primary)",
-            strokeDasharray: edge.secondary ? "8 6" : undefined,
-            strokeWidth: edge.secondary
-              ? 1
+              : "target-left",
+        type: "hierarchyRelationship",
+        data: {
+          parallelOffset: (pairIndex - (pairCount - 1) / 2) * 22
+        } satisfies HierarchyEdgeData,
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: edge.secondary
+            ? "var(--ui-border-subtle)"
+            : "var(--ui-border-strong)"
+        },
+        style: {
+          opacity: highlighted ? 0.9 : 0.16,
+          stroke: edge.secondary
+            ? "var(--ui-border-subtle)"
+            : edge.family === "taxonomy"
+              ? "var(--success)"
               : edge.family === "structural"
-                ? 1.7
-                : 1.2
-          }
-        };
-      });
+                ? "var(--ui-border-strong)"
+                : "var(--primary)",
+          strokeDasharray: edge.secondary ? "8 6" : undefined,
+          strokeWidth: edge.secondary
+            ? 1
+            : edge.family === "structural"
+              ? 1.7
+              : 1.2
+        }
+      };
+    });
   }, [
     focusNodeId,
     focusGraphNode,
     focusDescendantIds,
     isMobile,
-    model.edges,
-    model.primaryEdgeByPair,
+    model,
     renderedFlowNodeById,
     renderedFlowNodeIds,
     showSecondaryEdges
@@ -723,10 +782,11 @@ export function KnowledgeGraphHierarchyView({
               <>
                 {focusDescendantIds.size > 0 ? (
                   <span className="inline-flex items-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-2.5 py-1 text-[10px] text-[var(--ui-ink-soft)]">
-                    {focusStructuralChildLabel}
+                    {focusLinkedItemLabel}
                   </span>
                 ) : null}
-                {focusPanelLinkedItemCount > 0 ? (
+                {focusPanelLinkedItemCount > 0 &&
+                focusPanelLinkedItemCount !== focusDirectLinkedIds.size ? (
                   <span className="inline-flex items-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-2.5 py-1 text-[10px] text-[var(--ui-ink-soft)]">
                     {focusRelatedLabel}
                   </span>
@@ -763,8 +823,8 @@ export function KnowledgeGraphHierarchyView({
                   Up to parent
                 </Button>
               ) : null}
-              {focusDirectChildIds.size > 0 ||
-              focusAllDescendantIds.size > 0 ? (
+              {focusDirectLinkedIds.size > 0 ||
+              focusAllConnectedIds.size > 0 ? (
                 <Button
                   type="button"
                   variant="secondary"
@@ -773,7 +833,7 @@ export function KnowledgeGraphHierarchyView({
                   onClick={() => setExpandAll((current) => !current)}
                   aria-pressed={expandAll}
                 >
-                  {expandAll ? "Direct children only" : "Expand subtree"}
+                  {expandAll ? "Direct links only" : "Expand connected map"}
                 </Button>
               ) : null}
               <Button
@@ -789,7 +849,7 @@ export function KnowledgeGraphHierarchyView({
                 }}
               >
                 <ChevronsDownUp className="size-3" aria-hidden="true" />
-                Full hierarchy
+                Back to full hierarchy
               </Button>
             </>
           ) : (
@@ -903,6 +963,7 @@ export function KnowledgeGraphHierarchyView({
             nodes={flowNodes}
             edges={flowEdges}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             nodesDraggable={false}
             nodesConnectable={false}
             nodesFocusable={false}

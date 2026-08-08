@@ -23,6 +23,7 @@ export type KnowledgeGraphHierarchyModel = {
   >;
   primaryChildrenById: ReadonlyMap<string, string[]>;
   primaryParentsById: ReadonlyMap<string, string[]>;
+  linkedNodeIdsById: ReadonlyMap<string, string[]>;
   childrenById: ReadonlyMap<string, string[]>;
   rootNodeIds: string[];
 };
@@ -44,6 +45,7 @@ export function buildKnowledgeGraphHierarchyModel(
   >();
   const primaryChildrenById = new Map<string, string[]>();
   const primaryParentsById = new Map<string, string[]>();
+  const linkedNodeIdSetsById = new Map<string, Set<string>>();
   const childrenById = new Map<string, string[]>();
   const forwardEdges = hierarchy.edges
     .filter((edge) => !edge.secondary)
@@ -53,6 +55,21 @@ export function buildKnowledgeGraphHierarchyModel(
         right.strength - left.strength ||
         left.id.localeCompare(right.id)
     );
+
+  for (const edge of hierarchy.edges) {
+    const sourceLinks = linkedNodeIdSetsById.get(edge.source) ?? new Set();
+    sourceLinks.add(edge.target);
+    linkedNodeIdSetsById.set(edge.source, sourceLinks);
+    const targetLinks = linkedNodeIdSetsById.get(edge.target) ?? new Set();
+    targetLinks.add(edge.source);
+    linkedNodeIdSetsById.set(edge.target, targetLinks);
+  }
+  const linkedNodeIdsById = new Map(
+    [...linkedNodeIdSetsById].map(([nodeId, linkedIds]) => [
+      nodeId,
+      [...linkedIds]
+    ])
+  );
 
   for (const edge of forwardEdges) {
     const pairKey = `${edge.source}\u0000${edge.target}`;
@@ -76,7 +93,8 @@ export function buildKnowledgeGraphHierarchyModel(
   }
   for (const children of [
     ...childrenById.values(),
-    ...primaryChildrenById.values()
+    ...primaryChildrenById.values(),
+    ...linkedNodeIdsById.values()
   ]) {
     children.sort((leftId, rightId) => {
       const left = nodeById.get(leftId)!;
@@ -102,6 +120,7 @@ export function buildKnowledgeGraphHierarchyModel(
     primaryEdgeByPair,
     primaryChildrenById,
     primaryParentsById,
+    linkedNodeIdsById,
     childrenById,
     rootNodeIds
   };
@@ -152,6 +171,44 @@ export function getKnowledgeGraphHierarchyPrimaryDescendants(
   return descendants;
 }
 
+export function getKnowledgeGraphHierarchyConnectedNodeIds(
+  model: KnowledgeGraphHierarchyModel,
+  nodeId: string,
+  includeSecondary = true
+) {
+  const connected = new Set<string>();
+  const linkedNodeIds = (currentId: string) =>
+    includeSecondary
+      ? (model.linkedNodeIdsById.get(currentId) ?? [])
+      : [
+          ...(model.primaryChildrenById.get(currentId) ?? []),
+          ...(model.primaryParentsById.get(currentId) ?? [])
+        ];
+  const queue = [...linkedNodeIds(nodeId)];
+  for (let index = 0; index < queue.length; index += 1) {
+    const currentId = queue[index]!;
+    if (connected.has(currentId) || currentId === nodeId) continue;
+    connected.add(currentId);
+    queue.push(...linkedNodeIds(currentId));
+  }
+  return connected;
+}
+
+export function getKnowledgeGraphHierarchyDirectLinkedNodeIds(
+  model: KnowledgeGraphHierarchyModel,
+  nodeId: string,
+  includeSecondary: boolean
+) {
+  return new Set(
+    includeSecondary
+      ? (model.linkedNodeIdsById.get(nodeId) ?? [])
+      : [
+          ...(model.primaryChildrenById.get(nodeId) ?? []),
+          ...(model.primaryParentsById.get(nodeId) ?? [])
+        ]
+  );
+}
+
 export function resolveKnowledgeGraphHierarchyVisibleIds({
   model,
   expandedNodeIds,
@@ -195,11 +252,13 @@ export function resolveKnowledgeGraphHierarchyVisibleIds({
 export function resolveKnowledgeGraphFocusedHierarchyVisibleIds({
   model,
   focusNodeId,
-  expandAll
+  expandAll,
+  includeSecondary = true
 }: {
   model: KnowledgeGraphHierarchyModel;
   focusNodeId: string;
   expandAll: boolean;
+  includeSecondary?: boolean;
 }) {
   if (!model.nodeById.has(focusNodeId)) {
     return new Set<string>();
@@ -208,14 +267,48 @@ export function resolveKnowledgeGraphFocusedHierarchyVisibleIds({
   if (!expandAll) {
     return new Set([
       focusNodeId,
-      ...(model.primaryChildrenById.get(focusNodeId) ?? [])
+      ...getKnowledgeGraphHierarchyDirectLinkedNodeIds(
+        model,
+        focusNodeId,
+        includeSecondary
+      )
     ]);
   }
 
   return new Set([
     focusNodeId,
-    ...getKnowledgeGraphHierarchyPrimaryDescendants(model, focusNodeId)
+    ...getKnowledgeGraphHierarchyConnectedNodeIds(
+      model,
+      focusNodeId,
+      includeSecondary
+    )
   ]);
+}
+
+export function resolveKnowledgeGraphHierarchyVisibleEdges({
+  model,
+  visibleNodeIds,
+  includeSecondary
+}: {
+  model: KnowledgeGraphHierarchyModel;
+  visibleNodeIds: ReadonlySet<string>;
+  includeSecondary: boolean;
+}) {
+  if (includeSecondary) {
+    return model.edges.filter(
+      (edge) =>
+        visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)
+    );
+  }
+  const primaryEdgeIds = new Set(
+    [...model.primaryEdgeByPair.values()].map((edge) => edge.id)
+  );
+  return model.edges.filter(
+    (edge) =>
+      visibleNodeIds.has(edge.source) &&
+      visibleNodeIds.has(edge.target) &&
+      primaryEdgeIds.has(edge.id)
+  );
 }
 
 export function toggleKnowledgeGraphHierarchyBranch(

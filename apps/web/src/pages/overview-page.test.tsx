@@ -1,42 +1,48 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { Provider } from "react-redux";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { buildOverviewXpFallback, OverviewPage } from "@/pages/overview-page";
+import {
+  buildOverviewXpFallback,
+  FORGE_OVERVIEW_GROUPS,
+  OverviewPage
+} from "@/pages/overview-page";
 import type { ForgeSnapshot } from "@/lib/types";
-import { createAppStore } from "@/store/store";
 
-const { useForgeShellMock } = vi.hoisted(() => ({
-  useForgeShellMock: vi.fn()
-}));
-const { LifeForceOverviewWorkspaceMock } = vi.hoisted(() => ({
-  LifeForceOverviewWorkspaceMock: vi.fn(() => <div>Life Force workspace</div>)
-}));
 const {
+  useForgeShellMock,
   getSleepViewMock,
   getFitnessViewMock,
   getMovementDayMock,
   getVitalsViewMock,
-  getXpMetricsMock,
-  getSettingsMock,
-  getGamificationAssetStatusMock,
-  installGamificationAssetStyleMock
+  getAttentionInboxMock,
+  useGetForgeDoctorQueryMock,
+  useGetXpMetricsQueryMock
 } = vi.hoisted(() => ({
+  useForgeShellMock: vi.fn(),
   getSleepViewMock: vi.fn(),
   getFitnessViewMock: vi.fn(),
   getMovementDayMock: vi.fn(),
   getVitalsViewMock: vi.fn(),
-  getXpMetricsMock: vi.fn(),
-  getSettingsMock: vi.fn(),
-  getGamificationAssetStatusMock: vi.fn(),
-  installGamificationAssetStyleMock: vi.fn()
+  getAttentionInboxMock: vi.fn(),
+  useGetForgeDoctorQueryMock: vi.fn(),
+  useGetXpMetricsQueryMock: vi.fn()
 }));
 
 vi.mock("@/components/shell/app-shell", () => ({
   useForgeShell: useForgeShellMock
+}));
+
+vi.mock("@/store/api/forge-api", () => ({
+  useGetForgeDoctorQuery: useGetForgeDoctorQueryMock,
+  useGetXpMetricsQuery: useGetXpMetricsQueryMock
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -44,12 +50,12 @@ vi.mock("@/lib/api", () => ({
   getFitnessView: (...args: unknown[]) => getFitnessViewMock(...args),
   getMovementDay: (...args: unknown[]) => getMovementDayMock(...args),
   getVitalsView: (...args: unknown[]) => getVitalsViewMock(...args),
-  getXpMetrics: (...args: unknown[]) => getXpMetricsMock(...args),
-  getSettings: (...args: unknown[]) => getSettingsMock(...args),
-  getGamificationAssetStatus: (...args: unknown[]) =>
-    getGamificationAssetStatusMock(...args),
-  installGamificationAssetStyle: (...args: unknown[]) =>
-    installGamificationAssetStyleMock(...args)
+  getAttentionInbox: (...args: unknown[]) => getAttentionInboxMock(...args)
+}));
+
+vi.mock("@/components/create-menu", () => ({
+  useForgeCreateActions: () => ({ actions: [], dialogs: null }),
+  CreateMenu: () => <button type="button">Create</button>
 }));
 
 vi.mock("@/components/customization/ai-surface-workspace", () => ({
@@ -62,7 +68,7 @@ vi.mock("@/components/customization/ai-surface-workspace", () => ({
       render: (args: { compact: boolean }) => ReactNode;
     }>;
   }) => (
-    <div>
+    <main>
       {baseWidgets.map((widget) => (
         <section
           key={widget.id}
@@ -72,7 +78,7 @@ vi.mock("@/components/customization/ai-surface-workspace", () => ({
           {widget.render({ compact: false })}
         </section>
       ))}
-    </div>
+    </main>
   )
 }));
 
@@ -88,43 +94,21 @@ vi.mock("@/components/shell/page-hero", () => ({
     badge?: ReactNode;
     actions?: ReactNode;
   }) => (
-    <div>
-      <div>{title}</div>
-      <div>{description}</div>
-      {badge ? <div>{badge}</div> : null}
+    <header>
+      <h1>{title}</h1>
+      <p>{description}</p>
+      <div>{badge}</div>
       {actions}
-    </div>
+    </header>
   )
+}));
+
+vi.mock("@/components/gamification/gamification-widgets", () => ({
+  GamificationOverviewWidget: () => <div>Forge Smith trophy</div>
 }));
 
 vi.mock("@/components/life-force/life-force-workspace", () => ({
-  LifeForceOverviewWorkspace: LifeForceOverviewWorkspaceMock
-}));
-
-vi.mock("@/components/experience/flagship-signal-deck", () => ({
-  FlagshipSignalDeck: ({
-    items
-  }: {
-    items: Array<{
-      id: string;
-      title: ReactNode;
-      href?: string;
-      actionLabel?: string;
-    }>;
-  }) => (
-    <div>
-      Signals
-      {items.map((item) =>
-        item.href ? (
-          <a key={item.id} href={item.href}>
-            {item.actionLabel ?? "Open"} {item.title}
-          </a>
-        ) : (
-          <div key={item.id}>{item.title}</div>
-        )
-      )}
-    </div>
-  )
+  LifeForceOverviewWorkspace: () => <div>Life Force workspace</div>
 }));
 
 vi.mock("@/components/customization/utility-widgets", () => ({
@@ -137,13 +121,6 @@ vi.mock("@/components/customization/utility-widgets", () => ({
 
 function createSnapshot(): ForgeSnapshot {
   return {
-    meta: {
-      apiVersion: "v1",
-      transport: "rest+sse",
-      generatedAt: "2026-04-12T10:00:00.000Z",
-      backend: "node",
-      mode: "transitional-node"
-    },
     metrics: {
       totalXp: 1800,
       level: 7,
@@ -156,424 +133,156 @@ function createSnapshot(): ForgeSnapshot {
       topGoalId: null,
       topGoalTitle: null
     },
-    dashboard: {
-      stats: {
-        totalPoints: 0,
-        completedThisWeek: 0,
-        activeGoals: 0,
-        alignmentScore: 0,
-        focusTasks: 0,
-        overdueTasks: 0,
-        dueThisWeek: 0
-      },
-      goals: [],
-      projects: [],
-      tasks: [],
-      habits: [],
-      tags: [],
-      suggestedTags: [],
-      owners: [],
-      executionBuckets: [],
-      notesSummaryByEntity: {},
-      gamification: {
-        totalXp: 1800,
-        level: 7,
-        currentLevelXp: 48,
-        nextLevelXp: 100,
-        weeklyXp: 126,
-        streakDays: 9,
-        comboMultiplier: 1.4,
-        momentumScore: 82,
-        topGoalId: null,
-        topGoalTitle: null
-      },
-      achievements: [],
-      milestoneRewards: [],
-      recentActivity: []
-    },
+    dashboard: { goals: [], projects: [] },
     overview: {
-      generatedAt: "2026-04-12T10:00:00.000Z",
-      strategicHeader: {
-        streakDays: 9,
-        level: 7,
-        totalXp: 1800,
-        currentLevelXp: 48,
-        nextLevelXp: 100,
-        momentumScore: 82,
-        focusTasks: 0,
-        overdueTasks: 0
-      },
-      projects: [],
-      activeGoals: [],
-      topTasks: [],
-      dueHabits: [],
+      topTasks: [
+        {
+          id: "task_focus",
+          title: "Finish the Overview",
+          description: "Complete the front door.",
+          status: "in_progress",
+          points: 50
+        }
+      ],
+      dueHabits: [
+        {
+          id: "habit_sleep",
+          title: "Protect sleep",
+          description: "Keep the routine.",
+          rewardXp: 10
+        }
+      ],
       recentEvidence: [],
-      achievements: [],
-      domainBalance: [],
-      neglectedGoals: []
+      activeGoals: []
     },
-    today: {
-      generatedAt: "2026-04-12T10:00:00.000Z",
-      directive: {
-        task: null,
-        goalTitle: null,
-        rewardXp: 0,
-        sessionLabel: "No directive"
-      },
-      timeline: [],
-      dueHabits: [],
-      dailyQuests: [],
-      milestoneRewards: [],
-      recentHabitRewards: [],
-      momentum: {
-        streakDays: 9,
-        momentumScore: 82,
-        recoveryHint: ""
-      }
-    },
-    risk: {
-      generatedAt: "2026-04-12T10:00:00.000Z",
-      overdueTasks: [],
-      blockedTasks: [],
-      neglectedGoals: [],
-      summary: ""
-    },
-    users: [],
-    strategies: [],
-    userScope: {
-      selectedUserIds: [],
-      selectedUsers: []
-    },
-    goals: [],
-    projects: [],
-    tags: [],
-    tasks: [],
-    habits: [],
-    activity: [],
+    today: { directive: { task: null, sessionLabel: "Plan today" } },
+    risk: { blockedTasks: [], overdueTasks: [] },
     activeTaskRuns: [],
+    projects: [{ id: "project_one" }],
+    tasks: [{ id: "task_focus" }],
+    habits: [{ id: "habit_sleep" }],
+    tags: [],
+    users: [],
+    userScope: {
+      selectedUserIds: ["user_operator"],
+      selectedUsers: [{ id: "user_operator", displayName: "Albert" }]
+    },
     lifeForce: {
-      userId: "user_operator",
-      dateKey: "2026-04-12",
-      baselineDailyAp: 200,
       dailyBudgetAp: 214,
       spentTodayAp: 132,
       remainingAp: 82,
-      forecastAp: 198,
-      plannedRemainingAp: 66,
-      targetBandMinAp: 181.9,
-      targetBandMaxAp: 214,
-      instantCapacityApPerHour: 11.5,
-      instantFreeApPerHour: 6.9,
-      overloadApPerHour: 0,
-      currentDrainApPerHour: 4.6,
-      fatigueBufferApPerHour: 1.2,
-      sleepRecoveryMultiplier: 1,
-      readinessMultiplier: 1,
-      fatigueDebtCarry: 0,
-      stats: [],
-      currentCurve: [],
-      activeDrains: [],
-      plannedDrains: [],
-      warnings: [],
-      recommendations: [],
-      topTaskIdsNeedingSplit: [],
-      updatedAt: "2026-04-12T10:00:00.000Z"
+      instantFreeApPerHour: 6.9
     }
+  } as unknown as ForgeSnapshot;
+}
+
+function attentionPayload(items = true) {
+  return {
+    generatedAt: "2026-08-01T12:00:00.000Z",
+    state: "active",
+    total: items ? 1 : 0,
+    offset: 0,
+    limit: 6,
+    hasMore: false,
+    summary: {
+      activeCount: items ? 1 : 0,
+      snoozedCount: 0,
+      dismissedCount: 0,
+      blockingCount: 0,
+      importantCount: items ? 1 : 0,
+      sourceCounts: {
+        approval: 0,
+        insight: 0,
+        task: items ? 1 : 0,
+        companion_sync: 0,
+        agent_session: 0
+      }
+    },
+    items: items
+      ? [
+          {
+            id: "attention_task",
+            source: "task",
+            kind: "overdue_work",
+            severity: "important",
+            state: "active",
+            title: "Review the overdue task",
+            reason: "It is overdue.",
+            detail: "Choose what comes next.",
+            target: {
+              entityType: "task",
+              entityId: "task_overdue",
+              label: "Open task",
+              href: "/tasks/task_overdue"
+            },
+            allowedActions: ["open"],
+            createdAt: "2026-08-01T11:00:00.000Z",
+            updatedAt: "2026-08-01T11:00:00.000Z",
+            sourceUpdatedAt: "2026-08-01T11:00:00.000Z",
+            dueAt: null,
+            snoozedUntil: null,
+            metadata: {}
+          }
+        ]
+      : []
   };
 }
 
-describe("OverviewPage", () => {
-  it("builds a contract-complete XP fallback without a cast", () => {
-    const fallback = buildOverviewXpFallback(createSnapshot());
-    expect(fallback.timezone).toBeTruthy();
-    expect(fallback.scope.mode).toBe("operator_fallback");
-    expect(fallback.dailyAmbientCap).toBeGreaterThan(0);
-  });
+function shell(
+  snapshot = createSnapshot(),
+  profile: "operator" | "standard" = "standard"
+) {
+  return {
+    snapshot,
+    operatorSession: { profile },
+    selectedUserIds: ["user_operator"],
+    refresh: vi.fn(),
+    createGoal: vi.fn(),
+    createProject: vi.fn(),
+    createTask: vi.fn()
+  };
+}
 
+function renderOverview() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } }
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <OverviewPage />
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+}
+
+describe("OverviewPage", () => {
   beforeEach(() => {
-    getSettingsMock.mockResolvedValue({
-      settings: {
-        gamificationTheme: "dark-fantasy"
-      }
+    useForgeShellMock.mockReturnValue(shell());
+    useGetForgeXpDefaults();
+    useGetForgeDoctorQueryMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false
     });
-    getGamificationAssetStatusMock.mockResolvedValue({
-      assets: {
-        version: "test",
-        defaultStyle: "dark-fantasy",
-        styles: [
-          {
-            id: "dark-fantasy",
-            label: "Dark Fantasy",
-            description: "Obsidian iron and ember gold.",
-            previewUrl: "/gamification-previews/dark-fantasy-mascot.webp",
-            fileName: "forge-gamification-dark-fantasy-test.zip",
-            downloadUrl: "https://example.test/dark-fantasy.zip",
-            sha256: "test",
-            installed: true,
-            spriteCount: 348,
-            expectedSpriteCount: 348,
-            installedAt: "2026-04-12T10:00:00.000Z"
-          }
-        ]
-      }
-    });
-    installGamificationAssetStyleMock.mockResolvedValue({ installed: true });
+    getAttentionInboxMock.mockResolvedValue(attentionPayload());
     getSleepViewMock.mockResolvedValue({
       sleep: {
         summary: {
-          totalSleepSeconds: 186_480,
-          averageSleepSeconds: 7.4 * 3600,
-          averageTimeInBedSeconds: 8 * 3600,
-          averageSleepScore: 84,
-          averageRegularityScore: 78,
-          averageEfficiency: 0.92,
-          averageRestorativeShare: 0.44,
-          reflectiveNightCount: 2,
-          linkedNightCount: 1,
-          averageBedtimeConsistencyMinutes: 28,
-          averageWakeConsistencyMinutes: 22,
-          latestBedtime: "2026-04-12T22:30:00.000Z",
-          latestWakeTime: "2026-04-13T06:45:00.000Z"
-        },
-        weeklyTrend: [],
-        monthlyPattern: [],
-        stageAverages: [],
-        linkBreakdown: [],
-        sessions: []
-      }
-    });
-    getFitnessViewMock.mockResolvedValue({
-      fitness: {
-        summary: {
-          workoutCount: 3,
-          weeklyVolumeSeconds: 10_800,
-          exerciseMinutes: 185,
-          energyBurnedKcal: 1200,
-          distanceMeters: 18_000,
-          workoutTypes: ["Run", "Ride"],
-          averageSessionMinutes: 61.7,
-          averageEffort: 7,
-          linkedSessionCount: 2,
-          plannedSessionCount: 1,
-          importedSessionCount: 3,
-          habitGeneratedSessionCount: 0,
-          reconciledSessionCount: 3,
-          topWorkoutType: "Run",
-          streakDays: 2
-        },
-        weeklyTrend: [],
-        typeBreakdown: [],
-        sessions: []
-      }
-    });
-    getMovementDayMock.mockResolvedValue({
-      movement: {
-        date: "2026-04-12",
-        settings: {
-          userId: "user_operator",
-          trackingEnabled: true,
-          publishMode: "auto_publish",
-          retentionMode: "keep_recent_raw",
-          locationPermissionStatus: "authorized",
-          motionPermissionStatus: "authorized",
-          backgroundTrackingReady: true,
-          lastCompanionSyncAt: "2026-04-12T10:00:00.000Z",
-          metadata: {},
-          createdAt: "2026-04-12T10:00:00.000Z",
-          updatedAt: "2026-04-12T10:00:00.000Z",
-          knownPlaceCount: 2
-        },
-        summary: {
-          totalDistanceMeters: 14_200,
-          totalMovingSeconds: 3_600,
-          totalIdleSeconds: 0,
-          tripCount: 2,
-          stayCount: 2,
-          missingCount: 0,
-          missingDurationSeconds: 0,
-          repairedGapCount: 0,
-          repairedGapDurationSeconds: 0,
-          continuedStayCount: 0,
-          continuedStayDurationSeconds: 0,
-          knownPlaceCount: 2,
-          caloriesKcal: 0,
-          estimatedScreenTimeSeconds: 0,
-          pickupCount: 0,
-          averageSpeedMps: 1.8
-        },
-        segments: [
-          {
-            id: "seg_work",
-            boxId: "box_work",
-            kind: "stay",
-            sourceKind: "automatic",
-            origin: "recorded",
-            editable: false,
-            startedAt: "2026-04-12T07:00:00.000Z",
-            endedAt: "2026-04-12T18:00:00.000Z",
-            trueStartedAt: "2026-04-12T07:00:00.000Z",
-            trueEndedAt: "2026-04-12T18:00:00.000Z",
-            visibleStartedAt: "2026-04-12T07:00:00.000Z",
-            visibleEndedAt: "2026-04-12T18:00:00.000Z",
-            durationSeconds: 39_600,
-            label: "Work",
-            subtitle: "Office",
-            distanceMeters: 0,
-            averageSpeedMps: 0,
-            estimatedScreenTimeSeconds: 0,
-            pickupCount: 0,
-            colorTone: "blue",
-            noteCount: 0,
-            overrideCount: 0,
-            overriddenAutomaticBoxIds: [],
-            overriddenUserBoxIds: [],
-            isFullyHidden: false,
-            rawStayIds: [],
-            rawTripIds: [],
-            rawPointCount: 0,
-            hasLegacyCorrections: false
-          },
-          {
-            id: "seg_home",
-            boxId: "box_home",
-            kind: "stay",
-            sourceKind: "automatic",
-            origin: "recorded",
-            editable: false,
-            startedAt: "2026-04-12T18:30:00.000Z",
-            endedAt: "2026-04-13T00:30:00.000Z",
-            trueStartedAt: "2026-04-12T18:30:00.000Z",
-            trueEndedAt: "2026-04-13T00:30:00.000Z",
-            visibleStartedAt: "2026-04-12T18:30:00.000Z",
-            visibleEndedAt: "2026-04-13T00:30:00.000Z",
-            durationSeconds: 21_600,
-            label: "Home",
-            subtitle: "Apartment",
-            distanceMeters: 0,
-            averageSpeedMps: 0,
-            estimatedScreenTimeSeconds: 0,
-            pickupCount: 0,
-            colorTone: "green",
-            noteCount: 0,
-            overrideCount: 0,
-            overriddenAutomaticBoxIds: [],
-            overriddenUserBoxIds: [],
-            isFullyHidden: false,
-            rawStayIds: [],
-            rawTripIds: [],
-            rawPointCount: 0,
-            hasLegacyCorrections: false
-          }
-        ],
-        stays: [],
-        trips: [],
-        places: [],
-        selectionAggregate: {
-          startedAt: "2026-04-12T07:00:00.000Z",
-          endedAt: "2026-04-13T00:30:00.000Z",
-          durationSeconds: 64_800,
-          distanceMeters: 14_200,
-          caloriesKcal: 0,
-          averageSpeedMps: 1.8,
-          stayCount: 2,
-          tripCount: 2,
-          noteCount: 0,
-          taskRunCount: 0,
-          trackedWorkSeconds: 0,
-          placeLabels: ["Work", "Home"],
-          tags: [],
-          estimatedScreenTimeSeconds: 0,
-          pickupCount: 0,
-          notificationCount: 0,
-          topApps: [],
-          topCategories: []
+          totalSleepSeconds: 25_200,
+          averageSleepSeconds: 25_200,
+          averageSleepScore: 82
         }
       }
     });
-    getVitalsViewMock.mockResolvedValue({
-      vitals: {
-        summary: {
-          trackedDays: 7,
-          metricCount: 4,
-          latestDateKey: "2026-04-12",
-          latestMetricCount: 4,
-          categoryBreakdown: [
-            { category: "recovery", metricCount: 2, coverageDays: 7 },
-            { category: "cardio", metricCount: 1, coverageDays: 4 },
-            { category: "activity", metricCount: 1, coverageDays: 7 }
-          ]
-        },
-        metrics: [
-          {
-            metric: "restingHeartRate",
-            label: "Resting heart rate",
-            category: "recovery",
-            unit: "bpm",
-            aggregation: "discrete",
-            latestValue: 54,
-            latestDateKey: "2026-04-12",
-            baselineValue: 56,
-            deltaValue: -2,
-            coverageDays: 7,
-            days: []
-          },
-          {
-            metric: "heartRateVariabilitySDNN",
-            label: "HRV (SDNN)",
-            category: "recovery",
-            unit: "ms",
-            aggregation: "discrete",
-            latestValue: 62,
-            latestDateKey: "2026-04-12",
-            baselineValue: 58,
-            deltaValue: 4,
-            coverageDays: 7,
-            days: []
-          }
-        ]
-      }
+    getFitnessViewMock.mockResolvedValue({
+      fitness: { summary: { workoutCount: 3, exerciseMinutes: 150 } }
     });
-    const snapshot = createSnapshot();
-    getXpMetricsMock.mockResolvedValue({
-      metrics: {
-        scope: {
-          mode: "operator_fallback",
-          userIds: ["user_operator"],
-          users: [],
-          label: "Operator"
-        },
-        profile: snapshot.metrics,
-        achievements: [],
-        milestoneRewards: [],
-        momentumPulse: {
-          status: "surging",
-          headline: "9-day streak online",
-          detail: "Forge is compounding.",
-          celebrationLabel: "Forge Smith",
-          nextMilestoneId: null,
-          nextMilestoneLabel: "Next unlock"
-        },
-        catalogPreview: [],
-        unlockedItemCount: 0,
-        totalItemCount: 120,
-        nextUnlock: null,
-        newestUnlock: null,
-        mascot: {
-          mood: "wise",
-          spriteKey: "mascot-state-014",
-          streakSpriteKey: "mascot-state-017",
-          headline: "A real streak is forming.",
-          line: "Keep swinging while the metal is hot.",
-          pressureLevel: 0,
-          missedDays: 0,
-          lastActiveDateKey: null
-        },
-        celebrations: [],
-        recentLedger: [],
-        rules: [],
-        dailyAmbientXp: 0,
-        dailyAmbientCap: 12
-      }
+    getMovementDayMock.mockResolvedValue({
+      movement: { summary: { totalMovingSeconds: 3_600 }, segments: [] }
+    });
+    getVitalsViewMock.mockResolvedValue({
+      vitals: { summary: { metricCount: 1 }, metrics: [] }
     });
   });
 
@@ -582,275 +291,245 @@ describe("OverviewPage", () => {
     vi.clearAllMocks();
   });
 
-  function renderOverviewPage() {
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false }
-      }
+  function useGetForgeXpDefaults() {
+    useGetXpMetricsQueryMock.mockReturnValue({
+      data: undefined,
+      isError: false
     });
-
-    return render(
-      <Provider store={createAppStore()}>
-        <QueryClientProvider client={queryClient}>
-          <MemoryRouter>
-            <OverviewPage />
-          </MemoryRouter>
-        </QueryClientProvider>
-      </Provider>
-    );
   }
 
-  it("puts Life Force next to XP and momentum in the top hero surface", () => {
-    useForgeShellMock.mockReturnValue({
-      snapshot: createSnapshot(),
-      selectedUserIds: [],
-      refresh: vi.fn()
-    });
-
-    renderOverviewPage();
-
-    expect(screen.getByText("Momentum 82")).toBeInTheDocument();
-    expect(screen.getAllByText("Life Force").length).toBeGreaterThan(0);
-    expect(screen.getByText("132 / 214 AP")).toBeInTheDocument();
-    expect(screen.getAllByText("Instant").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("6.9 AP/h").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Weekly XP").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("126").length).toBeGreaterThan(0);
+  it("builds a contract-complete XP fallback", () => {
+    const fallback = buildOverviewXpFallback(createSnapshot());
+    expect(fallback.scope.label).toBe("Albert");
+    expect(fallback.dailyAmbientCap).toBe(12);
   });
 
-  it("keeps the momentum summary above the action signals block", () => {
-    useForgeShellMock.mockReturnValue({
-      snapshot: createSnapshot(),
-      selectedUserIds: [],
-      refresh: vi.fn()
-    });
-
-    renderOverviewPage();
-
-    const summaryHeading = screen.getAllByText("Current state")[0]!;
-    const signalsHeading = screen.getByText("Signals");
+  it("states the page purpose and exposes the five first actions", () => {
+    renderOverview();
     expect(
-      summaryHeading.compareDocumentPosition(signalsHeading) &
-        Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
+      screen.getByRole("heading", { name: "Overview", level: 1 })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "See what needs attention, continue current work, or open any part of Forge."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Search Forge" })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Attention" })).toHaveAttribute(
+      "href",
+      "/attention"
+    );
+    expect(screen.getByRole("link", { name: "Continue work" })).toHaveAttribute(
+      "href",
+      "/workbench"
+    );
+    expect(screen.getByRole("link", { name: "Explore Forge" })).toHaveAttribute(
+      "href",
+      "#forge-map"
+    );
   });
 
-  it("links overview entity cards to their owning views", () => {
-    const snapshot = createSnapshot();
-    snapshot.dashboard.milestoneRewards = [
-      {
-        id: "reward_level_8",
-        title: "Level 8 threshold",
-        summary: "Reach the next level.",
-        rewardLabel: "Level 8",
-        progressLabel: "1800/2000 XP",
-        current: 1800,
-        target: 2000,
-        completed: false
+  it("maps every supported production destination and excludes non-entities", () => {
+    renderOverview();
+    const hrefs = [...document.querySelectorAll("a")].map((link) =>
+      link.getAttribute("href")
+    );
+    const configuredHrefs = FORGE_OVERVIEW_GROUPS.flatMap((group) => [
+      ...group.destinations.map((destination) => destination.href),
+      ...(group.advanced?.destinations.map((destination) => destination.href) ??
+        [])
+    ]);
+    expect(new Set(configuredHrefs).size).toBe(configuredHrefs.length);
+    for (const group of FORGE_OVERVIEW_GROUPS) {
+      expect(
+        screen.getByRole("heading", { name: group.title, level: 3 })
+      ).toBeInTheDocument();
+      for (const destination of [
+        ...group.destinations,
+        ...(group.advanced?.destinations ?? [])
+      ]) {
+        expect(hrefs).toContain(destination.href);
       }
-    ];
-    snapshot.overview.projects = [
-      {
-        id: "project_md",
-        title: "Advance the MD thesis experiments",
-        description: "Move the experiment work forward.",
-        earnedPoints: 280
-      } as ForgeSnapshot["overview"]["projects"][number]
-    ];
-    snapshot.overview.dueHabits = [
-      {
-        id: "habit_sleep",
-        title: "Go to bed before 11",
-        description: "Protect tomorrow's runway.",
-        rewardXp: 10
-      } as ForgeSnapshot["overview"]["dueHabits"][number]
-    ];
-    snapshot.overview.topTasks = [
-      {
-        id: "task_brain",
-        title: "Attribution to brain inference pipeline",
-        description: "Finish the attribution pass.",
-        status: "in_progress",
-        points: 80
-      } as ForgeSnapshot["overview"]["topTasks"][number]
-    ];
-    snapshot.overview.activeGoals = [
-      {
-        id: "goal_great",
-        title: "Be a great man",
-        description: "Keep the lifetime goal visible.",
-        horizon: "lifetime",
-        progress: 93,
-        tags: []
-      } as unknown as ForgeSnapshot["overview"]["activeGoals"][number]
-    ];
+    }
+    expect(hrefs).not.toContain("/settings/mobile/lab");
+    expect(hrefs).not.toContain("/campaigns");
+  });
 
-    useForgeShellMock.mockReturnValue({
-      snapshot,
-      selectedUserIds: [],
-      refresh: vi.fn()
-    });
+  it("uses the scoped Attention contract and links exact items", async () => {
+    renderOverview();
+    await waitFor(() =>
+      expect(getAttentionInboxMock).toHaveBeenCalledWith({
+        state: "active",
+        limit: 6,
+        userIds: ["user_operator"]
+      })
+    );
+    expect(
+      await screen.findByRole("link", { name: /Review the overdue task/ })
+    ).toHaveAttribute("href", "/tasks/task_overdue");
+  });
 
-    renderOverviewPage();
+  it("routes active-run actions to the running task instead of the ranked top task", () => {
+    const snapshot = createSnapshot();
+    snapshot.activeTaskRuns = [
+      {
+        id: "run_active",
+        taskId: "task_running",
+        taskTitle: "Work already in progress"
+      } as ForgeSnapshot["activeTaskRuns"][number]
+    ];
+    useForgeShellMock.mockReturnValue(shell(snapshot));
+    renderOverview();
 
     expect(
       screen.getByRole("link", {
-        name: /Advance the MD thesis experiments/i
+        name: /Current work Work already in progress/
       })
-    ).toHaveAttribute("href", "/projects/project_md");
+    ).toHaveAttribute("href", "/tasks/task_running");
     expect(
-      screen.getByRole("link", { name: "Open habit Go to bed before 11" })
-    ).toHaveAttribute("href", "/habits");
-    expect(
-      screen
-        .getAllByRole("link", {
-          name: /Attribution to brain inference pipeline/i
-        })
-        .some((link) => link.getAttribute("href") === "/tasks/task_brain")
-    ).toBe(true);
-    expect(
-      screen.getByRole("link", { name: "Open goal Be a great man" })
-    ).toHaveAttribute("href", "/goals/goal_great");
-    expect(
-      screen.getByRole("link", { name: /Open rewards Level 8 threshold/i })
-    ).toHaveAttribute("href", "/rewards");
-    expect(screen.getByRole("link", { name: /All projects/i })).toHaveAttribute(
-      "href",
-      "/projects"
-    );
-    expect(screen.getByRole("link", { name: /All habits/i })).toHaveAttribute(
-      "href",
-      "/habits"
-    );
-    expect(screen.getByRole("link", { name: /All tasks/i })).toHaveAttribute(
-      "href",
-      "/kanban"
-    );
+      screen.getByRole("link", {
+        name: /Active task run Work already in progress/
+      })
+    ).toHaveAttribute("href", "/tasks/task_running");
   });
 
-  it("renders the overview Life Force surface in compact mode", () => {
-    useForgeShellMock.mockReturnValue({
-      snapshot: createSnapshot(),
-      selectedUserIds: [],
-      refresh: vi.fn()
-    });
-
-    renderOverviewPage();
-
-    expect(LifeForceOverviewWorkspaceMock).toHaveBeenCalledWith(
-      expect.objectContaining({ showEditor: false }),
-      undefined
-    );
-  });
-
-  it("keeps the compact Forge Smith visible and detailed Life Force optional", () => {
-    useForgeShellMock.mockReturnValue({
-      snapshot: createSnapshot(),
-      selectedUserIds: [],
-      refresh: vi.fn()
-    });
-
-    renderOverviewPage();
-
-    expect(screen.getByTestId("overview-widget-gamification")).toHaveAttribute(
-      "data-default-hidden",
-      "false"
-    );
-    expect(screen.getByTestId("overview-widget-life-force")).toHaveAttribute(
-      "data-default-hidden",
-      "true"
-    );
-    expect(screen.getByTestId("overview-widget-summary")).toHaveAttribute(
-      "data-default-hidden",
-      "false"
-    );
-  });
-
-  it("loads compact overview context without an artificial delay", async () => {
-    useForgeShellMock.mockReturnValue({
-      snapshot: createSnapshot(),
-      selectedUserIds: [],
-      refresh: vi.fn()
-    });
-
-    renderOverviewPage();
-
-    await waitFor(() => {
-      expect(getXpMetricsMock).toHaveBeenCalledTimes(1);
-      expect(getSleepViewMock).toHaveBeenCalledTimes(1);
-      expect(getFitnessViewMock).toHaveBeenCalledWith([], { compact: true });
-      expect(getMovementDayMock).toHaveBeenCalledTimes(1);
-      expect(getVitalsViewMock).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  it("does not present empty health summaries as recorded evidence", async () => {
-    useForgeShellMock.mockReturnValue({
-      snapshot: createSnapshot(),
-      selectedUserIds: [],
-      refresh: vi.fn()
-    });
-    getSleepViewMock.mockResolvedValue({
-      sleep: {
-        summary: {
-          totalSleepSeconds: 0,
-          averageSleepSeconds: 0,
-          averageSleepScore: 0
-        },
-        sessions: []
-      }
-    });
-    getFitnessViewMock.mockResolvedValue({
-      fitness: {
-        summary: {
-          workoutCount: 0,
-          exerciseMinutes: 0,
-          topWorkoutType: null
-        },
-        sessions: []
-      }
-    });
-    getVitalsViewMock.mockResolvedValue({
-      vitals: {
-        summary: {
-          trackedDays: 0,
-          metricCount: 0,
-          latestDateKey: null,
-          latestMetricCount: 0,
-          categoryBreakdown: []
-        },
-        metrics: []
-      }
-    });
-
-    renderOverviewPage();
-
-    expect(await screen.findByText("No health data yet")).toBeInTheDocument();
-    expect(screen.queryByText("Average sleep")).not.toBeInTheDocument();
-    expect(screen.queryByText("Sleep score")).not.toBeInTheDocument();
-    expect(screen.queryByText("0 metrics")).not.toBeInTheDocument();
-  });
-
-  it("shows live health and movement metrics when those feeds are available", async () => {
-    useForgeShellMock.mockReturnValue({
-      snapshot: createSnapshot(),
-      selectedUserIds: [],
-      refresh: vi.fn()
-    });
-
-    renderOverviewPage();
-
+  it("shows truthful empty and permission-limited states", async () => {
+    getAttentionInboxMock.mockResolvedValue(attentionPayload(false));
+    renderOverview();
     expect(
-      await screen.findByText("Recovery, training, and vitals")
+      await screen.findByText("No items need attention")
     ).toBeInTheDocument();
-    expect(screen.getByText("Average sleep")).toBeInTheDocument();
-    expect(screen.getByText("7.4h")).toBeInTheDocument();
-    expect(screen.getByText("185 min")).toBeInTheDocument();
-    expect(screen.getByText("Resting heart rate")).toBeInTheDocument();
-    expect(screen.getByText("54.0 bpm")).toBeInTheDocument();
-    expect(screen.getByText("Today's place balance")).toBeInTheDocument();
-    expect(screen.getByText("11h at Work")).toBeInTheDocument();
-    expect(screen.getByText("6h at Home")).toBeInTheDocument();
-    expect(screen.getAllByText("1h moving").length).toBeGreaterThan(0);
+    expect(screen.getByText("Permission required")).toBeInTheDocument();
+    expect(useGetForgeDoctorQueryMock).toHaveBeenCalledWith(undefined, {
+      skip: true
+    });
+  });
+
+  it("names loading states without showing invented counts", () => {
+    getAttentionInboxMock.mockReturnValue(new Promise(() => undefined));
+    useForgeShellMock.mockReturnValue(shell(createSnapshot(), "operator"));
+    useGetForgeDoctorQueryMock.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false
+    });
+    renderOverview();
+    expect(screen.getByText("Checking current attention")).toBeInTheDocument();
+    expect(screen.getByText("Checking…")).toBeInTheDocument();
+    expect(
+      screen.getByText("System health is being checked")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("0 active")).not.toBeInTheDocument();
+  });
+
+  it("shows the canonical Doctor score for an operator", () => {
+    useForgeShellMock.mockReturnValue(shell(createSnapshot(), "operator"));
+    useGetForgeDoctorQueryMock.mockReturnValue({
+      data: {
+        doctor: {
+          integrity: {
+            score: 96,
+            status: "healthy",
+            headline: "Forge is healthy"
+          }
+        }
+      },
+      isLoading: false,
+      isError: false
+    });
+    renderOverview();
+    expect(screen.getByText("96/100")).toBeInTheDocument();
+    expect(screen.getByText("Forge is healthy")).toBeInTheDocument();
+    expect(useGetForgeDoctorQueryMock).toHaveBeenCalledWith(undefined, {
+      skip: false
+    });
+  });
+
+  it("keeps Settings reachable when the Doctor report fails", () => {
+    useForgeShellMock.mockReturnValue(shell(createSnapshot(), "operator"));
+    useGetForgeDoctorQueryMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true
+    });
+    renderOverview();
+    expect(
+      screen.getByRole("link", { name: /System health Unavailable/ })
+    ).toHaveAttribute("href", "/settings");
+    expect(
+      screen.getByText("Health details could not be loaded")
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the map available when Attention fails", async () => {
+    getAttentionInboxMock.mockRejectedValue(new Error("offline"));
+    renderOverview();
+    expect(
+      await screen.findByText(
+        "Attention could not be loaded. Other Forge areas are still available."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Try again" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Everything in Forge", level: 2 })
+    ).toBeInTheDocument();
+  });
+
+  it("opens global search through the established keyboard contract", () => {
+    let searchEventSeen = false;
+    let searchModifierSeen = false;
+    const listener = (event: KeyboardEvent) => {
+      if (event.key === "k") {
+        searchEventSeen = true;
+        searchModifierSeen = event.metaKey || event.ctrlKey;
+      }
+    };
+    window.addEventListener("keydown", listener);
+    renderOverview();
+    fireEvent.click(screen.getByRole("button", { name: "Search Forge" }));
+    window.removeEventListener("keydown", listener);
+    expect(searchEventSeen).toBe(true);
+    expect(searchModifierSeen).toBe(true);
+  });
+
+  it("keeps core navigation visible and secondary detail optional", () => {
+    renderOverview();
+    for (const id of ["hero", "gamification", "what-matters", "forge-map"]) {
+      expect(screen.getByTestId(`overview-widget-${id}`)).toHaveAttribute(
+        "data-default-hidden",
+        "false"
+      );
+    }
+    for (const id of ["summary", "pipeline", "goals", "life-force"]) {
+      expect(screen.getByTestId(`overview-widget-${id}`)).toHaveAttribute(
+        "data-default-hidden",
+        "true"
+      );
+    }
+  });
+
+  it("links every health summary even when a feed is unavailable", async () => {
+    getSleepViewMock.mockRejectedValue(new Error("sleep unavailable"));
+    renderOverview();
+    const sleepLink = await screen.findByRole("link", {
+      name: /Sleep Unavailable/
+    });
+    expect(sleepLink).toHaveAttribute("href", "/sleep");
+    for (const [name, href] of [
+      [/Sports/, "/sports"],
+      [/Vitals/, "/vitals"],
+      [/Movement/, "/movement"]
+    ] as const) {
+      expect(
+        screen
+          .getAllByRole("link", { name })
+          .some((link) => link.getAttribute("href") === href)
+      ).toBe(true);
+    }
   });
 });

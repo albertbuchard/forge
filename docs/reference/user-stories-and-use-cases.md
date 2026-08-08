@@ -32,6 +32,13 @@ gamification, iPhone sync, and watchOS commands.
 The inventory is not a claim that every story has received a fresh quality audit. A code
 path can exist while its current quality remains unverified.
 
+## Story Lifecycle
+
+| Lifecycle | Meaning |
+| --- | --- |
+| `Current product` | The capability has an implementation path in the current Forge contract. Its readiness is stated separately and may still be unverified. |
+| `Planned` | The capability is an accepted product direction, but it is unscheduled and evidence-gated unless the story says otherwise. Planned does not mean promised for a specific release. |
+
 ## Story States
 
 | State                | Meaning                                                                                                                               |
@@ -314,6 +321,53 @@ functional analysis, or force the user through a field-by-field form.
 | WATCH-11 | As a watch user, I can quickly capture an emotion, trigger, routine, prompt, place, trip, workout, or note and review the backend receipt. | Watch quick capture and action envelopes.       | `In review`: quick captures use bounded durable envelopes and visible latest receipts; complete every capture, dictation, ambiguity, and correction scenario.                                                                                                                                                       |
 | WATCH-12 | As a watch user, I can launch Habits, Check In, Mark Moment, and Emotion from widgets or App Intents.                                      | WidgetKit and App Intents.                      | `Needs audit`: test locked phone, stale widget, intent failure, localization, and deep links.                                                                                                                                                                                                                       |
 
+## Planned User Stories
+
+These stories record accepted product directions in the same contract as current capabilities.
+They are unscheduled and evidence-gated. A planned story moves into the current-product
+inventory only when its implementation path, permissions, data contract, and first validation
+package are explicit.
+
+### Existing Story Families
+
+| ID | User story and expected result | Surfaces and contracts | Current state and next check |
+| --- | --- | --- | --- |
+| SYS-16 | As a user, I can save a cross-domain search, scope, and filter combination as a named view and return to the same bounded result later. | Action Bar, route filters, user-scoped saved-view contract. | `Planned`: observe repeated manual filter sequences, define ownership and permission behavior, and prove that saved state survives route and schema changes safely. |
+| SYS-17 | As a user, I can create a related record from my current context with the valid relationship prefilled and return to the exact place I started. | Action Bar, guided create flows, general entity links, return-state contract. | `Planned`: measure current create-and-return steps in at least five story families and test ambiguous, unauthorized, deleted, and stale source records. |
+| SYS-18 | As a user, I can undo a recent reversible change through a bounded receipt without hiding changes that cannot be safely reversed. | Mutation receipts, soft delete, board moves, dismissals, metadata edits. | `Planned`: inventory reversible mutations and define expiry, idempotency, authorization, concurrency, and honest non-reversible states before exposing a shared control. |
+| SYS-19 | As a user, I can see when important derived information was updated, where it came from, and whether it is partial or stale. | Shared provenance presentation, Overview, Health, Movement, Life Force, Watch snapshots. | `Planned`: map every source timestamp and partial-data rule, then confirm that a shared treatment adds clarity without duplicating stronger domain-specific labels. |
+| SYS-20 | As a user, I can review suggested relationships between records, understand why each link was proposed, and accept or reject it before Forge writes anything. | General entity links, Knowledge Graph, suggestion and explanation contract. | `Planned`: establish precision and false-positive thresholds, privacy boundaries, permission filtering, and a no-write-until-confirmed test matrix. |
+| SYS-21 | As a user, I can queue supported web changes while temporarily offline and later see whether each change was accepted, conflicted, or needs my decision. | Web shell, mutation outbox, idempotency keys, conflict receipts. | `Planned`: audit mutation idempotency and conflict behavior, define an explicit supported-action list, and test reconnect, duplicate, stale, and multi-device cases. |
+| SYS-22 | As a user, I can capture text, links, files, or dictation in one place, review the record type and relationships Forge proposes, and confirm the result before it is stored. | Global capture, Artifact Store, notes, guided classification, general links. | `Planned`: test representative inputs, ambiguous classifications, unsafe files, permissions, accessibility, and a strict confirmation boundary. |
+| HOME-08 | As a user, I can follow one valid action from an attention item and see evidence that the underlying problem was resolved rather than merely dismissed. | Attention Inbox, action routes, resolution receipts, activity evidence. | `Planned`: audit every attention kind, allowed action, authorization rule, stale-item condition, and verifiable resolution signal. |
+| HOME-09 | As a user, I can open a concise daily briefing that explains what matters now using current work, schedule, health context, and recent evidence without inventing conclusions. | Overview, Today, calendar, health context, activity, provenance. | `Planned`: define source freshness and omission rules, test empty and conflicting evidence, and compare comprehension with the existing Overview and Today surfaces. |
+| PREF-08 | As a user, I can compare selected records across time without exporting them or losing their type, source, units, and provenance. | Preferences, insights, Health, Psyche, Knowledge, comparison read model. | `Planned`: validate common comparison tasks and define type-safe alignment, unit, missing-data, permission, and provenance contracts. |
+| KNOW-09 | As a user, I can find meaningfully related local records across Forge and see the exact source evidence behind every result. | Local semantic index, search, Knowledge Graph, permission and provenance filters. | `Planned`: establish a representative retrieval fixture, relevance thresholds, local resource bounds, deletion behavior, and zero cross-user leakage before choosing an embedding or index implementation. |
+| IOS-12 | As an iPhone user, I can install the public companion through a normal distribution channel after its sync, permission, privacy, and recovery contracts are verified. | App Store distribution, release metadata, iPhone verification gates. | `Planned`: require the applicable IOS-01 through IOS-11 gates, privacy disclosures, support path, signed build evidence, and external store approval before public availability. |
+
+### First Use And Adoption
+
+| ID | User story and expected result | Surfaces and contracts | Current state and next check |
+| --- | --- | --- | --- |
+| ONB-01 | As a new user, I can choose the outcome I want from Forge and receive a short first-run path that ends in a useful result rather than a tour of every screen. | First-run experience, starter data, permissions, progress and resume state. | `Planned`: test the top three intended outcomes with new users and define skip, resume, empty, offline, and permission-denied behavior without mutating existing accounts. |
+| ONB-02 | As a prospective user, I can try a safe public demonstration of Forge without installing it or exposing personal information. | Isolated demo runtime, deterministic sample data, reset and abuse controls. | `Planned`: define the public threat model, operating-cost ceiling, reset isolation, clear sample-data labeling, and a task-completion fixture before hosting anything. |
+| ONB-03 | As a new user, I can import supported records from Markdown or Obsidian, Notion, Todoist, Apple Reminders, calendars, GitHub Issues, or Linear while preserving source provenance and reviewing conflicts. | Import assistants, source adapters, preview, mapping, provenance, rollback. | `Planned`: measure demand by source, document export constraints, and prove preview, deduplication, partial failure, permission, and recoverable rollback before enabling writes. |
+| ONB-04 | As a user, I can opt in to privacy-preserving product feedback that records activation outcomes without sending record content, titles, paths, credentials, or stable device identifiers. | Consent settings, event allowlist, local inspection, deletion and export controls. | `Planned`: define the minimum event schema, retention and aggregation rules, opt-in copy, network failure behavior, and tests that prohibited fields can never leave the runtime. |
+| ONB-05 | As a desktop user, I can install and update a signed Forge package through a normal application flow without using a terminal, while keeping data location and rollback choices visible. | Signed desktop packages, installer, updater, data-root selection, rollback. | `Planned`: choose supported operating systems, document signing and notarization requirements, and test clean install, upgrade, downgrade, failure, uninstall, and data preservation. |
+
+### Templates And Ecosystem
+
+| ID | User story and expected result | Surfaces and contracts | Current state and next check |
+| --- | --- | --- | --- |
+| ECO-01 | As a new user, I can start from a reviewed Forge setup for a concrete outcome and understand exactly which records, links, settings, and permissions it will add. | Starter-pack manifest, preview, scoped install, provenance, removal. | `Planned`: identify high-demand outcomes and prove manifest validation, permission disclosure, collision handling, versioning, and recoverable removal. |
+| ECO-02 | As a user, I can browse a trustworthy gallery of templates and integrations, inspect compatibility and permissions, and install only an explicitly reviewed package. | Gallery metadata, signing and review state, compatibility, install and update contracts. | `Planned`: define authorship, moderation, signing, version compatibility, security review, reporting, removal, and offline failure requirements before accepting third-party packages. |
+
+### Android Companion
+
+| ID | User story and expected result | Surfaces and contracts | Current state and next check |
+| --- | --- | --- | --- |
+| ANDROID-01 | As an Android user, I can pair a companion, grant Health Connect permissions selectively, and synchronize supported health and movement evidence through the same provider-neutral Forge contracts. | Android companion, Health Connect, pairing, background sync, provider-neutral health API. | `Planned`: validate user demand and platform coverage, map Health Connect data and permission differences, and require parity tests for pairing, privacy, deduplication, background limits, recovery, and source provenance. |
+
 ## Route Coverage Index
 
 Every web route surface must map back to at least one story above. The route catalog is the
@@ -455,19 +509,9 @@ actions rather than invented batch entities.
 
 ## Known Improvement Opportunities
 
-These are candidates, not commitments. Each requires a measured baseline and a check that
-the capability is not already present under another name.
-
-| Candidate                                 | Stories                                      | Value hypothesis                                                                             | Evidence required before implementation                                                     |
-| ----------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Saved cross-domain views                  | SYS-01, SYS-10, HOME-01                      | Repeated filters and scopes could become named views that reduce navigation and setup time.  | Observe repeated manual filter sequences and verify persistence/security requirements.      |
-| Context-aware create handoff              | SYS-08, SYS-09, SYS-12                       | Creating from a record could prefill the relationship and return to the exact prior state.   | Measure current create/navigation steps for at least five domains and test ambiguity risks. |
-| Universal undo for reversible mutations   | SYS-07, PLAN-06, OPS-03                      | A bounded undo receipt could make moves, soft deletes, dismissals, and metadata edits safer. | Inventory which mutations are truly reversible and define idempotency/expiry rules.         |
-| Freshness and provenance strip            | HOME-01, HEALTH-01, MOVE-01, LF-01, WATCH-01 | A shared compact indicator could make stale or partial derived data obvious.                 | Identify every source timestamp and avoid duplicating existing domain-specific labels.      |
-| Cross-record comparison workspace         | PREF-06, HEALTH-04, PSY-18, KNOW-07          | Users could compare selected records without exporting them or losing provenance.            | Validate common comparison tasks and define type-safe comparison contracts.                 |
-| Attention-to-action resolution            | HOME-04, AGENT-07                            | Attention items could carry one explicit resolution path and verified result.                | Audit current allowed actions, stale-item handling, and authorization per item kind.        |
-| Guided relationship suggestions           | SYS-12, PSY-19, KNOW-07                      | Forge could suggest likely links while requiring human confirmation.                         | Measure link-retrieval quality, false-positive cost, privacy, and explanation quality.      |
-| Offline mutation outbox for the web shell | SYS-07, IOS-09, WATCH-03                     | Explicit queued writes could make transient disconnection safer on mobile.                   | Audit mutation idempotency and conflict handling before exposing any queue.                 |
+The former candidate list is now represented by the explicit, evidence-gated stories in
+[Planned User Stories](#planned-user-stories). Add a new planned story there instead of
+maintaining a second feature list.
 
 ## Improvement Ledger
 

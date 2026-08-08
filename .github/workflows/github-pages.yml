@@ -9,7 +9,10 @@ on:
       - "package.json"
       - "package-lock.json"
       - "apps/api/src/**"
+      - "docs/reference/user-stories-and-use-cases.md"
       - "scripts/docs/export-openapi-docs.ts"
+      - "scripts/docs/generate-user-stories-page.mjs"
+      - "scripts/docs/generate-user-stories-page.test.mjs"
       - "scripts/ci/setup-safe-chain-ci.sh"
       - "plugins/openclaw/docs/**"
       - ".github/workflows/github-pages.yml"
@@ -40,7 +43,10 @@ jobs:
       - name: Set up Safe Chain
         run: ./scripts/ci/setup-safe-chain-ci.sh
       - run: npm ci
+      - run: npx playwright install chromium
       - run: npm run docs:openapi
+      - run: npm run test:docs:user-stories
+      - run: npm run docs:user-stories:check
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
