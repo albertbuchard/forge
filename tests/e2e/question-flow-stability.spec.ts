@@ -113,11 +113,24 @@ test("the guided Person flow saves rich local context without browser persistenc
   const contactValue = `guided-${suffix}@example.com`;
   const factValue = `Morning ${suffix}`;
   const failedResponses: Array<{ status: number; url: string }> = [];
+  const eventStreamStatuses: number[] = [];
   const pageErrors: string[] = [];
 
   page.on("pageerror", (error) => pageErrors.push(error.message));
   page.on("response", (response) => {
+    const isEventStream =
+      new URL(response.url()).pathname === "/api/v1/events/stream";
+    if (isEventStream) {
+      eventStreamStatuses.push(response.status());
+    }
     if (response.status() >= 400) {
+      const expectedBoundedStreamRetry =
+        isEventStream &&
+        response.status() === 429 &&
+        /^\d+$/u.test(response.headers()["retry-after"] ?? "");
+      if (expectedBoundedStreamRetry) {
+        return;
+      }
       failedResponses.push({ status: response.status(), url: response.url() });
     }
   });
@@ -235,6 +248,18 @@ test("the guided Person flow saves rich local context without browser persistenc
 
   expect(pageErrors).toEqual([]);
   expect(failedResponses).toEqual([]);
+  const lastBoundedStreamRetry = eventStreamStatuses.lastIndexOf(429);
+  if (lastBoundedStreamRetry >= 0) {
+    await expect
+      .poll(
+        () =>
+          eventStreamStatuses
+            .slice(lastBoundedStreamRetry + 1)
+            .some((status) => status === 200),
+        { timeout: 15_000 }
+      )
+      .toBe(true);
+  }
 });
 
 test("People pagination preserves loaded rows and waits for deliberate retry after 429", async ({

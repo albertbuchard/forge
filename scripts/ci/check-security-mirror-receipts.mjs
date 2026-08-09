@@ -46,6 +46,8 @@ const compiledDataManagementSecurityMarkers = [
   "MAX_BACKUP_ARCHIVE_TOTAL_BYTES"
 ];
 
+const migrationFilePattern = /^\d{3}_.+\.sql$/u;
+
 const exactFileMirrors = [
   {
     canonicalRoot: "packages/companion-iroh",
@@ -94,14 +96,26 @@ export async function verifySecurityMirrorReceipts() {
   const migrationNames = (
     await readdir(path.join(repoRoot, canonicalMigrationRoot))
   )
-    .filter((name) => /^(?:10[7-9]|11[0-9]|120)_.*\.sql$/u.test(name))
+    .filter((name) => migrationFilePattern.test(name))
     .sort();
-  if (migrationNames.length !== 14) {
+  if (migrationNames.length === 0) {
     throw new Error(
-      `Expected migrations 107 through 120; found ${migrationNames.join(", ")}`
+      `No canonical Forge migrations were found in ${canonicalMigrationRoot}.`
     );
   }
   for (const mirrorRoot of migrationMirrors) {
+    const mirrorMigrationNames = (
+      await readdir(path.join(repoRoot, mirrorRoot))
+    )
+      .filter((name) => migrationFilePattern.test(name))
+      .sort();
+    if (
+      JSON.stringify(mirrorMigrationNames) !== JSON.stringify(migrationNames)
+    ) {
+      throw new Error(
+        `Generated migration inventory differs: ${mirrorRoot} != ${canonicalMigrationRoot}`
+      );
+    }
     for (const migrationName of migrationNames) {
       receipts.push(
         await assertExactFile(
