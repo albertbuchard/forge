@@ -101,6 +101,7 @@ test("pairing --json lists requests through authenticated Forge without making a
       USERPROFILE: home,
       FORGE_ORIGIN: "http://127.0.0.1",
       FORGE_PORT: String(address.port),
+      FORGE_DATA_ROOT: path.join(home, ".forge"),
       FORGE_API_TOKEN: "synthetic-test-token"
     });
     const parsed = JSON.parse(result.stdout);
