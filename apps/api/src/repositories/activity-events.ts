@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
+import { redactSecretValues } from "../security/secret-redaction.js";
 import { getEntityOwner } from "./entity-ownership.js";
 import { recordEventLog } from "./event-log.js";
 import {
@@ -90,23 +91,35 @@ function resolveActivityOwner(
 
 function mapActivityEvent(row: ActivityEventRow): ActivityEvent {
   const owner = resolveActivityOwner(row);
+  const redacted = redactSecretValues({
+    title: row.title,
+    description: row.description,
+    actor: row.actor,
+    metadata: JSON.parse(row.metadata_json) as Record<
+      string,
+      ActivityMetadataValue
+    >
+  }).value;
   return activityEventSchema.parse({
     id: row.id,
     entityType: row.entity_type,
     entityId: row.entity_id,
     eventType: row.event_type,
-    title: row.title,
-    description: row.description,
-    actor: row.actor,
+    title: redacted.title,
+    description: redacted.description,
+    actor: redacted.actor,
     source: row.source,
-    metadata: JSON.parse(row.metadata_json) as Record<string, ActivityMetadataValue>,
+    metadata: redacted.metadata,
     createdAt: row.created_at,
     userId: owner.userId,
     user: owner.user
   });
 }
 
-export function recordActivityEvent(input: ActivityEventInput, now = new Date()): ActivityEvent {
+export function recordActivityEvent(
+  input: ActivityEventInput,
+  now = new Date()
+): ActivityEvent {
   const id = `evt_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
   const createdAt = now.toISOString();
   const event = activityEventSchema.parse({
@@ -159,7 +172,9 @@ export function recordActivityEvent(input: ActivityEventInput, now = new Date())
   return event;
 }
 
-export function listActivityEvents(filters: ActivityListQuery = {}): ActivityEvent[] {
+export function listActivityEvents(
+  filters: ActivityListQuery = {}
+): ActivityEvent[] {
   const whereClauses: string[] = [];
   const params: Array<string | number> = [];
 
@@ -183,6 +198,63 @@ export function listActivityEvents(filters: ActivityListQuery = {}): ActivityEve
     whereClauses.push("created_at < ?");
     params.push(filters.to);
   }
+  if (filters.userIds && filters.userIds.length > 0) {
+    const userPlaceholders = filters.userIds.map(() => "?").join(", ");
+    whereClauses.push(
+      `EXISTS (
+         SELECT 1
+         FROM entity_owners activity_owner
+         WHERE activity_owner.user_id IN (${userPlaceholders})
+           AND (
+             (
+               activity_events.entity_type = 'task_run'
+               AND activity_owner.entity_type = 'task'
+               AND activity_owner.entity_id = (
+                 SELECT task_runs.task_id
+                 FROM task_runs
+                 WHERE task_runs.id = activity_events.entity_id
+                 LIMIT 1
+               )
+             )
+             OR (
+               activity_events.entity_type = 'system'
+               AND json_type(activity_events.metadata_json, '$.correctedEntityType') = 'text'
+               AND json_type(activity_events.metadata_json, '$.correctedEntityId') = 'text'
+               AND activity_owner.entity_type = CASE
+                 WHEN json_extract(activity_events.metadata_json, '$.correctedEntityType') = 'work_block'
+                   THEN 'work_block_template'
+                 ELSE json_extract(activity_events.metadata_json, '$.correctedEntityType')
+               END
+               AND activity_owner.entity_id = json_extract(
+                 activity_events.metadata_json,
+                 '$.correctedEntityId'
+               )
+             )
+             OR (
+               activity_events.entity_type != 'task_run'
+               AND NOT (
+                 activity_events.entity_type = 'system'
+                 AND COALESCE(
+                   json_type(activity_events.metadata_json, '$.correctedEntityType') = 'text',
+                   0
+                 )
+                 AND COALESCE(
+                   json_type(activity_events.metadata_json, '$.correctedEntityId') = 'text',
+                   0
+                 )
+               )
+               AND activity_owner.entity_type = CASE
+                 WHEN activity_events.entity_type = 'work_block'
+                   THEN 'work_block_template'
+                 ELSE activity_events.entity_type
+               END
+               AND activity_owner.entity_id = activity_events.entity_id
+             )
+           )
+       )`
+    );
+    params.push(...filters.userIds);
+  }
   if (!filters.includeCorrected) {
     whereClauses.push("event_type != 'activity_corrected'");
     whereClauses.push(
@@ -190,7 +262,8 @@ export function listActivityEvents(filters: ActivityListQuery = {}): ActivityEve
     );
   }
 
-  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+  const whereSql =
+    whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
   const limitSql = filters.limit ? "LIMIT ?" : "";
   if (filters.limit) {
     params.push(filters.limit);
@@ -263,7 +336,9 @@ export function listActivityEventsForTask(
   );
 }
 
-export function getActivityEventById(eventId: string): ActivityEvent | undefined {
+export function getActivityEventById(
+  eventId: string
+): ActivityEvent | undefined {
   const row = getDatabase()
     .prepare(
       `SELECT id, entity_type, entity_id, event_type, title, description, actor, source, metadata_json, created_at
@@ -286,7 +361,9 @@ export function removeActivityEvent(
 
   return runInTransaction(() => {
     const existingCorrection = getDatabase()
-      .prepare(`SELECT correcting_event_id FROM activity_event_corrections WHERE corrected_event_id = ?`)
+      .prepare(
+        `SELECT correcting_event_id FROM activity_event_corrections WHERE corrected_event_id = ?`
+      )
       .get(eventId) as { correcting_event_id: string } | undefined;
     if (existingCorrection) {
       return getActivityEventById(existingCorrection.correcting_event_id);

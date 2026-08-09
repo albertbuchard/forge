@@ -26,7 +26,7 @@ const columns = [
       return href ? (
         <Link
           to={href}
-          className="font-medium text-[var(--ui-ink-strong)] transition hover:text-[var(--primary)]"
+          className="-mx-2 inline-flex min-h-11 items-center px-2 font-medium text-[var(--ui-ink-strong)] transition hover:text-[var(--primary)]"
         >
           {getReadableActivityTitle(info.row.original)}
         </Link>
@@ -73,7 +73,7 @@ const columns = [
       return href ? (
         <Link
           to={href}
-          className="inline-flex text-[11px] uppercase tracking-[0.16em] text-[var(--primary)] transition hover:text-[var(--ui-ink-strong)]"
+          className="-mx-2 inline-flex min-h-11 items-center px-2 text-[11px] uppercase tracking-[0.16em] text-[var(--primary)] transition hover:text-[var(--ui-ink-strong)]"
         >
           Open
         </Link>
@@ -104,7 +104,7 @@ export function ActivityTable({
           cell: (info) => (
             <Button
               variant="ghost"
-              className="h-auto px-0 py-0 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-soft)]"
+              className="min-h-11 px-3 py-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-soft)]"
               pending={removingEventId === info.row.original.id}
               aria-label={`Remove ${getReadableActivityTitle(info.row.original)} from visible activity`}
               onClick={() => {
@@ -190,7 +190,7 @@ export function ActivityTable({
                 {href ? (
                   <Link
                     to={href}
-                    className="inline-flex text-[11px] uppercase tracking-[0.16em] text-[var(--primary)] transition hover:text-[var(--ui-ink-strong)]"
+                    className="-mx-2 inline-flex min-h-11 items-center px-2 text-[11px] uppercase tracking-[0.16em] text-[var(--primary)] transition hover:text-[var(--ui-ink-strong)]"
                   >
                     Open
                   </Link>
@@ -198,7 +198,7 @@ export function ActivityTable({
                 {onRemove ? (
                   <Button
                     variant="ghost"
-                    className="h-auto px-0 py-0 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-soft)]"
+                    className="min-h-11 px-3 py-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-soft)]"
                     pending={removingEventId === event.id}
                     aria-label={`Remove ${getReadableActivityTitle(event)} from visible activity`}
                     onClick={() => {

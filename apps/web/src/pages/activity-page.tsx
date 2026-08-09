@@ -238,14 +238,14 @@ export function ActivityPage() {
             Reset
           </Button>
         </div>
-        <label className="mt-4 flex min-h-10 items-center gap-3 text-sm text-[var(--ui-ink-soft)]">
+        <label className="mt-4 flex min-h-11 cursor-pointer items-center gap-3 text-sm text-[var(--ui-ink-soft)]">
           <input
             type="checkbox"
             checked={includeCorrected}
             onChange={(event) =>
               updateFilter("includeCorrected", event.target.checked)
             }
-            className="size-4 accent-[var(--primary)]"
+            className="size-5 accent-[var(--primary)]"
           />
           Show corrected and correction entries
         </label>
@@ -319,7 +319,7 @@ export function ActivityPage() {
                         getActivityEventCtaLabel(event) ? (
                           <Link
                             to={getActivityEventHref(event)!}
-                            className="mt-3 inline-flex text-[11px] uppercase tracking-[0.16em] text-[var(--primary)] transition hover:text-[var(--ui-ink-strong)]"
+                            className="-mx-2 mt-3 inline-flex min-h-11 items-center px-2 text-[11px] uppercase tracking-[0.16em] text-[var(--primary)] transition hover:text-[var(--ui-ink-strong)]"
                           >
                             {getActivityEventCtaLabel(event)}
                           </Link>
