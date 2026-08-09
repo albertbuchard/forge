@@ -542,7 +542,8 @@ function resolveTagsForPath(path: string) {
   if (
     path.startsWith("/api/v1/tasks") ||
     path.startsWith("/api/v1/work-items") ||
-    path.startsWith("/api/v1/work-adjustments")
+    path.startsWith("/api/v1/work-adjustments") ||
+    path.startsWith("/api/v1/offline-mutations")
   ) {
     return ["Tasks"];
   }
@@ -4942,6 +4943,98 @@ export function buildOpenApiDocument() {
       expiresAt: nullable({ type: "string", format: "date-time" }),
       createdAt: { type: "string", format: "date-time" },
       undoneAt: nullable({ type: "string", format: "date-time" })
+    }
+  };
+
+  const offlineTaskMutationInput = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "version",
+      "sessionId",
+      "idempotencyKey",
+      "action",
+      "taskId",
+      "expectedUpdatedAt",
+      "status"
+    ],
+    properties: {
+      version: { type: "integer", const: 1 },
+      sessionId: { type: "string", minLength: 1, maxLength: 200 },
+      idempotencyKey: { type: "string", minLength: 1, maxLength: 128 },
+      action: { type: "string", const: "task_status" },
+      taskId: { type: "string", minLength: 1, maxLength: 200 },
+      expectedUpdatedAt: { type: "string", format: "date-time" },
+      status: {
+        type: "string",
+        enum: ["backlog", "focus", "in_progress", "blocked"]
+      }
+    }
+  };
+
+  const offlineTaskMutationReceipt = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "version",
+      "idempotencyKey",
+      "action",
+      "status",
+      "summary",
+      "task",
+      "current",
+      "mutationReceipt",
+      "receivedAt"
+    ],
+    properties: {
+      version: { type: "integer", const: 1 },
+      idempotencyKey: { type: "string", minLength: 1, maxLength: 128 },
+      action: { type: "string", const: "task_status" },
+      status: {
+        type: "string",
+        enum: ["accepted", "conflicted", "rejected"]
+      },
+      summary: { type: "string" },
+      task: nullable({
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "title", "status", "updatedAt"],
+        properties: {
+          id: { type: "string" },
+          title: { type: "string" },
+          status: {
+            type: "string",
+            enum: ["backlog", "focus", "in_progress", "blocked", "done"]
+          },
+          updatedAt: { type: "string", format: "date-time" }
+        }
+      }),
+      current: nullable({
+        type: "object",
+        additionalProperties: false,
+        required: ["status", "updatedAt"],
+        properties: {
+          status: {
+            type: "string",
+            enum: ["backlog", "focus", "in_progress", "blocked", "done"]
+          },
+          updatedAt: { type: "string", format: "date-time" }
+        }
+      }),
+      mutationReceipt: nullable({
+        $ref: "#/components/schemas/MutationReceipt"
+      }),
+      receivedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const offlineTaskMutationResponse = {
+    type: "object",
+    additionalProperties: false,
+    required: ["receipt", "replayed"],
+    properties: {
+      receipt: { $ref: "#/components/schemas/OfflineTaskMutationReceipt" },
+      replayed: { type: "boolean" }
     }
   };
 
@@ -11965,6 +12058,9 @@ export function buildOpenApiDocument() {
         AttentionInboxPayload: attentionInboxPayload,
         AttentionInboxStateRecord: attentionInboxStateRecord,
         MutationReceipt: mutationReceipt,
+        OfflineTaskMutationInput: offlineTaskMutationInput,
+        OfflineTaskMutationReceipt: offlineTaskMutationReceipt,
+        OfflineTaskMutationResponse: offlineTaskMutationResponse,
         EntityNavigationItem: entityNavigationItem,
         EntityNavigationPayload: entityNavigationPayload,
         EntityNavigationPinInput: entityNavigationPinInput,
@@ -20234,6 +20330,42 @@ export function buildOpenApiDocument() {
             "403": { $ref: "#/components/responses/Error" },
             "404": { $ref: "#/components/responses/Error" },
             "409": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/offline-mutations/task-status": {
+        post: {
+          summary: "Set a queued offline task status",
+          description:
+            "Operator-session only. Forge binds each stable idempotency key to the authenticated browser session and the canonical request fingerprint. Exact retries return the stored terminal receipt while it remains within the 30-day, newest-500-results-per-session retention window. After eviction, the expected task revision still prevents a silent overwrite, but the original terminal receipt is no longer guaranteed. A stale task revision returns a conflicted receipt without changing the task, a completed task remains online-only, and an unavailable task returns a rejected receipt without revealing whether it was deleted or never existed. Reusing a key for a changed request returns 409.",
+          security: [{ operatorSession: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/OfflineTaskMutationInput"
+                }
+              }
+            }
+          },
+          responses: {
+            "200": {
+              ...jsonResponse(
+                { $ref: "#/components/schemas/OfflineTaskMutationResponse" },
+                "Stored terminal result for the queued task-status edit"
+              ),
+              headers: {
+                "Idempotency-Replayed": {
+                  schema: { type: "string", enum: ["true", "false"] }
+                }
+              }
+            },
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" },
+            default: { $ref: "#/components/responses/Error" }
           }
         }
       },

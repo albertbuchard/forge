@@ -1,6 +1,7 @@
 import {
   createContext,
   useContext,
+  useCallback,
   useEffect,
   lazy,
   useMemo,
@@ -71,6 +72,10 @@ import {
 } from "@/components/shell/shell-navigation";
 import { ShellBackgroundActivityDialog } from "@/components/shell/shell-background-activity-dialog";
 import {
+  ShellMutationReceiptCenter,
+  ShellMutationReceiptTrigger
+} from "@/components/shell/shell-mutation-receipt-center";
+import {
   NAV_ROUTE_REGISTRY,
   PRIMARY_ROUTES,
   getRouteLabel,
@@ -126,6 +131,11 @@ import { useShellRouteHandoff } from "@/features/shell/use-shell-route-handoff";
 import { useShellSessionTelemetry } from "@/features/shell/use-shell-session-telemetry";
 import { useShellTaskHeartbeat } from "@/features/shell/use-shell-task-heartbeat";
 import { useShellThemeController } from "@/features/shell/use-shell-theme-controller";
+import {
+  useOfflineMutationOutbox,
+  type OfflineMutationOutboxController
+} from "@/features/shell/use-offline-mutation-outbox";
+import type { OfflineMutationOutboxEntry } from "@/lib/offline-mutation-outbox";
 import type {
   GoalMutationInput,
   ProjectMutationInput,
@@ -134,6 +144,7 @@ import type {
 import type {
   CalendarSchedulingRules,
   ForgeSnapshot,
+  OfflineTaskStatus,
   OperatorSession,
   SettingsPayload,
   Task,
@@ -250,6 +261,38 @@ type ShellContextValue = {
   }) => void;
 };
 
+export function buildOfflineTaskStatusMove(
+  tasks: Task[],
+  taskId: string,
+  status: OfflineTaskStatus
+) {
+  const task = tasks.find((entry) => entry.id === taskId);
+  if (!task) {
+    throw new Error("Forge could not find that task in the current view.");
+  }
+  if (task.status === "done") {
+    throw new Error(
+      "Reopening a completed task needs a live connection. Forge did not queue this move."
+    );
+  }
+  return {
+    taskId,
+    taskLabel: task.title,
+    expectedUpdatedAt: task.updatedAt,
+    desiredStatus: status
+  };
+}
+
+export function requireAcceptedOfflineTaskStatusMove(
+  entry: OfflineMutationOutboxEntry
+) {
+  if (entry.state === "accepted") return;
+  const restoredLane = ["queued", "sending"].includes(entry.state)
+    ? " The board restored the task's current lane until Forge accepts the queued move."
+    : " The board restored the task's current lane.";
+  throw new Error(`${entry.summary}${restoredLane}`);
+}
+
 const ShellContext = createContext<ShellContextValue | null>(null);
 let lastKnownShellContext: ShellContextValue | null = null;
 
@@ -303,7 +346,8 @@ function ShellFrame({
   onCreateAndStartTask,
   onFocusRun,
   onPauseRun,
-  onCompleteRun
+  onCompleteRun,
+  offlineMutationOutbox
 }: {
   children: ReactNode;
   routeLocation: RouterLocation;
@@ -338,6 +382,7 @@ function ShellFrame({
   onFocusRun: (runId: string) => Promise<void>;
   onPauseRun: (runId: string) => Promise<void>;
   onCompleteRun: (runId: string) => Promise<void>;
+  offlineMutationOutbox: OfflineMutationOutboxController;
 }) {
   const shell = useForgeShell();
   const { t } = useI18n();
@@ -350,6 +395,8 @@ function ShellFrame({
   const [actionBarOpen, setActionBarOpen] = useState(false);
   const actionBarReturnFocusRef = useRef<HTMLElement | null>(null);
   const [backgroundActivityOpen, setBackgroundActivityOpen] = useState(false);
+  const [offlineMutationCenterOpen, setOfflineMutationCenterOpen] =
+    useState(false);
   const [desktopCreateTriggerTarget, setDesktopCreateTriggerTarget] =
     useState<HTMLDivElement | null>(null);
   const [mobileCreateTriggerTarget, setMobileCreateTriggerTarget] =
@@ -731,6 +778,10 @@ function ShellFrame({
                         onClick={() => setBackgroundActivityOpen(true)}
                       />
                     ) : null}
+                    <ShellMutationReceiptTrigger
+                      controller={offlineMutationOutbox}
+                      onOpen={() => setOfflineMutationCenterOpen(true)}
+                    />
                     <div
                       ref={setDesktopCreateTriggerTarget}
                       className="shrink-0"
@@ -913,6 +964,11 @@ function ShellFrame({
                         />
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5">
+                        <ShellMutationReceiptTrigger
+                          compact
+                          controller={offlineMutationOutbox}
+                          onOpen={() => setOfflineMutationCenterOpen(true)}
+                        />
                         <Button
                           variant="secondary"
                           size="sm"
@@ -1087,6 +1143,12 @@ function ShellFrame({
         error={ingestJobsQuery.error}
         onRetry={() => void ingestJobsQuery.refetch()}
         recentIngestJobs={recentIngestJobs}
+      />
+
+      <ShellMutationReceiptCenter
+        open={offlineMutationCenterOpen}
+        onOpenChange={setOfflineMutationCenterOpen}
+        controller={offlineMutationOutbox}
       />
 
       {showGlobalCreateMenu ? (
@@ -1362,9 +1424,13 @@ export function AppShell() {
     useReleaseTaskRunMutation();
   const [completeTaskRunMutation, completeTaskRunMutationState] =
     useCompleteTaskRunMutation();
-  const refreshLegacySnapshotQueries = async () => {
+  const refreshLegacySnapshotQueries = useCallback(async () => {
     await invalidateForgeSnapshot(queryClient);
-  };
+  }, [queryClient]);
+  const offlineMutationOutbox = useOfflineMutationOutbox({
+    sessionId: operatorSessionQuery.data?.session.id ?? null,
+    onAccepted: refreshLegacySnapshotQueries
+  });
   const submitTaskStatusPatch = async (
     taskId: string,
     status: "backlog" | "focus" | "in_progress" | "blocked" | "done",
@@ -1372,6 +1438,15 @@ export function AppShell() {
       completedTodayWorkSeconds?: number;
     }
   ) => {
+    const visibleTasks = snapshotQuery.data?.tasks ?? [];
+    const currentTask = visibleTasks.find((task) => task.id === taskId);
+    if (status !== "done" && currentTask?.status !== "done") {
+      const outcome = await offlineMutationOutbox.queueTaskStatusMove(
+        buildOfflineTaskStatusMove(visibleTasks, taskId, status)
+      );
+      requireAcceptedOfflineTaskStatusMove(outcome);
+      return;
+    }
     try {
       await patchTaskStatusMutation({
         taskId,
@@ -1894,6 +1969,7 @@ export function AppShell() {
                     openTaskCloseout(run.taskId, run.id);
                   }
                 }}
+                offlineMutationOutbox={offlineMutationOutbox}
               >
                 <div className="relative min-w-0">
                   {displayedLocationContext ? (

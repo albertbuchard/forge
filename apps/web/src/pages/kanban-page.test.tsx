@@ -588,7 +588,7 @@ describe("KanbanPage split flow", () => {
     ).toBeVisible();
   });
 
-  it("shows the Undo receipt after moving a board card", async () => {
+  it("routes a board move through the shell offline-mutation seam", async () => {
     const shell = renderKanban([
       createTask({
         id: "task_1",
@@ -606,13 +606,9 @@ describe("KanbanPage split flow", () => {
     );
 
     await waitFor(() => {
-      expect(patchTaskMock).toHaveBeenCalledWith("task_1", {
-        status: "focus"
-      });
-      expect(shell.refresh).toHaveBeenCalled();
+      expect(shell.patchTaskStatus).toHaveBeenCalledWith("task_1", "focus");
     });
-    expect(screen.getByRole("button", { name: /Undo:/ })).toBeVisible();
-    expect(shell.patchTaskStatus).not.toHaveBeenCalled();
+    expect(patchTaskMock).not.toHaveBeenCalled();
   });
 
   it("filters kanban tasks through compact entity chips", async () => {

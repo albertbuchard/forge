@@ -462,6 +462,11 @@ import {
   type MutationReceiptInverse
 } from "./services/mutation-receipts.js";
 import {
+  fingerprintOfflineTaskMutation,
+  readOfflineTaskMutationOutcome,
+  recordOfflineTaskMutationOutcome
+} from "./services/offline-mutations.js";
+import {
   artifactEnrichmentRequestSchema,
   artifactEncryptRequestSchema,
   artifactHistoryQuerySchema,
@@ -666,6 +671,8 @@ import {
   calendarOverviewQuerySchema,
   psycheObservationCalendarExportQuerySchema,
   notesListQuerySchema,
+  offlineTaskMutationInputSchema,
+  offlineTaskMutationResponseSchema,
   updateTagSchema,
   createTaskSchema,
   diagnosticLogListQuerySchema,
@@ -724,6 +731,7 @@ import {
   type CrudEntityType,
   type Goal,
   type Habit,
+  type OfflineTaskMutationReceipt,
   type ProjectSummary,
   type Task,
   type TaskTimeSummary,
@@ -24547,6 +24555,163 @@ export async function buildServer(
     }
     return { task: result.task };
   });
+  app.post(
+    "/api/v1/offline-mutations/task-status",
+    async (request, reply) => {
+      const authentication = request.forgeSecurity?.authentication;
+      if (
+        authentication?.mode !== "browser_session" ||
+        authentication.principal.kind !== "operator_session" ||
+        authentication.principal.profile !== "operator" ||
+        !authentication.browserSession
+      ) {
+        throw new HttpError(
+          403,
+          "offline_mutation_operator_session_required",
+          "Offline mutation replay requires an authenticated operator browser session."
+        );
+      }
+      const auth = requireOperatorSession(
+        request.headers as Record<string, unknown>,
+        { route: "/api/v1/offline-mutations/task-status" }
+      );
+      const input = offlineTaskMutationInputSchema.parse(request.body ?? {});
+      const sessionId = authentication.browserSession.id;
+      if (input.sessionId !== sessionId) {
+        throw new HttpError(
+          409,
+          "offline_mutation_session_mismatch",
+          "This offline mutation belongs to a different operator session."
+        );
+      }
+
+      const requestFingerprint = fingerprintOfflineTaskMutation(input);
+      const response = runInTransaction(() => {
+        const replayedReceipt = readOfflineTaskMutationOutcome({
+          sessionId,
+          idempotencyKey: input.idempotencyKey,
+          requestFingerprint
+        });
+        if (replayedReceipt) {
+          return offlineTaskMutationResponseSchema.parse({
+            receipt: replayedReceipt,
+            replayed: true
+          });
+        }
+
+        const receivedAt = new Date().toISOString();
+        const current = getTaskForAuth(input.taskId, auth);
+        let receipt: OfflineTaskMutationReceipt;
+        if (!current) {
+          receipt = {
+            version: 1,
+            idempotencyKey: input.idempotencyKey,
+            action: "task_status",
+            status: "rejected",
+            summary:
+              "Forge could not apply this offline edit because the task is unavailable.",
+            task: null,
+            current: null,
+            mutationReceipt: null,
+            receivedAt
+          };
+        } else if (current.status === "done") {
+          receipt = {
+            version: 1,
+            idempotencyKey: input.idempotencyKey,
+            action: "task_status",
+            status: "rejected",
+            summary:
+              "Forge did not reopen this completed task because reopening requires a live connection.",
+            task: null,
+            current: {
+              status: current.status,
+              updatedAt: current.updatedAt
+            },
+            mutationReceipt: null,
+            receivedAt
+          };
+        } else if (current.updatedAt !== input.expectedUpdatedAt) {
+          receipt = {
+            version: 1,
+            idempotencyKey: input.idempotencyKey,
+            action: "task_status",
+            status: "conflicted",
+            summary:
+              "Forge left the task unchanged because it changed after this offline edit was queued.",
+            task: null,
+            current: {
+              status: current.status,
+              updatedAt: current.updatedAt
+            },
+            mutationReceipt: null,
+            receivedAt
+          };
+        } else {
+          const updated = updateTaskWithMutationReceipt(
+            input.taskId,
+            { status: input.status },
+            auth
+          );
+          if (!updated) {
+            receipt = {
+              version: 1,
+              idempotencyKey: input.idempotencyKey,
+              action: "task_status",
+              status: "rejected",
+              summary:
+                "Forge could not apply this offline edit because the task is unavailable.",
+              task: null,
+              current: null,
+              mutationReceipt: null,
+              receivedAt
+            };
+          } else {
+            const task = {
+              id: updated.task.id,
+              title: updated.task.title,
+              status: updated.task.status,
+              updatedAt: updated.task.updatedAt
+            };
+            receipt = {
+              version: 1,
+              idempotencyKey: input.idempotencyKey,
+              action: "task_status",
+              status: "accepted",
+              summary:
+                current.status === updated.task.status
+                  ? `Forge confirmed ${updated.task.title} is ${updated.task.status.replaceAll("_", " ")}.`
+                  : `Forge moved ${updated.task.title} from ${current.status.replaceAll("_", " ")} to ${updated.task.status.replaceAll("_", " ")}.`,
+              task,
+              current: {
+                status: task.status,
+                updatedAt: task.updatedAt
+              },
+              mutationReceipt: updated.mutationReceipt,
+              receivedAt
+            };
+          }
+        }
+
+        const parsedReceipt = offlineTaskMutationResponseSchema.parse({
+          receipt,
+          replayed: false
+        }).receipt;
+        recordOfflineTaskMutationOutcome({
+          sessionId,
+          idempotencyKey: input.idempotencyKey,
+          requestFingerprint,
+          receipt: parsedReceipt
+        });
+        return { receipt: parsedReceipt, replayed: false };
+      });
+      reply.header(
+        "Idempotency-Replayed",
+        response.replayed ? "true" : "false"
+      );
+      return response;
+    }
+  );
   app.post("/api/v1/work-items", async (request, reply) => {
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,

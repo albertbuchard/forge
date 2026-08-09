@@ -38840,6 +38840,198 @@
           }
         }
       },
+      "OfflineTaskMutationInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "sessionId",
+          "idempotencyKey",
+          "action",
+          "taskId",
+          "expectedUpdatedAt",
+          "status"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 1
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "action": {
+            "type": "string",
+            "const": "task_status"
+          },
+          "taskId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "expectedUpdatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "backlog",
+              "focus",
+              "in_progress",
+              "blocked"
+            ]
+          }
+        }
+      },
+      "OfflineTaskMutationReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "idempotencyKey",
+          "action",
+          "status",
+          "summary",
+          "task",
+          "current",
+          "mutationReceipt",
+          "receivedAt"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 1
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "action": {
+            "type": "string",
+            "const": "task_status"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "conflicted",
+              "rejected"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "task": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "title",
+                  "status",
+                  "updatedAt"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "backlog",
+                      "focus",
+                      "in_progress",
+                      "blocked",
+                      "done"
+                    ]
+                  },
+                  "updatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "current": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "status",
+                  "updatedAt"
+                ],
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "backlog",
+                      "focus",
+                      "in_progress",
+                      "blocked",
+                      "done"
+                    ]
+                  },
+                  "updatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mutationReceipt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MutationReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "OfflineTaskMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "receipt",
+          "replayed"
+        ],
+        "properties": {
+          "receipt": {
+            "$ref": "#/components/schemas/OfflineTaskMutationReceipt"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        }
+      },
       "EntityNavigationItem": {
         "type": "object",
         "additionalProperties": false,
@@ -61454,6 +61646,69 @@
           "Tasks"
         ],
         "operationId": "postwork_adjustments"
+      }
+    },
+    "/api/v1/offline-mutations/task-status": {
+      "post": {
+        "summary": "Set a queued offline task status",
+        "description": "Operator-session only. Forge binds each stable idempotency key to the authenticated browser session and the canonical request fingerprint. Exact retries return the stored terminal receipt while it remains within the 30-day, newest-500-results-per-session retention window. After eviction, the expected task revision still prevents a silent overwrite, but the original terminal receipt is no longer guaranteed. A stale task revision returns a conflicted receipt without changing the task, a completed task remains online-only, and an unavailable task returns a rejected receipt without revealing whether it was deleted or never existed. Reusing a key for a changed request returns 409.",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OfflineTaskMutationInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stored terminal result for the queued task-status edit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfflineTaskMutationResponse"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Tasks"
+        ],
+        "operationId": "postoffline_mutations_task_status"
       }
     },
     "/api/v1/tasks/{id}": {

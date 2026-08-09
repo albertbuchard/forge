@@ -270,7 +270,12 @@ const REVIEWED_BODY_LIMIT_OVERRIDES = new Map<string, number>([
   ["POST /api/v1/artifacts", 150 * 1024 * 1024],
   ["POST /api/v1/mobile/healthkit/sync-sessions/:id/chunks", 40_000_000],
   ["POST /api/v1/mobile/healthkit/sync", 8_000_000],
+  ["POST /api/v1/offline-mutations/task-status", 16 * 1024],
   ["POST /api/v1/courses/import", 12 * 1024 * 1024]
+]);
+
+const EXACT_ROUTE_OPERATIONS = new Map<string, string>([
+  ["POST /api/v1/offline-mutations/task-status", "update"]
 ]);
 
 function normalizeMethod(method: string) {
@@ -327,6 +332,10 @@ function actionNamespaceForRoute(routePath: string) {
 }
 
 function operationForRoute(method: string, routePath: string) {
+  const exactOperation = EXACT_ROUTE_OPERATIONS.get(`${method} ${routePath}`);
+  if (exactOperation) {
+    return exactOperation;
+  }
   if (method === "GET" || method === "HEAD") {
     return "read";
   }

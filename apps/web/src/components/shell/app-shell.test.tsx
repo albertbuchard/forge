@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  buildOfflineTaskStatusMove,
   buildSidebarMetrics,
   buildStartTaskNowInput,
+  requireAcceptedOfflineTaskStatusMove,
   sanitizeSelectedUserIds
 } from "@/components/shell/app-shell";
-import type { ForgeSnapshot } from "@/lib/types";
+import { createOfflineTaskMutationEntry } from "@/lib/offline-mutation-outbox";
+import type { ForgeSnapshot, Task } from "@/lib/types";
 
 function createSnapshot(): ForgeSnapshot {
   return {
@@ -232,5 +235,67 @@ describe("buildStartTaskNowInput", () => {
       timerMode: "planned",
       plannedDurationSeconds: 1200
     });
+  });
+});
+
+describe("buildOfflineTaskStatusMove", () => {
+  it("uses the visible task revision and rejects a missing task", () => {
+    const task = {
+      id: "task_1",
+      title: "Prepare quarterly review",
+      updatedAt: "2026-08-09T12:00:00.000Z"
+    } as Task;
+
+    expect(buildOfflineTaskStatusMove([task], task.id, "focus")).toEqual({
+      taskId: task.id,
+      taskLabel: task.title,
+      expectedUpdatedAt: task.updatedAt,
+      desiredStatus: "focus"
+    });
+    expect(() =>
+      buildOfflineTaskStatusMove([task], "task_missing", "blocked")
+    ).toThrow(/could not find that task/i);
+  });
+
+  it("keeps every completed-task reopening move online-only", () => {
+    const completed = {
+      id: "task_done",
+      title: "Completed task",
+      status: "done",
+      updatedAt: "2026-08-09T12:00:00.000Z"
+    } as Task;
+
+    for (const status of [
+      "backlog",
+      "focus",
+      "in_progress",
+      "blocked"
+    ] as const) {
+      expect(() =>
+        buildOfflineTaskStatusMove([completed], completed.id, status)
+      ).toThrow(/needs a live connection/i);
+    }
+  });
+
+  it("keeps an optimistic board lane only after the server accepts it", () => {
+    const queued = createOfflineTaskMutationEntry({
+      sessionId: "session_1",
+      taskId: "task_1",
+      taskLabel: "Prepare quarterly review",
+      expectedUpdatedAt: "2026-08-09T12:00:00.000Z",
+      desiredStatus: "focus",
+      now: new Date("2026-08-09T12:01:00.000Z")
+    });
+    expect(() => requireAcceptedOfflineTaskStatusMove(queued)).toThrow(
+      /restored the task's current lane until Forge accepts/i
+    );
+    for (const state of ["conflicted", "needs_decision", "rejected"] as const) {
+      expect(() =>
+        requireAcceptedOfflineTaskStatusMove({ ...queued, state })
+      ).toThrow(/restored the task's current lane/i);
+    }
+    expect(() =>
+      requireAcceptedOfflineTaskStatusMove({ ...queued, state: "accepted" })
+    ).not.toThrow();
   });
 });

@@ -2,6 +2,7 @@ import type {
   ForgeCustomTheme,
   ForgeThemePreference
 } from "@/lib/theme-system";
+import type { MutationReceipt } from "@/lib/mutation-receipts";
 import type { WorkbenchPortKind } from "@/lib/workbench/nodes";
 
 export type TaskStatus =
@@ -10,6 +11,47 @@ export type TaskStatus =
   | "in_progress"
   | "blocked"
   | "done";
+export type OfflineTaskStatus = Exclude<TaskStatus, "done">;
+
+export type OfflineMutationReceiptStatus =
+  | "accepted"
+  | "conflicted"
+  | "rejected";
+
+export interface OfflineTaskMutationInput {
+  version: 1;
+  sessionId: string;
+  idempotencyKey: string;
+  action: "task_status";
+  taskId: string;
+  expectedUpdatedAt: string;
+  status: OfflineTaskStatus;
+}
+
+export interface OfflineTaskMutationReceipt {
+  version: 1;
+  idempotencyKey: string;
+  action: "task_status";
+  status: OfflineMutationReceiptStatus;
+  summary: string;
+  task: {
+    id: string;
+    title: string;
+    status: TaskStatus;
+    updatedAt: string;
+  } | null;
+  current: {
+    status: TaskStatus;
+    updatedAt: string;
+  } | null;
+  mutationReceipt: MutationReceipt | null;
+  receivedAt: string;
+}
+
+export interface OfflineTaskMutationResponse {
+  receipt: OfflineTaskMutationReceipt;
+  replayed: boolean;
+}
 export type TaskPriority = "low" | "medium" | "high" | "critical";
 export type TaskEffort = "light" | "deep" | "marathon";
 export type TaskEnergy = "low" | "steady" | "high";

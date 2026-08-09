@@ -76,6 +76,8 @@ import type {
   Habit,
   ForgeSnapshot,
   Insight,
+  OfflineTaskMutationInput,
+  OfflineTaskMutationResponse,
   OperatorOverviewPayload,
   OperatorContextPayload,
   OperatorLogWorkInput,
@@ -6896,6 +6898,18 @@ export function patchTask(
           ? undefined
           : patch.plannedDurationSeconds
     })
+    }
+  );
+}
+
+export function submitOfflineTaskStatusMutation(
+  input: OfflineTaskMutationInput
+) {
+  return request<OfflineTaskMutationResponse>(
+    "/api/v1/offline-mutations/task-status",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
     }
   );
 }

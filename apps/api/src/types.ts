@@ -15,6 +15,19 @@ export const taskStatusSchema = z.enum([
   "blocked",
   "done"
 ]);
+export const offlineTaskStatusSchema = z.enum([
+  "backlog",
+  "focus",
+  "in_progress",
+  "blocked"
+]);
+export const offlineMutationReceiptStatusSchema = z.enum([
+  "accepted",
+  "conflicted",
+  "rejected"
+]);
+export const OFFLINE_TASK_MUTATION_VERSION = 1 as const;
+export const OFFLINE_MUTATION_IDEMPOTENCY_KEY_MAX_LENGTH = 128;
 export const taskPrioritySchema = z.enum(["low", "medium", "high", "critical"]);
 export const taskEffortSchema = z.enum(["light", "deep", "marathon"]);
 export const taskEnergySchema = z.enum(["low", "steady", "high"]);
@@ -4984,6 +4997,89 @@ export const updateTaskSchema = z.object({
   notes: z.array(nestedCreateNoteSchema).optional()
 });
 
+export const offlineTaskMutationInputSchema = z
+  .object({
+    version: z.literal(OFFLINE_TASK_MUTATION_VERSION),
+    sessionId: z.string().trim().min(1).max(200),
+    idempotencyKey: z
+      .string()
+      .trim()
+      .min(1)
+      .max(OFFLINE_MUTATION_IDEMPOTENCY_KEY_MAX_LENGTH),
+    action: z.literal("task_status"),
+    taskId: z.string().trim().min(1).max(200),
+    expectedUpdatedAt: dateTimeSchema,
+    status: offlineTaskStatusSchema
+  })
+  .strict();
+
+const offlineMutationReceiptSchema = z
+  .object({
+    id: z.string(),
+    operation: z.enum([
+      "entity_update",
+      "entity_soft_delete",
+      "entity_hard_delete",
+      "task_update",
+      "attention_state"
+    ]),
+    targetType: z.string(),
+    targetId: z.string(),
+    targetLabel: z.string(),
+    ownerUserId: z.string().nullable(),
+    summary: z.string(),
+    status: z.enum([
+      "available",
+      "undone",
+      "expired",
+      "conflicted",
+      "not_reversible"
+    ]),
+    reversible: z.boolean(),
+    explanation: z.string(),
+    expiresAt: z.string().nullable(),
+    createdAt: z.string(),
+    undoneAt: z.string().nullable()
+  })
+  .strict();
+
+const offlineMutationTaskSnapshotSchema = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    status: taskStatusSchema,
+    updatedAt: dateTimeSchema
+  })
+  .strict();
+
+const offlineMutationCurrentTaskSchema = z
+  .object({
+    status: taskStatusSchema,
+    updatedAt: dateTimeSchema
+  })
+  .strict();
+
+export const offlineTaskMutationReceiptSchema = z
+  .object({
+    version: z.literal(OFFLINE_TASK_MUTATION_VERSION),
+    idempotencyKey: z.string().min(1).max(128),
+    action: z.literal("task_status"),
+    status: offlineMutationReceiptStatusSchema,
+    summary: z.string(),
+    task: offlineMutationTaskSnapshotSchema.nullable(),
+    current: offlineMutationCurrentTaskSchema.nullable(),
+    mutationReceipt: offlineMutationReceiptSchema.nullable(),
+    receivedAt: dateTimeSchema
+  })
+  .strict();
+
+export const offlineTaskMutationResponseSchema = z
+  .object({
+    receipt: offlineTaskMutationReceiptSchema,
+    replayed: z.boolean()
+  })
+  .strict();
+
 export const lifeForceProfilePatchSchema = z.object({
   baseDailyAp: z.number().int().min(50).max(500).optional(),
   readinessMultiplier: z.number().min(0.5).max(1.5).optional(),
@@ -6143,6 +6239,19 @@ export type TaskRunStatus = z.infer<typeof taskRunStatusSchema>;
 export type TaskTimerMode = z.infer<typeof taskTimerModeSchema>;
 export type TimeAccountingMode = z.infer<typeof timeAccountingModeSchema>;
 export type TaskStatus = z.infer<typeof taskStatusSchema>;
+export type OfflineTaskStatus = z.infer<typeof offlineTaskStatusSchema>;
+export type OfflineMutationReceiptStatus = z.infer<
+  typeof offlineMutationReceiptStatusSchema
+>;
+export type OfflineTaskMutationInput = z.infer<
+  typeof offlineTaskMutationInputSchema
+>;
+export type OfflineTaskMutationReceipt = z.infer<
+  typeof offlineTaskMutationReceiptSchema
+>;
+export type OfflineTaskMutationResponse = z.infer<
+  typeof offlineTaskMutationResponseSchema
+>;
 export type UpdateTagInput = z.infer<typeof updateTagSchema>;
 export type UpdateGoalInput = z.infer<typeof updateGoalSchema>;
 export type UpdateHabitInput = z.infer<typeof updateHabitSchema>;

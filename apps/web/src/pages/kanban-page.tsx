@@ -810,14 +810,7 @@ export function KanbanPage() {
             notesSummaryByEntity={shell.snapshot.dashboard.notesSummaryByEntity}
             selectedTaskId={selectedTaskId}
             onMove={async (taskId, nextStatus) => {
-              if (nextStatus === "done") {
-                await shell.patchTaskStatus(taskId, nextStatus);
-                return;
-              }
-              await updateTaskMutation.mutateAsync({
-                taskId,
-                patch: { status: nextStatus }
-              });
+              await shell.patchTaskStatus(taskId, nextStatus);
             }}
             onMoveProject={async (projectId, nextStatus) => {
               await shell.patchProject(projectId, {
