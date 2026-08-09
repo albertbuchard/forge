@@ -13,6 +13,7 @@ import {
 import { PEOPLE_FIXTURE_OWNER_ID } from "./people-performance-fixture.mjs";
 import { verifyPeopleScalePerformanceFixture } from "./people-performance-scale-fixture.mjs";
 import {
+  isExactPublicForgeHealthIdentity,
   requestJson,
   runCheckedSubprocess,
   startPeoplePerformanceServer
@@ -159,13 +160,13 @@ async function measureRestarts({ repositoryRoot, dataRoot, samples, signal }) {
       const health = await requestJson(
         agent,
         server.origin,
-        "/api/v1/health",
+        "/api/health",
         {},
         signal
       );
-      if (health.status !== 200 || health.body.ok !== true) {
+      if (!isExactPublicForgeHealthIdentity(health)) {
         throw new Error(
-          `People scale restart ${index + 1} health check failed with ${health.status}.`
+          `People scale restart ${index + 1} health identity check failed with ${health.status}: ${JSON.stringify(health.body)}.`
         );
       }
       startupMs.push(server.ready.startupMs);
@@ -187,7 +188,8 @@ async function measureRestarts({ repositoryRoot, dataRoot, samples, signal }) {
     protocol: {
       samples,
       process: "fresh assembled Fastify process per sample",
-      readiness: "server listen plus GET /api/v1/health = 200/status ok",
+      readiness:
+        "server listen plus public GET /api/health = 200 with the Forge credential-required identity",
       shutdown: "IPC graceful close with SIGTERM/SIGKILL fallback"
     },
     summary: summarizeDurations(startupMs),

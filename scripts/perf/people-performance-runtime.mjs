@@ -164,6 +164,7 @@ export async function startPeoplePerformanceServer({
   });
 
   let ready;
+  let operatorSessionCookie = null;
   let onStartupAbort = null;
   const abortReadiness = new Promise((_, reject) => {
     if (!signal) return;
@@ -186,7 +187,23 @@ export async function startPeoplePerformanceServer({
         child.on("message", (message) => {
           if (message?.type === "ready") {
             child.off("exit", onExit);
-            resolve(message);
+            const {
+              operatorSessionCookie: receivedOperatorSessionCookie,
+              ...publicReady
+            } = message;
+            if (
+              typeof receivedOperatorSessionCookie !== "string" ||
+              !receivedOperatorSessionCookie.startsWith("forge_session=")
+            ) {
+              reject(
+                new Error(
+                  "People performance server did not issue its private operator session."
+                )
+              );
+              return;
+            }
+            operatorSessionCookie = receivedOperatorSessionCookie;
+            resolve(publicReady);
           } else if (message?.type === "fatal") {
             child.off("exit", onExit);
             reject(
@@ -258,6 +275,12 @@ export async function startPeoplePerformanceServer({
     origin: `http://127.0.0.1:${resolvedPort}`,
     ready,
     sampleMemory,
+    getOperatorSessionCookie() {
+      if (!operatorSessionCookie) {
+        throw new Error("People performance operator session is unavailable.");
+      }
+      return operatorSessionCookie;
+    },
     stop,
     getOutput: () => ({ stdout, stderr })
   };
@@ -458,6 +481,20 @@ export function requestJson(
   });
 }
 
+export function isExactPublicForgeHealthIdentity(response) {
+  const body = response?.body;
+  return (
+    response?.status === 200 &&
+    body !== null &&
+    typeof body === "object" &&
+    !Array.isArray(body) &&
+    Object.keys(body).sort().join(",") === "app,ok,security" &&
+    body.ok === true &&
+    body.app === "forge" &&
+    body.security === "credential-required"
+  );
+}
+
 async function honorPeopleListRateWindow(timestamps, signal = null) {
   const now = performance.now();
   while (
@@ -645,24 +682,61 @@ export async function runPeopleApiProtocol({
   });
   const listRateTimestamps = [];
   try {
-    const sessionResponse = await requestJson(
+    const publicHealth = await requestJson(
+      agent,
+      server.origin,
+      "/api/health",
+      {},
+      signal
+    );
+    if (!isExactPublicForgeHealthIdentity(publicHealth)) {
+      throw new Error(
+        `Public Forge health identity failed with ${publicHealth.status}: ${JSON.stringify(publicHealth.body)}`
+      );
+    }
+    const anonymousProtectedHealth = await requestJson(
+      agent,
+      server.origin,
+      "/api/v1/health",
+      {},
+      signal
+    );
+    if (anonymousProtectedHealth.status !== 401) {
+      throw new Error(
+        `Protected Forge health admitted an anonymous request with ${anonymousProtectedHealth.status}.`
+      );
+    }
+    const anonymousOperatorSession = await requestJson(
       agent,
       server.origin,
       "/api/v1/auth/operator-session",
       {},
       signal
     );
-    if (sessionResponse.status !== 200) {
+    if (anonymousOperatorSession.status !== 401) {
       throw new Error(
-        `Operator session bootstrap returned ${sessionResponse.status}: ${JSON.stringify(sessionResponse.body)}`
+        `Forge operator session admitted an anonymous request with ${anonymousOperatorSession.status}.`
       );
     }
-    const setCookie = sessionResponse.headers["set-cookie"];
-    const cookieHeader = Array.isArray(setCookie) ? setCookie[0] : setCookie;
-    const cookie = cookieHeader?.split(";", 1)[0];
-    if (!cookie) {
+    const cookie = server.getOperatorSessionCookie();
+    const sessionResponse = await requestJson(
+      agent,
+      server.origin,
+      "/api/v1/auth/operator-session",
+      { cookie },
+      signal
+    );
+    if (sessionResponse.status !== 200) {
       throw new Error(
-        "Operator session bootstrap did not set a session cookie."
+        `Private operator session verification returned ${sessionResponse.status}: ${JSON.stringify(sessionResponse.body)}`
+      );
+    }
+    if (
+      sessionResponse.body.session?.principalKind !== "operator_session" ||
+      sessionResponse.body.session?.localOwner !== true
+    ) {
+      throw new Error(
+        "Private operator session verification returned the wrong authority."
       );
     }
     const list = await runApiScenario({
@@ -786,6 +860,12 @@ export async function runPeopleApiProtocol({
     return {
       status: allChecksPass(checks) ? "pass" : "fail",
       serverStartupMs: server.ready.startupMs,
+      accessContract: {
+        publicHealthStatus: publicHealth.status,
+        anonymousProtectedHealthStatus: anonymousProtectedHealth.status,
+        anonymousOperatorSessionStatus: anonymousOperatorSession.status,
+        authenticatedOperatorSessionStatus: sessionResponse.status
+      },
       scenarios: { list, search, context },
       cursorTraversal,
       checks

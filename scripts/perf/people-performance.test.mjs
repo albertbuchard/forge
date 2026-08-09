@@ -54,6 +54,8 @@ import {
 import { runPeopleScalePerformanceProtocol } from "./people-performance-scale.mjs";
 import {
   initializeIsolatedForgeDatabase,
+  isExactPublicForgeHealthIdentity,
+  runPeopleApiProtocol,
   runCheckedSubprocess
 } from "./people-performance-runtime.mjs";
 
@@ -62,6 +64,25 @@ const repositoryRoot = path.resolve(
   "..",
   ".."
 );
+
+test("public Forge health identity is exact and data-free", () => {
+  const exact = {
+    status: 200,
+    body: { ok: true, app: "forge", security: "credential-required" }
+  };
+  assert.equal(isExactPublicForgeHealthIdentity(exact), true);
+  assert.equal(
+    isExactPublicForgeHealthIdentity({
+      ...exact,
+      body: { ...exact.body, storageRoot: "/private/runtime" }
+    }),
+    false
+  );
+  assert.equal(
+    isExactPublicForgeHealthIdentity({ ...exact, status: 401 }),
+    false
+  );
+});
 
 test("nearest-rank summaries use the requested finite sample population", () => {
   const values = Array.from({ length: 20 }, (_, index) => index + 1);
@@ -791,4 +812,17 @@ test("small scale fixtures exercise production claims, restarts, plans, and inte
     (TEST_PROFILE.scale.claimWarmups + TEST_PROFILE.scale.claimSamples) *
       TEST_PROFILE.scale.claimBatchSize
   );
+  const apiProtocol = await runPeopleApiProtocol({
+    repositoryRoot,
+    dataRoot,
+    profile: TEST_PROFILE,
+    budgets: await loadBudgets(null)
+  });
+  assert.equal(apiProtocol.status, "pass");
+  assert.deepEqual(apiProtocol.accessContract, {
+    publicHealthStatus: 200,
+    anonymousProtectedHealthStatus: 401,
+    anonymousOperatorSessionStatus: 401,
+    authenticatedOperatorSessionStatus: 200
+  });
 });

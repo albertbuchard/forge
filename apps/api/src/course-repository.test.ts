@@ -172,6 +172,127 @@ function passLessonCheckpointsBefore(
   assert.ok(updated.flow.submittableActivityIds.includes(targetActivityId));
 }
 
+test("repairs built-in release identity and content without weakening immutable hashes", async () => {
+  const dataRoot = await mkdtemp(
+    path.join(os.tmpdir(), "forge-course-release-integrity-test-")
+  );
+  configureDatabase({ dataRoot });
+  configureLegacyWikiAutoImport(false);
+  try {
+    await initializeDatabase();
+    ensureSystemUsers();
+    ensureBuiltInCourses();
+    const database = getDatabase();
+    const courseId = "course.polynomials-etale-triple-covers";
+    const version = "3.1.0";
+    const canonical = database
+      .prepare(
+        `SELECT content_hash, definition_json, definition_sha256
+         FROM courses WHERE id = ?`
+      )
+      .get(courseId) as {
+      content_hash: string;
+      definition_json: string;
+      definition_sha256: string;
+    };
+    database
+      .prepare(
+        "DELETE FROM course_releases WHERE course_id = ? AND version = ?"
+      )
+      .run(courseId, version);
+    ensureBuiltInCourses();
+    const restoredRelease = database
+      .prepare(
+        `SELECT content_hash, definition_json, definition_sha256, published_at
+         FROM course_releases
+         WHERE course_id = ? AND version = ?`
+      )
+      .get(courseId, version) as {
+      content_hash: string;
+      definition_json: string;
+      definition_sha256: string;
+      published_at: string;
+    };
+    assert.equal(restoredRelease.content_hash, canonical.content_hash);
+    assert.equal(restoredRelease.definition_json, canonical.definition_json);
+    assert.equal(
+      restoredRelease.definition_sha256,
+      canonical.definition_sha256
+    );
+
+    database
+      .prepare(
+        `UPDATE course_releases SET definition_json = '{}'
+         WHERE course_id = ? AND version = ?`
+      )
+      .run(courseId, version);
+    assert.equal(
+      (
+        database
+          .prepare(
+            `SELECT definition_sha256 FROM course_releases
+             WHERE course_id = ? AND version = ?`
+          )
+          .get(courseId, version) as { definition_sha256: string | null }
+      ).definition_sha256,
+      null
+    );
+    ensureBuiltInCourses();
+    const repairedRelease = database
+      .prepare(
+        `SELECT content_hash, definition_json, definition_sha256, published_at
+         FROM course_releases
+         WHERE course_id = ? AND version = ?`
+      )
+      .get(courseId, version) as {
+      content_hash: string;
+      definition_json: string;
+      definition_sha256: string;
+      published_at: string;
+    };
+    assert.equal(repairedRelease.content_hash, canonical.content_hash);
+    assert.equal(repairedRelease.definition_json, canonical.definition_json);
+    assert.equal(
+      repairedRelease.definition_sha256,
+      canonical.definition_sha256
+    );
+    assert.equal(repairedRelease.published_at, restoredRelease.published_at);
+
+    database
+      .prepare("UPDATE courses SET definition_json = '{}' WHERE id = ?")
+      .run(courseId);
+    ensureBuiltInCourses();
+    const repairedCourse = database
+      .prepare(
+        `SELECT definition_json, definition_sha256
+         FROM courses WHERE id = ?`
+      )
+      .get(courseId) as {
+      definition_json: string;
+      definition_sha256: string;
+    };
+    assert.equal(repairedCourse.definition_json, canonical.definition_json);
+    assert.equal(repairedCourse.definition_sha256, canonical.definition_sha256);
+
+    database
+      .prepare(
+        `UPDATE course_releases SET content_hash = ?
+         WHERE course_id = ? AND version = ?`
+      )
+      .run("0".repeat(64), courseId, version);
+    assert.throws(
+      () => ensureBuiltInCourses(),
+      (error: unknown) =>
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "course_release_version_immutable"
+    );
+  } finally {
+    closeDatabase();
+    await rm(dataRoot, { recursive: true, force: true });
+  }
+});
+
 test("imports a modular course and carries proof evidence into concept mastery", async () => {
   const dataRoot = await mkdtemp(path.join(os.tmpdir(), "forge-course-test-"));
   configureDatabase({ dataRoot });
@@ -1179,6 +1300,73 @@ test("upgrades a Course C 1.8 enrollment to 1.9 without losing assessed work", a
         (candidate) => candidate.activityId === activity.id
       )?.feedback?.verdict,
       "pass"
+    );
+
+    const database = getDatabase();
+    database
+      .prepare(
+        `UPDATE course_enrollments SET course_version = '1.8.0'
+         WHERE course_id = ? AND user_id = ?`
+      )
+      .run(courseId, userId);
+    assert.equal(
+      getCourseDetail(courseId, userId).release.enrolledVersion,
+      "1.8.0"
+    );
+    const historical = database
+      .prepare(
+        `SELECT definition_json, definition_sha256
+         FROM course_releases
+         WHERE course_id = ? AND version = '1.8.0'`
+      )
+      .get(courseId) as {
+      definition_json: string;
+      definition_sha256: string;
+    };
+    assert.equal(
+      createHash("sha256").update(historical.definition_json).digest("hex"),
+      historical.definition_sha256
+    );
+    const schemaValidMutation = JSON.parse(historical.definition_json) as {
+      course: { title: string };
+    };
+    schemaValidMutation.course.title = "Mutated historical release";
+    database
+      .prepare(
+        `UPDATE course_releases SET definition_json = ?
+         WHERE course_id = ? AND version = '1.8.0'`
+      )
+      .run(JSON.stringify(schemaValidMutation), courseId);
+    assert.throws(
+      () => getCourseDetail(courseId, userId),
+      (error: unknown) =>
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "course_release_definition_integrity_failed"
+    );
+    closeDatabase();
+
+    await initializeDatabase();
+    ensureSystemUsers();
+    assert.throws(
+      () => getCourseDetail(courseId, userId),
+      (error: unknown) =>
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "course_release_definition_integrity_failed"
+    );
+    getDatabase()
+      .prepare(
+        `UPDATE course_releases SET definition_sha256 = ?
+         WHERE course_id = ? AND version = '1.8.0'`
+      )
+      .run("0".repeat(64), courseId);
+    assert.throws(
+      () => getCourseDetail(courseId, userId),
+      (error: unknown) =>
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "course_release_definition_integrity_failed"
     );
   } finally {
     closeDatabase();

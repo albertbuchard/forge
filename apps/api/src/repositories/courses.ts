@@ -62,6 +62,7 @@ type CourseRow = {
   source_url: string | null;
   content_hash: string;
   definition_json: string;
+  definition_sha256: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -111,11 +112,38 @@ function packageContentHash(coursePackage: ForgeCoursePackage) {
     .digest("hex");
 }
 
+function definitionSha256(definitionJson: string) {
+  return createHash("sha256").update(definitionJson).digest("hex");
+}
+
+function hasValidDefinitionIdentity(row: {
+  definition_json: string;
+  definition_sha256: string | null;
+}) {
+  return (
+    row.definition_sha256 !== null &&
+    definitionSha256(row.definition_json) === row.definition_sha256
+  );
+}
+
+function requireDefinitionIntegrity(
+  row: { definition_json: string; definition_sha256: string | null },
+  releaseLabel: string
+) {
+  if (hasValidDefinitionIdentity(row)) return;
+  throw new HttpError(
+    409,
+    "course_release_definition_integrity_failed",
+    `The stored definition for ${releaseLabel} did not pass its SHA-256 integrity check. Restore or reinstall that release before using it.`
+  );
+}
+
 function conceptContentHash(concept: CourseConcept) {
   return createHash("sha256").update(stableJson(concept)).digest("hex");
 }
 
 function parseCoursePackage(row: CourseRow) {
+  requireDefinitionIntegrity(row, `course release ${row.version}`);
   return defineCoursePackage(
     forgeCoursePackageSchema.parse(parseJson<unknown>(row.definition_json, {}))
   );
@@ -145,12 +173,12 @@ function coursePackageByVersion(
   if (courseVersion === courseRow.version) return parseCoursePackage(courseRow);
   const release = getDatabase()
     .prepare(
-      `SELECT definition_json
+      `SELECT definition_json, definition_sha256
        FROM course_releases
        WHERE course_id = ? AND version = ?`
     )
     .get(courseRow.id, courseVersion) as
-    | { definition_json: string }
+    | { definition_json: string; definition_sha256: string | null }
     | undefined;
   if (!release) {
     throw new HttpError(
@@ -159,6 +187,7 @@ function coursePackageByVersion(
       `The enrolled course release ${courseVersion} is unavailable.`
     );
   }
+  requireDefinitionIntegrity(release, `course release ${courseVersion}`);
   return defineCoursePackage(
     forgeCoursePackageSchema.parse(
       parseJson<unknown>(release.definition_json, {})
@@ -456,16 +485,13 @@ function latestLessonAttempts(
         ...carriedActivityIds,
         userId,
         activity.id
-      ) as
-      | (JsonRecord & { feedback_json?: string | null })
-      | undefined;
+      ) as (JsonRecord & { feedback_json?: string | null }) | undefined;
     return attempt
       ? {
           id: String(attempt.id),
           activityId: String(attempt.activity_id),
           status: String(attempt.status),
-          score:
-            typeof attempt.score === "number" ? attempt.score : null,
+          score: typeof attempt.score === "number" ? attempt.score : null,
           grade: typeof attempt.grade === "string" ? attempt.grade : null,
           pointsAwarded:
             typeof attempt.points_awarded === "number"
@@ -473,8 +499,7 @@ function latestLessonAttempts(
               : 0,
           answerMarkdown: String(attempt.answer_markdown),
           submittedAt: String(attempt.submitted_at),
-          deliveryMode:
-            attempt.delivery_mode === "voice" ? "voice" : "visual",
+          deliveryMode: attempt.delivery_mode === "voice" ? "voice" : "visual",
           lessonAttemptOrdinal: Number(attempt.lesson_attempt_ordinal),
           activityAttemptOrdinal: Number(attempt.activity_attempt_ordinal),
           feedback: attempt.feedback_json
@@ -529,8 +554,7 @@ function learnerLessonFrontier(
       ? attemptByActivityId.get(block.remediationActivityId)
       : null;
     const passed =
-      attempt?.status === "assessed" &&
-      attempt.feedback?.verdict === "pass";
+      attempt?.status === "assessed" && attempt.feedback?.verdict === "pass";
     const remediationPassed =
       remediationAttempt?.status === "assessed" &&
       remediationAttempt.feedback?.verdict === "pass";
@@ -610,14 +634,35 @@ export function importCoursePackage(input: unknown) {
         ...parsedPackage,
         provenance: { ...parsedPackage.provenance, contentHash: computedHash }
       });
+  const courseDefinitionJson = JSON.stringify(coursePackage);
+  const courseDefinitionSha256 = definitionSha256(courseDefinitionJson);
   const database = getDatabase();
   const now = nowIso();
   const existingCourse = database
     .prepare("SELECT * FROM courses WHERE id = ?")
     .get(coursePackage.course.id) as CourseRow | undefined;
-  const existingCoursePackage = existingCourse
-    ? parseCoursePackage(existingCourse)
-    : null;
+  const existingCourseDefinitionIsValid = existingCourse
+    ? hasValidDefinitionIdentity(existingCourse)
+    : false;
+  const repairingExactCurrentRelease = Boolean(
+    existingCourse &&
+    existingCourse.version === coursePackage.course.version &&
+    existingCourse.content_hash === computedHash
+  );
+  if (
+    existingCourse &&
+    !existingCourseDefinitionIsValid &&
+    !repairingExactCurrentRelease
+  ) {
+    requireDefinitionIntegrity(
+      existingCourse,
+      `course release ${existingCourse.version}`
+    );
+  }
+  const existingCoursePackage =
+    existingCourseDefinitionIsValid && existingCourse
+      ? parseCoursePackage(existingCourse)
+      : null;
   const conceptUpgradeById = new Map(
     (coursePackage.conceptUpgrades ?? []).map((upgrade) => [
       upgrade.conceptId,
@@ -808,14 +853,16 @@ export function importCoursePackage(input: unknown) {
       database
         .prepare(
           `INSERT OR IGNORE INTO course_releases (
-             course_id, version, content_hash, definition_json, published_at
-           ) VALUES (?, ?, ?, ?, ?)`
+             course_id, version, content_hash, definition_json,
+             definition_sha256, published_at
+           ) VALUES (?, ?, ?, ?, ?, ?)`
         )
         .run(
           existingCourse.id,
           existingCourse.version,
           existingCourse.content_hash,
           existingCourse.definition_json,
+          definitionSha256(existingCourse.definition_json),
           existingCourse.created_at
         );
     }
@@ -825,8 +872,9 @@ export function importCoursePackage(input: unknown) {
           id, slug, version, schema_version, title, subtitle, description,
           language, authors_json, license, estimated_weeks, minutes_per_week,
           tags_json, entry_lesson_id, featured_lesson_id, source_url,
-          content_hash, definition_json, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          content_hash, definition_json, definition_sha256, created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           slug = excluded.slug,
           version = excluded.version,
@@ -845,6 +893,7 @@ export function importCoursePackage(input: unknown) {
           source_url = excluded.source_url,
           content_hash = excluded.content_hash,
           definition_json = excluded.definition_json,
+          definition_sha256 = excluded.definition_sha256,
           updated_at = excluded.updated_at`
       )
       .run(
@@ -865,22 +914,43 @@ export function importCoursePackage(input: unknown) {
         coursePackage.course.featuredLessonId ?? null,
         coursePackage.course.sourceUrl ?? null,
         computedHash,
-        JSON.stringify(coursePackage),
+        courseDefinitionJson,
+        courseDefinitionSha256,
         now,
         now
       );
     database
+      .prepare("UPDATE courses SET definition_sha256 = ? WHERE id = ?")
+      .run(courseDefinitionSha256, coursePackage.course.id);
+    database
       .prepare(
-        `INSERT OR IGNORE INTO course_releases (
-           course_id, version, content_hash, definition_json, published_at
-         ) VALUES (?, ?, ?, ?, ?)`
+        `INSERT INTO course_releases (
+           course_id, version, content_hash, definition_json,
+           definition_sha256, published_at
+         ) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(course_id, version) DO UPDATE SET
+           definition_json = excluded.definition_json,
+           definition_sha256 = excluded.definition_sha256
+         WHERE course_releases.content_hash = excluded.content_hash`
       )
       .run(
         coursePackage.course.id,
         coursePackage.course.version,
         computedHash,
-        JSON.stringify(coursePackage),
+        courseDefinitionJson,
+        courseDefinitionSha256,
         now
+      );
+    database
+      .prepare(
+        `UPDATE course_releases SET definition_sha256 = ?
+         WHERE course_id = ? AND version = ? AND content_hash = ?`
+      )
+      .run(
+        courseDefinitionSha256,
+        coursePackage.course.id,
+        coursePackage.course.version,
+        computedHash
       );
 
     const upsertConcept = database.prepare(
@@ -1028,27 +1098,249 @@ export function exportCoursePackage(courseId: string) {
   return coursePackage;
 }
 
+type BuiltInCourseManifestEntry = {
+  file: string;
+  courseId: string;
+  version: string;
+  conceptCount: number;
+  moduleCount: number;
+  lessonCount: number;
+  installedStateSha256: string;
+  contentHash: string;
+  fileSha256: string;
+};
+
+function readBuiltInCourseManifest(catalogDir: string) {
+  const manifestPath = path.join(catalogDir, "catalog-manifest.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+    schemaVersion?: unknown;
+    courses?: unknown;
+  };
+  if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.courses)) {
+    throw new Error("The built-in course catalog manifest is invalid.");
+  }
+  const entries = manifest.courses.map((candidate, index) => {
+    if (!candidate || typeof candidate !== "object") {
+      throw new Error(`Built-in course catalog entry ${index + 1} is invalid.`);
+    }
+    const entry = candidate as Record<string, unknown>;
+    const parsed = {
+      file: entry.file,
+      courseId: entry.courseId,
+      version: entry.version,
+      conceptCount: entry.conceptCount,
+      moduleCount: entry.moduleCount,
+      lessonCount: entry.lessonCount,
+      installedStateSha256: entry.installedStateSha256,
+      contentHash: entry.contentHash,
+      fileSha256: entry.fileSha256
+    };
+    if (
+      typeof parsed.file !== "string" ||
+      !parsed.file.endsWith(".forge-course.json") ||
+      path.basename(parsed.file) !== parsed.file ||
+      typeof parsed.courseId !== "string" ||
+      parsed.courseId.length === 0 ||
+      typeof parsed.version !== "string" ||
+      parsed.version.length === 0 ||
+      !Number.isSafeInteger(parsed.conceptCount) ||
+      Number(parsed.conceptCount) < 0 ||
+      !Number.isSafeInteger(parsed.moduleCount) ||
+      Number(parsed.moduleCount) < 1 ||
+      !Number.isSafeInteger(parsed.lessonCount) ||
+      Number(parsed.lessonCount) < 1 ||
+      typeof parsed.installedStateSha256 !== "string" ||
+      !/^[0-9a-f]{64}$/u.test(parsed.installedStateSha256) ||
+      typeof parsed.contentHash !== "string" ||
+      !/^[0-9a-f]{64}$/u.test(parsed.contentHash) ||
+      typeof parsed.fileSha256 !== "string" ||
+      !/^[0-9a-f]{64}$/u.test(parsed.fileSha256)
+    ) {
+      throw new Error(`Built-in course catalog entry ${index + 1} is invalid.`);
+    }
+    return parsed as BuiltInCourseManifestEntry;
+  });
+  if (
+    new Set(entries.map((entry) => entry.file)).size !== entries.length ||
+    new Set(entries.map((entry) => entry.courseId)).size !== entries.length
+  ) {
+    throw new Error("The built-in course catalog manifest has duplicates.");
+  }
+  const catalogFiles = readdirSync(catalogDir)
+    .filter((file) => file.endsWith(".forge-course.json"))
+    .sort();
+  const manifestFiles = entries.map((entry) => entry.file).sort();
+  if (catalogFiles.join("\n") !== manifestFiles.join("\n")) {
+    throw new Error(
+      "The built-in course catalog files do not match the manifest."
+    );
+  }
+  for (const entry of entries) {
+    const fileSha256 = createHash("sha256")
+      .update(readFileSync(path.join(catalogDir, entry.file)))
+      .digest("hex");
+    if (fileSha256 !== entry.fileSha256) {
+      throw new Error(
+        `Built-in course ${entry.file} does not match its manifest SHA-256.`
+      );
+    }
+  }
+  return entries;
+}
+
+function updateCourseStateDigest(
+  digest: ReturnType<typeof createHash>,
+  label: string,
+  rows: Iterable<Record<string, unknown>>
+) {
+  digest.update(`${label}\n`);
+  for (const row of rows) {
+    for (const [key, value] of Object.entries(row).sort(([left], [right]) =>
+      left < right ? -1 : left > right ? 1 : 0
+    )) {
+      const valueType = value === null ? "null" : typeof value;
+      if (
+        value !== null &&
+        typeof value !== "string" &&
+        typeof value !== "number"
+      ) {
+        throw new Error(
+          `Built-in course state contains unsupported ${valueType} data.`
+        );
+      }
+      const encodedValue = value === null ? "" : String(value);
+      digest.update(`${Buffer.byteLength(key)}:`);
+      digest.update(key);
+      digest.update(`${valueType}:${Buffer.byteLength(encodedValue)}:`);
+      digest.update(encodedValue);
+    }
+    digest.update("\n");
+  }
+}
+
+export function builtInCourseStateSha256(courseId: string) {
+  const database = getDatabase();
+  const course = database
+    .prepare(
+      `SELECT id, slug, version, schema_version, title, subtitle, description,
+              language, authors_json, license, estimated_weeks,
+              minutes_per_week, tags_json, entry_lesson_id,
+              featured_lesson_id, source_url, content_hash,
+              definition_sha256
+       FROM courses WHERE id = ?`
+    )
+    .get(courseId) as Record<string, unknown> | undefined;
+  if (!course) return null;
+  const digest = createHash("sha256");
+  updateCourseStateDigest(digest, "course", [course]);
+  const release = database
+    .prepare(
+      `SELECT course_id, version, content_hash, definition_sha256
+       FROM course_releases
+       WHERE course_id = ? AND version = ?`
+    )
+    .get(courseId, String(course.version)) as
+    | Record<string, unknown>
+    | undefined;
+  updateCourseStateDigest(digest, "release", release ? [release] : []);
+  updateCourseStateDigest(
+    digest,
+    "concepts",
+    database
+      .prepare(
+        `SELECT cc.concept_id, cc.order_index, cc.status, cc.delivery_owner,
+                c.slug, c.title, c.summary, c.definition_markdown,
+                c.example_markdown, c.non_example_markdown,
+                c.prerequisite_ids_json, c.related_ids_json,
+                c.content_hash, c.tags_json
+         FROM course_concepts cc
+         JOIN concepts c ON c.id = cc.concept_id
+         WHERE cc.course_id = ?
+         ORDER BY cc.order_index, cc.concept_id`
+      )
+      .iterate(courseId) as Iterable<Record<string, unknown>>
+  );
+  updateCourseStateDigest(
+    digest,
+    "modules",
+    database
+      .prepare(
+        `SELECT id, title, description, order_index, start_week, end_week,
+                definition_json
+         FROM course_modules WHERE course_id = ?
+         ORDER BY order_index, id`
+      )
+      .iterate(courseId) as Iterable<Record<string, unknown>>
+  );
+  updateCourseStateDigest(
+    digest,
+    "lessons",
+    database
+      .prepare(
+        `SELECT id, module_id, week, day, order_index, title, summary,
+                estimated_minutes, definition_json
+         FROM course_lessons WHERE course_id = ?
+         ORDER BY order_index, id`
+      )
+      .iterate(courseId) as Iterable<Record<string, unknown>>
+  );
+  return digest.digest("hex");
+}
+
 export function ensureBuiltInCourses() {
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));
   const catalogDir = path.resolve(moduleDir, "..", "course-catalog");
   if (!existsSync(catalogDir)) return [];
-  const packages = readdirSync(catalogDir)
-    .filter((file) => file.endsWith(".forge-course.json"))
-    .sort()
-    .map((file) => {
-      const parsed = forgeCoursePackageSchema.parse(JSON.parse(
-        readFileSync(path.join(catalogDir, file), "utf8")
-      ));
-      return parsed;
-    })
-    .sort(
-      (left, right) =>
-        left.conceptRefs.length - right.conceptRefs.length ||
-        left.course.id.localeCompare(right.course.id)
+  const entries = readBuiltInCourseManifest(catalogDir);
+  const database = getDatabase();
+  const catalogIsCurrent = entries.every((entry) => {
+    const installed = database
+      .prepare(
+        `SELECT version, content_hash,
+                (SELECT COUNT(*) FROM course_concepts
+                 WHERE course_id = courses.id) AS concept_count,
+                (SELECT COUNT(*) FROM course_modules
+                 WHERE course_id = courses.id) AS module_count,
+                (SELECT COUNT(*) FROM course_lessons
+                 WHERE course_id = courses.id) AS lesson_count
+         FROM courses WHERE id = ?`
+      )
+      .get(entry.courseId) as
+      | {
+          version: string;
+          content_hash: string;
+          concept_count: number;
+          module_count: number;
+          lesson_count: number;
+        }
+      | undefined;
+    return (
+      installed?.version === entry.version &&
+      installed.content_hash === entry.contentHash &&
+      installed.concept_count === entry.conceptCount &&
+      installed.module_count === entry.moduleCount &&
+      installed.lesson_count === entry.lessonCount &&
+      builtInCourseStateSha256(entry.courseId) === entry.installedStateSha256
     );
-  return packages.map((coursePackage) =>
-    importCoursePackage(coursePackage).course
-  );
+  });
+  if (catalogIsCurrent) {
+    return entries.map((entry) => toCourse(requireCourseRow(entry.courseId)));
+  }
+  return entries.map((entry) => {
+    const coursePackage = forgeCoursePackageSchema.parse(
+      JSON.parse(readFileSync(path.join(catalogDir, entry.file), "utf8"))
+    );
+    if (
+      coursePackage.course.id !== entry.courseId ||
+      coursePackage.course.version !== entry.version ||
+      coursePackage.provenance.contentHash !== entry.contentHash
+    ) {
+      throw new Error(
+        `Built-in course ${entry.file} does not match its catalog identity.`
+      );
+    }
+    return importCoursePackage(coursePackage).course;
+  });
 }
 
 export function listCourses(userId: string) {
@@ -2241,10 +2533,7 @@ export function getCourseAttemptResult(attemptId: string, userId: string) {
     throw new HttpError(404, "course_attempt_not_found", "Attempt not found.");
   }
   const courseRow = requireCourseRow(row.course_id);
-  const coursePackage = coursePackageByVersion(
-    courseRow,
-    row.course_version
-  );
+  const coursePackage = coursePackageByVersion(courseRow, row.course_version);
   const access = lessonAccessState(coursePackage, row.course_id, userId);
   const lessonIndex = coursePackage.lessons.findIndex(
     (lesson) => lesson.id === row.lesson_id

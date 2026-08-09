@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "courses": [
+    {
+      "file": "from-polynomials-to-etale-triple-covers.forge-course.json",
+      "courseId": "course.polynomials-etale-triple-covers",
+      "version": "3.1.0",
+      "conceptCount": 97,
+      "moduleCount": 7,
+      "lessonCount": 330,
+      "installedStateSha256": "4de3b07c8ec6371d2431270149388d2ae29b8255effdebf32cbae1e3c4afd05b",
+      "contentHash": "a5c9b61b293eb7d30dcf1401ca22591a4587de413e32e8428c148a602e12c112",
+      "fileSha256": "6a911deb03cda4c9c8f80a9f8c2ad4ca29cce9cc6ee1fd890fded10e9ec5e3e8"
+    },
+    {
+      "file": "cpge-mathematics-and-concours-fluency.forge-course.json",
+      "courseId": "course.cpge-mathematics-concours-fluency",
+      "version": "1.9.0",
+      "conceptCount": 181,
+      "moduleCount": 9,
+      "lessonCount": 330,
+      "installedStateSha256": "73831e4734b48e15e8253ad450e6eac6274501dd68898f72e5c0e0607b35f9fa",
+      "contentHash": "bb6a5d1b289a35221d744c847c724c1894a53280fa704844930596926a53e526",
+      "fileSha256": "65ba2bd4e6dff50bb84c046e198f5644a99d5b2b1aab8b94393964a680118633"
+    }
+  ]
+}

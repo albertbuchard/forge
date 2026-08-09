@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readdir, readFile } from "node:fs/promises";
 import os from "node:os";
@@ -26,6 +27,8 @@ const PEOPLE_LEGACY_SCHEMA_REPAIR_MIGRATION =
   "104_people_legacy_schema_repair.sql";
 const SECURITY_PAIRING_METADATA_COMPATIBILITY_MIGRATION =
   "120_security_pairing_metadata_compatibility.sql";
+const COURSE_DEFINITION_INTEGRITY_MIGRATION =
+  "121_course_definition_integrity.sql";
 
 const PEOPLE_HARDENING_COLUMNS = [
   {
@@ -160,6 +163,57 @@ function backfillLegacyPairingClientMetadata(database: DatabaseSync) {
     SELECT id, client_type
     FROM security_pairing_requests
   `);
+}
+
+function backfillCourseDefinitionIntegrity(database: DatabaseSync) {
+  const courseIds = database
+    .prepare(
+      `SELECT id FROM courses
+       WHERE definition_sha256 IS NULL
+       ORDER BY id`
+    )
+    .all() as Array<{ id: string }>;
+  const readCourse = database.prepare(
+    "SELECT definition_json FROM courses WHERE id = ?"
+  );
+  const updateCourse = database.prepare(
+    "UPDATE courses SET definition_sha256 = ? WHERE id = ?"
+  );
+  for (const { id } of courseIds) {
+    const row = readCourse.get(id) as { definition_json: string } | undefined;
+    if (!row) continue;
+    updateCourse.run(
+      createHash("sha256").update(row.definition_json).digest("hex"),
+      id
+    );
+  }
+
+  const releaseIds = database
+    .prepare(
+      `SELECT course_id, version FROM course_releases
+       WHERE definition_sha256 IS NULL
+       ORDER BY course_id, version`
+    )
+    .all() as Array<{ course_id: string; version: string }>;
+  const readRelease = database.prepare(
+    `SELECT definition_json FROM course_releases
+     WHERE course_id = ? AND version = ?`
+  );
+  const updateRelease = database.prepare(
+    `UPDATE course_releases SET definition_sha256 = ?
+     WHERE course_id = ? AND version = ?`
+  );
+  for (const { course_id: courseId, version } of releaseIds) {
+    const row = readRelease.get(courseId, version) as
+      | { definition_json: string }
+      | undefined;
+    if (!row) continue;
+    updateRelease.run(
+      createHash("sha256").update(row.definition_json).digest("hex"),
+      courseId,
+      version
+    );
+  }
 }
 
 function findSourceProjectRoot(startDir: string): string | null {
@@ -701,6 +755,9 @@ export async function initializeDatabase(): Promise<void> {
       database.exec(sql);
       if (file === SECURITY_PAIRING_METADATA_COMPATIBILITY_MIGRATION) {
         backfillLegacyPairingClientMetadata(database);
+      }
+      if (file === COURSE_DEFINITION_INTEGRITY_MIGRATION) {
+        backfillCourseDefinitionIntegrity(database);
       }
       database
         .prepare("INSERT INTO migrations (id, applied_at) VALUES (?, ?)")

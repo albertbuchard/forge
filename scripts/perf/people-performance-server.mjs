@@ -15,12 +15,41 @@ async function main() {
     import("../../apps/api/src/app.ts"),
     import("../../apps/api/src/db.ts")
   ]);
+  let securityRuntime = null;
   const app = await buildServer({
     dataRoot,
     taskRunWatchdog: false,
     devrageMetricSync: false,
-    peerRuntime: false
+    peerRuntime: false,
+    onSecurityRuntimeReady(runtime) {
+      securityRuntime = runtime;
+    }
   });
+  if (!securityRuntime) {
+    throw new Error("People performance security runtime is unavailable.");
+  }
+  const ownerEpoch =
+    securityRuntime.store.readOwnerSecurityEpoch("user_operator");
+  if (!ownerEpoch) {
+    throw new Error("People performance owner security state is unavailable.");
+  }
+  const operatorSession = securityRuntime.browserSessions.create(
+    {
+      kind: "operator_session",
+      subjectId: "user_operator",
+      ownerId: "user_operator",
+      clientId: null,
+      installationId: null,
+      audience: securityRuntime.audience,
+      scopes: ["*"],
+      profile: "operator",
+      ownerSecurityEpoch: ownerEpoch,
+      clientSecurityEpoch: null,
+      authenticatedAt: new Date().toISOString()
+    },
+    { processBound: true }
+  );
+  const operatorSessionCookie = `forge_session=${encodeURIComponent(operatorSession.sessionToken)}`;
   let closing = false;
   const close = async () => {
     if (closing) return;
@@ -78,7 +107,8 @@ async function main() {
     type: "ready",
     pid: process.pid,
     port,
-    startupMs: performance.now() - startedAt
+    startupMs: performance.now() - startedAt,
+    operatorSessionCookie
   });
 }
 
