@@ -36,6 +36,48 @@ function toTimeZoneDateKey(date: Date, timeZone: string): string {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
+function toTimeZoneDateStartIso(dateKey: string, timeZone: string): string {
+  const target = new Date(`${dateKey}T00:00:00.000Z`).getTime();
+  let candidate = target;
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  });
+
+  for (let iteration = 0; iteration < 4; iteration += 1) {
+    const parts = Object.fromEntries(
+      formatter
+        .formatToParts(new Date(candidate))
+        .map((part) => [part.type, part.value])
+    );
+    const observedAsUtc = Date.UTC(
+      Number(parts.year),
+      Number(parts.month) - 1,
+      Number(parts.day),
+      Number(parts.hour),
+      Number(parts.minute),
+      Number(parts.second)
+    );
+    const adjustment = target - observedAsUtc;
+    candidate += adjustment;
+    if (adjustment === 0) {
+      break;
+    }
+  }
+
+  const result = new Date(candidate);
+  if (toTimeZoneDateKey(result, timeZone) !== dateKey) {
+    throw new Error(`Unable to resolve ${dateKey} in ${timeZone}`);
+  }
+  return result.toISOString();
+}
+
 function addDateKeyDays(dateKey: string, days: number): string {
   const date = new Date(`${dateKey}T12:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);
@@ -102,22 +144,31 @@ export function getWeeklyReviewPayload(
   const range = getWeeklyReviewDateRange(now, timeZone);
   const weekKey = range.weekStartDate;
   const closure = getWeeklyReviewClosure(weekKey);
-  const weekTasks = tasks.filter((task) => {
-    const updatedDateKey = toTimeZoneDateKey(
-      new Date(task.updatedAt),
+  const completedTasks = tasks.filter((task) => {
+    if (task.completedAt === null) {
+      return false;
+    }
+    const completedDateKey = toTimeZoneDateKey(
+      new Date(task.completedAt),
       range.timeZone
     );
     return (
-      updatedDateKey >= range.weekStartDate &&
-      updatedDateKey <= range.weekEndDate
+      completedDateKey >= range.weekStartDate &&
+      completedDateKey <= range.weekEndDate
     );
   });
-  const completedTasks = weekTasks.filter((task) => task.completedAt !== null);
   const buckets = dailyBuckets(tasks, range.weekStartDate, range.timeZone);
   const totalXp = completedTasks.reduce((sum, task) => sum + task.points, 0);
   const peakBucket =
     [...buckets].sort((left, right) => right.xp - left.xp)[0] ?? buckets[0]!;
-  const activity = listActivityEvents({ limit: 20 }).slice(0, 4);
+  const activity = listActivityEvents({
+    from: toTimeZoneDateStartIso(range.weekStartDate, range.timeZone),
+    to: toTimeZoneDateStartIso(
+      addDateKeyDays(range.weekEndDate, 1),
+      range.timeZone
+    ),
+    limit: 4
+  });
   const wins =
     activity.length > 0
       ? activity.map((event) => ({
