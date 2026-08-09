@@ -406,15 +406,59 @@ test("PLAN-17 release remains handoff-only and quick completion is deferred", as
       actor: "Codex",
       leaseTtlSeconds: 900
     });
-    const released = releaseTaskRun(claimed.run.id, {
+    const handoff = {
       actor: "Codex",
       note: "Handoff",
       closeoutNote: { contentMarkdown: "Paused for review." }
-    });
+    } as const;
+    const released = releaseTaskRun(claimed.run.id, handoff);
     assert.equal(released.status, "released");
     assert.equal(getTaskById(task.id)?.status, "in_progress");
     assert.equal(getTaskById(task.id)?.completionReport, null);
     assert.equal(getTaskById(task.id)?.closeoutState, "not_applicable");
+    const replayed = releaseTaskRun(claimed.run.id, handoff);
+    assert.equal(replayed.id, released.id);
+    const contentFreeReplay = releaseTaskRun(claimed.run.id, {
+      actor: "Codex"
+    });
+    assert.equal(contentFreeReplay.id, released.id);
+
+    const activity = getDatabase()
+      .prepare(
+        `SELECT metadata_json FROM activity_events
+         WHERE entity_type = 'task_run' AND entity_id = ? AND event_type = 'task_run_released'`
+      )
+      .get(claimed.run.id) as { metadata_json: string };
+    const metadata = JSON.parse(activity.metadata_json) as {
+      handoffFingerprint?: string;
+    };
+    assert.match(metadata.handoffFingerprint ?? "", /^[0-9a-f]{64}$/);
+
+    expectHttpError(
+      () =>
+        releaseTaskRun(claimed.run.id, {
+          ...handoff,
+          note: "Changed handoff"
+        }),
+      409,
+      "task_run_handoff_conflict"
+    );
+    expectHttpError(
+      () =>
+        releaseTaskRun(claimed.run.id, {
+          ...handoff,
+          closeoutNote: { contentMarkdown: "Changed review note." }
+        }),
+      409,
+      "task_run_handoff_conflict"
+    );
+    const linkedNotes = listNotes().filter((note) =>
+      note.links.some(
+        (link) => link.entityType === "task" && link.entityId === task.id
+      )
+    );
+    assert.equal(linkedNotes.length, 1);
+    assert.equal(linkedNotes[0]?.contentMarkdown, "Paused for review.");
     assert.equal(
       taskRunReleaseSchema.safeParse({
         actor: "Codex",

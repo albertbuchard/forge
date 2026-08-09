@@ -95,12 +95,13 @@ function getRunEndMs(row: TaskRunTimingRow, nowMs: number): number {
   }
 
   const terminal =
-    row.completed_at ??
-    row.released_at ??
-    row.timed_out_at ??
-    row.updated_at ??
-    row.lease_expires_at ??
-    row.heartbeat_at;
+    row.status === "timed_out"
+      ? row.lease_expires_at
+      : (row.completed_at ??
+        row.released_at ??
+        row.updated_at ??
+        row.lease_expires_at ??
+        row.heartbeat_at);
   return Math.max(Date.parse(row.claimed_at), Date.parse(terminal));
 }
 

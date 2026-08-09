@@ -623,6 +623,7 @@ function markExpiredRunsTimedOutInTransaction(
 
   for (const run of expired) {
     update.run(nowIso, nowIso, run.id);
+    finalizeTaskRunTimebox(run.id, "cancelled", run.lease_expires_at);
     recordActivityEvent({
       entityType: "task_run",
       entityId: run.id,
@@ -1078,6 +1079,7 @@ function canonicalizeCloseoutValue(value: unknown): unknown {
 type ParsedTaskRunCompleteInput = ReturnType<
   typeof taskRunCompleteSchema.parse
 >;
+type ParsedTaskRunReleaseInput = ReturnType<typeof taskRunReleaseSchema.parse>;
 
 function taskRunCloseoutFingerprint(input: ParsedTaskRunCompleteInput): string {
   return createHash("sha256")
@@ -1087,6 +1089,19 @@ function taskRunCloseoutFingerprint(input: ParsedTaskRunCompleteInput): string {
           note: input.note,
           completionReport: input.completionReport ?? null,
           gitRefs: input.gitRefs ?? null,
+          closeoutNote: input.closeoutNote ?? null
+        })
+      )
+    )
+    .digest("hex");
+}
+
+function taskRunReleaseFingerprint(input: ParsedTaskRunReleaseInput): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify(
+        canonicalizeCloseoutValue({
+          note: input.note,
           closeoutNote: input.closeoutNote ?? null
         })
       )
@@ -1119,6 +1134,31 @@ function readTaskRunCloseoutFingerprint(taskRunId: string): string | null {
   }
 }
 
+function readTaskRunReleaseFingerprint(taskRunId: string): string | null {
+  const row = getDatabase()
+    .prepare(
+      `SELECT metadata_json
+       FROM activity_events
+       WHERE entity_type = 'task_run'
+         AND entity_id = ?
+         AND event_type = 'task_run_released'
+       ORDER BY created_at DESC
+       LIMIT 1`
+    )
+    .get(taskRunId) as { metadata_json: string } | undefined;
+  if (!row) {
+    return null;
+  }
+  try {
+    const metadata = JSON.parse(row.metadata_json) as Record<string, unknown>;
+    return typeof metadata.handoffFingerprint === "string"
+      ? metadata.handoffFingerprint
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function isMinimalLegacyCompletionReplay(
   input: ParsedTaskRunCompleteInput,
   current: TaskRunRow
@@ -1126,6 +1166,20 @@ function isMinimalLegacyCompletionReplay(
   return (
     input.completionReport === undefined &&
     (input.gitRefs === undefined || input.gitRefs.length === 0) &&
+    input.closeoutNote === undefined &&
+    (input.note.length === 0 || input.note === current.note)
+  );
+}
+
+function isContentFreeReleaseReplay(input: ParsedTaskRunReleaseInput): boolean {
+  return input.note.length === 0 && input.closeoutNote === undefined;
+}
+
+function isMinimalLegacyReleaseReplay(
+  input: ParsedTaskRunReleaseInput,
+  current: TaskRunRow
+): boolean {
+  return (
     input.closeoutNote === undefined &&
     (input.note.length === 0 || input.note === current.note)
   );
@@ -1140,6 +1194,19 @@ function throwTaskRunCloseoutConflict(
     409,
     "task_run_closeout_conflict",
     `Task run ${taskRunId} was already completed with different closeout evidence`,
+    buildTaskRunErrorDetails(current, now)
+  );
+}
+
+function throwTaskRunHandoffConflict(
+  taskRunId: string,
+  current: TaskRunRow,
+  now: Date
+): never {
+  throw new HttpError(
+    409,
+    "task_run_handoff_conflict",
+    `Task run ${taskRunId} was already released with different handoff evidence`,
     buildTaskRunErrorDetails(current, now)
   );
 }
@@ -1264,6 +1331,17 @@ export function releaseTaskRun(
     const current = requireRun(taskRunId);
     if (current.status === "released") {
       assertActorMatch(current, parsedInput.actor, now);
+      const persistedFingerprint = readTaskRunReleaseFingerprint(taskRunId);
+      if (persistedFingerprint) {
+        if (
+          !isContentFreeReleaseReplay(parsedInput) &&
+          persistedFingerprint !== taskRunReleaseFingerprint(parsedInput)
+        ) {
+          throwTaskRunHandoffConflict(taskRunId, current, now);
+        }
+      } else if (!isMinimalLegacyReleaseReplay(parsedInput, current)) {
+        throwTaskRunHandoffConflict(taskRunId, current, now);
+      }
       return mapTaskRun(current, now);
     }
     if (current.status !== "active") {
@@ -1278,6 +1356,7 @@ export function releaseTaskRun(
 
     const nowIso = now.toISOString();
     const note = parsedInput.note.length > 0 ? parsedInput.note : current.note;
+    const handoffFingerprint = taskRunReleaseFingerprint(parsedInput);
     getDatabase()
       .prepare(
         `UPDATE task_runs
@@ -1310,7 +1389,8 @@ export function releaseTaskRun(
       metadata: {
         taskId: run.taskId,
         status: run.status,
-        creditedSeconds: run.creditedSeconds
+        creditedSeconds: run.creditedSeconds,
+        handoffFingerprint
       }
     });
     recordTaskRunProgressRewards(

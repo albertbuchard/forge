@@ -25501,6 +25501,8 @@ test("expired task runs recover cleanly after their lease lapses", async () => {
           id: string;
           status: string;
           timedOutAt: string | null;
+          leaseExpiresAt: string;
+          creditedSeconds: number;
         }>;
       }
     ).timedOutRuns;
@@ -25508,6 +25510,16 @@ test("expired task runs recover cleanly after their lease lapses", async () => {
     assert.equal(timedOutRuns[0]!.id, runId);
     assert.equal(timedOutRuns[0]!.status, "timed_out");
     assert.ok(timedOutRuns[0]!.timedOutAt);
+    assert.equal(timedOutRuns[0]!.creditedSeconds, 1);
+    const cancelledTimebox = getDatabase()
+      .prepare(
+        `SELECT status, ends_at
+         FROM task_timeboxes
+         WHERE linked_task_run_id = ?`
+      )
+      .get(runId) as { status: string; ends_at: string } | undefined;
+    assert.equal(cancelledTimebox?.status, "cancelled");
+    assert.equal(cancelledTimebox?.ends_at, timedOutRuns[0]!.leaseExpiresAt);
 
     const reclaimed = await app.inject({
       method: "POST",

@@ -3,13 +3,20 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { closeDatabase, configureDatabase, initializeDatabase } from "./db.js";
+import {
+  closeDatabase,
+  configureDatabase,
+  getDatabase,
+  initializeDatabase
+} from "./db.js";
 import { claimTaskRun, listTaskRuns } from "./repositories/task-runs.js";
 import { listTasks } from "./repositories/tasks.js";
 import { recoverExpiredTaskRunsOnStartup } from "./services/run-recovery.js";
 
 test("startup recovery marks expired task runs timed out after a restart gap", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-startup-recovery-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-startup-recovery-")
+  );
 
   try {
     configureDatabase({ dataRoot: rootDir, seedDemoData: true });
@@ -26,6 +33,14 @@ test("startup recovery marks expired task runs timed out after a restart gap", a
       new Date("2026-03-22T05:00:00.000Z"),
       { source: "openclaw" }
     );
+    const activeTimebox = getDatabase()
+      .prepare(
+        `SELECT status, ends_at
+         FROM task_timeboxes
+         WHERE linked_task_run_id = ?`
+      )
+      .get(claimed.run.id) as { status: string; ends_at: string } | undefined;
+    assert.equal(activeTimebox?.status, "active");
 
     closeDatabase();
 
@@ -39,9 +54,21 @@ test("startup recovery marks expired task runs timed out after a restart gap", a
     assert.equal(summary.recoveredCount, 1);
     assert.deepEqual(summary.recoveredRunIds, [claimed.run.id]);
 
-    const recoveredRun = listTaskRuns({ taskId }).find((run) => run.id === claimed.run.id);
+    const recoveredRun = listTaskRuns({ taskId }).find(
+      (run) => run.id === claimed.run.id
+    );
     assert.equal(recoveredRun?.status, "timed_out");
     assert.equal(recoveredRun?.timedOutAt, "2026-03-22T05:00:03.000Z");
+    assert.equal(recoveredRun?.creditedSeconds, 1);
+    const cancelledTimebox = getDatabase()
+      .prepare(
+        `SELECT status, ends_at
+         FROM task_timeboxes
+         WHERE linked_task_run_id = ?`
+      )
+      .get(claimed.run.id) as { status: string; ends_at: string } | undefined;
+    assert.equal(cancelledTimebox?.status, "cancelled");
+    assert.equal(cancelledTimebox?.ends_at, claimed.run.leaseExpiresAt);
   } finally {
     closeDatabase();
     await rm(rootDir, { recursive: true, force: true });
@@ -49,7 +76,9 @@ test("startup recovery marks expired task runs timed out after a restart gap", a
 });
 
 test("startup recovery stays a no-op when there are no expired task runs", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-startup-recovery-noop-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-startup-recovery-noop-")
+  );
 
   try {
     configureDatabase({ dataRoot: rootDir, seedDemoData: true });
