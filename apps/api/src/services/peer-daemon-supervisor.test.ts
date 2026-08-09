@@ -26,6 +26,10 @@ const TEST_OWNER = "user_peer_supervisor_test";
 const TEST_COMMAND_AUTHORITY_PUBLIC_KEY = Buffer.alloc(32, 7).toString(
   "base64url"
 );
+// The release gate builds native binaries immediately before this process test.
+// Keep process admission bounded while allowing for scheduler delay under that load.
+const RELEASE_LOAD_PROCESS_START_TIMEOUT_MS = 45_000;
+const RELEASE_LOAD_TEST_TIMEOUT_MS = 60_000;
 const FAKE_PEER_SOURCE = `#!${process.execPath}
 import { spawn } from "node:child_process";
 import {
@@ -644,48 +648,60 @@ test("opens the circuit after the configured crash budget", async () => {
   }
 });
 
-test("bounds startup timeout and kills a daemon that ignores SIGTERM", async () => {
-  const fixture = await createFixture(
-    { neverReady: true, ignoreSigterm: true },
-    { identityExists: true }
-  );
-  let monotonicAdvanceMs = 0;
-  const supervisor = new PeerDaemonSupervisor(
-    enabledConfig(fixture, {
-      startupTimeoutMs: 400,
-      maxRestarts: 0,
-      shutdownTimeoutMs: 30,
-      killTimeoutMs: 500
-    }),
-    testDependencies(fixture, {
-      monotonicNow: () => process.uptime() * 1_000 + monotonicAdvanceMs
-    })
-  );
-  try {
-    const failedStart = expectSupervisorError(
-      supervisor.start(),
-      "circuit_open"
+test(
+  "bounds startup timeout and kills a daemon that ignores SIGTERM",
+  { timeout: RELEASE_LOAD_TEST_TIMEOUT_MS },
+  async () => {
+    const fixture = await createFixture(
+      { neverReady: true, ignoreSigterm: true },
+      { identityExists: true }
     );
-    await waitFor(
-      async () =>
-        (await readEvents(fixture)).some((event) => event.kind === "serve"),
-      15_000
+    // Freeze the startup clock until the child is admitted. After the deliberate
+    // deadline jump, resume real monotonic progress for the shutdown timers.
+    let monotonicNowMs = 10_000;
+    let monotonicResumeUptimeMs: number | null = null;
+    const supervisor = new PeerDaemonSupervisor(
+      enabledConfig(fixture, {
+        startupTimeoutMs: 400,
+        maxRestarts: 0,
+        shutdownTimeoutMs: 30,
+        killTimeoutMs: 500
+      }),
+      testDependencies(fixture, {
+        monotonicNow: () =>
+          monotonicNowMs +
+          (monotonicResumeUptimeMs === null
+            ? 0
+            : process.uptime() * 1_000 - monotonicResumeUptimeMs)
+      })
     );
-    const beganAt = Date.now();
-    monotonicAdvanceMs += 1_000;
-    await failedStart;
-    assert.ok(Date.now() - beganAt < 2_000);
-    const status = supervisor.status();
-    assert.equal(status.state, "circuit_open");
-    assert.match(status.lastError ?? "", /startup deadline/);
-    assert.equal(status.pid, null);
-    assert.equal(status.lastExit?.signal, "SIGKILL");
-    assert.equal(status.lastExit?.intentional, false);
-  } finally {
-    await supervisor.stop();
-    await fixture.cleanup();
+    try {
+      const failedStart = expectSupervisorError(
+        supervisor.start(),
+        "circuit_open"
+      );
+      await waitFor(
+        async () =>
+          (await readEvents(fixture)).some((event) => event.kind === "serve"),
+        RELEASE_LOAD_PROCESS_START_TIMEOUT_MS
+      );
+      const beganAt = Date.now();
+      monotonicNowMs += 1_000;
+      monotonicResumeUptimeMs = process.uptime() * 1_000;
+      await failedStart;
+      assert.ok(Date.now() - beganAt < 2_000);
+      const status = supervisor.status();
+      assert.equal(status.state, "circuit_open");
+      assert.match(status.lastError ?? "", /startup deadline/);
+      assert.equal(status.pid, null);
+      assert.equal(status.lastExit?.signal, "SIGKILL");
+      assert.equal(status.lastExit?.intentional, false);
+    } finally {
+      await supervisor.stop();
+      await fixture.cleanup();
+    }
   }
-});
+);
 
 test("marks a stop during startup as intentional", async () => {
   const fixture = await createFixture(
