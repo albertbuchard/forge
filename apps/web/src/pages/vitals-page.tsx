@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { PageHero } from "@/components/shell/page-hero";
+import { ProvenanceSummary } from "@/components/provenance-summary";
 import { useForgeShell } from "@/components/shell/app-shell";
 import {
   DevrageRageFigure,
@@ -237,7 +238,10 @@ export function VitalsPage() {
         badge={`${vitals.summary.metricCount} tracked metrics`}
       />
 
-      <Card className="grid gap-3 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 sm:grid-cols-3">
+      {vitals.provenance ? (
+        <ProvenanceSummary provenance={vitals.provenance} />
+      ) : (
+        <Card className="grid gap-3 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 sm:grid-cols-3">
         <div>
           <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
             Freshness
@@ -269,7 +273,8 @@ export function VitalsPage() {
             available here.
           </div>
         </div>
-      </Card>
+        </Card>
+      )}
 
       {vitals.summary.metricCount === 0 ? (
         <Card className="border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-6">

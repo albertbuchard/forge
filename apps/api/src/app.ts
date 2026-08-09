@@ -412,6 +412,7 @@ import {
   updateLifeForceProfile,
   updateLifeForceTemplate
 } from "./services/life-force.js";
+import { buildDerivedDataProvenance, latestObservedAt } from "./provenance.js";
 import {
   CRUD_OWNERSHIP_AUTHORIZATION_MATRIX,
   crudEntityIsVisible,
@@ -11206,6 +11207,7 @@ function compactTrainingLoad(
 function compactVitals(vitals: ReturnType<typeof getVitalsViewData>) {
   return {
     summary: vitals.summary,
+    provenance: vitals.provenance,
     metrics: vitals.metrics.slice(0, 12).map((metric) => ({
       metric: metric.metric,
       label: metric.label,
@@ -11293,6 +11295,7 @@ function compactLifeForce(lifeForce: ReturnType<typeof buildLifeForcePayload>) {
     warnings: lifeForce.warnings,
     recommendations: lifeForce.recommendations,
     updatedAt: lifeForce.updatedAt,
+    provenance: lifeForce.provenance,
     detailRoute: "/api/v1/life-force"
   };
 }
@@ -11658,19 +11661,104 @@ function buildOperatorOverview(request: {
     noteScope: request.noteScope
   });
 
+  const signalMatrix = buildSignalMatrix({
+    overview,
+    operator,
+    today,
+    lifeForce,
+    sleep,
+    psyche
+  });
+  const strategyWorkObservedAt = latestObservedAt([
+    ...goals.map((goal) => goal.updatedAt),
+    ...projects.map((project) => project.updatedAt),
+    ...tasks.map((task) => task.updatedAt)
+  ]);
+  const healthObservedAt = latestObservedAt([
+    lifeForce.provenance?.observedAt,
+    vitals.provenance?.observedAt,
+    sleep.latestNight?.endedAt
+  ]);
+  const notesObservedAt = latestObservedAt(
+    notes.notes.map(
+      (note) =>
+        note.observedAt ??
+        (note.kind === "evidence" || note.userId ? note.updatedAt : null)
+    )
+  );
+  const observedAt = latestObservedAt([
+    strategyWorkObservedAt,
+    healthObservedAt,
+    notesObservedAt
+  ]);
+  const hasObservedEvidence = observedAt !== null;
   return {
     generatedAt: now.toISOString(),
+    provenance: buildDerivedDataProvenance({
+      generatedAt: now.toISOString(),
+      observedAt,
+      staleAfterSeconds: 60,
+      sourceSummary:
+        "Authorized strategy, work, calendar, health, notes, and Psyche summaries",
+      completeness:
+        warnings.length > 0
+          ? "partial"
+          : hasObservedEvidence
+            ? "complete"
+            : "unknown",
+      completenessReason:
+        warnings.length > 0
+          ? warnings.join(" ")
+          : hasObservedEvidence
+            ? "Every supported overview source was evaluated for the authorized user scope."
+            : "No persisted source observation is available for this user scope.",
+      confidence: {
+        level:
+          warnings.length > 0
+            ? "medium"
+            : hasObservedEvidence
+              ? "high"
+              : "unknown",
+        reason:
+          hasObservedEvidence
+            ? "The overview preserves source record identifiers and keeps permission-based omissions explicit."
+            : "Forge evaluated the authorized sources, but none has a persisted observation time."
+      },
+      sources: [
+        {
+          id: "overview-strategy-work",
+          label: "Strategy and work summaries",
+          kind: "aggregate",
+          observedAt: strategyWorkObservedAt,
+          detailRoute: "/api/v1/context"
+        },
+        {
+          id: "overview-health",
+          label: "Health and capacity summaries",
+          kind: "aggregate",
+          observedAt: healthObservedAt,
+          detailRoute: "/api/v1/health"
+        },
+        {
+          id: "overview-notes-psyche",
+          label: "Recent notes and authorized Psyche summaries",
+          kind: "aggregate",
+          observedAt: notesObservedAt,
+          detailRoute: "/api/v1/notes"
+        }
+      ],
+      evidence: signalMatrix.flatMap((signal) =>
+        signal.ids.slice(0, 4).map((id) => ({
+          label: signal.lane,
+          reference: `${signal.lane}:${id}`,
+          observedAt: null
+        }))
+      )
+    }),
     detailMode: "compact" as const,
     summary:
       "Compact operator overview for agent continuity. It keeps current direction, today/yesterday, health, calendar, psyche, notes, and IDs, while full records stay behind drill-down routes.",
-    signalMatrix: buildSignalMatrix({
-      overview,
-      operator,
-      today,
-      lifeForce,
-      sleep,
-      psyche
-    }),
+    signalMatrix,
     snapshot: {
       generatedAt: now.toISOString(),
       userScope: {

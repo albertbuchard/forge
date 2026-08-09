@@ -5052,6 +5052,75 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const derivedDataProvenance = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "generatedAt",
+      "observedAt",
+      "freshness",
+      "completeness",
+      "staleAfterSeconds",
+      "sourceSummary",
+      "statusDetail",
+      "confidence",
+      "sources",
+      "evidence"
+    ],
+    properties: {
+      generatedAt: { type: "string", format: "date-time" },
+      observedAt: nullable({ type: "string", format: "date-time" }),
+      freshness: {
+        type: "string",
+        enum: ["fresh", "stale", "future", "missing"]
+      },
+      completeness: {
+        type: "string",
+        enum: ["complete", "partial", "unknown"]
+      },
+      staleAfterSeconds: { type: "integer", minimum: 1 },
+      sourceSummary: { type: "string" },
+      statusDetail: { type: "string" },
+      confidence: {
+        type: "object",
+        additionalProperties: false,
+        required: ["level", "reason"],
+        properties: {
+          level: {
+            type: "string",
+            enum: ["high", "medium", "low", "unknown"]
+          },
+          reason: { type: "string" }
+        }
+      },
+      sources: arrayOf({
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "label", "kind", "observedAt", "detailRoute"],
+        properties: {
+          id: { type: "string" },
+          label: { type: "string" },
+          kind: {
+            type: "string",
+            enum: ["record", "aggregate", "derived", "device", "service"]
+          },
+          observedAt: nullable({ type: "string", format: "date-time" }),
+          detailRoute: nullable({ type: "string" })
+        }
+      }),
+      evidence: arrayOf({
+        type: "object",
+        additionalProperties: false,
+        required: ["label", "reference", "observedAt"],
+        properties: {
+          label: { type: "string" },
+          reference: { type: "string" },
+          observedAt: nullable({ type: "string", format: "date-time" })
+        }
+      })
+    }
+  };
+
   const operatorContextPayload = {
     type: "object",
     additionalProperties: false,
@@ -5095,6 +5164,7 @@ export function buildOpenApiDocument() {
     additionalProperties: false,
     required: [
       "generatedAt",
+      "provenance",
       "detailMode",
       "summary",
       "signalMatrix",
@@ -5118,6 +5188,7 @@ export function buildOpenApiDocument() {
     ],
     properties: {
       generatedAt: { type: "string", format: "date-time" },
+      provenance: { $ref: "#/components/schemas/DerivedDataProvenance" },
       detailMode: { type: "string", enum: ["compact"] },
       summary: { type: "string" },
       signalMatrix: arrayOf({
@@ -11361,6 +11432,7 @@ export function buildOpenApiDocument() {
         GamificationCelebration: gamificationCelebration,
         GamificationScope: gamificationScope,
         XpMetricsPayload: xpMetricsPayload,
+        DerivedDataProvenance: derivedDataProvenance,
         OperatorContextPayload: operatorContextPayload,
         OperatorOverviewPayload: operatorOverviewPayload
       },

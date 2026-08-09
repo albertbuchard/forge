@@ -1075,9 +1075,35 @@ struct ForgeWatchConnection: Codable, Hashable {
     let directNetworkingEnabled: Bool
 }
 
+struct ForgeWatchDerivedDataSource: Codable, Hashable {
+    let id: String
+    let label: String
+    let kind: String
+    let observedAt: String?
+    let detailRoute: String?
+}
+
+struct ForgeWatchDerivedDataConfidence: Codable, Hashable {
+    let level: String
+    let reason: String
+}
+
+struct ForgeWatchDerivedDataProvenance: Codable, Hashable {
+    let generatedAt: String
+    let observedAt: String?
+    let freshness: String
+    let completeness: String
+    let staleAfterSeconds: Int
+    let sourceSummary: String
+    let statusDetail: String
+    let confidence: ForgeWatchDerivedDataConfidence
+    let sources: [ForgeWatchDerivedDataSource]
+}
+
 struct ForgeWatchBootstrap: Codable, Hashable {
     let schemaVersion: Int?
     let generatedAt: String
+    let provenance: ForgeWatchDerivedDataProvenance?
     let connection: ForgeWatchConnection?
     let surfaces: [ForgeWatchSurfaceSummary]?
     let now: ForgeWatchNowSnapshot?
@@ -1100,6 +1126,7 @@ struct ForgeWatchBootstrap: Codable, Hashable {
     init(
         schemaVersion: Int?,
         generatedAt: String,
+        provenance: ForgeWatchDerivedDataProvenance? = nil,
         connection: ForgeWatchConnection?,
         surfaces: [ForgeWatchSurfaceSummary]?,
         now: ForgeWatchNowSnapshot?,
@@ -1121,6 +1148,7 @@ struct ForgeWatchBootstrap: Codable, Hashable {
     ) {
         self.schemaVersion = schemaVersion
         self.generatedAt = generatedAt
+        self.provenance = provenance
         self.connection = connection
         self.surfaces = surfaces
         self.now = now
@@ -1192,6 +1220,7 @@ struct ForgeWatchBootstrap: Codable, Hashable {
         ForgeWatchBootstrap(
             schemaVersion: schemaVersion,
             generatedAt: generatedAt,
+            provenance: provenance,
             connection: connection ?? self.connection,
             surfaces: surfaces,
             now: now,
@@ -1217,6 +1246,7 @@ struct ForgeWatchBootstrap: Codable, Hashable {
         ForgeWatchBootstrap(
             schemaVersion: schemaVersion,
             generatedAt: generatedAt,
+            provenance: provenance,
             connection: connection,
             surfaces: surfaces,
             now: now,

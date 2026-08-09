@@ -21,6 +21,7 @@ import { SheetScaffold } from "@/components/experience/sheet-scaffold";
 import { FacetedTokenSearch, type FacetedTokenOption } from "@/components/search/faceted-token-search";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
+import { ProvenanceSummary } from "@/components/provenance-summary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -747,6 +748,12 @@ export function MovementPage() {
   const movementMonth = movementMonthQuery.data;
   const movementAllTime = movementAllTimeQuery.data;
   const movementSettings = movementSettingsQuery.data;
+  const activeProvenance =
+    viewMode === "month"
+      ? movementMonth.provenance
+      : viewMode === "all_time"
+        ? movementAllTime.provenance
+        : movementDay.provenance;
   const movementDaySegments = movementDay.segments.filter((segment, index, segments) => {
     const key = `${segment.kind}:${segment.id}:${segment.startedAt}:${segment.endedAt}`;
     return (
@@ -793,6 +800,10 @@ export function MovementPage() {
           </div>
         }
       />
+
+      {activeProvenance ? (
+        <ProvenanceSummary provenance={activeProvenance} />
+      ) : null}
 
       <Card
         className="grid grid-cols-2 gap-3 rounded-[28px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-3 sm:p-4 md:grid-cols-3"

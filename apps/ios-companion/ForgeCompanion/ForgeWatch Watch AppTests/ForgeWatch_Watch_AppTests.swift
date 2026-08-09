@@ -895,6 +895,18 @@ final class ForgeWatch_Watch_AppTests: XCTestCase {
         XCTAssertEqual(decoded.schemaVersion, ForgeWatchBootstrap.empty.schemaVersion)
     }
 
+    func testWatchBootstrapDecodesSharedProvenanceWithoutChangingLegacySupport() throws {
+        let data = Data(
+            #"{"schemaVersion":2,"generatedAt":"2026-08-09T12:00:00Z","provenance":{"generatedAt":"2026-08-09T12:00:00Z","observedAt":"2026-08-09T11:59:00Z","freshness":"fresh","completeness":"complete","staleAfterSeconds":900,"sourceSummary":"Authorized Forge records","statusDetail":"Complete evidence. The latest observation is within the freshness window.","confidence":{"level":"high","reason":"Generated from the paired user scope."},"sources":[{"id":"watch-work","label":"Work records","kind":"aggregate","observedAt":"2026-08-09T11:59:00Z","detailRoute":"/api/v1/mobile/watch/bootstrap"}]},"habits":[],"checkInOptions":{"activities":[],"emotions":[],"triggers":[],"placeCategories":[],"routinePrompts":[],"recentPeople":[]},"pendingPrompts":[]}"#.utf8
+        )
+
+        let decoded = try JSONDecoder().decode(ForgeWatchBootstrap.self, from: data)
+
+        XCTAssertEqual(decoded.provenance?.freshness, "fresh")
+        XCTAssertEqual(decoded.provenance?.sources.first?.label, "Work records")
+        XCTAssertNil(ForgeWatchBootstrap.empty.provenance)
+    }
+
     func testWatchHasReadOnlyPeopleGlanceButNoIdentityGrantOrPeerManagementAuthority() throws {
         let surfaceNames = WatchSurface.allCases.map(\.rawValue)
         let launchDestinations = ForgeWatchLaunchDestination.allCases.map(\.rawValue)

@@ -36,6 +36,7 @@ import { isSecuredMobilePairingMarker } from "./security/mobile-pairing-credenti
 import { recordActivityEvent } from "./repositories/activity-events.js";
 import { recordHabitGeneratedWorkoutReward } from "./repositories/rewards.js";
 import { resolveUserForMutation } from "./repositories/users.js";
+import { buildDerivedDataProvenance, latestObservedAt } from "./provenance.js";
 
 const healthLinkSchema = z.object({
   entityType: z.string().trim().min(1),
@@ -9170,6 +9171,7 @@ function vitalMetricPrimaryValue(metric: {
 }
 
 export function getVitalsViewData(userIds?: string[]) {
+  const generatedAt = nowIso();
   const rows = listDailySummaryRows("vitals", userIds);
   const dayCount = new Set(rows.map((row) => row.date_key)).size;
   const metricBuckets = new Map<
@@ -9325,17 +9327,77 @@ export function getVitalsViewData(userIds?: string[]) {
     })
     .sort((left, right) => right.metricCount - left.metricCount);
 
+  const observedAt = latestObservedAt([
+    ...rows.map((row) => row.updated_at),
+    ...metrics.flatMap((metric) => metric.days.map((day) => day.latestSampleAt))
+  ]);
+  const latestDateKey = rows[0]?.date_key ?? null;
+  const latestMetricCount = metrics.filter(
+    (metric) => metric.latestDateKey === latestDateKey
+  ).length;
+  const sourceLabels = [
+    ...new Set(rows.map((row) => row.source).filter(Boolean))
+  ];
   return {
     summary: {
       trackedDays: dayCount,
       metricCount: metrics.length,
-      latestDateKey: rows[0]?.date_key ?? null,
-      latestMetricCount: metrics.filter(
-        (metric) => metric.latestDateKey === (rows[0]?.date_key ?? null)
-      ).length,
+      latestDateKey,
+      latestMetricCount,
       categoryBreakdown
     },
-    metrics
+    metrics,
+    provenance: buildDerivedDataProvenance({
+      generatedAt,
+      observedAt,
+      staleAfterSeconds: 48 * 60 * 60,
+      sourceSummary:
+        sourceLabels.length > 0
+          ? `Daily health aggregates from ${sourceLabels.join(", ")}`
+          : "Daily health aggregates",
+      completeness:
+        metrics.length === 0
+          ? "unknown"
+          : latestMetricCount < metrics.length
+            ? "partial"
+            : "complete",
+      completenessReason:
+        metrics.length === 0
+          ? "No aggregate has been received for this user scope."
+          : `${latestMetricCount} of ${metrics.length} tracked metrics have a value on the latest day.`,
+      confidence: {
+        level: rows.length > 0 ? "high" : "unknown",
+        reason:
+          rows.length > 0
+            ? "Values come from stored daily aggregates with units, sample counts, and observation times."
+            : "No stored daily aggregate is available to evaluate."
+      },
+      sources:
+        sourceLabels.length > 0
+          ? sourceLabels.map((label) => ({
+              id: `health-${label}`,
+              label,
+              kind: "aggregate" as const,
+              observedAt,
+              detailRoute: "/api/v1/health/vitals"
+            }))
+          : [
+              {
+                id: "health-daily-aggregates",
+                label: "Daily health aggregates",
+                kind: "aggregate" as const,
+                observedAt: null,
+                detailRoute: "/api/v1/health/vitals"
+              }
+            ],
+      evidence: metrics.slice(0, 24).map((metric) => ({
+        label: metric.label,
+        reference: `health_metric:${metric.metric}`,
+        observedAt:
+          [...metric.days].reverse().find((day) => day.latestSampleAt)
+            ?.latestSampleAt ?? null
+      }))
+    })
   };
 }
 

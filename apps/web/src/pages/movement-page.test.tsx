@@ -4,6 +4,37 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { MovementPage } from "@/pages/movement-page";
+import type { DerivedDataProvenance } from "@/lib/types";
+
+function provenance(
+  sourceSummary: string,
+  observedAt: string
+): DerivedDataProvenance {
+  return {
+    generatedAt: "2026-04-11T12:00:00.000Z",
+    observedAt,
+    freshness: "fresh",
+    completeness: "complete",
+    staleAfterSeconds: 1800,
+    sourceSummary,
+    statusDetail:
+      "Complete evidence. The latest observation is within the freshness window.",
+    confidence: {
+      level: "high",
+      reason: "The summary uses stored movement records."
+    },
+    sources: [
+      {
+        id: sourceSummary,
+        label: sourceSummary,
+        kind: "aggregate",
+        observedAt,
+        detailRoute: "/movement"
+      }
+    ],
+    evidence: []
+  };
+}
 
 const {
   useForgeShellMock,
@@ -205,7 +236,11 @@ describe("Movement page Life Force integration", () => {
           placeLabels: [],
           topApps: [],
           topCategories: []
-        }
+        },
+        provenance: provenance(
+          "day movement records",
+          "2026-04-11T11:55:00.000Z"
+        )
       }
     });
     getMovementMonthMock.mockResolvedValue({
@@ -217,7 +252,11 @@ describe("Movement page Life Force integration", () => {
           movingSeconds: 1800,
           idleSeconds: 7200,
           caloriesKcal: 320
-        }
+        },
+        provenance: provenance(
+          "monthly movement records",
+          "2026-04-10T18:00:00.000Z"
+        )
       }
     });
     getMovementAllTimeMock.mockResolvedValue({
@@ -240,7 +279,11 @@ describe("Movement page Life Force integration", () => {
             distanceMeters: 12000,
             activityType: "drive"
           }
-        ]
+        ],
+        provenance: provenance(
+          "all-time movement records",
+          "2026-04-10T09:00:00.000Z"
+        )
       }
     });
     getMovementSettingsMock.mockResolvedValue({
@@ -328,5 +371,26 @@ describe("Movement page Life Force integration", () => {
 
     expect(await screen.findByText("Life Force sync")).toBeInTheDocument();
     expect(screen.getByText("0 AP/h free right now")).toBeInTheDocument();
+  });
+
+  it("shows provenance for the active movement view", async () => {
+    renderWithProviders();
+
+    expect(
+      await screen.findByText(/from day movement records/i)
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Month" }));
+    expect(
+      await screen.findByText(/from monthly movement records/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/from day movement records/i)
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "All time" }));
+    expect(
+      await screen.findByText(/from all-time movement records/i)
+    ).toBeInTheDocument();
   });
 });

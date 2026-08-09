@@ -32,6 +32,7 @@ import {
   resolveTaskExpectedDurationSeconds
 } from "./life-force-model.js";
 import { computeWorkTime } from "./work-time.js";
+import { buildDerivedDataProvenance, latestObservedAt } from "../provenance.js";
 
 type LifeForceProfileRow = {
   user_id: string;
@@ -3690,6 +3691,17 @@ export function buildLifeForcePayload(
     })
     .map((row) => row.id)
     .slice(0, 3);
+  const sourceObservationTimes = [
+    ...taskRuns.contributions.map((entry) => entry.endsAt),
+    ...workouts.contributions.map((entry) => entry.endsAt),
+    ...movement.contributions.map((entry) => entry.endsAt),
+    ...notes.map((entry) => entry.endsAt),
+    ...habits.map((entry) => entry.endsAt),
+    ...wakeImpulses.map((entry) => entry.endsAt),
+    ...adjustments.map((entry) => entry.endsAt)
+  ];
+  const observedAt = latestObservedAt(sourceObservationTimes);
+  const hasObservedEvidence = observedAt !== null;
   return lifeForcePayloadSchema.parse({
     userId: user.id,
     dateKey: range.dateKey,
@@ -3730,7 +3742,47 @@ export function buildLifeForcePayload(
           : "Favor lower-friction admin or recovery until headroom increases."
     ],
     topTaskIdsNeedingSplit,
-    updatedAt: now.toISOString()
+    updatedAt: now.toISOString(),
+    provenance: buildDerivedDataProvenance({
+      generatedAt: now.toISOString(),
+      observedAt,
+      staleAfterSeconds: 30 * 60,
+      sourceSummary:
+        "Stored work, recovery, habit, workout, and movement signals",
+      completeness: hasObservedEvidence ? "complete" : "unknown",
+      completenessReason:
+        hasObservedEvidence
+          ? "Forge evaluated every available input configured for the current user scope."
+          : "No persisted work, recovery, habit, workout, or movement observation is available.",
+      confidence: {
+        level: hasObservedEvidence ? "medium" : "unknown",
+        reason:
+          hasObservedEvidence
+            ? "Current drain is grounded in stored evidence; forecasts remain model estimates."
+            : "Forge can compute the configured baseline, but no observed input supports a current derived state."
+      },
+      sources: [
+        {
+          id: "life-force-inputs",
+          label: "Life Force input records",
+          kind: "derived",
+          observedAt,
+          detailRoute: "/api/v1/life-force"
+        }
+      ],
+      evidence: [
+        ...activeDrains.slice(0, 8).map((drain) => ({
+          label: drain.title,
+          reference: `${drain.sourceType}:${drain.sourceId}`,
+          observedAt: drain.startedAt
+        })),
+        ...plannedDrains.slice(0, 8).map((drain) => ({
+          label: drain.title,
+          reference: `${drain.sourceType}:${drain.sourceId}`,
+          observedAt: drain.startedAt
+        }))
+      ]
+    })
   });
 }
 

@@ -6,6 +6,7 @@ import {
 } from "@/lib/workbench/nodes.js";
 import { getRuntimeTimeZone } from "@/lib/date-keys.js";
 import { isValidTimeZone } from "./services/calendar-time.js";
+import { derivedDataProvenanceSchema } from "./provenance.js";
 
 export const taskStatusSchema = z.enum([
   "backlog",
@@ -1061,7 +1062,8 @@ export const lifeForcePayloadSchema = z.object({
   warnings: z.array(lifeForceWarningSchema),
   recommendations: z.array(trimmedString),
   topTaskIdsNeedingSplit: z.array(z.string()),
-  updatedAt: z.string()
+  updatedAt: z.string(),
+  provenance: derivedDataProvenanceSchema.optional()
 });
 
 export const noteLinkSchema = z.object({

@@ -38,6 +38,7 @@ import {
 } from "./repositories/psyche.js";
 import { formatLocalDateKey } from "@/lib/date-keys.js";
 import type { CreateNoteInput } from "./types.js";
+import { buildDerivedDataProvenance, latestObservedAt } from "./provenance.js";
 
 const watchCaptureEventTypeSchema = z.enum([
   "activity_check_in",
@@ -1336,8 +1337,11 @@ export function buildDirectionSnapshot(pairing: PairingSessionLike) {
   return { goals, goalCount, projects, projectCount };
 }
 
-function buildTodaySnapshot(pairing: PairingSessionLike) {
-  const todayKey = formatLocalDateKey();
+function buildTodaySnapshot(
+  pairing: PairingSessionLike,
+  anchorDateKey?: string
+) {
+  const todayKey = anchorDateKey ?? formatLocalDateKey();
   const ownershipSql =
     pairing.user_id === "user_operator"
       ? ""
@@ -1868,12 +1872,105 @@ export function buildWatchBootstrap(
   });
   const work = buildWorkSnapshot(pairing);
   const direction = buildDirectionSnapshot(pairing);
-  const today = buildTodaySnapshot(pairing);
+  const today = buildTodaySnapshot(pairing, options?.anchorDateKey);
   const generatedAt = nowIso();
+  const health = buildHealthSnapshot(pairing.user_id);
+  const movement = buildMovementSnapshot(pairing.user_id);
+  const sync = buildSyncSnapshot(pairing);
+  const observedAt = latestObservedAt([
+    work.currentRun?.heartbeatAt,
+    today.dueTasks[0]?.updatedAt,
+    health.lastWorkout?.endedAt,
+    movement.latestStay?.endedAt,
+    movement.latestTrip?.endedAt
+  ]);
+  const hasObservedEvidence = observedAt !== null;
 
   return {
     schemaVersion: 2,
     generatedAt,
+    provenance: buildDerivedDataProvenance({
+      generatedAt,
+      observedAt,
+      staleAfterSeconds: 15 * 60,
+      sourceSummary:
+        "Authorized Forge work, health, movement, and sync records",
+      completeness: hasObservedEvidence ? "complete" : "unknown",
+      completenessReason: hasObservedEvidence
+        ? "Every supported Watch surface was evaluated; empty surfaces remain explicit."
+        : "No persisted work, health, or movement observation is available for this pairing.",
+      confidence: {
+        level: hasObservedEvidence ? "high" : "unknown",
+        reason: hasObservedEvidence
+          ? "The snapshot is generated from the pairing's authorized user scope."
+          : "Forge evaluated the pairing's authorized sources, but none has a persisted observation time."
+      },
+      sources: [
+        {
+          id: "watch-work",
+          label: "Work and planning records",
+          kind: "aggregate",
+          observedAt: latestObservedAt([
+            work.currentRun?.heartbeatAt,
+            today.dueTasks[0]?.updatedAt
+          ]),
+          detailRoute: "/api/v1/mobile/watch/bootstrap"
+        },
+        {
+          id: "watch-health",
+          label: "Health records",
+          kind: "aggregate",
+          observedAt: health.lastWorkout?.endedAt ?? null,
+          detailRoute: "/api/v1/health"
+        },
+        {
+          id: "watch-movement",
+          label: "Movement records",
+          kind: "aggregate",
+          observedAt: latestObservedAt([
+            movement.latestStay?.endedAt,
+            movement.latestTrip?.endedAt
+          ]),
+          detailRoute: "/api/v1/movement/day"
+        },
+        {
+          id: "watch-sync",
+          label: "Watch sync counters",
+          kind: "aggregate",
+          observedAt: null,
+          detailRoute: "/api/v1/mobile/watch/bootstrap"
+        }
+      ],
+      evidence: [
+        ...(work.currentRun
+          ? [
+              {
+                label: work.currentRun.taskTitle,
+                reference: `task_run:${work.currentRun.id}`,
+                observedAt: work.currentRun.heartbeatAt
+              }
+            ]
+          : []),
+        ...(health.lastWorkout
+          ? [
+              {
+                label: health.lastWorkout.workoutType,
+                reference: `workout:${health.lastWorkout.id}`,
+                observedAt: health.lastWorkout.endedAt
+              }
+            ]
+          : []),
+        ...(movement.latestTrip
+          ? [
+              {
+                label: movement.latestTrip.label,
+                reference: `movement_trip:${movement.latestTrip.id}`,
+                observedAt: movement.latestTrip.endedAt
+              }
+            ]
+          : [])
+      ]
+    }),
     surfaces: buildWatchSurfaces(),
     now: {
       currentRun: work.currentRun,
@@ -1888,8 +1985,8 @@ export function buildWatchBootstrap(
     projects: direction.projects,
     projectCount: direction.projectCount,
     today,
-    health: buildHealthSnapshot(pairing.user_id),
-    movement: buildMovementSnapshot(pairing.user_id),
+    health,
+    movement,
     psyche: buildWatchPsycheSnapshot(pairing),
     inbox: {
       prompts: pendingPrompts,
@@ -1925,7 +2022,7 @@ export function buildWatchBootstrap(
             }
           : null
     },
-    sync: buildSyncSnapshot(pairing),
+    sync,
     habits,
     checkInOptions: {
       activities: activityOptions,
@@ -2194,11 +2291,7 @@ function requireWatchTaskRunAccess(
     .prepare(`SELECT task_id FROM task_runs WHERE id = ?`)
     .get(taskRunId) as { task_id: string } | undefined;
   if (!row || !hasWatchTaskAccess(pairing.user_id, row.task_id)) {
-    throw new HttpError(
-      404,
-      "watch_task_run_not_found",
-      "Task run not found"
-    );
+    throw new HttpError(404, "watch_task_run_not_found", "Task run not found");
   }
   return row.task_id;
 }

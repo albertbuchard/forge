@@ -39025,6 +39025,172 @@
           }
         }
       },
+      "DerivedDataProvenance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "generatedAt",
+          "observedAt",
+          "freshness",
+          "completeness",
+          "staleAfterSeconds",
+          "sourceSummary",
+          "statusDetail",
+          "confidence",
+          "sources",
+          "evidence"
+        ],
+        "properties": {
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "observedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "freshness": {
+            "type": "string",
+            "enum": [
+              "fresh",
+              "stale",
+              "future",
+              "missing"
+            ]
+          },
+          "completeness": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "partial",
+              "unknown"
+            ]
+          },
+          "staleAfterSeconds": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sourceSummary": {
+            "type": "string"
+          },
+          "statusDetail": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "level",
+              "reason"
+            ],
+            "properties": {
+              "level": {
+                "type": "string",
+                "enum": [
+                  "high",
+                  "medium",
+                  "low",
+                  "unknown"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "label",
+                "kind",
+                "observedAt",
+                "detailRoute"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "record",
+                    "aggregate",
+                    "derived",
+                    "device",
+                    "service"
+                  ]
+                },
+                "observedAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "detailRoute": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "label",
+                "reference",
+                "observedAt"
+              ],
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "reference": {
+                  "type": "string"
+                },
+                "observedAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
       "OperatorContextPayload": {
         "type": "object",
         "additionalProperties": false,
@@ -39137,6 +39303,7 @@
         "additionalProperties": false,
         "required": [
           "generatedAt",
+          "provenance",
           "detailMode",
           "summary",
           "signalMatrix",
@@ -39162,6 +39329,9 @@
           "generatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/DerivedDataProvenance"
           },
           "detailMode": {
             "type": "string",

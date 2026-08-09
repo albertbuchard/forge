@@ -541,6 +541,32 @@ export interface LifeForceWarning {
   detail: string;
 }
 
+export interface DerivedDataProvenance {
+  generatedAt: string;
+  observedAt: string | null;
+  freshness: "fresh" | "stale" | "future" | "missing";
+  completeness: "complete" | "partial" | "unknown";
+  staleAfterSeconds: number;
+  sourceSummary: string;
+  statusDetail: string;
+  confidence: {
+    level: "high" | "medium" | "low" | "unknown";
+    reason: string;
+  };
+  sources: Array<{
+    id: string;
+    label: string;
+    kind: "record" | "aggregate" | "derived" | "device" | "service";
+    observedAt: string | null;
+    detailRoute: string | null;
+  }>;
+  evidence: Array<{
+    label: string;
+    reference: string;
+    observedAt: string | null;
+  }>;
+}
+
 export interface LifeForcePayload {
   userId: string;
   dateKey: string;
@@ -568,6 +594,7 @@ export interface LifeForcePayload {
   recommendations: string[];
   topTaskIdsNeedingSplit: string[];
   updatedAt: string;
+  provenance?: DerivedDataProvenance;
 }
 
 export interface LifeForceTemplateUpdateInput {
@@ -2737,6 +2764,7 @@ export interface VitalsViewData {
     coverageDays: number;
     days: VitalMetricDayRecord[];
   }>;
+  provenance?: DerivedDataProvenance;
 }
 
 export type MovementPublishMode =
@@ -3051,6 +3079,7 @@ export interface MovementDayData {
   trips: MovementTripRecord[];
   places: MovementKnownPlace[];
   selectionAggregate: MovementSelectionAggregate;
+  provenance?: DerivedDataProvenance;
 }
 
 export interface MovementMonthData {
@@ -3072,6 +3101,7 @@ export interface MovementMonthData {
     tripCount: number;
     stayCount: number;
   };
+  provenance?: DerivedDataProvenance;
 }
 
 export interface MovementAllTimeData {
@@ -3095,6 +3125,7 @@ export interface MovementAllTimeData {
     distanceMeters: number;
     activityType: string;
   }>;
+  provenance?: DerivedDataProvenance;
 }
 
 export interface ScreenTimeDayData {
@@ -4623,6 +4654,7 @@ export interface OperatorSession {
 
 export interface OperatorOverviewPayload {
   generatedAt: string;
+  provenance?: DerivedDataProvenance;
   snapshot: ForgeSnapshot;
   operator: OperatorContextPayload;
   sleep: SleepViewData;

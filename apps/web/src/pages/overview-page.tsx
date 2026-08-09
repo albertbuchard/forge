@@ -30,6 +30,7 @@ import {
 import { CreateMenu, useForgeCreateActions } from "@/components/create-menu";
 import { GamificationOverviewWidget } from "@/components/gamification/gamification-widgets";
 import { LifeForceOverviewWorkspace } from "@/components/life-force/life-force-workspace";
+import { ProvenanceSummary } from "@/components/provenance-summary";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
@@ -1249,6 +1250,33 @@ export function OverviewPage() {
               }
             />
           </div>
+          {snapshot.lifeForce?.provenance ||
+          vitals?.provenance ||
+          movementDay?.provenance ? (
+            <div className="mt-3 grid gap-2 xl:grid-cols-3">
+              {snapshot.lifeForce?.provenance ? (
+                <ProvenanceSummary
+                  provenance={snapshot.lifeForce.provenance}
+                  href="/life-force"
+                  actionLabel="Open Life Force"
+                />
+              ) : null}
+              {vitals?.provenance ? (
+                <ProvenanceSummary
+                  provenance={vitals.provenance}
+                  href="/vitals"
+                  actionLabel="Open Vitals"
+                />
+              ) : null}
+              {movementDay?.provenance ? (
+                <ProvenanceSummary
+                  provenance={movementDay.provenance}
+                  href="/movement"
+                  actionLabel="Open Movement"
+                />
+              ) : null}
+            </div>
+          ) : null}
         </div>
       )
     },

@@ -29,6 +29,7 @@ import {
   Zap
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { ProvenanceSummary } from "@/components/provenance-summary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -1204,6 +1205,15 @@ function LifeForceCompact({
         <div className="mt-4 rounded-[18px] border border-[color-mix(in_srgb,var(--primary)_24%,transparent)] bg-[var(--ui-accent-soft)] px-4 py-3 text-sm text-[var(--ui-ink-medium)]">
           {feedback}
         </div>
+      ) : null}
+
+      {lifeForce.provenance ? (
+        <ProvenanceSummary
+          className="mt-4"
+          provenance={lifeForce.provenance}
+          href="/life-force"
+          actionLabel="Open Life Force"
+        />
       ) : null}
 
       <div className="mt-4 grid gap-3 md:grid-cols-3">

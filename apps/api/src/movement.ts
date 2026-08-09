@@ -8,6 +8,7 @@ import { createManualRewardGrant } from "./repositories/rewards.js";
 import { listTaskRuns } from "./repositories/task-runs.js";
 import { getDefaultUser } from "./repositories/users.js";
 import { getScreenTimeOverlapSummary } from "./screen-time.js";
+import { buildDerivedDataProvenance, latestObservedAt } from "./provenance.js";
 
 const movementPublishModeSchema = z.enum([
   "auto_publish",
@@ -6048,6 +6049,7 @@ export function getMovementDayDetail(input: {
   date?: string;
   userIds?: string[];
 }) {
+  const generatedAt = nowIso();
   const targetDate = input.date ?? dayKey(nowIso());
   const userIds = input.userIds && input.userIds.length > 0 ? input.userIds : [getDefaultUser().id];
   const placeRows = listMovementPlaceRows(input.userIds);
@@ -6142,6 +6144,10 @@ export function getMovementDayDetail(input: {
     trips,
     userIds: input.userIds
   });
+  const observedAt = latestObservedAt([
+    ...stays.map((stay) => stay.endedAt),
+    ...trips.map((trip) => trip.endedAt)
+  ]);
   return {
     date: targetDate,
     settings: getMovementSettings(input.userIds),
@@ -6197,7 +6203,63 @@ export function getMovementDayDetail(input: {
     stays,
     trips,
     places,
-    selectionAggregate
+    selectionAggregate,
+    provenance: buildDerivedDataProvenance({
+      generatedAt,
+      observedAt,
+      staleAfterSeconds: 30 * 60,
+      sourceSummary: "Recorded stays, trips, and canonical movement boxes",
+      completeness:
+        allSegments.length === 0
+          ? "unknown"
+          : allSegments.some((segment) => segment.kind === "missing")
+            ? "partial"
+            : "complete",
+      completenessReason:
+        allSegments.length === 0
+          ? `No movement evidence is stored for ${targetDate}.`
+          : allSegments.some((segment) => segment.kind === "missing")
+            ? `${allSegments.filter((segment) => segment.kind === "missing").length} gap${allSegments.filter((segment) => segment.kind === "missing").length === 1 ? " is" : "s are"} visible in the day.`
+            : "No unresolved movement gap is visible in the day.",
+      confidence: {
+        level:
+          allSegments.length === 0
+            ? "unknown"
+            : allSegments.some((segment) => segment.kind === "missing")
+              ? "medium"
+              : "high",
+        reason:
+          "Recorded stays and trips remain distinguishable from repaired gaps and missing spans."
+      },
+      sources: [
+        {
+          id: "movement-stays",
+          label: "Recorded stays",
+          kind: "record",
+          observedAt: latestObservedAt(stays.map((stay) => stay.endedAt)),
+          detailRoute: `/api/v1/movement/day?date=${targetDate}`
+        },
+        {
+          id: "movement-trips",
+          label: "Recorded trips",
+          kind: "record",
+          observedAt: latestObservedAt(trips.map((trip) => trip.endedAt)),
+          detailRoute: `/api/v1/movement/day?date=${targetDate}`
+        },
+        {
+          id: "movement-projection",
+          label: "Canonical movement boxes",
+          kind: "derived",
+          observedAt,
+          detailRoute: `/api/v1/movement/day?date=${targetDate}`
+        }
+      ],
+      evidence: allSegments.slice(0, 24).map((segment) => ({
+        label: segment.label,
+        reference: `movement_box:${segment.boxId}`,
+        observedAt: segment.endedAt
+      }))
+    })
   };
 }
 
@@ -6205,6 +6267,7 @@ export function getMovementMonthSummary(input: {
   month?: string;
   userIds?: string[];
 }) {
+  const generatedAt = nowIso();
   const targetMonth = input.month ?? monthKey(nowIso());
   const stays = listMovementStayRows(input.userIds).filter(
     (row) => monthKey(row.started_at) === targetMonth
@@ -6258,6 +6321,10 @@ export function getMovementMonthSummary(input: {
     }
     byDay.set(key, current);
   }
+  const observedAt = latestObservedAt([
+    ...stays.map((stay) => stay.ended_at),
+    ...trips.map((trip) => trip.ended_at)
+  ]);
   return {
     month: targetMonth,
     days: [...byDay.entries()]
@@ -6280,11 +6347,48 @@ export function getMovementMonthSummary(input: {
         trips.reduce((sum, trip) => sum + trip.idle_seconds, 0),
       tripCount: trips.length,
       stayCount: stays.length
-    }
+    },
+    provenance: buildDerivedDataProvenance({
+      generatedAt,
+      observedAt,
+      staleAfterSeconds: 30 * 60,
+      sourceSummary: "Recorded movement by day",
+      completeness: byDay.size > 0 ? "complete" : "unknown",
+      completenessReason:
+        byDay.size > 0
+          ? `${byDay.size} recorded day${byDay.size === 1 ? " is" : "s are"} included.`
+          : `No movement evidence is stored for ${targetMonth}.`,
+      confidence: {
+        level: byDay.size > 0 ? "high" : "unknown",
+        reason: "The summary is computed from stored stays and trips."
+      },
+      sources: [
+        {
+          id: "movement-month",
+          label: "Recorded stays and trips",
+          kind: "aggregate",
+          observedAt,
+          detailRoute: `/api/v1/movement/month?month=${targetMonth}`
+        }
+      ],
+      evidence: [
+        ...stays.slice(0, 12).map((stay) => ({
+          label: `Stay on ${dayKey(stay.started_at)}`,
+          reference: `movement_stay:${stay.id}`,
+          observedAt: stay.ended_at
+        })),
+        ...trips.slice(0, 12).map((trip) => ({
+          label: trip.label,
+          reference: `movement_trip:${trip.id}`,
+          observedAt: trip.ended_at
+        }))
+      ]
+    })
   };
 }
 
 export function getMovementAllTimeSummary(userIds?: string[]) {
+  const generatedAt = nowIso();
   const placeRows = listMovementPlaceRows(userIds);
   const stays = listMovementStayRows(userIds);
   const trips = listMovementTripRows(userIds);
@@ -6294,6 +6398,11 @@ export function getMovementAllTimeSummary(userIds?: string[]) {
       tagBreakdown.set(tag, (tagBreakdown.get(tag) ?? 0) + 1);
     });
   });
+  const observedAt = latestObservedAt([
+    ...placeRows.map((place) => place.updated_at),
+    ...stays.map((stay) => stay.ended_at),
+    ...trips.map((trip) => trip.ended_at)
+  ]);
   return {
     summary: {
       knownPlaceCount: placeRows.length,
@@ -6327,7 +6436,43 @@ export function getMovementAllTimeSummary(userIds?: string[]) {
         startedAt: trip.started_at,
         distanceMeters: trip.distance_meters,
         activityType: trip.activity_type
+      })),
+    provenance: buildDerivedDataProvenance({
+      generatedAt,
+      observedAt,
+      staleAfterSeconds: 30 * 60,
+      sourceSummary: "All stored movement places, stays, and trips",
+      completeness:
+        placeRows.length + stays.length + trips.length > 0
+          ? "complete"
+          : "unknown",
+      completenessReason:
+        placeRows.length + stays.length + trips.length > 0
+          ? "Every stored movement record in the authorized user scope is included."
+          : "No movement record is stored for this user scope.",
+      confidence: {
+        level:
+          placeRows.length + stays.length + trips.length > 0
+            ? "high"
+            : "unknown",
+        reason:
+          "The summary is computed directly from authorized stored records."
+      },
+      sources: [
+        {
+          id: "movement-all-time",
+          label: "Stored movement records",
+          kind: "aggregate",
+          observedAt,
+          detailRoute: "/api/v1/movement/all-time"
+        }
+      ],
+      evidence: trips.slice(0, 24).map((trip) => ({
+        label: trip.label,
+        reference: `movement_trip:${trip.id}`,
+        observedAt: trip.ended_at
       }))
+    })
   };
 }
 
