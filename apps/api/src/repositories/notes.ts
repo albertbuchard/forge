@@ -1126,79 +1126,84 @@ export function listNotesByObservedAtRange(
     .map(({ note }) => note);
 }
 
-export function createNote(input: CreateNoteInput, context: NoteContext): Note {
+export function createNoteWithinTransaction(
+  input: CreateNoteInput,
+  context: NoteContext
+): Note {
   cleanupExpiredNotes();
   const parsed = createNoteSchema.parse({
     ...input,
     links: normalizeLinks(input.links),
     tags: normalizeTags(input.tags)
   });
-  return runInTransaction(() => {
-    const now = new Date().toISOString();
-    const id = `note_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
-    const wikiFields = prepareNoteWikiFields({
-      id,
-      contentMarkdown: parsed.contentMarkdown,
-      kind: parsed.kind,
-      title: parsed.title,
-      slug: parsed.slug,
-      spaceId: parsed.spaceId,
-      parentSlug: parsed.parentSlug,
-      indexOrder: parsed.indexOrder,
-      showInIndex: parsed.showInIndex,
-      aliases: parsed.aliases,
-      summary: parsed.summary,
-      userId: parsed.userId ?? null
-    });
-    const contentPlain = stripMarkdown(parsed.contentMarkdown);
+  const now = new Date().toISOString();
+  const id = `note_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+  const wikiFields = prepareNoteWikiFields({
+    id,
+    contentMarkdown: parsed.contentMarkdown,
+    kind: parsed.kind,
+    title: parsed.title,
+    slug: parsed.slug,
+    spaceId: parsed.spaceId,
+    parentSlug: parsed.parentSlug,
+    indexOrder: parsed.indexOrder,
+    showInIndex: parsed.showInIndex,
+    aliases: parsed.aliases,
+    summary: parsed.summary,
+    userId: parsed.userId ?? null
+  });
+  const contentPlain = stripMarkdown(parsed.contentMarkdown);
 
-    getDatabase()
-      .prepare(
-        `INSERT INTO notes (
+  getDatabase()
+    .prepare(
+      `INSERT INTO notes (
            id, kind, title, slug, space_id, parent_slug, index_order, show_in_index, aliases_json, summary, content_markdown, content_plain, author, source, tags_json, destroy_at,
            source_path, frontmatter_json, revision_hash, last_synced_at, created_at, updated_at
          )
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        id,
-        wikiFields.kind,
-        wikiFields.title,
-        wikiFields.slug,
-        wikiFields.spaceId,
-        wikiFields.parentSlug,
-        wikiFields.indexOrder,
-        wikiFields.showInIndex ? 1 : 0,
-        JSON.stringify(wikiFields.aliases),
-        wikiFields.summary,
-        parsed.contentMarkdown,
-        contentPlain,
-        parsed.author ?? context.actor ?? null,
-        context.source,
-        JSON.stringify(parsed.tags),
-        parsed.destroyAt,
-        canonicalNoteSourcePath(),
-        JSON.stringify(parsed.frontmatter),
-        parsed.revisionHash,
-        parsed.lastSyncedAt ?? null,
-        now,
-        now
-      );
-    insertLinks(id, parsed.links, now);
-    setEntityOwner(
-      "note",
+    )
+    .run(
       id,
-      parsed.userId,
-      parsed.author ?? context.actor ?? null
+      wikiFields.kind,
+      wikiFields.title,
+      wikiFields.slug,
+      wikiFields.spaceId,
+      wikiFields.parentSlug,
+      wikiFields.indexOrder,
+      wikiFields.showInIndex ? 1 : 0,
+      JSON.stringify(wikiFields.aliases),
+      wikiFields.summary,
+      parsed.contentMarkdown,
+      contentPlain,
+      parsed.author ?? context.actor ?? null,
+      context.source,
+      JSON.stringify(parsed.tags),
+      parsed.destroyAt,
+      canonicalNoteSourcePath(),
+      JSON.stringify(parsed.frontmatter),
+      parsed.revisionHash,
+      parsed.lastSyncedAt ?? null,
+      now,
+      now
     );
-    clearDeletedEntityRecord("note", id);
-    upsertSearchRow(id, contentPlain, parsed.author ?? context.actor ?? null);
+  insertLinks(id, parsed.links, now);
+  setEntityOwner(
+    "note",
+    id,
+    parsed.userId,
+    parsed.author ?? context.actor ?? null
+  );
+  clearDeletedEntityRecord("note", id);
+  upsertSearchRow(id, contentPlain, parsed.author ?? context.actor ?? null);
 
-    const note = getNoteById(id, { skipCleanup: true })!;
-    syncNoteWikiArtifacts(note);
-    recordNoteActivity(note, "note.created", "Note added", context);
-    return getNoteById(id, { skipCleanup: true })!;
-  });
+  const note = getNoteById(id, { skipCleanup: true })!;
+  syncNoteWikiArtifacts(note);
+  recordNoteActivity(note, "note.created", "Note added", context);
+  return getNoteById(id, { skipCleanup: true })!;
+}
+
+export function createNote(input: CreateNoteInput, context: NoteContext): Note {
+  return runInTransaction(() => createNoteWithinTransaction(input, context));
 }
 
 export function createLinkedNotes(

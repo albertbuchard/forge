@@ -697,6 +697,9 @@ export function OverviewPage() {
   const createActions = useForgeCreateActions({
     goals: snapshot.dashboard.goals,
     projects: snapshot.dashboard.projects,
+    tasks: snapshot.tasks,
+    strategies: snapshot.strategies,
+    habits: snapshot.habits,
     tags: snapshot.tags,
     users: snapshot.users,
     defaultUserId: selectedUserIds.length === 1 ? selectedUserIds[0] : null,

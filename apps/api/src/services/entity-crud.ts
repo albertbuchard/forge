@@ -57,6 +57,7 @@ import {
 } from "../repositories/calendar.js";
 import {
   createNote,
+  createNoteWithinTransaction,
   deleteNote,
   getNoteById,
   getNoteByIdIncludingDeleted,
@@ -269,6 +270,7 @@ import type {
   BatchSearchEntitiesInput,
   BatchUpdateEntitiesInput,
   CrudEntityType,
+  CreateNoteInput,
   DeleteMode,
   DeletedEntityRecord,
   Note,
@@ -326,7 +328,7 @@ const ENTITY_CALENDAR_LIST_RANGE = {
   to: "2100-01-01T00:00:00.000Z"
 } as const;
 
-type CrudContext = {
+export type CrudContext = {
   source: ActivitySource;
   actor?: string | null;
   userIds?: string[];
@@ -883,7 +885,7 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
         spaceId: requestedSpaceId,
         userId
       });
-      return createNote(
+      return createContextualNote(
         { ...data, spaceId, userId } as never,
         context
       ) as Record<string, unknown>;
@@ -1866,6 +1868,122 @@ export function crudEntityIsVisible(
     deleted &&
     entityMatchesCrudScope(entityType, { ...deleted.snapshot, id }, context)
   );
+}
+
+export function crudEntityIsLiveAndVisible(
+  entityType: CrudEntityType,
+  id: string,
+  context: Pick<CrudContext, "userIds" | "projectIds" | "tagIds">
+) {
+  if (getDeletedEntityRecord(entityType, id)) {
+    return false;
+  }
+  if (!context.projectIds?.length && !context.tagIds?.length) {
+    const sourceTables: Partial<Record<CrudEntityType, string>> = {
+      goal: "goals",
+      project: "projects",
+      task: "tasks",
+      strategy: "strategies",
+      habit: "habits",
+      trigger_report: "trigger_reports"
+    };
+    const sourceTable = sourceTables[entityType];
+    if (sourceTable) {
+      const userIds = context.userIds ?? [];
+      if (userIds.length === 0) {
+        return Boolean(
+          getDatabase()
+            .prepare(`SELECT 1 FROM ${sourceTable} WHERE id = ? LIMIT 1`)
+            .get(id)
+        );
+      }
+      const userPlaceholders = userIds.map(() => "?").join(", ");
+      return Boolean(
+        getDatabase()
+          .prepare(
+            `SELECT 1
+             FROM ${sourceTable}
+             WHERE id = ?
+               AND (
+                 EXISTS (
+                   SELECT 1 FROM entity_owners
+                   WHERE entity_type = ?
+                     AND entity_id = ?
+                     AND user_id IN (${userPlaceholders})
+                 )
+                 OR EXISTS (
+                   SELECT 1 FROM entity_assignments
+                   WHERE entity_type = ?
+                     AND entity_id = ?
+                     AND role = 'assignee'
+                     AND user_id IN (${userPlaceholders})
+                 )
+               )
+             LIMIT 1`
+          )
+          .get(
+            id,
+            entityType,
+            id,
+            ...userIds,
+            entityType,
+            id,
+            ...userIds
+          )
+      );
+    }
+  }
+  if (
+    entityType === "artifact" &&
+    !canAccessArtifact(id, { source: "system", ...context })
+  ) {
+    return false;
+  }
+  return Boolean(getScopedCrudEntity(entityType, id, context));
+}
+
+export function createContextualNote(
+  input: CreateNoteInput,
+  context: CrudContext
+): Note {
+  const createContext = input.createContext;
+  if (!createContext) {
+    return createNote(input, context);
+  }
+
+  return runInTransaction(() => {
+    const sourceLinks = input.links.filter(
+      (link) =>
+        link.entityType === createContext.sourceEntityType &&
+        link.entityId === createContext.sourceEntityId
+    );
+    if (
+      sourceLinks.length !== 1 ||
+      (sourceLinks[0]?.anchorKey ?? null) !== createContext.anchorKey
+    ) {
+      throw new HttpError(
+        400,
+        "note_create_context_ambiguous",
+        "The related note must contain one exact link to its source record."
+      );
+    }
+    if (
+      !crudEntityIsLiveAndVisible(
+        createContext.sourceEntityType,
+        createContext.sourceEntityId,
+        context
+      )
+    ) {
+      throw new HttpError(
+        404,
+        "note_create_context_not_found",
+        "The source record is unavailable. The note was not created."
+      );
+    }
+
+    const { createContext: _createContext, ...noteInput } = input;
+    return createNoteWithinTransaction(noteInput, context);
+  });
 }
 
 export function getEntityById(

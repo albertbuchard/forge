@@ -2666,6 +2666,33 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const noteCreateContext = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "version",
+      "sourceEntityType",
+      "sourceEntityId",
+      "anchorKey"
+    ],
+    properties: {
+      version: { type: "integer", enum: [1] },
+      sourceEntityType: {
+        type: "string",
+        enum: [
+          "goal",
+          "project",
+          "task",
+          "strategy",
+          "habit",
+          "trigger_report"
+        ]
+      },
+      sourceEntityId: { type: "string", minLength: 1, maxLength: 256 },
+      anchorKey: nullable({ type: "string", maxLength: 120 })
+    }
+  };
+
   const note = {
     type: "object",
     additionalProperties: false,
@@ -2765,7 +2792,10 @@ export function buildOpenApiDocument() {
     type: "object",
     additionalProperties: false,
     required: ["contentMarkdown"],
-    properties: noteMutationProperties
+    properties: {
+      ...noteMutationProperties,
+      createContext: { $ref: "#/components/schemas/NoteCreateContext" }
+    }
   };
 
   const notePatchInput = {
@@ -11808,6 +11838,7 @@ export function buildOpenApiDocument() {
         TriggerReportPage: triggerReportPage,
         NoteLink: noteLink,
         Note: note,
+        NoteCreateContext: noteCreateContext,
         NoteCreateInput: noteCreateInput,
         NotePatchInput: notePatchInput,
         WikiPageSummary: wikiPageSummary,
@@ -18663,6 +18694,8 @@ export function buildOpenApiDocument() {
         },
         post: {
           summary: "Create a note linked to one or more Forge entities",
+          description:
+            "When createContext is present, Forge validates one exact live source link inside the same transaction that creates the note. Missing, deleted, unauthorized, duplicated, or mismatched source records do not create a note.",
           requestBody: {
             required: true,
             content: {
@@ -18680,6 +18713,8 @@ export function buildOpenApiDocument() {
               },
               "Created note"
             ),
+            "400": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         }

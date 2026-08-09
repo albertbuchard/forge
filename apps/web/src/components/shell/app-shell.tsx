@@ -393,10 +393,14 @@ function ShellFrame({
   const createActions = useForgeCreateActions({
     goals: shell.snapshot.dashboard.goals,
     projects: shell.snapshot.dashboard.projects,
+    tasks: shell.snapshot.tasks,
+    strategies: shell.snapshot.strategies,
+    habits: shell.snapshot.habits,
     tags: shell.snapshot.tags,
     users: shell.snapshot.users,
     defaultUserId:
       shell.selectedUserIds.length === 1 ? shell.selectedUserIds[0] : null,
+    returnFocusRef: actionBarReturnFocusRef,
     onCreateGoal: shell.createGoal,
     onCreateProject: shell.createProject,
     onCreateTask: shell.createTask

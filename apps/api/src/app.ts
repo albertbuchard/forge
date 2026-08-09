@@ -431,6 +431,7 @@ import { buildDerivedDataProvenance, latestObservedAt } from "./provenance.js";
 import {
   CRUD_OWNERSHIP_AUTHORIZATION_MATRIX,
   crudEntityIsVisible,
+  createContextualNote,
   createEntities,
   deleteEntities,
   deleteEntity,
@@ -17903,7 +17904,9 @@ export async function buildServer(
     const input = createNoteSchema.parse(request.body ?? {});
     const firstLinkedEntityType =
       input.links.find((link) => isPsycheEntityType(link.entityType))
-        ?.entityType ?? input.links[0]?.entityType;
+        ?.entityType ??
+      input.createContext?.sourceEntityType ??
+      input.links[0]?.entityType;
     const auth = requireNoteAccess(
       request.headers as Record<string, unknown>,
       firstLinkedEntityType,
@@ -17920,7 +17923,7 @@ export async function buildServer(
       ...input,
       userId
     });
-    const note = createNote(
+    const note = createContextualNote(
       { ...input, userId, spaceId },
       toActivityContext(auth)
     );

@@ -2791,6 +2791,18 @@ export function createNote(input: {
     entityId: string;
     anchorKey?: string | null;
   }>;
+  createContext?: {
+    version: 1;
+    sourceEntityType:
+      | "goal"
+      | "project"
+      | "task"
+      | "strategy"
+      | "habit"
+      | "trigger_report";
+    sourceEntityId: string;
+    anchorKey: string | null;
+  };
 }) {
   return request<{ note: Note }>("/api/v1/notes", {
     method: "POST",

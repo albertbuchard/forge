@@ -3811,6 +3811,24 @@ export const createNoteLinkSchema = z.object({
   anchorKey: trimmedString.nullable().default(null)
 });
 
+export const contextualNoteSourceEntityTypeSchema = z.enum([
+  "goal",
+  "project",
+  "task",
+  "strategy",
+  "habit",
+  "trigger_report"
+]);
+
+export const noteCreateContextSchema = z
+  .object({
+    version: z.literal(1),
+    sourceEntityType: contextualNoteSourceEntityTypeSchema,
+    sourceEntityId: nonEmptyTrimmedString.max(256),
+    anchorKey: trimmedString.max(120).nullable().default(null)
+  })
+  .strict();
+
 const repeatedTrimmedStringQuerySchema = z.preprocess((value) => {
   if (value === undefined || value === null || value === "") {
     return [];
@@ -3878,7 +3896,8 @@ export const createNoteSchema = z.object({
   frontmatter: z.record(z.string(), z.unknown()).default({}),
   revisionHash: trimmedString.default(""),
   lastSyncedAt: dateTimeSchema.nullable().optional(),
-  userId: nonEmptyTrimmedString.nullable().optional()
+  userId: nonEmptyTrimmedString.nullable().optional(),
+  createContext: noteCreateContextSchema.optional()
 });
 
 export const nestedCreateNoteSchema = z.object({

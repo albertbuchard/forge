@@ -7,10 +7,15 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode
+  type ReactNode,
+  type RefObject
 } from "react";
 import { Plus, Sparkles, X } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import type {
+  ContextualCreateReturnState,
+  ContextualNoteSource
+} from "@/components/notes/contextual-note-dialog";
 import { Button } from "@/components/ui/button";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { useI18n } from "@/lib/i18n";
@@ -23,8 +28,11 @@ import type {
 import type {
   DashboardGoal,
   Goal,
+  Habit,
   ProjectSummary,
+  Strategy,
   Tag,
+  Task,
   UserSummary
 } from "@/lib/types";
 
@@ -46,6 +54,70 @@ const LazyTaskDialog = lazy(() =>
     default: module.TaskDialog
   }))
 );
+const LazyContextualNoteDialog = lazy(() =>
+  import("@/components/notes/contextual-note-dialog").then((module) => ({
+    default: module.ContextualNoteDialog
+  }))
+);
+
+type ResolvedCreateContext = Omit<ContextualNoteSource, "label">;
+
+function safeContextId(value: string | null) {
+  if (!value) {
+    return null;
+  }
+  try {
+    const decoded = decodeURIComponent(value).trim();
+    return decoded && decoded.length <= 256 && !decoded.includes("/")
+      ? decoded
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function resolveForgeCreateContext(
+  pathname: string,
+  search = ""
+): ResolvedCreateContext | null {
+  const segments = pathname.split("/").filter(Boolean);
+  const directType =
+    segments.length === 2
+      ? (
+          {
+            goals: "goal",
+            projects: "project",
+            tasks: "task",
+            strategies: "strategy"
+          } as const
+        )[segments[0] as "goals" | "projects" | "tasks" | "strategies"]
+      : segments.length === 3 &&
+          segments[0] === "psyche" &&
+          segments[1] === "reports"
+        ? "trigger_report"
+        : null;
+  if (directType) {
+    const entityId = safeContextId(segments.at(-1) ?? null);
+    return entityId
+      ? { version: 1, entityType: directType, entityId, anchorKey: null }
+      : null;
+  }
+
+  if (pathname === "/habits") {
+    const rawFocusValues = new URLSearchParams(search).getAll("focus");
+    const focusValue =
+      rawFocusValues.length === 1 ? safeContextId(rawFocusValues[0]!) : null;
+    return focusValue
+      ? {
+          version: 1,
+          entityType: "habit",
+          entityId: focusValue,
+          anchorKey: null
+        }
+      : null;
+  }
+  return null;
+}
 
 export type ForgeCreateActionId =
   | "goal"
@@ -58,6 +130,7 @@ export type ForgeCreateActionId =
   | "behavior"
   | "flashcard"
   | "trigger_report"
+  | "note"
   | "wiki_page";
 
 export type ForgeCreateActionGroup = (typeof CREATE_ACTION_GROUPS)[number];
@@ -81,12 +154,13 @@ type ForgeCreateActionSpec = {
     | "behavior"
     | "flashcard"
     | "trigger_report"
+    | "note"
     | "wiki_page"
   >;
 };
 
 export type ForgeCreateAction = ForgeCreateActionSpec & {
-  onSelect: () => void;
+  onSelect: (returnFocusTarget?: HTMLElement | null) => void;
 };
 
 function useIsMobileCreateSheet() {
@@ -159,9 +233,10 @@ function CreateActionButton({
 }
 
 function buildForgeCreateActionSpecs(
-  t: ReturnType<typeof useI18n>["t"]
+  t: ReturnType<typeof useI18n>["t"],
+  contextualSource: ContextualNoteSource | null
 ): ForgeCreateActionSpec[] {
-  return [
+  const specs: ForgeCreateActionSpec[] = [
     {
       id: "goal",
       kind: "goal",
@@ -273,6 +348,20 @@ function buildForgeCreateActionSpecs(
       aliases: ["report", "trigger report", "psyche report"],
       filterIds: ["trigger_report"]
     },
+    ...(contextualSource
+      ? [
+          {
+            id: "note" as const,
+            kind: "note" as const,
+            group: "Knowledge" as const,
+            title: "Add related note",
+            quickActionTitle: `Add note to ${contextualSource.label}`,
+            description: `Add a note here. Forge keeps it linked to ${contextualSource.label} and returns you to this exact place.`,
+            aliases: ["note", "related note", "context", "evidence"],
+            filterIds: ["note" as const]
+          }
+        ]
+      : []),
     {
       id: "wiki_page",
       kind: "wiki_page",
@@ -285,44 +374,114 @@ function buildForgeCreateActionSpecs(
       filterIds: ["wiki_page"]
     }
   ];
+  return specs;
 }
 
 export function useForgeCreateActions({
   goals,
   projects,
+  tasks = [],
+  strategies = [],
+  habits = [],
   tags,
   users,
   defaultUserId = null,
+  returnFocusRef,
   onCreateGoal,
   onCreateProject,
   onCreateTask
 }: {
   goals: DashboardGoal[];
   projects: ProjectSummary[];
+  tasks?: Task[];
+  strategies?: Strategy[];
+  habits?: Habit[];
   tags: Tag[];
   users?: UserSummary[];
   defaultUserId?: string | null;
+  returnFocusRef?: RefObject<HTMLElement | null>;
   onCreateGoal: (input: GoalMutationInput) => Promise<void>;
   onCreateProject: (input: ProjectMutationInput) => Promise<void>;
   onCreateTask: (input: QuickTaskInput) => Promise<void>;
 }) {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const location = useLocation();
   const safeGoals = goals ?? [];
   const safeProjects = projects ?? [];
+  const safeTasks = tasks ?? [];
+  const safeStrategies = strategies ?? [];
+  const safeHabits = habits ?? [];
   const safeTags = tags ?? [];
   const safeUsers = users ?? [];
   const [goalOpen, setGoalOpen] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
   const [taskOpen, setTaskOpen] = useState(false);
+  const [contextualNoteOpen, setContextualNoteOpen] = useState(false);
+  const [contextualNoteActivated, setContextualNoteActivated] = useState(false);
+  const [contextualReturnState, setContextualReturnState] =
+    useState<ContextualCreateReturnState | null>(null);
 
-  const specs = useMemo(() => buildForgeCreateActionSpecs(t), [t]);
+  const resolvedContext = useMemo(
+    () => resolveForgeCreateContext(location.pathname, location.search),
+    [location.pathname, location.search]
+  );
+  const contextualSource = useMemo<ContextualNoteSource | null>(() => {
+    if (!resolvedContext) {
+      return null;
+    }
+    const sourceLabel = (() => {
+      switch (resolvedContext.entityType) {
+        case "goal":
+          return safeGoals.find(
+            (entry) => entry.id === resolvedContext.entityId
+          )?.title;
+        case "project":
+          return safeProjects.find(
+            (entry) => entry.id === resolvedContext.entityId
+          )?.title;
+        case "task":
+          return safeTasks.find(
+            (entry) => entry.id === resolvedContext.entityId
+          )?.title;
+        case "strategy":
+          return safeStrategies.find(
+            (entry) => entry.id === resolvedContext.entityId
+          )?.title;
+        case "habit":
+          return safeHabits.find(
+            (entry) => entry.id === resolvedContext.entityId
+          )?.title;
+        case "trigger_report":
+          return undefined;
+      }
+    })();
+    const typeLabel = resolvedContext.entityType
+      .replaceAll("_", " ")
+      .replace(/^./, (value) => value.toUpperCase());
+    return {
+      ...resolvedContext,
+      label: sourceLabel?.trim() || `this ${typeLabel.toLowerCase()}`
+    };
+  }, [
+    resolvedContext,
+    safeGoals,
+    safeHabits,
+    safeProjects,
+    safeStrategies,
+    safeTasks
+  ]);
+
+  const specs = useMemo(
+    () => buildForgeCreateActionSpecs(t, contextualSource),
+    [contextualSource, t]
+  );
 
   const actions = useMemo<ForgeCreateAction[]>(
     () =>
       specs.map((spec) => ({
         ...spec,
-        onSelect: () => {
+        onSelect: (explicitReturnFocusTarget) => {
           switch (spec.id) {
             case "goal":
               setGoalOpen(true);
@@ -333,6 +492,22 @@ export function useForgeCreateActions({
             case "task":
               setTaskOpen(true);
               return;
+            case "note": {
+              const activeElement =
+                explicitReturnFocusTarget ??
+                returnFocusRef?.current ??
+                (document.activeElement instanceof HTMLElement
+                  ? document.activeElement
+                  : null);
+              setContextualReturnState({
+                scrollX: window.scrollX,
+                scrollY: window.scrollY,
+                focusTarget: activeElement
+              });
+              setContextualNoteActivated(true);
+              setContextualNoteOpen(true);
+              return;
+            }
             case "strategy":
               navigate("/strategies?create=1");
               return;
@@ -362,11 +537,23 @@ export function useForgeCreateActions({
           }
         }
       })),
-    [navigate, specs]
+    [navigate, returnFocusRef, specs]
   );
 
   const dialogs: ReactNode = (
-    <Suspense fallback={null}>
+    <Suspense
+      fallback={
+        goalOpen || projectOpen || taskOpen || contextualNoteOpen ? (
+          <div
+            className="fixed bottom-4 left-1/2 z-[90] flex min-h-11 -translate-x-1/2 items-center rounded-full border border-border bg-background px-4 text-sm font-medium text-foreground shadow-lg"
+            role="status"
+            aria-live="polite"
+          >
+            Opening creation form…
+          </div>
+        ) : null
+      }
+    >
       {goalOpen ? (
         <LazyGoalDialog
           open={goalOpen}
@@ -387,6 +574,11 @@ export function useForgeCreateActions({
           goals={safeGoals as Goal[]}
           users={safeUsers}
           editingProject={null}
+          initialGoalId={
+            resolvedContext?.entityType === "goal"
+              ? resolvedContext.entityId
+              : null
+          }
           defaultUserId={defaultUserId}
           onOpenChange={setProjectOpen}
           onSubmit={async (input) => {
@@ -400,14 +592,40 @@ export function useForgeCreateActions({
           open={taskOpen}
           goals={safeGoals as Goal[]}
           projects={safeProjects}
+          workItems={safeTasks}
           tags={safeTags}
           users={safeUsers}
           editingTask={null}
+          initialGoalId={
+            resolvedContext?.entityType === "goal"
+              ? resolvedContext.entityId
+              : null
+          }
+          initialProjectId={
+            resolvedContext?.entityType === "project"
+              ? resolvedContext.entityId
+              : null
+          }
+          initialParentWorkItemId={
+            resolvedContext?.entityType === "task"
+              ? resolvedContext.entityId
+              : null
+          }
           defaultUserId={defaultUserId}
           onOpenChange={setTaskOpen}
           onSubmit={async (input) => {
             await onCreateTask(input);
           }}
+        />
+      ) : null}
+
+      {contextualSource && contextualNoteActivated ? (
+        <LazyContextualNoteDialog
+          open={contextualNoteOpen}
+          source={contextualSource}
+          defaultUserId={defaultUserId}
+          returnState={contextualReturnState}
+          onOpenChange={setContextualNoteOpen}
         />
       ) : null}
     </Suspense>
@@ -601,7 +819,9 @@ export function CreateMenu({
                           description={action.description}
                           onClick={() => {
                             setMenuOpen(false);
-                            action.onSelect();
+                            action.onSelect(
+                              menuRef.current?.querySelector("button") ?? null
+                            );
                           }}
                         />
                       ))}
@@ -663,7 +883,9 @@ export function CreateMenu({
                         description={action.description}
                         onClick={() => {
                           setMenuOpen(false);
-                          action.onSelect();
+                          action.onSelect(
+                            menuRef.current?.querySelector("button") ?? null
+                          );
                         }}
                       />
                     ))}

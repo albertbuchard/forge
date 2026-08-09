@@ -1,7 +1,48 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CreateMenu, type ForgeCreateAction } from "@/components/create-menu";
+import {
+  CreateMenu,
+  resolveForgeCreateContext,
+  useForgeCreateActions,
+  type ForgeCreateAction
+} from "@/components/create-menu";
+
+const { contextualDialogRenderedMock } = vi.hoisted(() => ({
+  contextualDialogRenderedMock: vi.fn()
+}));
+
+vi.mock("@/components/notes/contextual-note-dialog", () => ({
+  ContextualNoteDialog: ({
+    open,
+    source,
+    onOpenChange
+  }: {
+    open: boolean;
+    source: { label: string };
+    onOpenChange: (open: boolean) => void;
+  }) => {
+    if (!open) {
+      return null;
+    }
+    contextualDialogRenderedMock(performance.now());
+    return (
+      <div role="dialog" aria-label="Contextual note">
+        <span>{source.label}</span>
+        <button type="button" onClick={() => onOpenChange(false)}>
+          Close contextual note
+        </button>
+      </div>
+    );
+  }
+}));
 
 const actions: ForgeCreateAction[] = [
   {
@@ -86,6 +127,34 @@ function installMatchMedia(initialMatches: boolean) {
       matches = next;
     }
   };
+}
+
+function ContextualActionsHarness() {
+  const createActions = useForgeCreateActions({
+    goals: [{ id: "goal_1", title: "Finish the thesis" }] as never,
+    projects: [],
+    tasks: [],
+    strategies: [],
+    habits: [],
+    tags: [],
+    users: [],
+    onCreateGoal: vi.fn(),
+    onCreateProject: vi.fn(),
+    onCreateTask: vi.fn()
+  });
+  const action = createActions.actions.find((entry) => entry.id === "note");
+  return (
+    <>
+      <span>{action?.description}</span>
+      <button
+        type="button"
+        onClick={(event) => action?.onSelect(event.currentTarget)}
+      >
+        Open related note
+      </button>
+      {createActions.dialogs}
+    </>
+  );
 }
 
 describe("CreateMenu", () => {
@@ -191,5 +260,115 @@ describe("CreateMenu", () => {
     expect(screen.getByText("New life goal")).toBeInTheDocument();
 
     desktopTarget.remove();
+  });
+});
+
+describe("resolveForgeCreateContext", () => {
+  it.each([
+    ["/goals/goal_1", "", "goal", "goal_1"],
+    ["/projects/project_1", "", "project", "project_1"],
+    ["/tasks/task_1", "", "task", "task_1"],
+    ["/strategies/strategy_1", "", "strategy", "strategy_1"],
+    ["/habits", "?focus=habit_1", "habit", "habit_1"],
+    ["/psyche/reports/report_1", "", "trigger_report", "report_1"]
+  ])(
+    "resolves the exact supported context at %s",
+    (pathname, search, entityType, entityId) => {
+      expect(resolveForgeCreateContext(pathname, search)).toEqual({
+        version: 1,
+        entityType,
+        entityId,
+        anchorKey: null
+      });
+    }
+  );
+
+  it("does not guess an ambiguous, malformed, or list-only context", () => {
+    expect(resolveForgeCreateContext("/habits", "")).toBeNull();
+    expect(
+      resolveForgeCreateContext("/habits", "?focus=habit_1&focus=habit_2")
+    ).toBeNull();
+    expect(
+      resolveForgeCreateContext("/habits", "?focus=bad%2Fid&focus=habit_1")
+    ).toBeNull();
+    expect(
+      resolveForgeCreateContext("/habits", "?focus=&focus=habit_1")
+    ).toBeNull();
+    expect(resolveForgeCreateContext("/tasks", "")).toBeNull();
+    expect(resolveForgeCreateContext("/tasks/bad%2Fid", "")).toBeNull();
+    expect(
+      resolveForgeCreateContext("/projects/project_1/edit", "")
+    ).toBeNull();
+  });
+
+  it("keeps contextual route resolution below the one-millisecond p95 budget", () => {
+    const durations: number[] = [];
+    for (let index = 0; index < 33; index += 1) {
+      const startedAt = performance.now();
+      expect(
+        resolveForgeCreateContext("/habits", "?focus=habit_evening_walk")
+      ).not.toBeNull();
+      if (index >= 3) {
+        durations.push(performance.now() - startedAt);
+      }
+    }
+    durations.sort((left, right) => left - right);
+    const p95 = durations[Math.ceil(durations.length * 0.95) - 1]!;
+    console.log(`context resolver p95 ${p95.toFixed(3)}ms`);
+    expect(p95).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("contextual create action", () => {
+  it("states the relationship clearly and opens within the 100ms p95 budget", async () => {
+    contextualDialogRenderedMock.mockClear();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } }
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/goals/goal_1?view=active#notes"]}>
+          <ContextualActionsHarness />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    expect(
+      screen.getByText(
+        "Add a note here. Forge keeps it linked to Finish the thesis and returns you to this exact place."
+      )
+    ).toBeInTheDocument();
+    const durations: number[] = [];
+    const openButton = screen.getByRole("button", {
+      name: "Open related note"
+    });
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    for (let index = 0; index < 33; index += 1) {
+      const startedAt = performance.now();
+      fireEvent.click(openButton);
+      if (index === 0) {
+        expect(screen.getByRole("status")).toHaveTextContent(
+          "Opening creation form…"
+        );
+      }
+      await screen.findByRole("dialog", { name: "Contextual note" });
+      if (index >= 3) {
+        const renderedAt = contextualDialogRenderedMock.mock.calls.at(-1)?.[0];
+        expect(renderedAt).toEqual(expect.any(Number));
+        durations.push(renderedAt - startedAt);
+      }
+      fireEvent.click(
+        screen.getByRole("button", { name: "Close contextual note" })
+      );
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("dialog", { name: "Contextual note" })
+        ).not.toBeInTheDocument()
+      );
+    }
+    durations.sort((left, right) => left - right);
+    const p95 = durations[Math.ceil(durations.length * 0.95) - 1]!;
+    console.log(`contextual create open p95 ${p95.toFixed(2)}ms`);
+    expect(p95).toBeLessThanOrEqual(100);
   });
 });
