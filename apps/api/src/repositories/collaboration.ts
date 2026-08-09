@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { getDatabase } from "../db.js";
+import { getDatabase, runInTransaction } from "../db.js";
+import { HttpError } from "../errors.js";
 import {
   decorateOwnedEntity,
   filterOwnedEntities,
@@ -12,6 +13,7 @@ import { recordEventLog } from "./event-log.js";
 import { createProject } from "./projects.js";
 import { createTask } from "./tasks.js";
 import { recordInsightAppliedReward } from "./rewards.js";
+import { resolveUserForMutation } from "./users.js";
 import {
   agentActionSchema,
   approvalRequestSchema,
@@ -61,6 +63,10 @@ type InsightFeedbackRow = {
   feedback_type: InsightFeedback["feedbackType"];
   note: string;
   created_at: string;
+};
+
+type InsightDuplicateRow = InsightRow & {
+  is_deleted: number;
 };
 
 type ApprovalRequestRow = {
@@ -264,76 +270,150 @@ export function getInsightById(insightId: string): Insight | undefined {
   return row ? mapInsight(row) : undefined;
 }
 
+function normalizeInsightDedupValue(value: string | null | undefined) {
+  return (value ?? "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/gu, " ")
+    .toLowerCase();
+}
+
+function findDuplicateInsightForOwner(
+  ownerUserId: string,
+  input: CreateInsightInput
+): InsightDuplicateRow | undefined {
+  const rows = getDatabase()
+    .prepare(
+      `SELECT
+         insights.id, insights.origin_type, insights.origin_agent_id, insights.origin_label,
+         insights.visibility, insights.status, insights.entity_type, insights.entity_id,
+         insights.timeframe_label, insights.title, insights.summary, insights.recommendation,
+         insights.rationale, insights.confidence, insights.cta_label, insights.evidence_json,
+         insights.created_at, insights.updated_at,
+         CASE WHEN deleted_entities.entity_id IS NULL THEN 0 ELSE 1 END AS is_deleted
+       FROM insights
+       JOIN entity_owners
+         ON entity_owners.entity_type = 'insight'
+        AND entity_owners.entity_id = insights.id
+       LEFT JOIN deleted_entities
+         ON deleted_entities.entity_type = 'insight'
+        AND deleted_entities.entity_id = insights.id
+       WHERE entity_owners.user_id = ?
+         AND insights.status NOT IN ('dismissed', 'expired')
+         AND forge_nfkc_lower(COALESCE(insights.entity_type, '')) = ?
+         AND forge_nfkc_lower(COALESCE(insights.entity_id, '')) = ?
+       ORDER BY is_deleted ASC, insights.created_at ASC, insights.id ASC`
+    )
+    .all(
+      ownerUserId,
+      normalizeInsightDedupValue(input.entityType),
+      normalizeInsightDedupValue(input.entityId)
+    ) as InsightDuplicateRow[];
+
+  return rows.find(
+    (candidate) =>
+      normalizeInsightDedupValue(candidate.title) ===
+        normalizeInsightDedupValue(input.title) &&
+      normalizeInsightDedupValue(candidate.summary) ===
+        normalizeInsightDedupValue(input.summary) &&
+      normalizeInsightDedupValue(candidate.recommendation) ===
+        normalizeInsightDedupValue(input.recommendation) &&
+      normalizeInsightDedupValue(candidate.timeframe_label) ===
+        normalizeInsightDedupValue(input.timeframeLabel) &&
+      normalizeInsightDedupValue(candidate.entity_type) ===
+        normalizeInsightDedupValue(input.entityType) &&
+      normalizeInsightDedupValue(candidate.entity_id) ===
+        normalizeInsightDedupValue(input.entityId)
+  );
+}
+
 export function createInsight(input: CreateInsightInput, context: CollaborationContext): Insight {
   const parsed = createInsightSchema.parse(input);
-  const now = new Date().toISOString();
-  const insightId = `ins_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
-
-  getDatabase()
-    .prepare(
-      `INSERT INTO insights (
-        id, origin_type, origin_agent_id, origin_label, visibility, status, entity_type, entity_id, timeframe_label,
-        title, summary, recommendation, rationale, confidence, cta_label, evidence_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      insightId,
-      parsed.originType,
-      parsed.originAgentId,
-      parsed.originLabel,
-      parsed.visibility,
-      parsed.status,
-      parsed.entityType,
-      parsed.entityId,
-      parsed.timeframeLabel,
-      parsed.title,
-      parsed.summary,
-      parsed.recommendation,
-      parsed.rationale,
-      parsed.confidence,
-      parsed.ctaLabel,
-      JSON.stringify(parsed.evidence),
-      now,
-      now
+  return runInTransaction(() => {
+    const owner = resolveUserForMutation(
+      inferFirstOwnedUserId(
+        parsed.entityType && parsed.entityId
+          ? [{ entityType: parsed.entityType, entityId: parsed.entityId }]
+          : []
+      ),
+      context.actor ?? parsed.originLabel ?? null
     );
-  setEntityOwner(
-    "insight",
-    insightId,
-    inferFirstOwnedUserId(
-      parsed.entityType && parsed.entityId
-        ? [{ entityType: parsed.entityType, entityId: parsed.entityId }]
-        : []
-    ),
-    context.actor ?? parsed.originLabel ?? null
-  );
-
-  recordActivityEvent({
-    entityType: "insight",
-    entityId: insightId,
-    eventType: "insight_created",
-    title: `Insight captured: ${parsed.title}`,
-    description: parsed.summary,
-    actor: context.actor ?? null,
-    source: context.source,
-    metadata: {
-      originType: parsed.originType,
-      entityType: parsed.entityType ?? "",
-      entityId: parsed.entityId ?? ""
+    const duplicate = findDuplicateInsightForOwner(owner.id, parsed);
+    if (duplicate) {
+      const inBin = duplicate.is_deleted === 1;
+      throw new HttpError(
+        409,
+        inBin ? "insight_duplicate_in_bin" : "insight_duplicate",
+        inBin
+          ? "A matching insight is already in the bin. Restore it instead of storing a duplicate."
+          : "A matching active insight already exists. Review or update it instead of storing a duplicate.",
+        {
+          existingId: duplicate.id,
+          existingStatus: duplicate.status
+        }
+      );
     }
-  });
-  recordEventLog({
-    eventKind: "insight.created",
-    entityType: "insight",
-    entityId: insightId,
-    actor: context.actor ?? null,
-    source: context.source,
-    metadata: {
-      originType: parsed.originType,
-      confidence: parsed.confidence
-    }
-  });
 
-  return getInsightById(insightId)!;
+    const now = new Date().toISOString();
+    const insightId = `ins_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+
+    getDatabase()
+      .prepare(
+        `INSERT INTO insights (
+          id, origin_type, origin_agent_id, origin_label, visibility, status, entity_type, entity_id, timeframe_label,
+          title, summary, recommendation, rationale, confidence, cta_label, evidence_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        insightId,
+        parsed.originType,
+        parsed.originAgentId,
+        parsed.originLabel,
+        parsed.visibility,
+        parsed.status,
+        parsed.entityType,
+        parsed.entityId,
+        parsed.timeframeLabel,
+        parsed.title,
+        parsed.summary,
+        parsed.recommendation,
+        parsed.rationale,
+        parsed.confidence,
+        parsed.ctaLabel,
+        JSON.stringify(parsed.evidence),
+        now,
+        now
+      );
+    setEntityOwner("insight", insightId, owner.id);
+
+    recordActivityEvent({
+      entityType: "insight",
+      entityId: insightId,
+      eventType: "insight_created",
+      title: `Insight captured: ${parsed.title}`,
+      description: parsed.summary,
+      actor: context.actor ?? null,
+      source: context.source,
+      metadata: {
+        originType: parsed.originType,
+        entityType: parsed.entityType ?? "",
+        entityId: parsed.entityId ?? ""
+      }
+    });
+    recordEventLog({
+      eventKind: "insight.created",
+      entityType: "insight",
+      entityId: insightId,
+      actor: context.actor ?? null,
+      source: context.source,
+      metadata: {
+        originType: parsed.originType,
+        confidence: parsed.confidence
+      }
+    });
+
+    return getInsightById(insightId)!;
+  });
 }
 
 export function updateInsight(insightId: string, input: UpdateInsightInput, context: CollaborationContext): Insight | undefined {
