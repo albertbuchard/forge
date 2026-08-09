@@ -309,7 +309,6 @@ async function verifyPackedForgePeerSource(
 
 function packedPeerEnvironment(binaryPath) {
   return {
-    ...process.env,
     FORGE_PEER_BIN: binaryPath,
     FORGE_PEER_ENABLED: "1",
     FORGE_PEER_REQUIRED: "1",
