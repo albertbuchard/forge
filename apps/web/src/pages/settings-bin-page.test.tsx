@@ -54,11 +54,14 @@ vi.mock("@/components/settings/settings-section-nav", () => ({
   )
 }));
 
-function makeRecord(index: number): DeletedEntityRecord {
+function makeRecord(
+  index: number,
+  entityType: DeletedEntityRecord["entityType"] = "task"
+): DeletedEntityRecord {
   return {
-    entityType: "task",
-    entityId: `task_${index}`,
-    title: `Deleted task ${index}`,
+    entityType,
+    entityId: `${entityType}_${index}`,
+    title: `Deleted ${entityType.replaceAll("_", " ")} ${index}`,
     subtitle: null,
     deletedAt: "2026-07-11T09:00:00.000Z",
     deletedByActor: "operator",
@@ -68,15 +71,28 @@ function makeRecord(index: number): DeletedEntityRecord {
   };
 }
 
-function renderPage(records: DeletedEntityRecord[]) {
-  getSettingsBinMock.mockResolvedValue({
+function binPayload(records: DeletedEntityRecord[]) {
+  return {
     bin: {
       generatedAt: "2026-07-11T10:00:00.000Z",
       totalCount: records.length,
       countsByEntityType: { task: records.length },
       records
     }
-  });
+  };
+}
+
+function renderPage(
+  records: DeletedEntityRecord[],
+  recordsAfterMutation?: DeletedEntityRecord[]
+) {
+  if (recordsAfterMutation) {
+    getSettingsBinMock
+      .mockResolvedValueOnce(binPayload(records))
+      .mockResolvedValue(binPayload(recordsAfterMutation));
+  } else {
+    getSettingsBinMock.mockResolvedValue(binPayload(records));
+  }
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -151,6 +167,33 @@ describe("SettingsBinPage", () => {
     expect(
       screen.getAllByRole("button", { name: "Delete forever" })
     ).toHaveLength(45);
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Delete first 40 shown forever"
+      })
+    );
+    await waitFor(() => {
+      const request = deleteEntitiesMock.mock.calls[1]?.[0] as {
+        operations: unknown[];
+      };
+      expect(request.operations).toHaveLength(40);
+    });
+    expect(window.confirm).toHaveBeenLastCalledWith(
+      "Permanently delete the first 40 of 45 shown items from the bin? This cannot be undone."
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Restore first 40 shown"
+      })
+    );
+    await waitFor(() => {
+      const request = restoreEntitiesMock.mock.calls[0]?.[0] as {
+        operations: unknown[];
+      };
+      expect(request.operations).toHaveLength(40);
+    });
   }, 15_000);
 
   it("requires confirmation before permanently deleting one record", async () => {
@@ -158,7 +201,7 @@ describe("SettingsBinPage", () => {
       .spyOn(window, "confirm")
       .mockReturnValueOnce(false)
       .mockReturnValueOnce(true);
-    renderPage([makeRecord(1)]);
+    renderPage([makeRecord(1)], []);
 
     const deleteButton = await screen.findByRole("button", {
       name: "Delete forever"
@@ -172,9 +215,65 @@ describe("SettingsBinPage", () => {
         operations: [{ entityType: "task", id: "task_1", mode: "hard" }]
       });
     });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(
+        screen.getByRole("status", { name: "" })
+      );
+    });
     expect(confirm).toHaveBeenLastCalledWith(
       'Permanently delete "Deleted task 1"? This removes the task record and cannot be undone.'
     );
+    expect(deleteButton).toHaveClass("min-h-11");
+  });
+
+  it("exposes the active type filter and restores the exact selected record", async () => {
+    renderPage([makeRecord(1)]);
+
+    const taskFilter = await screen.findByRole("button", { name: "Tasks" });
+    expect(taskFilter).toHaveAttribute("aria-pressed", "false");
+    expect(taskFilter).toHaveClass("min-h-11");
+
+    fireEvent.click(taskFilter);
+    expect(taskFilter).toHaveAttribute("aria-pressed", "true");
+
+    const restoreButton = screen.getByRole("button", { name: "Restore" });
+    expect(restoreButton).toHaveClass("min-h-11");
+    fireEvent.click(restoreButton);
+
+    await waitFor(() => {
+      expect(restoreEntitiesMock).toHaveBeenCalledWith({
+        operations: [{ entityType: "task", id: "task_1" }]
+      });
+    });
+  });
+
+  it("reveals the remaining records after restoring the last item in an active filter", async () => {
+    const task = makeRecord(1);
+    const note = makeRecord(2, "note");
+    renderPage([task, note], [note]);
+
+    const taskFilter = await screen.findByRole("button", { name: "Tasks" });
+    fireEvent.click(taskFilter);
+    expect(screen.getByText("Deleted task 1")).toBeInTheDocument();
+    expect(screen.queryByText("Deleted note 2")).not.toBeInTheDocument();
+
+    const restoreButton = screen.getByRole("button", { name: "Restore" });
+    restoreButton.focus();
+    fireEvent.click(restoreButton);
+
+    expect(await screen.findByText("Deleted note 2")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Tasks" })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Notes" })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+    await waitFor(() => {
+      expect(document.activeElement).toBe(
+        screen.getByRole("status", { name: "" })
+      );
+    });
   });
 
   it("keeps a failed permanent deletion visible and recoverable", async () => {
