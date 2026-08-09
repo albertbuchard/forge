@@ -34,6 +34,7 @@ import {
 import {
   classifyFramePixels,
   isExactPrivateOperatorSessionPayload,
+  isPrivateOperatorSessionAdmissionRequest,
   normalizeRafToReference,
   parsePrivateOperatorSessionCookie,
   positiveFiniteFrameDurations,
@@ -129,6 +130,30 @@ test("private browser authority is exact and malformed cookies stay secret", () 
     false
   );
   assert.equal(isExactPrivateOperatorSessionPayload(401, exact), false);
+  assert.equal(
+    isPrivateOperatorSessionAdmissionRequest({
+      targetUrl: "http://127.0.0.1:4318/forge/people",
+      responseUrl: "http://127.0.0.1:4318/api/v1/auth/operator-session",
+      method: "GET"
+    }),
+    true
+  );
+  assert.equal(
+    isPrivateOperatorSessionAdmissionRequest({
+      targetUrl: "http://127.0.0.1:4318/forge/people",
+      responseUrl: "http://127.0.0.1:4318/api/v1/auth/operator-session/other",
+      method: "GET"
+    }),
+    false
+  );
+  assert.equal(
+    isPrivateOperatorSessionAdmissionRequest({
+      targetUrl: "http://127.0.0.1:4318/forge/people",
+      responseUrl: "not-a-url",
+      method: "GET"
+    }),
+    false
+  );
   const spawnArgs = peoplePerformanceServerSpawnArgs(
     path.join(
       repositoryRoot,

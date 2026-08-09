@@ -78,6 +78,24 @@ export function isExactPrivateOperatorSessionPayload(status, body) {
   );
 }
 
+export function isPrivateOperatorSessionAdmissionRequest({
+  targetUrl,
+  responseUrl,
+  method
+}) {
+  try {
+    const target = new URL(targetUrl);
+    const response = new URL(responseUrl);
+    return (
+      method === "GET" &&
+      response.origin === target.origin &&
+      response.pathname === "/api/v1/auth/operator-session"
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function installPrivateOperatorSessionCookie(context, server) {
   const value = parsePrivateOperatorSessionCookie(
     server.getOperatorSessionCookie()
@@ -97,15 +115,20 @@ async function installPrivateOperatorSessionCookie(context, server) {
 }
 
 async function navigateWithPrivateOperatorAdmission(page, targetUrl, options) {
-  const applicationOrigin = new URL(targetUrl).origin;
+  if (page.url() !== "about:blank") {
+    await page.goto("about:blank", {
+      waitUntil: "load",
+      timeout: 30_000
+    });
+  }
   const admissionResponse = page.waitForResponse(
     (response) => {
-      const responseUrl = new URL(response.url());
-      return (
-        responseUrl.origin === applicationOrigin &&
-        responseUrl.pathname === "/api/v1/auth/operator-session" &&
-        response.request().method() === "GET"
-      );
+      const request = response.request();
+      return isPrivateOperatorSessionAdmissionRequest({
+        targetUrl,
+        responseUrl: response.url(),
+        method: request.method()
+      });
     },
     { timeout: 30_000 }
   );
