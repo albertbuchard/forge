@@ -258,7 +258,15 @@ function renderWithProviders(element: React.ReactNode, initialEntry = "/") {
 
 describe("core route states", () => {
   it("shows the overview shell when only gamification metrics exist", async () => {
-    useForgeShellMock.mockReturnValue({ snapshot: createSnapshot() });
+    useForgeShellMock.mockReturnValue({
+      snapshot: createSnapshot(),
+      operatorSession: { profile: "standard" },
+      selectedUserIds: [],
+      refresh: vi.fn(),
+      createGoal: vi.fn(),
+      createProject: vi.fn(),
+      createTask: vi.fn()
+    });
     useQueryMock.mockImplementation(
       ({ queryKey }: { queryKey?: unknown[] }) => ({
         data:
@@ -296,7 +304,8 @@ describe("core route states", () => {
     renderWithProviders(<OverviewPage />);
 
     expect(screen.getAllByText("Overview").length).toBeGreaterThan(0);
-    expect(screen.getByText("Momentum 0")).toBeInTheDocument();
+    expect(screen.getByText("What matters now")).toBeInTheDocument();
+    expect(screen.getByText("No items need attention")).toBeInTheDocument();
   });
 
   it("shows the goals empty state when no goals exist yet", async () => {

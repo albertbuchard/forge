@@ -1723,6 +1723,11 @@
   --ui-surface-3: rgba(255, 255, 255, 0.1);
   --ui-surface-hover: rgba(255, 255, 255, 0.09);
   --ui-surface-active: rgba(192, 193, 255, 0.14);
+  --ui-surface-selected: color-mix(
+    in srgb,
+    var(--primary) 18%,
+    var(--ui-surface-2) 82%
+  );
   --ui-surface-shell: linear-gradient(
     180deg,
     color-mix(in srgb, var(--surface-panel) 94%, transparent),

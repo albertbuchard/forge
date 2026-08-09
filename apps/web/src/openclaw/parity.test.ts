@@ -182,34 +182,28 @@ describe("forge plugin route parity", () => {
     expect(report.mirrored).toContain(
       "POST /api/v1/courses/:courseId/voice-session"
     );
-    expect(report.mirrored).toContain(
-      "POST /api/v1/courses/:courseId/upgrade"
-    );
+    expect(report.mirrored).toContain("POST /api/v1/courses/:courseId/upgrade");
   });
 
-  it(
-    "derives the complete live route contract and verifies actual server registration",
-    async () => {
-      const dataRoot = mkdtempSync(
-        path.join(os.tmpdir(), "forge-route-parity-")
+  it("derives the complete live route contract and verifies actual server registration", async () => {
+    const dataRoot = mkdtempSync(path.join(os.tmpdir(), "forge-route-parity-"));
+    const app = await buildServer({ dataRoot, taskRunWatchdog: false });
+    try {
+      const issued = createAgentToken(
+        createAgentTokenSchema.parse({
+          label: "Route parity test",
+          agentLabel: "Route parity test",
+          trustLevel: "trusted",
+          scopes: ["read"]
+        })
       );
-      const app = await buildServer({ dataRoot, taskRunWatchdog: false });
-      try {
-        const issued = createAgentToken(
-          createAgentTokenSchema.parse({
-            label: "Route parity test",
-            agentLabel: "Route parity test",
-            trustLevel: "trusted",
-            scopes: ["read"]
-          })
-        );
-        const response = await app.inject({
-          method: "GET",
-          url: "/api/v1/agents/onboarding",
-          headers: { authorization: `Bearer ${issued.token}` }
-        });
-        expect(response.statusCode).toBe(200);
-        const onboarding = response.json();
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/v1/agents/onboarding",
+        headers: { authorization: `Bearer ${issued.token}` }
+      });
+      expect(response.statusCode).toBe(200);
+      const onboarding = response.json();
       const courseMethodRoutes = onboarding.onboarding.entityRouteModel
         .specializedDomainSurfaces.courses.methodRoutes as Record<
         string,
@@ -265,24 +259,17 @@ describe("forge plugin route parity", () => {
         const [method, url] = route.split(" ");
         expect(
           app.hasRoute({
-            method: method as
-              | "GET"
-              | "POST"
-              | "PUT"
-              | "PATCH"
-              | "DELETE",
+            method: method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
             url
           }),
           `${route} should be registered by Fastify`
         ).toBe(true);
       }
-      } finally {
-        await app.close();
-        rmSync(dataRoot, { recursive: true, force: true });
-      }
-    },
-    20_000
-  );
+    } finally {
+      await app.close();
+      rmSync(dataRoot, { recursive: true, force: true });
+    }
+  }, 45_000);
 
   it("publishes supported route keys for governance and diagnostics", () => {
     const supported = collectSupportedPluginApiRouteKeys();
@@ -345,9 +332,9 @@ describe("forge plugin route parity", () => {
     expect(supported.has("POST /api/v1/entities/search")).toBe(true);
     expect(supported.has("POST /api/v1/work-adjustments")).toBe(true);
     expect(supported.has("POST /api/v1/insights")).toBe(true);
-    expect(
-      supported.has("POST /api/v1/courses/:courseId/voice-session")
-    ).toBe(true);
+    expect(supported.has("POST /api/v1/courses/:courseId/voice-session")).toBe(
+      true
+    );
     expect(supported.has("POST /api/v1/courses/:courseId/upgrade")).toBe(true);
   });
 

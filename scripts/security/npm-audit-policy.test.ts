@@ -5,35 +5,14 @@ import { evaluateNpmAuditReport } from "./npm-audit-policy.js";
 
 const activeDate = new Date("2026-07-27T00:00:00.000Z");
 
-test("accepts only the documented React Router advisory and its dependency chain", () => {
-  const result = evaluateNpmAuditReport(
-    {
-      vulnerabilities: {
-        "react-router": {
-          severity: "high",
-          via: [
-            {
-              url: "https://github.com/advisories/GHSA-qwww-vcr4-c8h2"
-            }
-          ]
-        },
-        "react-router-dom": {
-          severity: "high",
-          via: ["react-router"]
-        }
-      }
-    },
-    activeDate
-  );
+test("accepts a production graph with no vulnerabilities", () => {
+  const result = evaluateNpmAuditReport({ vulnerabilities: {} }, activeDate);
 
   assert.equal(result.rejected.length, 0);
-  assert.deepEqual(result.accepted.map((entry) => entry.packageName).sort(), [
-    "react-router",
-    "react-router-dom"
-  ]);
+  assert.equal(result.accepted.length, 0);
 });
 
-test("rejects an unapproved advisory even when another exception is valid", () => {
+test("rejects every npm advisory when no npm exception is active", () => {
   const result = evaluateNpmAuditReport(
     {
       vulnerabilities: {
@@ -60,7 +39,7 @@ test("rejects an unapproved advisory even when another exception is valid", () =
   ]);
 });
 
-test("rejects unresolved audit chains and expired exception policy", () => {
+test("rejects unresolved audit chains and an expired global exception policy", () => {
   const unresolved = evaluateNpmAuditReport(
     {
       vulnerabilities: {
@@ -74,7 +53,7 @@ test("rejects unresolved audit chains and expired exception policy", () => {
     () =>
       evaluateNpmAuditReport(
         { vulnerabilities: {} },
-        new Date("2026-08-09T00:00:00.000Z")
+        new Date("2026-09-09T00:00:00.000Z")
       ),
     /expired/u
   );

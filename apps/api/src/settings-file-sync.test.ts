@@ -35,6 +35,57 @@ test("startup exports forge.json when the runtime settings file is missing", asy
   }
 });
 
+test("a redacted Google settings snapshot remains restart-safe", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-settings-file-restart-")
+  );
+  const firstApp = await buildServer({
+    dataRoot: rootDir,
+    seedDemoData: false
+  });
+
+  try {
+    const payload = await readForgeJson(rootDir);
+    const google = (
+      payload.calendarProviders as {
+        google: Record<string, unknown>;
+      }
+    ).google;
+    assert.equal(typeof google.clientId, "string");
+    assert.equal("clientSecret" in google, false);
+  } finally {
+    await firstApp.close();
+    closeDatabase();
+  }
+
+  const restartedApp = await buildServer({
+    dataRoot: rootDir,
+    seedDemoData: false
+  });
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(restartedApp);
+    const response = await restartedApp.inject({
+      method: "GET",
+      url: "/api/v1/settings",
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(response.statusCode, 200, response.body);
+    const google = (
+      response.json() as {
+        settings: {
+          calendarProviders: { google: Record<string, unknown> };
+        };
+      }
+    ).settings.calendarProviders.google;
+    assert.equal(typeof google.clientId, "string");
+    assert.equal("clientSecret" in google, false);
+  } finally {
+    await restartedApp.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("forge.json overrides writable settings and is rewritten as a full snapshot", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-settings-file-override-")

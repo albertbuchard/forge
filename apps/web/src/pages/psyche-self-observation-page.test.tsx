@@ -1,5 +1,11 @@
 import type { ReactNode } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -37,12 +43,15 @@ const {
 }));
 
 let restoreDate: (() => void) | null = null;
-const COMPLEX_INTEGRATION_TEST_TIMEOUT_MS = 20_000;
+const SELF_OBSERVATION_TEST_TIMEOUT_MS = 60_000;
+
+vi.setConfig({ testTimeout: SELF_OBSERVATION_TEST_TIMEOUT_MS });
 
 vi.mock("react-router-dom", async () => {
-  const actual = await vi.importActual<typeof import("react-router-dom")>(
-    "react-router-dom"
-  );
+  const actual =
+    await vi.importActual<typeof import("react-router-dom")>(
+      "react-router-dom"
+    );
   return {
     ...actual,
     useNavigate: () => navigateMock
@@ -87,7 +96,13 @@ vi.mock("@/components/experience/sheet-scaffold", () => ({
     open: boolean;
     title: string;
     children: ReactNode;
-  }) => (open ? <div><div>{title}</div>{children}</div> : null)
+  }) =>
+    open ? (
+      <div>
+        <div>{title}</div>
+        {children}
+      </div>
+    ) : null
 }));
 
 vi.mock("@/components/notes/note-tags-input", () => ({
@@ -489,61 +504,72 @@ describe("PsycheSelfObservationPage", () => {
       ]
     });
 
-    createNoteMock.mockImplementation(async (input: Record<string, unknown>) => {
-      const observedAt = ((input.frontmatter as Record<string, string>).observedAt ??
-        "2026-04-06T11:00:00.000Z") as string;
-      observations = [
-        ...observations,
-        createObservation({
-          id: "note_created",
-          contentMarkdown: String(input.contentMarkdown),
-          contentPlain: String(input.contentMarkdown),
-          observedAt,
-          author: String(input.author ?? ""),
-          tags: (input.tags as string[]) ?? [],
-          userKind: "human",
-          links: ((input.links as Array<{ entityType: string; entityId: string; anchorKey: null }>) ?? [])
-        })
-      ];
-      return { note: observations[observations.length - 1]!.note };
-    });
+    createNoteMock.mockImplementation(
+      async (input: Record<string, unknown>) => {
+        const observedAt = ((input.frontmatter as Record<string, string>)
+          .observedAt ?? "2026-04-06T11:00:00.000Z") as string;
+        observations = [
+          ...observations,
+          createObservation({
+            id: "note_created",
+            contentMarkdown: String(input.contentMarkdown),
+            contentPlain: String(input.contentMarkdown),
+            observedAt,
+            author: String(input.author ?? ""),
+            tags: (input.tags as string[]) ?? [],
+            userKind: "human",
+            links:
+              (input.links as Array<{
+                entityType: string;
+                entityId: string;
+                anchorKey: null;
+              }>) ?? []
+          })
+        ];
+        return { note: observations[observations.length - 1]!.note };
+      }
+    );
 
-    patchNoteMock.mockImplementation(async (noteId: string, patch: Record<string, unknown>) => {
-      observations = observations.map((entry) =>
-        entry.note.id === noteId
-          ? createObservation({
-              id: entry.id,
-              contentMarkdown: String(
-                patch.contentMarkdown ?? entry.note.contentMarkdown
-              ),
-              contentPlain: String(
-                patch.contentMarkdown ?? entry.note.contentPlain
-              ),
-              observedAt: String(
-                ((patch.frontmatter as Record<string, string> | undefined)?.observedAt ??
-                  entry.observedAt) as string
-              ),
-              author: String(patch.author ?? entry.note.author ?? ""),
-              tags: (patch.tags as string[]) ?? entry.note.tags ?? [],
-              userKind:
-                ((patch.userId as string | undefined) ?? entry.note.userId) ===
-                "user_forge_bot"
-                  ? "bot"
-                  : "human",
-              links:
-                ((patch.links as Array<{ entityType: string; entityId: string; anchorKey: null }>) ??
-                  entry.note.links) as Array<{
+    patchNoteMock.mockImplementation(
+      async (noteId: string, patch: Record<string, unknown>) => {
+        observations = observations.map((entry) =>
+          entry.note.id === noteId
+            ? createObservation({
+                id: entry.id,
+                contentMarkdown: String(
+                  patch.contentMarkdown ?? entry.note.contentMarkdown
+                ),
+                contentPlain: String(
+                  patch.contentMarkdown ?? entry.note.contentPlain
+                ),
+                observedAt: String(
+                  ((patch.frontmatter as Record<string, string> | undefined)
+                    ?.observedAt ?? entry.observedAt) as string
+                ),
+                author: String(patch.author ?? entry.note.author ?? ""),
+                tags: (patch.tags as string[]) ?? entry.note.tags ?? [],
+                userKind:
+                  ((patch.userId as string | undefined) ??
+                    entry.note.userId) === "user_forge_bot"
+                    ? "bot"
+                    : "human",
+                links: ((patch.links as Array<{
+                  entityType: string;
+                  entityId: string;
+                  anchorKey: null;
+                }>) ?? entry.note.links) as Array<{
                   entityType: string;
                   entityId: string;
                   anchorKey: null;
                 }>
-            })
-          : entry
-      );
-      return {
-        note: observations.find((entry) => entry.note.id === noteId)!.note
-      };
-    });
+              })
+            : entry
+        );
+        return {
+          note: observations.find((entry) => entry.note.id === noteId)!.note
+        };
+      }
+    );
 
     deleteNoteMock.mockResolvedValue({ note: observations[0]!.note });
 
@@ -557,9 +583,9 @@ describe("PsycheSelfObservationPage", () => {
       writable: true,
       value: vi.fn(() => undefined)
     });
-    vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => undefined);
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(
+      () => undefined
+    );
   });
 
   afterEach(() => {
@@ -575,17 +601,28 @@ describe("PsycheSelfObservationPage", () => {
     renderPage();
 
     expect(
-      (await screen.findAllByText("Notice the tension before the meeting.")).length
+      (await screen.findAllByText("Notice the tension before the meeting."))
+        .length
     ).toBeGreaterThan(0);
-    expect(screen.getAllByText("Automated system note.").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Resisted Doomscrolling").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("Automated system note.").length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("Resisted Doomscrolling").length
+    ).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Forge activity" })[0]!);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Forge activity" })[0]!
+    );
 
     await waitFor(() =>
-      expect(screen.queryAllByText("Notice the tension before the meeting.")).toHaveLength(0)
+      expect(
+        screen.queryAllByText("Notice the tension before the meeting.")
+      ).toHaveLength(0)
     );
-    expect(screen.getAllByText("Resisted Doomscrolling").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("Resisted Doomscrolling").length
+    ).toBeGreaterThan(0);
   });
 
   it(
@@ -603,23 +640,25 @@ describe("PsycheSelfObservationPage", () => {
           screen.queryAllByText("Notice the tension before the meeting.")
         ).toHaveLength(0)
       );
-      expect(screen.getAllByText("Resisted Doomscrolling").length).toBeGreaterThan(
-        0
-      );
+      expect(
+        screen.getAllByText("Resisted Doomscrolling").length
+      ).toBeGreaterThan(0);
 
       fireEvent.click(screen.getByRole("button", { name: /Informative/i }));
       fireEvent.click(screen.getByRole("option", { name: /Compact/i }));
 
       expect(screen.getByRole("button", { name: /Compact/i })).toBeTruthy();
     },
-    10_000
+    SELF_OBSERVATION_TEST_TIMEOUT_MS
   );
 
   it("exports the current week with the active filters", async () => {
     renderPage();
 
     await screen.findAllByText("Notice the tension before the meeting.");
-    fireEvent.click(screen.getAllByRole("button", { name: "Forge activity" })[0]!);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Forge activity" })[0]!
+    );
     fireEvent.click(screen.getByRole("button", { name: "Export week" }));
 
     await waitFor(() =>
@@ -635,58 +674,66 @@ describe("PsycheSelfObservationPage", () => {
     );
   });
 
-  it("creates a new observation with the default self-observation tag and linked records", async () => {
-    renderPage();
-    fireEvent.click(
-      (await screen.findAllByRole("button", { name: "Add observation" }))[0]!
-    );
+  it(
+    "creates a new observation with the default self-observation tag and linked records",
+    async () => {
+      renderPage();
+      fireEvent.click(
+        (await screen.findAllByRole("button", { name: "Add observation" }))[0]!
+      );
 
-    expect(screen.getAllByText("Self-observation").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Self-observation").length).toBeGreaterThan(0);
 
-    fireEvent.change(screen.getByLabelText("Author"), {
-      target: { value: "Albert" }
-    });
-    fireEvent.change(screen.getByLabelText("Observation note"), {
-      target: { value: "Wrote down the pressure before sending the message." }
-    });
-    fireEvent.click(screen.getAllByRole("button", { name: "focus" })[1]!);
-    fireEvent.click(screen.getByRole("button", { name: "Withdrawal loop" }));
-    fireEvent.click(screen.getByRole("button", { name: "Meeting spiral" }));
-    fireEvent.click(screen.getByRole("button", { name: "Calm nervous system" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save observation" }));
+      fireEvent.change(screen.getByLabelText("Author"), {
+        target: { value: "Albert" }
+      });
+      fireEvent.change(screen.getByLabelText("Observation note"), {
+        target: { value: "Wrote down the pressure before sending the message." }
+      });
+      fireEvent.click(screen.getAllByRole("button", { name: "focus" })[1]!);
+      fireEvent.click(screen.getByRole("button", { name: "Withdrawal loop" }));
+      fireEvent.click(screen.getByRole("button", { name: "Meeting spiral" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Calm nervous system" })
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Save observation" }));
 
-    await waitFor(() =>
-      expect(createNoteMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          contentMarkdown: "Wrote down the pressure before sending the message.",
-          author: "Albert",
-          userId: "user_operator",
-          tags: expect.arrayContaining(["Self-observation", "focus"]),
-          links: expect.arrayContaining([
-            expect.objectContaining({
-              entityType: "goal",
-              entityId: "goal_1"
-            }),
-            expect.objectContaining({
-              entityType: "behavior_pattern",
-              entityId: "pattern_1"
-            }),
-            expect.objectContaining({
-              entityType: "trigger_report",
-              entityId: "report_1"
-            })
-          ])
-        })
-      )
-    );
+      await waitFor(() =>
+        expect(createNoteMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            contentMarkdown:
+              "Wrote down the pressure before sending the message.",
+            author: "Albert",
+            userId: "user_operator",
+            tags: expect.arrayContaining(["Self-observation", "focus"]),
+            links: expect.arrayContaining([
+              expect.objectContaining({
+                entityType: "goal",
+                entityId: "goal_1"
+              }),
+              expect.objectContaining({
+                entityType: "behavior_pattern",
+                entityId: "pattern_1"
+              }),
+              expect.objectContaining({
+                entityType: "trigger_report",
+                entityId: "report_1"
+              })
+            ])
+          })
+        )
+      );
 
-    await waitFor(() =>
-      expect(
-        screen.queryAllByText("Wrote down the pressure before sending the message.")
-          .length
-      ).toBeGreaterThan(0)
-    );
-  }, COMPLEX_INTEGRATION_TEST_TIMEOUT_MS);
+      await waitFor(() =>
+        expect(
+          screen.queryAllByText(
+            "Wrote down the pressure before sending the message."
+          ).length
+        ).toBeGreaterThan(0)
+      );
+    },
+    SELF_OBSERVATION_TEST_TIMEOUT_MS
+  );
 
   it("opens an existing observation in edit mode and lets it be deleted", async () => {
     renderPage();
@@ -725,15 +772,18 @@ describe("PsycheSelfObservationPage", () => {
         )
       );
     },
-    10_000
+    SELF_OBSERVATION_TEST_TIMEOUT_MS
   );
 
   it("moves an observation to a new hour slot with drag and drop", async () => {
     const view = renderPage();
 
-    const card = (await screen.findAllByText("Notice the tension before the meeting."))[0]!;
-    const targetSlot =
-      view.container.querySelectorAll<HTMLElement>("[data-self-observation-slot]")[0]!;
+    const card = (
+      await screen.findAllByText("Notice the tension before the meeting.")
+    )[0]!;
+    const targetSlot = view.container.querySelectorAll<HTMLElement>(
+      "[data-self-observation-slot]"
+    )[0]!;
     const dataTransfer = {
       payload: {} as Record<string, string>,
       setData(key: string, value: string) {

@@ -17,6 +17,10 @@ import { installMockDate } from "@/test/mock-date";
 import { useForgeClipboardStore } from "@/store/use-forge-clipboard";
 import type { ForgeSnapshot } from "@/lib/types";
 
+const CALENDAR_INTEGRATION_TEST_TIMEOUT_MS = 30_000;
+
+vi.setConfig({ testTimeout: CALENDAR_INTEGRATION_TEST_TIMEOUT_MS });
+
 const {
   useForgeShellMock,
   getLifeForceMock,

@@ -30,7 +30,7 @@ async function sourceFiles(root: URL): Promise<URL[]> {
   return files;
 }
 
-test("the React Router High advisory exception is bounded and non-reachable", async () => {
+test("React Router uses the remediated release and remains client-only", async () => {
   const rootManifest = JSON.parse(
     await readFile(new URL("../../../../package.json", import.meta.url), "utf8")
   ) as {
@@ -45,24 +45,17 @@ test("the React Router High advisory exception is bounded and non-reachable", as
   ) as {
     dependencies?: Record<string, string>;
   };
-  const exception = SUPPLY_CHAIN_SECURITY_EXCEPTIONS.find(
-    (entry) => entry.advisoryId === "GHSA-qwww-vcr4-c8h2"
+  assert.equal(
+    SUPPLY_CHAIN_SECURITY_EXCEPTIONS.find(
+      (entry) => String(entry.advisoryId) === "GHSA-qwww-vcr4-c8h2"
+    ),
+    undefined
   );
-
-  assert.ok(exception);
-  assert.equal(rootManifest.dependencies?.["react-router-dom"], "7.18.1");
-  assert.equal(openClawManifest.dependencies?.["react-router-dom"], "7.18.1");
+  assert.equal(rootManifest.dependencies?.["react-router-dom"], "7.18.2");
+  assert.equal(openClawManifest.dependencies?.["react-router-dom"], "7.18.2");
   assert.equal(rootManifest.dependencies?.["@react-router/dev"], undefined);
   assert.equal(rootManifest.devDependencies?.["@react-router/dev"], undefined);
   assert.doesNotThrow(() => assertActiveSupplyChainSecurityExceptions());
-  assert.throws(
-    () =>
-      assertActiveSupplyChainSecurityExceptions(new Date(exception.expiresAt)),
-    /expired/u
-  );
-  assert.ok(
-    Date.parse(exception.expiresAt) <= Date.parse("2026-08-25T00:00:00Z")
-  );
   const webSources = await sourceFiles(
     new URL("../../../../apps/web/src/", import.meta.url)
   );
@@ -103,10 +96,21 @@ test("the desktop RSA advisory exception is bounded and absent from every target
   const exception = SUPPLY_CHAIN_SECURITY_EXCEPTIONS.find(
     (entry) => entry.advisoryId === "RUSTSEC-2023-0071"
   );
+  const desktop = SUPPLY_CHAIN_INVENTORY.find(
+    (entry) => entry.id === "desktop-tauri-rust"
+  );
 
   assert.ok(exception);
+  assert.ok(desktop);
+  assert.deepEqual(desktop.auditCommands, [
+    "node --import tsx scripts/security/cargo-audit-policy.ts --file apps/desktop-tauri/Cargo.lock",
+    "cargo tree --locked --manifest-path apps/desktop-tauri/Cargo.toml --target all -i rsa",
+    "cargo deny --config apps/desktop-tauri/deny.toml --manifest-path apps/desktop-tauri/Cargo.toml check"
+  ]);
   assert.equal(exception.owner, "Forge security maintainers");
   assert.equal(exception.scope, "apps/desktop-tauri/Cargo.lock");
+  assert.deepEqual(exception.packages, ["rsa"]);
+  assert.deepEqual(exception.affectedVersions, ["0.9.10"]);
   assert.ok(exception.compensatingControls.length > 0);
   assert.throws(
     () =>
@@ -133,6 +137,22 @@ test("the desktop RSA advisory exception is bounded and absent from every target
   );
   assert.equal(stdout.trim(), "");
   assert.match(stderr, /nothing to print/u);
+
+  const policyResult = await execFileAsync(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      "scripts/security/cargo-audit-policy.ts",
+      "--file",
+      "apps/desktop-tauri/Cargo.lock"
+    ],
+    { cwd: repoRoot }
+  );
+  assert.match(
+    policyResult.stdout,
+    /active, bounded exceptions: RUSTSEC-2023-0071 for rsa@0\.9\.10/u
+  );
 });
 
 test("shipped plugin audits exclude host peer dependencies", () => {

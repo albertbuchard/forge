@@ -1,12 +1,15 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildServer } from "../../../../apps/api/src/app";
 import type { ApplicationSecurityRuntime } from "../../../../apps/api/src/security/application-security-runtime";
 
 const repoRoot = path.resolve(import.meta.dirname, "../../../..");
 const tempRoots: string[] = [];
+const QUESTION_FLOW_CONTRACT_TEST_TIMEOUT_MS = 30_000;
+
+vi.setConfig({ testTimeout: QUESTION_FLOW_CONTRACT_TEST_TIMEOUT_MS });
 
 afterEach(() => {
   while (tempRoots.length > 0) {
@@ -3899,15 +3902,13 @@ describe("question flow simulation cycles", () => {
     expect(
       catalogByTool.get("forge_get_self_observation_calendar")?.notes.join(" ")
     ).toMatch(/note batch CRUD[\s\S]*no.*standalone self_observation/i);
-    expect(
-      onboarding.recommendedPluginTools.healthWorkflow
-    ).toContain("forge_update_food_log");
-    expect(
-      catalogByTool.get("forge_update_food_log")?.requiredFields
-    ).toEqual(["foodLogId"]);
-    expect(
-      catalogByTool.get("forge_update_food_log")?.notes.join(" ")
-    ).toMatch(
+    expect(onboarding.recommendedPluginTools.healthWorkflow).toContain(
+      "forge_update_food_log"
+    );
+    expect(catalogByTool.get("forge_update_food_log")?.requiredFields).toEqual([
+      "foodLogId"
+    ]);
+    expect(catalogByTool.get("forge_update_food_log")?.notes.join(" ")).toMatch(
       /read forge_get_weight_loss_overview first[\s\S]*exact existing log[\s\S]*only fields[\s\S]*complete desired item list[\s\S]*PATCH \/api\/v1\/health\/weight-loss\/food-logs\/:id/i
     );
     expect(

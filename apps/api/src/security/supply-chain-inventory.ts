@@ -14,6 +14,7 @@ export type SupplyChainSecurityException = {
   owner: string;
   scope: string;
   packages: readonly string[];
+  affectedVersions: readonly string[];
   affectedCapability: string;
   nonReachabilityEvidence: readonly string[];
   compensatingControls: readonly string[];
@@ -122,7 +123,7 @@ export const SUPPLY_CHAIN_INVENTORY = [
     lockfiles: ["apps/desktop-tauri/Cargo.lock"],
     generatedMirrors: [],
     auditCommands: [
-      "cargo audit --manifest-path apps/desktop-tauri/Cargo.toml",
+      "node --import tsx scripts/security/cargo-audit-policy.ts --file apps/desktop-tauri/Cargo.lock",
       "cargo tree --locked --manifest-path apps/desktop-tauri/Cargo.toml --target all -i rsa",
       "cargo deny --config apps/desktop-tauri/deny.toml --manifest-path apps/desktop-tauri/Cargo.toml check"
     ],
@@ -181,33 +182,12 @@ export const SUPPLY_CHAIN_INVENTORY = [
 
 export const SUPPLY_CHAIN_SECURITY_EXCEPTIONS = [
   {
-    advisoryId: "GHSA-qwww-vcr4-c8h2",
-    severity: "high",
-    owner: "Forge security maintainers",
-    scope: "root and OpenClaw production Node graphs",
-    packages: ["react-router", "react-router-dom"],
-    affectedCapability:
-      "React Router server-side React Server Components action handling",
-    nonReachabilityEvidence: [
-      "Forge builds a client-side Vite single-page application.",
-      "Forge imports BrowserRouter, Routes, and navigation APIs from react-router-dom.",
-      "Forge does not install @react-router/dev or a React Router server adapter.",
-      "Forge has no entry.rsc.tsx, RSC route action, or React Router framework-mode server."
-    ],
-    compensatingControls: [
-      "Forge's Fastify API handles server actions instead of React Router.",
-      "The release test rejects any React Router server adapter or RSC entrypoint."
-    ],
-    incompatibleRemediation:
-      "React Router 8.3 removes react-router-dom and requires React 19.2.7 plus Vite 7; Forge currently uses React 19.1 and Vite 6. A 7.11 downgrade was rejected because it breaks the existing typed Location.mask route-handoff contract.",
-    expiresAt: "2026-08-09T00:00:00.000Z"
-  },
-  {
     advisoryId: "RUSTSEC-2023-0071",
     severity: "moderate",
     owner: "Forge security maintainers",
     scope: "apps/desktop-tauri/Cargo.lock",
     packages: ["rsa"],
+    affectedVersions: ["0.9.10"],
     affectedCapability: "RSA private-key operations in the Forge desktop shell",
     nonReachabilityEvidence: [
       "rsa 0.9.10 is an orphan optional lock entry.",
@@ -220,7 +200,7 @@ export const SUPPLY_CHAIN_SECURITY_EXCEPTIONS = [
     ],
     incompatibleRemediation:
       "There is no reachable dependency edge to upgrade. Regenerating the lock without optional target metadata would weaken cross-target reproducibility.",
-    expiresAt: "2026-08-09T00:00:00.000Z"
+    expiresAt: "2026-09-09T00:00:00.000Z"
   }
 ] as const satisfies readonly SupplyChainSecurityException[];
 

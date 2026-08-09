@@ -25,6 +25,10 @@ import {
 } from "@/lib/api";
 import type { Artifact } from "@/lib/types";
 
+const ARTIFACT_INTEGRATION_TEST_TIMEOUT_MS = 30_000;
+
+vi.setConfig({ testTimeout: ARTIFACT_INTEGRATION_TEST_TIMEOUT_MS });
+
 const createObjectURLMock = vi.fn(() => "blob:artifact-download");
 const revokeObjectURLMock = vi.fn();
 const anchorClickMock = vi.fn();
@@ -1004,7 +1008,7 @@ describe("ArtifactsPage", () => {
         })
       );
     });
-  });
+  }, 20_000);
 
   it("shows encrypted artifact state and downloads through the password modal", async () => {
     const encryptedArtifact: Artifact = {

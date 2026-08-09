@@ -503,6 +503,7 @@ describe("TrainingLoadPage", () => {
 
   it("shows the exact strain rule and explains why recovery is not an acute-load spike", async () => {
     const trainingLoad = createTrainingLoad();
+    const currentDateKey = new Date().toISOString().slice(0, 10);
     trainingLoad.summary = {
       ...trainingLoad.summary,
       acuteLoad7d: 376.6,
@@ -517,12 +518,12 @@ describe("TrainingLoadPage", () => {
     };
     trainingLoad.dailyLoad = trainingLoad.dailyLoad.map((entry) => ({
       ...entry,
-      dateKey: "2026-07-31"
+      dateKey: currentDateKey
     }));
     trainingLoad.sessionSignals = trainingLoad.sessionSignals.map((entry) => ({
       ...entry,
-      dateKey: "2026-07-31",
-      startedAt: "2026-07-31T17:00:00.000Z"
+      dateKey: currentDateKey,
+      startedAt: `${currentDateKey}T17:00:00.000Z`
     }));
     trainingLoad.trainingIntelligence.loadDecision = {
       status: "recover",

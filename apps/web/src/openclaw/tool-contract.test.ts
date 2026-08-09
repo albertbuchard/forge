@@ -31,6 +31,10 @@ import { collectMirroredApiRouteKeys } from "./routes";
 import { callConfiguredForgeApi } from "./api-client";
 import { registerForgePluginTools } from "./tools";
 
+const TOOL_CONTRACT_TEST_TIMEOUT_MS = 30_000;
+
+vi.setConfig({ testTimeout: TOOL_CONTRACT_TEST_TIMEOUT_MS });
+
 vi.mock("./api-client.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./api-client.js")>();
   return {

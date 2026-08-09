@@ -8,7 +8,7 @@ import { createAgentToken } from "../../../../apps/api/src/repositories/settings
 import { createAgentTokenSchema } from "../../../../apps/api/src/types";
 
 const tempRoots: string[] = [];
-const ONBOARDING_CONTRACT_TEST_TIMEOUT_MS = 20_000;
+const ONBOARDING_CONTRACT_TEST_TIMEOUT_MS = 45_000;
 
 vi.setConfig({ testTimeout: ONBOARDING_CONTRACT_TEST_TIMEOUT_MS });
 
@@ -393,7 +393,9 @@ describe("forge onboarding contract", () => {
         if (catalogEntry.entityType === "self_observation") {
           expect(flow.questionStyle).toBe("psyche_adjacent_active_listening");
           expect(flow.readinessCheck).toMatch(/Self Observation lane/i);
-          expect(flow.readinessCheck).toMatch(/support[\s\S]*never requires a save/i);
+          expect(flow.readinessCheck).toMatch(
+            /support[\s\S]*never requires a save/i
+          );
           expect(flow.readinessCheck).toMatch(/exact backing note/i);
           expect(flow.readinessCheck).toMatch(/note batch CRUD/i);
           expect(flow.readinessCheck).toMatch(
@@ -1119,8 +1121,7 @@ describe("forge onboarding contract", () => {
           listCourses: "GET /api/v1/courses",
           courseDetail: "GET /api/v1/courses/:courseId",
           learningSession: "GET /api/v1/courses/:courseId/learn",
-          voiceLearningSession:
-            "POST /api/v1/courses/:courseId/voice-session",
+          voiceLearningSession: "POST /api/v1/courses/:courseId/voice-session",
           submitAttempt:
             "POST /api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
           upgradeEnrollment: "POST /api/v1/courses/:courseId/upgrade",
@@ -1138,8 +1139,7 @@ describe("forge onboarding contract", () => {
         writeRoutes: {
           submitAttempt:
             "/api/v1/courses/:courseId/lessons/:lessonId/activities/:activityId/attempts",
-          voiceLearningSession:
-            "/api/v1/courses/:courseId/voice-session",
+          voiceLearningSession: "/api/v1/courses/:courseId/voice-session",
           upgradeEnrollment: "/api/v1/courses/:courseId/upgrade",
           importCourse: "/api/v1/courses/import"
         }

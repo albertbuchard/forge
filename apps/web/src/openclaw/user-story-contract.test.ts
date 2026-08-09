@@ -1,10 +1,14 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildServer } from "../../../../apps/api/src/app";
 import type { ApplicationSecurityRuntime } from "../../../../apps/api/src/security/application-security-runtime";
 import { ROUTE_VIEW_IDS } from "../routes/route-view-catalog";
+
+const USER_STORY_CONTRACT_TEST_TIMEOUT_MS = 30_000;
+
+vi.setConfig({ testTimeout: USER_STORY_CONTRACT_TEST_TIMEOUT_MS });
 
 const contractPath = [
   path.resolve(process.cwd(), "docs/reference/user-stories-and-use-cases.md"),

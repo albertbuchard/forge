@@ -40,9 +40,19 @@ test(
         path: url.pathname,
         authorization: request.headers.authorization ?? null
       });
+      if (url.pathname === "/api/health") {
+        sendJson(response, 200, {
+          ok: true,
+          app: "forge",
+          security: "credential-required"
+        });
+        return;
+      }
       if (url.pathname === "/api/v1/health") {
         sendJson(response, 200, {
           ok: true,
+          app: "forge",
+          backend: "forge-node-runtime",
           runtime: {
             pid: process.pid,
             storageRoot: testRoot,

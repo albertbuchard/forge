@@ -388,16 +388,11 @@ function toSettingsFileOverrideInput(
 
   if (input.calendarProviders) {
     next.calendarProviders = {};
-    if (input.calendarProviders.google) {
-      next.calendarProviders.google = {};
-      if (input.calendarProviders.google.clientId !== undefined) {
-        next.calendarProviders.google.clientId =
-          input.calendarProviders.google.clientId;
-      }
-      if (Object.keys(next.calendarProviders.google).length === 0) {
-        delete next.calendarProviders.google;
-      }
-    }
+    // forge.json is a redacted snapshot: it can expose the effective Google
+    // client ID, but it must never contain the matching client secret. Treating
+    // that visible ID as an override would turn every generated snapshot into
+    // an invalid partial credential pair on the next startup. Google OAuth
+    // credentials are updated atomically through the settings API instead.
     if (input.calendarProviders.microsoft) {
       next.calendarProviders.microsoft = {};
       if (input.calendarProviders.microsoft.clientId !== undefined) {
@@ -446,8 +441,7 @@ function toSettingsFileOverrideInput(
           input.modelSettings.forgeAgent.wiki.connectionId;
       }
       if (input.modelSettings.forgeAgent.wiki.model !== undefined) {
-        forgeAgent.wiki.model =
-          input.modelSettings.forgeAgent.wiki.model;
+        forgeAgent.wiki.model = input.modelSettings.forgeAgent.wiki.model;
       }
       if (Object.keys(forgeAgent.wiki).length === 0) {
         delete forgeAgent.wiki;
@@ -646,11 +640,13 @@ function findAgentIdentity(agentId: string): AgentIdentity | undefined {
 }
 
 function normalizeAgentIdentityPart(value: string | null | undefined) {
-  return value
-    ?.trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9._:]+/g, "_")
-    .replace(/^_+|_+$/g, "") || "";
+  return (
+    value
+      ?.trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._:]+/g, "_")
+      .replace(/^_+|_+$/g, "") || ""
+  );
 }
 
 function runtimeProviderFromAgentType(
@@ -805,7 +801,7 @@ function readSettingsRow(): SettingsRow {
 export function listAgentTokens(): AgentTokenSummary[] {
   const rows = getDatabase()
     .prepare(
-        `SELECT
+      `SELECT
          agent_tokens.id,
          agent_tokens.label,
          agent_tokens.token_prefix,
@@ -856,7 +852,9 @@ export function listAgentIdentities(): AgentIdentity[] {
     )
     .all() as AgentIdentityRow[];
   const links = listAgentIdentityUserLinks(rows.map((row) => row.id));
-  const manualAgents = rows.map((row) => mapAgent(row, links.get(row.id) ?? []));
+  const manualAgents = rows.map((row) =>
+    mapAgent(row, links.get(row.id) ?? [])
+  );
   const modelAgents = listAiModelConnections().map(
     buildConnectionAgentIdentity
   );
@@ -1232,8 +1230,7 @@ function updateSettingsInternal(
           current.execution.timeAccountingMode
       },
       themePreference: parsed.themePreference ?? current.themePreference,
-      gamificationTheme:
-        parsed.gamificationTheme ?? current.gamificationTheme,
+      gamificationTheme: parsed.gamificationTheme ?? current.gamificationTheme,
       customTheme:
         parsed.customTheme === undefined
           ? (current.customTheme ?? null)
@@ -1246,12 +1243,11 @@ function updateSettingsInternal(
         google: resolveGoogleCalendarOauthPublicConfig(process.env, {
           clientId: nextGoogleClientId,
           clientSecret: nextGoogleClientSecret,
-          clientSecretStorage:
-            googleClientSecretWasProvided
-              ? nextGoogleClientSecret.length > 0
-                ? "encrypted"
-                : "none"
-              : currentGoogleSecret.storage
+          clientSecretStorage: googleClientSecretWasProvided
+            ? nextGoogleClientSecret.length > 0
+              ? "encrypted"
+              : "none"
+            : currentGoogleSecret.storage
         }),
         microsoft: {
           clientId:
@@ -1607,7 +1603,7 @@ export function verifyAgentToken(token: string): AgentTokenSummary | null {
   const hash = hashToken(token);
   const row = getDatabase()
     .prepare(
-        `SELECT
+      `SELECT
          agent_tokens.id,
          agent_tokens.label,
          agent_tokens.token_prefix,

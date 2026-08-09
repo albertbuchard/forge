@@ -38,6 +38,7 @@ const TEST_CONFIG = {
 } as const;
 
 const temporaryRoots: string[] = [];
+const OPENAPI_CONTRACT_TEST_TIMEOUT_MS = 20_000;
 
 afterEach(() => {
   while (temporaryRoots.length > 0) {
@@ -352,156 +353,163 @@ describe("People and peer-sharing agent contract", () => {
     );
   });
 
-  it("keeps person batch-first and the live OpenAPI route catalog current", async () => {
-    const dataRoot = mkdtempSync(
-      path.join(os.tmpdir(), "forge-person-catalog-")
-    );
-    temporaryRoots.push(dataRoot);
-    let security: ApplicationSecurityRuntime | undefined;
-    const app = await buildServer({
-      dataRoot,
-      taskRunWatchdog: false,
-      onSecurityRuntimeReady(runtime) {
-        security = runtime;
-      }
-    });
-    expect(security).toBeDefined();
-    const ownerEpoch = security!.store.readOwnerSecurityEpoch("user_operator");
-    expect(ownerEpoch).toBeDefined();
-    const session = security!.browserSessions.create({
-      kind: "operator_session",
-      subjectId: "user_operator",
-      ownerId: "user_operator",
-      clientId: null,
-      installationId: null,
-      audience: security!.audience,
-      scopes: ["*"],
-      profile: "operator",
-      ownerSecurityEpoch: ownerEpoch!,
-      clientSecurityEpoch: null,
-      authenticatedAt: new Date().toISOString()
-    });
-    const headers = {
-      cookie: `forge_session=${encodeURIComponent(session.sessionToken)}`
-    };
-    const response = await app.inject({
-      method: "GET",
-      url: "/api/v1/agents/onboarding",
-      headers
-    });
-    const openApiResponse = await app.inject({
-      method: "GET",
-      url: "/api/v1/openapi.json",
-      headers
-    });
-    await app.close();
-    expect(response.statusCode).toBe(200);
-    expect(openApiResponse.statusCode).toBe(200);
-    const onboarding = response.json().onboarding;
-    const person = onboarding.entityCatalog.find(
+  it(
+    "keeps person batch-first and the live OpenAPI route catalog current",
+    async () => {
+      const dataRoot = mkdtempSync(
+        path.join(os.tmpdir(), "forge-person-catalog-")
+      );
+      temporaryRoots.push(dataRoot);
+      let security: ApplicationSecurityRuntime | undefined;
+      const app = await buildServer({
+        dataRoot,
+        taskRunWatchdog: false,
+        onSecurityRuntimeReady(runtime) {
+          security = runtime;
+        }
+      });
+      expect(security).toBeDefined();
+      const ownerEpoch =
+        security!.store.readOwnerSecurityEpoch("user_operator");
+      expect(ownerEpoch).toBeDefined();
+      const session = security!.browserSessions.create({
+        kind: "operator_session",
+        subjectId: "user_operator",
+        ownerId: "user_operator",
+        clientId: null,
+        installationId: null,
+        audience: security!.audience,
+        scopes: ["*"],
+        profile: "operator",
+        ownerSecurityEpoch: ownerEpoch!,
+        clientSecurityEpoch: null,
+        authenticatedAt: new Date().toISOString()
+      });
+      const headers = {
+        cookie: `forge_session=${encodeURIComponent(session.sessionToken)}`
+      };
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/v1/agents/onboarding",
+        headers
+      });
+      const openApiResponse = await app.inject({
+        method: "GET",
+        url: "/api/v1/openapi.json",
+        headers
+      });
+      await app.close();
+      expect(response.statusCode).toBe(200);
+      expect(openApiResponse.statusCode).toBe(200);
+      const onboarding = response.json().onboarding;
+      const person = onboarding.entityCatalog.find(
         (entry: { entityType: string }) => entry.entityType === "person"
       );
-    expect(person?.classification).toBe("batch_crud_entity");
-    expect(onboarding.entityRouteModel.batchCrudEntities).toContain("person");
-    expect(person?.preferredMutationTool).toMatch(/forge_create_entities/);
-    expect(person?.preferredMutationTool).toMatch(/forge_restore_entities/);
-    expect(person?.questionFlow?.openingQuestion).toMatch(
-      /Who is this person/i
-    );
-    expect(person?.questionFlow?.askSequence?.join(" ")).toMatch(
-      /page evidence.*model inference/i
-    );
-    expect(person?.questionFlow?.askSequence?.join(" ")).toMatch(
-      /accept, correct, or skip/i
-    );
+      expect(person?.classification).toBe("batch_crud_entity");
+      expect(onboarding.entityRouteModel.batchCrudEntities).toContain("person");
+      expect(person?.preferredMutationTool).toMatch(/forge_create_entities/);
+      expect(person?.preferredMutationTool).toMatch(/forge_restore_entities/);
+      expect(person?.questionFlow?.openingQuestion).toMatch(
+        /Who is this person/i
+      );
+      expect(person?.questionFlow?.askSequence?.join(" ")).toMatch(
+        /page evidence.*model inference/i
+      );
+      expect(person?.questionFlow?.askSequence?.join(" ")).toMatch(
+        /accept, correct, or skip/i
+      );
 
-    const expectedPeopleRoutes = PEER_ROUTE_CONTRACTS.filter(
-      (route) => route.mcpExposed && route.path.startsWith("/api/v1/people")
-    );
-    const expectedPeerRoutes = PEER_ROUTE_CONTRACTS.filter(
-      (route) => route.mcpExposed && route.path.startsWith("/api/v1/peers")
-    );
-    for (const [surfaceKey, routeTool, expectedRoutes] of [
-      ["people", "forge_call_people_route", expectedPeopleRoutes],
-      ["peerSharing", "forge_call_peer_route", expectedPeerRoutes]
-    ] as const) {
-      const surface =
-        onboarding.entityRouteModel.specializedDomainSurfaces[surfaceKey];
-      expect(surface?.routeTool).toBe(routeTool);
-      expect(surface?.routeKeys).toEqual(
-        expectedRoutes.map((route) => route.operationId)
+      const expectedPeopleRoutes = PEER_ROUTE_CONTRACTS.filter(
+        (route) => route.mcpExposed && route.path.startsWith("/api/v1/people")
       );
-      expect(surface?.methodRoutes).toEqual(
-        Object.fromEntries(
-          expectedRoutes.map((route) => [
-            route.operationId,
-            `${route.method} ${route.path}`
-          ])
-        )
+      const expectedPeerRoutes = PEER_ROUTE_CONTRACTS.filter(
+        (route) => route.mcpExposed && route.path.startsWith("/api/v1/peers")
       );
-      const inputGuide = onboarding.toolInputCatalog.find(
-        (entry: { toolName: string }) => entry.toolName === routeTool
-      );
-      expect(inputGuide?.requiredFields).toContain("routeKey");
-      for (const route of expectedRoutes) {
-        expect(inputGuide?.inputShape).toContain(`"${route.operationId}"`);
+      for (const [surfaceKey, routeTool, expectedRoutes] of [
+        ["people", "forge_call_people_route", expectedPeopleRoutes],
+        ["peerSharing", "forge_call_peer_route", expectedPeerRoutes]
+      ] as const) {
+        const surface =
+          onboarding.entityRouteModel.specializedDomainSurfaces[surfaceKey];
+        expect(surface?.routeTool).toBe(routeTool);
+        expect(surface?.routeKeys).toEqual(
+          expectedRoutes.map((route) => route.operationId)
+        );
+        expect(surface?.methodRoutes).toEqual(
+          Object.fromEntries(
+            expectedRoutes.map((route) => [
+              route.operationId,
+              `${route.method} ${route.path}`
+            ])
+          )
+        );
+        const inputGuide = onboarding.toolInputCatalog.find(
+          (entry: { toolName: string }) => entry.toolName === routeTool
+        );
+        expect(inputGuide?.requiredFields).toContain("routeKey");
+        for (const route of expectedRoutes) {
+          expect(inputGuide?.inputShape).toContain(`"${route.operationId}"`);
+        }
       }
-    }
-    expect(
-      onboarding.entityRouteModel.specializedDomainSurfaces.people.notes.join(
-        " "
-      )
-    ).toMatch(/current version-bound preview/i);
-    expect(onboarding.recommendedPluginTools.peopleWorkflow).toEqual(
-      expect.arrayContaining([
-        "forge_search_entities",
-        "forge_create_entities",
-        "forge_update_entities",
-        "forge_delete_entities",
-        "forge_restore_entities",
-        "forge_call_people_route",
-        "forge_call_peer_route"
-      ])
-    );
-    expect(onboarding.recommendedPluginTools.specializedDomainWorkflow).toEqual(
-      expect.arrayContaining([
-        "forge_call_people_route",
-        "forge_call_peer_route"
-      ])
-    );
+      expect(
+        onboarding.entityRouteModel.specializedDomainSurfaces.people.notes.join(
+          " "
+        )
+      ).toMatch(/current version-bound preview/i);
+      expect(onboarding.recommendedPluginTools.peopleWorkflow).toEqual(
+        expect.arrayContaining([
+          "forge_search_entities",
+          "forge_create_entities",
+          "forge_update_entities",
+          "forge_delete_entities",
+          "forge_restore_entities",
+          "forge_call_people_route",
+          "forge_call_peer_route"
+        ])
+      );
+      expect(
+        onboarding.recommendedPluginTools.specializedDomainWorkflow
+      ).toEqual(
+        expect.arrayContaining([
+          "forge_call_people_route",
+          "forge_call_peer_route"
+        ])
+      );
 
-    const openApi = openApiResponse.json() as {
-      paths: Record<string, Record<string, { operationId?: string }>>;
-      components: {
-        schemas: {
-          AgentOnboardingPayload: {
-            properties: {
-              recommendedPluginTools: { required: string[] };
+      const openApi = openApiResponse.json() as {
+        paths: Record<string, Record<string, { operationId?: string }>>;
+        components: {
+          schemas: {
+            AgentOnboardingPayload: {
+              properties: {
+                recommendedPluginTools: { required: string[] };
+              };
             };
           };
         };
       };
-    };
-    for (const route of PEER_ROUTE_CONTRACTS) {
-      const openApiPath = route.path.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
+      for (const route of PEER_ROUTE_CONTRACTS) {
+        const openApiPath = route.path.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
+        expect(
+          openApi.paths[openApiPath]?.[route.method.toLowerCase()]?.operationId,
+          `${route.method} ${route.path} is missing from live OpenAPI`
+        ).toBe(route.operationId);
+      }
       expect(
-        openApi.paths[openApiPath]?.[route.method.toLowerCase()]?.operationId,
-        `${route.method} ${route.path} is missing from live OpenAPI`
-      ).toBe(route.operationId);
-    }
-    expect(
-      openApi.components.schemas.AgentOnboardingPayload.properties
-        .recommendedPluginTools.required
-    ).toEqual(
-      expect.arrayContaining([
-        "artifactWorkflow",
-        "attentionWorkflow",
-        "entityNavigationWorkflow",
-        "peopleWorkflow",
-        "preferencesWorkflow",
-        "questionnaireWorkflow",
-        "selfObservationWorkflow"
-      ])
-    );
-  });
+        openApi.components.schemas.AgentOnboardingPayload.properties
+          .recommendedPluginTools.required
+      ).toEqual(
+        expect.arrayContaining([
+          "artifactWorkflow",
+          "attentionWorkflow",
+          "entityNavigationWorkflow",
+          "peopleWorkflow",
+          "preferencesWorkflow",
+          "questionnaireWorkflow",
+          "selfObservationWorkflow"
+        ])
+      );
+    },
+    OPENAPI_CONTRACT_TEST_TIMEOUT_MS
+  );
 });
