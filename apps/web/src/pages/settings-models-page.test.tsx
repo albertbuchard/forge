@@ -10,19 +10,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { SettingsModelsPage } from "@/pages/settings-models-page";
 
-const { getSettingsMock, getWikiSettingsMock, testAiModelConnectionMock } =
-  vi.hoisted(() => ({
-    getSettingsMock: vi.fn(),
-    getWikiSettingsMock: vi.fn(),
-    testAiModelConnectionMock: vi.fn()
-  }));
+const {
+  getSettingsMock,
+  getWikiSettingsMock,
+  saveAiModelConnectionMock,
+  testAiModelConnectionMock
+} = vi.hoisted(() => ({
+  getSettingsMock: vi.fn(),
+  getWikiSettingsMock: vi.fn(),
+  saveAiModelConnectionMock: vi.fn(),
+  testAiModelConnectionMock: vi.fn()
+}));
 
 vi.mock("@/lib/api", () => ({
   getSettings: getSettingsMock,
   getWikiSettings: getWikiSettingsMock,
   testAiModelConnection: testAiModelConnectionMock,
   patchSettings: vi.fn(),
-  saveAiModelConnection: vi.fn(),
+  saveAiModelConnection: saveAiModelConnectionMock,
   deleteAiModelConnection: vi.fn(),
   deleteWikiProfile: vi.fn(),
   createWikiEmbeddingProfile: vi.fn(),
@@ -130,6 +135,9 @@ describe("SettingsModelsPage", () => {
         outputPreview: "ok"
       }
     });
+    saveAiModelConnectionMock.mockResolvedValue({
+      connection: { id: "model_local" }
+    });
   });
 
   afterEach(() => {
@@ -160,7 +168,10 @@ describe("SettingsModelsPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Test" }));
 
     expect(
-      await screen.findByText("Local endpoint is offline")
+      await screen.findByText(/Local endpoint is offline/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Forge did not switch to another connection/i)
     ).toBeInTheDocument();
     expect(screen.getAllByRole("combobox")[0]).toHaveValue("model_local");
   });
@@ -169,17 +180,33 @@ describe("SettingsModelsPage", () => {
     renderPage();
 
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    expect(
+      await screen.findByText("Connection test succeeded: ok")
+    ).toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText("Base URL"), {
       target: { value: "https://changed.example.test/v1" }
     });
 
+    const saveButton = screen.getByRole("button", { name: "Save connection" });
     const testButton = screen.getByRole("button", { name: "Test connection" });
+    expect(saveButton).toBeDisabled();
     expect(testButton).toBeDisabled();
-
-    fireEvent.change(
-      screen.getByPlaceholderText("Leave blank to keep the stored key"),
-      { target: { value: "fresh-test-key" } }
+    expect(
+      screen.getByText(/Enter a fresh API key before saving or testing/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Connection test succeeded: ok")
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Connection API key")).toHaveAttribute(
+      "placeholder",
+      "Enter a fresh API key"
     );
+
+    fireEvent.change(screen.getByLabelText("Connection API key"), {
+      target: { value: "fresh-test-key" }
+    });
+    expect(saveButton).toBeEnabled();
     expect(testButton).toBeEnabled();
     fireEvent.click(testButton);
 
@@ -191,5 +218,91 @@ describe("SettingsModelsPage", () => {
         apiKey: "fresh-test-key"
       })
     );
+  });
+
+  it("clears saved-card health after updating the same connection", async () => {
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Test" }));
+    expect(await screen.findByText(/qwen3 responded: ok/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
+
+    await waitFor(() =>
+      expect(saveAiModelConnectionMock).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "model_local" })
+      )
+    );
+    expect(screen.queryByText(/qwen3 responded: ok/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Not health-checked in this browser session.")
+    ).toBeInTheDocument();
+  });
+
+  it("explains missing keys and blank models before enabling an external connection", async () => {
+    renderPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "OpenAI-compatible" })
+    );
+    const saveButton = screen.getByRole("button", { name: "Save connection" });
+    const testButton = screen.getByRole("button", { name: "Test connection" });
+
+    expect(saveButton).toBeDisabled();
+    expect(testButton).toBeDisabled();
+    expect(
+      screen.getByText(/Enter an API key before saving or testing/i)
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Connection API key"), {
+      target: { value: "fresh-test-key" }
+    });
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Connection model" }),
+      { target: { value: "" } }
+    );
+
+    expect(saveButton).toBeDisabled();
+    expect(testButton).toBeDisabled();
+    expect(
+      screen.getByText(/Enter a model name before saving or testing/i)
+    ).toBeInTheDocument();
+  });
+
+  it("names provider state and destructive controls with 44-pixel targets", async () => {
+    getWikiSettingsMock.mockResolvedValueOnce({
+      settings: {
+        embeddingProfiles: [
+          {
+            id: "embedding_fast",
+            label: "Fast wiki search",
+            model: "text-embedding-3-small",
+            baseUrl: "https://api.openai.com/v1",
+            chunkSize: 1_200,
+            chunkOverlap: 200,
+            enabled: true
+          }
+        ]
+      }
+    });
+    renderPage();
+
+    const selectedProvider = await screen.findByRole("button", {
+      name: "OpenAI API"
+    });
+    expect(selectedProvider).toHaveAttribute("aria-pressed", "true");
+    expect(selectedProvider).toHaveClass("min-h-11");
+    expect(
+      screen.getByRole("button", {
+        name: "Remove Fast wiki search embedding profile"
+      })
+    ).toHaveClass("min-h-11", "min-w-11");
+    expect(
+      screen.getByRole("button", { name: "Remove Local model connection" })
+    ).toHaveClass("min-h-11", "min-w-11");
+    expect(
+      screen.getByRole("textbox", { name: "Connection model" })
+    ).toHaveClass("min-h-11");
   });
 });

@@ -51,6 +51,11 @@ type ConnectionHealthState = {
   detail: string;
 };
 
+type EditorTestFeedback = {
+  revision: number;
+  message: string;
+};
+
 const WORKBENCH_MOCK_PROVIDER_ENABLED = import.meta.env.DEV;
 
 const modelPanelClass =
@@ -60,7 +65,7 @@ const modelSoftPanelClass =
 const modelEmptyClass =
   "rounded-[20px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-5 text-sm leading-6 text-[var(--ui-ink-soft)]";
 const modelInputClass =
-  "min-w-0 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-3 text-sm text-[var(--ui-ink-strong)] outline-none placeholder:text-[var(--ui-ink-faint)] transition focus:border-[var(--primary)]/35 focus:bg-[var(--ui-surface-3)]";
+  "min-h-11 min-w-0 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-3 text-sm text-[var(--ui-ink-strong)] outline-none placeholder:text-[var(--ui-ink-faint)] transition focus:border-[var(--primary)]/35 focus:bg-[var(--ui-surface-3)]";
 const modelTitleClass = "text-sm text-[var(--ui-ink-strong)]";
 const modelBodyClass = "text-[var(--ui-ink-soft)]";
 const modelFaintClass = "text-[var(--ui-ink-faint)]";
@@ -142,6 +147,9 @@ export function SettingsModelsPage() {
   const [manualOauthCode, setManualOauthCode] = useState("");
   const [oauthSessionId, setOauthSessionId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [editorRevision, setEditorRevision] = useState(0);
+  const [editorTestFeedback, setEditorTestFeedback] =
+    useState<EditorTestFeedback | null>(null);
   const [connectionHealth, setConnectionHealth] = useState<
     Record<string, ConnectionHealthState>
   >({});
@@ -230,8 +238,18 @@ export function SettingsModelsPage() {
             ? (oauthSessionId ?? undefined)
             : undefined
       }),
-    onSuccess: async () => {
+    onSuccess: async ({ connection }) => {
       setFeedback("Connection saved.");
+      setEditorTestFeedback(null);
+      setEditorRevision((current) => current + 1);
+      setConnectionHealth((current) => {
+        if (!(connection.id in current)) {
+          return current;
+        }
+        const next = { ...current };
+        delete next[connection.id];
+        return next;
+      });
       if (editor.provider === "openai-codex") {
         setOauthSessionId(null);
         setManualOauthCode("");
@@ -330,13 +348,19 @@ export function SettingsModelsPage() {
             }
       );
     },
-    onSuccess: ({ result }) => {
-      setFeedback(`Connection test succeeded: ${result.outputPreview}`);
+    onMutate: () => ({ revision: editorRevision }),
+    onSuccess: ({ result }, _variables, context) => {
+      setEditorTestFeedback({
+        revision: context.revision,
+        message: `Connection test succeeded: ${result.outputPreview}`
+      });
     },
-    onError: (error) => {
-      setFeedback(
-        error instanceof Error ? error.message : "Connection test failed."
-      );
+    onError: (error, _variables, context) => {
+      setEditorTestFeedback({
+        revision: context?.revision ?? editorRevision,
+        message:
+          error instanceof Error ? error.message : "Connection test failed."
+      });
     }
   });
 
@@ -449,25 +473,60 @@ export function SettingsModelsPage() {
   const selectedBasicChatConnection = connections.find(
     (connection) => connection.id === basicChatConnectionId
   );
+  const savedBindingIsCurrent = matchesSavedConnectionBinding(
+    editor,
+    editedConnection
+  );
+  const hasFreshApiKey = editor.apiKey.trim().length > 0;
+  const canReuseSavedCredential = Boolean(
+    editedConnection?.hasStoredCredential && savedBindingIsCurrent
+  );
+  const hasAuthorizedOauth = oauthSession?.status === "authorized";
 
   const canSaveConnection = useMemo(() => {
     if (!editor.label.trim() || !editor.model.trim()) return false;
     if (editor.provider === "openai-codex") {
-      return Boolean(
-        oauthSession?.status === "authorized" ||
-        (editor.id && editedConnection?.hasStoredCredential)
-      );
+      return hasAuthorizedOauth || canReuseSavedCredential;
     }
     if (editor.provider === "mock") {
       return true;
     }
-    return editor.apiKey.trim().length > 0 || Boolean(editor.id);
-  }, [editor, editedConnection?.hasStoredCredential, oauthSession?.status]);
-  const canTestConnection =
-    editor.provider === "mock" ||
-    (!editor.apiKey.trim() &&
-      matchesSavedConnectionBinding(editor, editedConnection)) ||
-    (editor.provider !== "openai-codex" && editor.apiKey.trim().length > 0);
+    return hasFreshApiKey || canReuseSavedCredential;
+  }, [
+    canReuseSavedCredential,
+    editor.label,
+    editor.model,
+    editor.provider,
+    hasAuthorizedOauth,
+    hasFreshApiKey
+  ]);
+  const canTestConnection = Boolean(
+    editor.model.trim() &&
+    (editor.provider === "mock" ||
+      canReuseSavedCredential ||
+      (editor.provider !== "openai-codex" && hasFreshApiKey))
+  );
+  const editorReadinessMessage = !editor.label.trim()
+    ? "Enter a connection name before saving."
+    : !editor.model.trim()
+      ? "Enter a model name before saving or testing this connection."
+      : editor.provider === "openai-codex" &&
+          !canReuseSavedCredential &&
+          !hasAuthorizedOauth
+        ? "Finish a new OpenAI Codex sign-in before saving changed connection details."
+        : editor.provider === "openai-codex" && hasAuthorizedOauth
+          ? "Sign-in is complete. Save this connection before testing it."
+          : editor.provider !== "mock" &&
+              !hasFreshApiKey &&
+              !canReuseSavedCredential
+            ? editor.id
+              ? "Enter a fresh API key before saving or testing a changed provider, endpoint, or model."
+              : "Enter an API key before saving or testing this connection."
+            : "Connection details are ready to save and test.";
+  const visibleEditorTestFeedback =
+    editorTestFeedback?.revision === editorRevision
+      ? editorTestFeedback.message
+      : "";
 
   if (settingsQuery.isLoading) {
     return (
@@ -528,6 +587,7 @@ export function SettingsModelsPage() {
             </span>
             <select
               className={modelInputClass}
+              aria-label="Basic chat connection"
               value={basicChatConnectionId}
               onChange={(event) => setBasicChatConnectionId(event.target.value)}
             >
@@ -549,6 +609,7 @@ export function SettingsModelsPage() {
             </select>
             <input
               className={modelInputClass}
+              aria-label="Basic chat model"
               value={basicChatModel}
               onChange={(event) => setBasicChatModel(event.target.value)}
               placeholder="Model"
@@ -561,6 +622,7 @@ export function SettingsModelsPage() {
             </span>
             <select
               className={modelInputClass}
+              aria-label="KarpaWiki Codex OAuth connection"
               value={wikiConnectionId}
               onChange={(event) => setWikiConnectionId(event.target.value)}
             >
@@ -579,6 +641,7 @@ export function SettingsModelsPage() {
             </select>
             <input
               className={modelInputClass}
+              aria-label="KarpaWiki model"
               value={wikiModel}
               onChange={(event) => setWikiModel(event.target.value)}
               placeholder="Model"
@@ -592,6 +655,7 @@ export function SettingsModelsPage() {
 
         <div className="flex flex-wrap gap-3">
           <Button
+            className="min-h-11"
             pending={saveDefaultsMutation.isPending}
             pendingLabel="Saving defaults"
             onClick={() => saveDefaultsMutation.mutate()}
@@ -672,6 +736,8 @@ export function SettingsModelsPage() {
                     </div>
                     <Button
                       variant="secondary"
+                      className="min-h-11 min-w-11"
+                      aria-label={`Remove ${profile.label} embedding profile`}
                       pending={deleteEmbeddingMutation.isPending}
                       pendingLabel="Deleting"
                       onClick={() => deleteEmbeddingMutation.mutate(profile.id)}
@@ -698,24 +764,28 @@ export function SettingsModelsPage() {
           <div className={modelSoftPanelClass}>
             <input
               className={modelInputClass}
+              aria-label="Embedding profile name"
               value={embeddingLabel}
               onChange={(event) => setEmbeddingLabel(event.target.value)}
               placeholder="Profile label"
             />
             <input
               className={modelInputClass}
+              aria-label="Embedding model"
               value={embeddingModel}
               onChange={(event) => setEmbeddingModel(event.target.value)}
               placeholder="Embedding model"
             />
             <input
               className={modelInputClass}
+              aria-label="Embedding base URL"
               value={embeddingBaseUrl}
               onChange={(event) => setEmbeddingBaseUrl(event.target.value)}
               placeholder="Embedding base URL"
             />
             <input
               className={modelInputClass}
+              aria-label="Embedding API key"
               value={embeddingApiKey}
               onChange={(event) => setEmbeddingApiKey(event.target.value)}
               placeholder="Embedding API key (optional)"
@@ -724,6 +794,7 @@ export function SettingsModelsPage() {
             <div className="grid gap-3 md:grid-cols-2">
               <input
                 className={modelInputClass}
+                aria-label="Embedding chunk size"
                 value={chunkSize}
                 onChange={(event) => setChunkSize(event.target.value)}
                 placeholder="Chunk size"
@@ -731,6 +802,7 @@ export function SettingsModelsPage() {
               />
               <input
                 className={modelInputClass}
+                aria-label="Embedding chunk overlap"
                 value={chunkOverlap}
                 onChange={(event) => setChunkOverlap(event.target.value)}
                 placeholder="Chunk overlap"
@@ -738,6 +810,7 @@ export function SettingsModelsPage() {
               />
             </div>
             <Button
+              className="min-h-11"
               pending={createEmbeddingMutation.isPending}
               pendingLabel="Saving"
               disabled={!embeddingLabel.trim() || !embeddingModel.trim()}
@@ -765,7 +838,11 @@ export function SettingsModelsPage() {
           <div className="grid gap-3">
             <div className="grid gap-2">
               <div className={modelEyebrowClass}>Provider</div>
-              <div className="grid gap-2 md:grid-cols-3">
+              <div
+                className="grid gap-2 md:grid-cols-3"
+                role="group"
+                aria-label="Model provider"
+              >
                 {(
                   [
                     ["openai-api", "OpenAI API"],
@@ -779,13 +856,15 @@ export function SettingsModelsPage() {
                   <button
                     key={provider}
                     type="button"
-                    className={`rounded-[18px] px-4 py-3 text-left text-sm transition ${
+                    aria-pressed={editor.provider === provider}
+                    className={`min-h-11 rounded-[18px] px-4 py-3 text-left text-sm transition ${
                       editor.provider === provider
                         ? "border border-[color-mix(in_srgb,var(--primary)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)] shadow-[var(--ui-shadow-soft)]"
                         : "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                     }`}
                     onClick={() => {
                       setEditor(defaultEditorState(provider));
+                      setEditorRevision((current) => current + 1);
                       setOauthSessionId(null);
                       setManualOauthCode("");
                     }}
@@ -798,6 +877,7 @@ export function SettingsModelsPage() {
 
             <input
               className={modelInputClass}
+              aria-label="Connection name"
               value={editor.label}
               onChange={(event) =>
                 setEditor((current) => ({
@@ -809,13 +889,15 @@ export function SettingsModelsPage() {
             />
             <input
               className={modelInputClass}
+              aria-label="Connection model"
               value={editor.model}
-              onChange={(event) =>
+              onChange={(event) => {
                 setEditor((current) => ({
                   ...current,
                   model: event.target.value
-                }))
-              }
+                }));
+                setEditorRevision((current) => current + 1);
+              }}
               placeholder="Model"
             />
 
@@ -837,26 +919,34 @@ export function SettingsModelsPage() {
               <>
                 <input
                   className={modelInputClass}
+                  aria-label="Connection base URL"
                   value={editor.baseUrl}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setEditor((current) => ({
                       ...current,
                       baseUrl: event.target.value
-                    }))
-                  }
+                    }));
+                    setEditorRevision((current) => current + 1);
+                  }}
                   placeholder="Base URL"
                 />
                 <input
                   className={modelInputClass}
+                  aria-label="Connection API key"
                   value={editor.apiKey}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setEditor((current) => ({
                       ...current,
                       apiKey: event.target.value
-                    }))
-                  }
+                    }));
+                    setEditorRevision((current) => current + 1);
+                  }}
                   placeholder={
-                    editor.id ? "Leave blank to keep the stored key" : "API key"
+                    canReuseSavedCredential
+                      ? "Leave blank to keep the stored key"
+                      : editor.id
+                        ? "Enter a fresh API key"
+                        : "API key"
                   }
                   type="password"
                 />
@@ -878,6 +968,7 @@ export function SettingsModelsPage() {
                 <div className="flex flex-wrap gap-3">
                   <Button
                     variant="secondary"
+                    className="min-h-11"
                     pending={startOauthMutation.isPending}
                     pendingLabel="Starting OAuth"
                     onClick={() => startOauthMutation.mutate()}
@@ -888,6 +979,7 @@ export function SettingsModelsPage() {
                   {oauthSession?.authUrl ? (
                     <Button
                       variant="secondary"
+                      className="min-h-11"
                       onClick={() =>
                         window.open(
                           oauthSession.authUrl ?? "",
@@ -917,12 +1009,14 @@ export function SettingsModelsPage() {
                 <div className="grid gap-2">
                   <input
                     className={modelInputClass}
+                    aria-label="OpenAI Codex authorization code or redirect URL"
                     value={manualOauthCode}
                     onChange={(event) => setManualOauthCode(event.target.value)}
                     placeholder="Paste the authorization code or full redirect URL"
                   />
                   <Button
                     variant="secondary"
+                    className="min-h-11"
                     disabled={!manualOauthCode.trim() || !oauthSessionId}
                     pending={submitManualCodeMutation.isPending}
                     pendingLabel="Submitting"
@@ -936,6 +1030,8 @@ export function SettingsModelsPage() {
 
             <div className="flex flex-wrap gap-3">
               <Button
+                className="min-h-11"
+                aria-describedby="model-connection-readiness"
                 pending={saveConnectionMutation.isPending}
                 pendingLabel="Saving connection"
                 disabled={!canSaveConnection}
@@ -945,6 +1041,8 @@ export function SettingsModelsPage() {
               </Button>
               <Button
                 variant="secondary"
+                className="min-h-11"
+                aria-describedby="model-connection-readiness"
                 pending={testConnectionMutation.isPending}
                 pendingLabel="Testing"
                 disabled={!canTestConnection}
@@ -954,13 +1052,36 @@ export function SettingsModelsPage() {
                 Test connection
               </Button>
             </div>
-            {feedback ? (
-              <div
-                className={`rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 text-sm ${modelBodyClass}`}
-              >
-                {feedback}
-              </div>
-            ) : null}
+            <div
+              id="model-connection-readiness"
+              className={`text-xs leading-5 ${modelFaintClass}`}
+            >
+              {editorReadinessMessage}
+            </div>
+            <div
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              className={
+                feedback
+                  ? `rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 text-sm ${modelBodyClass}`
+                  : "sr-only"
+              }
+            >
+              {feedback ?? ""}
+            </div>
+            <div
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              className={
+                visibleEditorTestFeedback
+                  ? `rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 text-sm ${modelBodyClass}`
+                  : "sr-only"
+              }
+            >
+              {visibleEditorTestFeedback}
+            </div>
           </div>
         </Card>
 
@@ -1003,6 +1124,7 @@ export function SettingsModelsPage() {
                   <div className="flex gap-2">
                     <Button
                       variant="secondary"
+                      className="min-h-11"
                       pending={
                         savedConnectionTestMutation.isPending &&
                         savedConnectionTestMutation.variables?.id ===
@@ -1021,8 +1143,10 @@ export function SettingsModelsPage() {
                     </Button>
                     <Button
                       variant="secondary"
+                      className="min-h-11"
                       onClick={() => {
                         setEditor(editorFromConnection(connection));
+                        setEditorRevision((current) => current + 1);
                         setOauthSessionId(null);
                         setManualOauthCode("");
                       }}
@@ -1031,6 +1155,8 @@ export function SettingsModelsPage() {
                     </Button>
                     <Button
                       variant="secondary"
+                      className="min-h-11 min-w-11"
+                      aria-label={`Remove ${connection.label} connection`}
                       pending={deleteConnectionMutation.isPending}
                       pendingLabel="Deleting"
                       onClick={() => {
@@ -1075,6 +1201,9 @@ export function SettingsModelsPage() {
                   ) : null}
                 </div>
                 <div
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
                   className={`rounded-[16px] border border-[var(--ui-border-subtle)] px-3 py-2 text-xs leading-5 ${
                     connectionHealth[connection.id]?.status === "healthy"
                       ? "bg-[var(--ui-success-soft)] text-[var(--success)]"
@@ -1086,6 +1215,9 @@ export function SettingsModelsPage() {
                 >
                   {connectionHealth[connection.id]?.detail ??
                     "Not health-checked in this browser session."}
+                  {connectionHealth[connection.id]?.status === "unavailable"
+                    ? " Forge did not switch to another connection."
+                    : ""}
                 </div>
               </div>
             ))}
