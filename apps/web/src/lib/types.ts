@@ -4613,6 +4613,30 @@ export type AttentionInboxSource =
 
 export type AttentionInboxState = "active" | "snoozed" | "dismissed";
 
+export type AttentionInboxKind =
+  | "decision"
+  | "review"
+  | "blocked_work"
+  | "overdue_work"
+  | "sync_problem"
+  | "runtime_problem";
+
+export type AttentionPrimaryActionKey =
+  | "review_decision"
+  | "review_insight"
+  | "resolve_blocker"
+  | "review_due_work"
+  | "recover_companion_sync"
+  | "reconnect_runtime";
+
+export interface AttentionPrimaryAction {
+  key: AttentionPrimaryActionKey;
+  label: string;
+  href: string;
+  sourceRef: string;
+  resolutionCondition: string;
+}
+
 export type AttentionInboxAction =
   | "open"
   | "approve"
@@ -4624,13 +4648,7 @@ export type AttentionInboxAction =
 export interface AttentionInboxItem {
   id: string;
   source: AttentionInboxSource;
-  kind:
-    | "decision"
-    | "review"
-    | "blocked_work"
-    | "overdue_work"
-    | "sync_problem"
-    | "runtime_problem";
+  kind: AttentionInboxKind;
   severity: "notice" | "important" | "blocking";
   state: AttentionInboxState;
   title: string;
@@ -4643,6 +4661,7 @@ export interface AttentionInboxItem {
     href: string;
   };
   allowedActions: AttentionInboxAction[];
+  primaryAction: AttentionPrimaryAction;
   createdAt: string;
   updatedAt: string;
   sourceUpdatedAt: string;
@@ -4676,6 +4695,81 @@ export interface AttentionInboxStateRecord {
   sourceUpdatedAt: string;
   note: string;
   updatedAt: string;
+}
+
+export type AttentionResolutionAttemptStatus =
+  | "pending"
+  | "resolved"
+  | "unavailable";
+
+export interface AttentionResolutionAttempt {
+  id: string;
+  itemId: string;
+  source: AttentionInboxSource;
+  kind: AttentionInboxKind;
+  actionKey: AttentionPrimaryActionKey;
+  sourceRef: string;
+  sourceUpdatedAt: string;
+  title: string;
+  targetLabel: string;
+  targetHref: string;
+  status: AttentionResolutionAttemptStatus;
+  startedAt: string;
+  checkedAt: string | null;
+}
+
+export interface AttentionResolutionReceipt {
+  id: string;
+  attemptId: string;
+  itemId: string;
+  source: AttentionInboxSource;
+  kind: AttentionInboxKind;
+  actionKey: AttentionPrimaryActionKey;
+  sourceRef: string;
+  sourceUpdatedAt: string;
+  title: string;
+  targetLabel: string;
+  targetHref: string;
+  evidenceCode: string;
+  evidenceSummary: string;
+  activityEventId: string;
+  resolvedAt: string;
+}
+
+export interface AttentionResolutionStartResult {
+  attempt: AttentionResolutionAttempt;
+  primaryAction: AttentionPrimaryAction;
+  replayed: boolean;
+}
+
+export type AttentionResolutionCheckStatus =
+  | "resolved"
+  | "still_open"
+  | "stale"
+  | "deleted"
+  | "denied";
+
+export interface AttentionResolutionCheckResult {
+  attemptId: string;
+  itemId: string;
+  status: AttentionResolutionCheckStatus;
+  explanation: string;
+  receipt: AttentionResolutionReceipt | null;
+}
+
+export interface AttentionResolutionCheckResponse {
+  results: AttentionResolutionCheckResult[];
+  receipts: AttentionResolutionReceipt[];
+}
+
+export interface AttentionResolutionList {
+  receipts: AttentionResolutionReceipt[];
+  total: number;
+  limit: number;
+  retention: {
+    days: number;
+    maxPerActor: number;
+  };
 }
 
 export type EntityNavigationAvailability = "available" | "deleted" | "missing";

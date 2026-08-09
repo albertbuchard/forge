@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
+import { AttentionSourceReturn } from "@/components/attention/attention-source-return";
 import {
   ArrowUpRight,
   BriefcaseBusiness,
@@ -564,6 +565,8 @@ export function TaskDetailPage() {
           </div>
         }
       />
+
+      <AttentionSourceReturn sourceRef={`task:${payload.task.id}`} />
 
       <Card className="min-w-0 overflow-hidden">
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-4">

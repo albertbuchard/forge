@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUpRight,
@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleAlert,
+  CircleCheck,
   Clock3,
   Inbox,
   Lightbulb,
@@ -17,7 +18,12 @@ import {
   Smartphone,
   X
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useSearchParams
+} from "react-router-dom";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
 import { MutationReceiptBanner } from "@/components/mutation-receipt-banner";
@@ -33,20 +39,116 @@ import {
   LoadingState
 } from "@/components/ui/page-state";
 import {
+  checkAttentionResolutions,
+  createAttentionResolutionIdempotencyKey,
   dismissAttentionInboxItem,
   getAttentionInbox,
+  getAttentionResolutions,
   restoreAttentionInboxItem,
-  snoozeAttentionInboxItem
+  snoozeAttentionInboxItem,
+  startAttentionResolutionAction
 } from "@/lib/api";
+import { ForgeApiError } from "@/lib/api-error";
 import type {
   AttentionInboxItem,
   AttentionInboxSource,
-  AttentionInboxState
+  AttentionInboxState,
+  AttentionResolutionCheckResult,
+  AttentionResolutionReceipt
 } from "@/lib/types";
 import type { MutationReceipt } from "@/lib/mutation-receipts";
 import { cn, formatDate, formatDateTime } from "@/lib/utils";
 
 const PAGE_SIZE = 25;
+
+type StartResolutionRequest = {
+  item: AttentionInboxItem;
+  logicalKey: string;
+  idempotencyKey: string;
+};
+
+function startResolutionLogicalKey(
+  item: AttentionInboxItem,
+  selectedUserIds: string[]
+) {
+  return JSON.stringify([
+    item.id,
+    item.primaryAction.key,
+    item.sourceUpdatedAt,
+    [
+      ...new Set(selectedUserIds.map((value) => value.trim()).filter(Boolean))
+    ].sort()
+  ]);
+}
+
+function isDefinitiveStartFailure(error: unknown) {
+  return (
+    error instanceof ForgeApiError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    error.status !== 408 &&
+    error.status !== 429
+  );
+}
+
+function readAttentionState(value: string | null): AttentionInboxState {
+  return value === "snoozed" || value === "dismissed" ? value : "active";
+}
+
+function readAttentionOffset(value: string | null) {
+  const parsed = Number.parseInt(value ?? "", 10);
+  if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > 10_000) {
+    return 0;
+  }
+  return Math.floor(parsed / PAGE_SIZE) * PAGE_SIZE;
+}
+
+function buildSourceActionHref(
+  href: string,
+  sourceRef: string,
+  returnHref: string
+) {
+  const target = new URL(href, window.location.origin);
+  if (
+    target.origin !== window.location.origin ||
+    target.username ||
+    target.password ||
+    !target.pathname.startsWith("/")
+  ) {
+    throw new Error("Forge refused an unsafe Attention action link.");
+  }
+  target.searchParams.set("attentionSource", sourceRef);
+  target.searchParams.set("attentionReturn", returnHref);
+  return `${target.pathname}${target.search}${target.hash}`;
+}
+
+function buildStoredSourceHref(
+  href: string,
+  sourceRef: string,
+  returnHref: string
+) {
+  try {
+    return buildSourceActionHref(href, sourceRef, returnHref);
+  } catch {
+    return "/attention";
+  }
+}
+
+function verificationMessage(result: AttentionResolutionCheckResult) {
+  if (result.status === "still_open") {
+    return "Forge checked the source. It still needs attention.";
+  }
+  if (result.status === "stale") {
+    return "The source changed after you started. Forge did not claim a resolution.";
+  }
+  if (result.status === "deleted") {
+    return "The source is no longer available. Deletion is not recorded as a resolution.";
+  }
+  if (result.status === "denied") {
+    return "Forge can no longer verify this source with your current access. No resolution was recorded.";
+  }
+  return result.explanation;
+}
 
 const SOURCE_LABELS: Record<AttentionInboxSource, string> = {
   approval: "Approval",
@@ -119,12 +221,14 @@ function stateCount(
 function AttentionRow({
   item,
   pending,
+  onStartAction,
   onSnooze,
   onDismiss,
   onRestore
 }: {
   item: AttentionInboxItem;
   pending: boolean;
+  onStartAction: (item: AttentionInboxItem) => void;
   onSnooze: (
     item: AttentionInboxItem,
     event: MouseEvent<HTMLButtonElement>
@@ -135,7 +239,9 @@ function AttentionRow({
   const SourceIcon = sourceIcon(item.source);
   return (
     <article
-      className="grid min-w-0 gap-4 border-b border-[var(--ui-border-subtle)] px-4 py-5 last:border-b-0 sm:grid-cols-[auto_minmax(0,1fr)] sm:px-5"
+      id={`attention-item-${encodeURIComponent(item.id)}`}
+      tabIndex={-1}
+      className="grid min-w-0 gap-4 border-b border-[var(--ui-border-subtle)] px-4 py-5 outline-none last:border-b-0 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ui-focus)] sm:grid-cols-[auto_minmax(0,1fr)] sm:px-5"
       data-testid={`attention-item-${item.id}`}
     >
       <div
@@ -191,10 +297,22 @@ function AttentionRow({
         </div>
 
         <div className="mt-4 flex min-w-0 flex-wrap items-center gap-2">
-          {item.allowedActions.includes("open") ? (
+          {item.state === "active" ? (
+            <Button
+              type="button"
+              className="min-h-11"
+              disabled={pending}
+              pending={pending}
+              pendingLabel="Opening source"
+              onClick={() => onStartAction(item)}
+            >
+              <ArrowUpRight className="size-3.5 shrink-0" />
+              {item.primaryAction.label}
+            </Button>
+          ) : item.allowedActions.includes("open") ? (
             <Link
               to={item.target.href}
-              className="inline-flex min-h-[2.125rem] min-w-0 max-w-full items-center justify-center gap-2 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-2.5 py-[0.4375rem] text-[13px] font-medium leading-none text-[var(--ui-ink-strong)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
+              className="inline-flex min-h-11 min-w-0 max-w-full items-center justify-center gap-2 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2 text-[13px] font-medium leading-none text-[var(--ui-ink-strong)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
             >
               <ArrowUpRight className="size-3.5 shrink-0" />
               <span className="truncate">
@@ -207,6 +325,7 @@ function AttentionRow({
               type="button"
               variant="ghost"
               size="sm"
+              className="min-h-11"
               disabled={pending}
               onClick={(event) => onSnooze(item, event)}
             >
@@ -219,11 +338,13 @@ function AttentionRow({
               type="button"
               variant="ghost"
               size="sm"
+              className="min-h-11"
+              title="Hide this queue item. This does not resolve its source."
               disabled={pending}
               onClick={() => onDismiss(item.id)}
             >
               <X className="size-3.5" />
-              Dismiss
+              Hide
             </Button>
           ) : null}
           {item.allowedActions.includes("restore") ? (
@@ -231,6 +352,7 @@ function AttentionRow({
               type="button"
               variant="secondary"
               size="sm"
+              className="min-h-11"
               disabled={pending}
               onClick={() => onRestore(item.id)}
             >
@@ -251,19 +373,62 @@ export function AttentionInboxPage() {
     : [];
   const selectedUserScopeKey = selectedUserIds.join(",");
   const queryClient = useQueryClient();
-  const [state, setState] = useState<AttentionInboxState>("active");
-  const [offset, setOffset] = useState(0);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const state = readAttentionState(searchParams.get("state"));
+  const offset = readAttentionOffset(searchParams.get("offset"));
+  const focusedItemId = searchParams.get("focus");
+  const returnedAttemptId = searchParams.get("attempt");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [verificationNotice, setVerificationNotice] = useState<string | null>(
+    null
+  );
+  const [latestResolution, setLatestResolution] =
+    useState<AttentionResolutionReceipt | null>(null);
   const [mutationReceipt, setMutationReceipt] =
     useState<MutationReceipt | null>(null);
+  const checkedScopeRef = useRef<string | null>(null);
+  const previousUserScopeRef = useRef(selectedUserScopeKey);
+  const startRetryKeysRef = useRef(new Map<string, string>());
   const [snoozeMenu, setSnoozeMenu] = useState<{
     item: AttentionInboxItem;
     position: { x: number; y: number };
   } | null>(null);
 
+  const updateLocationState = (
+    nextState: AttentionInboxState,
+    nextOffset = 0
+  ) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("state", nextState);
+    if (nextOffset > 0) {
+      next.set("offset", String(nextOffset));
+    } else {
+      next.delete("offset");
+    }
+    next.delete("focus");
+    next.delete("attempt");
+    setSearchParams(next);
+  };
+
   useEffect(() => {
-    setOffset(0);
-  }, [selectedUserScopeKey, state]);
+    if (previousUserScopeRef.current === selectedUserScopeKey) {
+      return;
+    }
+    previousUserScopeRef.current = selectedUserScopeKey;
+    if (offset === 0) {
+      return;
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete("offset");
+    next.delete("focus");
+    next.delete("attempt");
+    setSearchParams(next, { replace: true });
+    // The selected Forge user scope is external to this route. A scope change
+    // must not leave the reader on an empty later page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedUserScopeKey]);
 
   const query = useQuery({
     queryKey: ["forge-attention-inbox", state, offset, ...selectedUserIds],
@@ -274,6 +439,11 @@ export function AttentionInboxPage() {
         offset,
         userIds: selectedUserIds
       })
+  });
+  const resolutionsQuery = useQuery({
+    queryKey: ["forge-attention-resolutions", ...selectedUserIds],
+    queryFn: () =>
+      getAttentionResolutions({ userIds: selectedUserIds, limit: 5 })
   });
 
   const invalidateQueue = async () => {
@@ -315,11 +485,157 @@ export function AttentionInboxPage() {
     },
     onError: reportActionError
   });
+  const checkResolutionMutation = useMutation({
+    mutationFn: () => checkAttentionResolutions({ userIds: selectedUserIds }),
+    onMutate: () => {
+      setActionError(null);
+      setVerificationNotice(null);
+    },
+    onSuccess: async (result) => {
+      if (returnedAttemptId) {
+        const returnedResult = result.results.find(
+          (entry) => entry.attemptId === returnedAttemptId
+        );
+        const returnedReceipt =
+          returnedResult?.receipt ??
+          result.receipts.find(
+            (receipt) => receipt.attemptId === returnedAttemptId
+          ) ??
+          null;
+        setLatestResolution(returnedReceipt);
+        if (returnedReceipt) {
+          setVerificationNotice(
+            `Resolved with source evidence: ${returnedReceipt.evidenceSummary}`
+          );
+        } else if (returnedResult) {
+          setVerificationNotice(verificationMessage(returnedResult));
+        } else {
+          setVerificationNotice(
+            "Forge found no pending check for this returned action. No new resolution was claimed."
+          );
+        }
+      } else {
+        setLatestResolution(null);
+        if (result.receipts.length > 0) {
+          setVerificationNotice(
+            `Forge verified ${result.receipts.length} resolution${result.receipts.length === 1 ? "" : "s"}. Review the evidence receipts below.`
+          );
+        } else if (result.results.length > 0) {
+          setVerificationNotice(
+            `Forge checked ${result.results.length} pending source${result.results.length === 1 ? "" : "s"}. No new verified resolution was recorded.`
+          );
+        }
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["forge-attention-inbox"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["forge-attention-resolutions"]
+        })
+      ]);
+    },
+    onError: reportActionError
+  });
+  const startResolutionMutation = useMutation({
+    mutationFn: (request: StartResolutionRequest) =>
+      startAttentionResolutionAction(request.item.id, {
+        actionKey: request.item.primaryAction.key,
+        sourceUpdatedAt: request.item.sourceUpdatedAt,
+        userIds: selectedUserIds,
+        idempotencyKey: request.idempotencyKey
+      }),
+    onMutate: () => {
+      setActionError(null);
+      setVerificationNotice(null);
+    },
+    onSuccess: (result, request) => {
+      const item = request.item;
+      const returnParams = new URLSearchParams(searchParams);
+      returnParams.set("state", state);
+      if (offset > 0) {
+        returnParams.set("offset", String(offset));
+      } else {
+        returnParams.delete("offset");
+      }
+      returnParams.set("focus", item.id);
+      returnParams.set("attempt", result.attempt.id);
+      const returnHref = `${location.pathname}?${returnParams.toString()}`;
+      try {
+        const targetHref = buildSourceActionHref(
+          result.primaryAction.href,
+          result.primaryAction.sourceRef,
+          returnHref
+        );
+        startRetryKeysRef.current.delete(request.logicalKey);
+        navigate(returnHref, { replace: true });
+        navigate(targetHref);
+      } catch (error) {
+        reportActionError(error);
+      }
+    },
+    onError: (error, request) => {
+      if (isDefinitiveStartFailure(error)) {
+        startRetryKeysRef.current.delete(request.logicalKey);
+      }
+      reportActionError(error);
+    }
+  });
   const pendingItemId =
+    (startResolutionMutation.isPending
+      ? startResolutionMutation.variables?.item.id
+      : null) ??
     (snoozeMutation.isPending ? snoozeMutation.variables?.itemId : null) ??
     (dismissMutation.isPending ? dismissMutation.variables : null) ??
     (restoreMutation.isPending ? restoreMutation.variables : null) ??
     null;
+
+  const startTrackedResolution = (selectedItem: AttentionInboxItem) => {
+    const logicalKey = startResolutionLogicalKey(selectedItem, selectedUserIds);
+    let idempotencyKey = startRetryKeysRef.current.get(logicalKey);
+    if (!idempotencyKey) {
+      idempotencyKey =
+        createAttentionResolutionIdempotencyKey("attention_start");
+      startRetryKeysRef.current.set(logicalKey, idempotencyKey);
+    }
+    startResolutionMutation.mutate({
+      item: selectedItem,
+      logicalKey,
+      idempotencyKey
+    });
+  };
+
+  useEffect(() => {
+    const checkKey = selectedUserScopeKey || "operator";
+    if (checkedScopeRef.current === checkKey) {
+      return;
+    }
+    checkedScopeRef.current = checkKey;
+    checkResolutionMutation.mutate();
+    // This is an idempotent source re-read for action attempts that the user
+    // explicitly started. It runs once for each selected-user scope.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedUserScopeKey]);
+
+  useEffect(() => {
+    if (!focusedItemId) {
+      return;
+    }
+    const queueElement = document.getElementById(
+      `attention-item-${encodeURIComponent(focusedItemId)}`
+    );
+    const receiptElement = returnedAttemptId
+      ? document.getElementById(
+          `attention-resolution-${encodeURIComponent(returnedAttemptId)}`
+        )
+      : null;
+    const element = queueElement ?? receiptElement;
+    element?.focus({ preventScroll: true });
+    element?.scrollIntoView?.({ block: "center" });
+  }, [
+    focusedItemId,
+    query.data?.items,
+    resolutionsQuery.data?.receipts,
+    returnedAttemptId
+  ]);
 
   const snoozeItems: FloatingActionMenuItem[] = snoozeMenu
     ? [
@@ -372,27 +688,119 @@ export function AttentionInboxPage() {
     <div className="mx-auto grid w-full max-w-[1100px] gap-5">
       <PageHero
         title="Attention"
-        description="Decisions, blocked work, and operational problems that need a next move."
+        description="Take the next valid action, then Forge checks the source and records a resolution only when the problem is gone."
         badge={summary ? `${summary.activeCount} active` : undefined}
         actions={
           <Button
             type="button"
             variant="secondary"
-            onClick={() => void query.refetch()}
-            pending={query.isFetching}
-            pendingLabel="Refreshing"
+            className="min-h-11"
+            onClick={() =>
+              void Promise.all([
+                query.refetch(),
+                resolutionsQuery.refetch(),
+                checkResolutionMutation.mutateAsync()
+              ])
+            }
+            pending={
+              query.isFetching ||
+              resolutionsQuery.isFetching ||
+              checkResolutionMutation.isPending
+            }
+            pendingLabel="Checking sources"
           >
             <RefreshCw className="size-4" />
-            Refresh
+            Check sources
           </Button>
         }
       />
+
+      <div className="border-y border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
+        Forge can verify the six current Attention kinds. Snoozing or hiding an
+        item changes this queue only; missing data, deletion, or lost access is
+        never called a resolution.
+      </div>
 
       <MutationReceiptBanner
         receipt={mutationReceipt}
         onReceiptChange={setMutationReceipt}
         onUndone={invalidateQueue}
       />
+
+      {verificationNotice ? (
+        <div
+          role="status"
+          className={cn(
+            "flex items-start gap-3 border-y px-4 py-3 text-sm text-[var(--ui-ink-medium)]",
+            latestResolution
+              ? "border-[var(--ui-success-border)] bg-[var(--ui-success-soft)]"
+              : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]"
+          )}
+        >
+          <CircleCheck
+            className={cn(
+              "mt-0.5 size-4 shrink-0",
+              latestResolution
+                ? "text-[var(--success)]"
+                : "text-[var(--primary)]"
+            )}
+            aria-hidden="true"
+          />
+          <span>{verificationNotice}</span>
+        </div>
+      ) : null}
+
+      {resolutionsQuery.data?.receipts.length ? (
+        <section
+          aria-label="Verified resolutions"
+          className="border-y border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]"
+        >
+          <div className="flex min-w-0 flex-col gap-1 border-b border-[var(--ui-border-subtle)] px-4 py-3 sm:px-5">
+            <h2 className="text-sm font-medium text-[var(--ui-ink-strong)]">
+              Resolved with evidence
+            </h2>
+            <p className="text-xs leading-5 text-[var(--ui-ink-faint)]">
+              These receipts were created only after Forge re-read the source.
+              History keeps the newest{" "}
+              {resolutionsQuery.data.retention.maxPerActor} receipts for{" "}
+              {resolutionsQuery.data.retention.days} days.
+            </p>
+          </div>
+          <div className="divide-y divide-[var(--ui-border-subtle)]">
+            {resolutionsQuery.data.receipts.map((receipt) => (
+              <article
+                key={receipt.id}
+                id={`attention-resolution-${encodeURIComponent(receipt.attemptId)}`}
+                tabIndex={-1}
+                className="grid min-w-0 gap-2 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ui-focus)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5"
+              >
+                <div className="min-w-0">
+                  <div className="font-medium text-[var(--ui-ink-strong)]">
+                    {receipt.title}
+                  </div>
+                  <div className="mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                    {receipt.evidenceSummary}
+                  </div>
+                  <div className="mt-1 text-xs text-[var(--ui-ink-faint)]">
+                    Verified {formatDateTime(receipt.resolvedAt)}
+                  </div>
+                </div>
+                <Link
+                  to={buildStoredSourceHref(
+                    receipt.targetHref,
+                    receipt.sourceRef,
+                    `${location.pathname}${location.search}`
+                  )}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2 text-sm font-medium text-[var(--ui-ink-strong)] hover:bg-[var(--ui-surface-hover)]"
+                >
+                  <ArrowUpRight className="size-4" aria-hidden="true" />
+                  Open source
+                </Link>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section
         aria-label="Attention summary"
@@ -431,12 +839,12 @@ export function AttentionInboxPage() {
               role="tab"
               aria-selected={state === tab.state}
               className={cn(
-                "min-h-9 min-w-0 rounded-[calc(var(--radius-control)-0.25rem)] px-3 py-2 text-sm font-medium transition",
+                "min-h-11 min-w-0 rounded-[calc(var(--radius-control)-0.25rem)] px-3 py-2 text-sm font-medium transition",
                 state === tab.state
                   ? "bg-[var(--ui-surface-active)] text-[var(--ui-ink-strong)] shadow-[var(--ui-shadow-soft)]"
                   : "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
               )}
-              onClick={() => setState(tab.state)}
+              onClick={() => updateLocationState(tab.state)}
             >
               <span className="truncate">{tab.label}</span>{" "}
               <span className="tabular-nums text-[var(--ui-ink-faint)]">
@@ -464,6 +872,27 @@ export function AttentionInboxPage() {
         </div>
       ) : null}
 
+      {resolutionsQuery.isError ? (
+        <div
+          role="alert"
+          className="flex items-start justify-between gap-3 border-y border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-medium)]"
+        >
+          <span>
+            Resolution history could not be loaded. The current Attention queue
+            is still available.
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="min-h-11 shrink-0"
+            onClick={() => void resolutionsQuery.refetch()}
+          >
+            Try history again
+          </Button>
+        </div>
+      ) : null}
+
       {query.isLoading ? (
         <LoadingState
           eyebrow="Attention"
@@ -486,6 +915,7 @@ export function AttentionInboxPage() {
               key={item.id}
               item={item}
               pending={pendingItemId === item.id}
+              onStartAction={startTrackedResolution}
               onSnooze={(selectedItem, event) => {
                 setActionError(null);
                 setSnoozeMenu({
@@ -522,7 +952,8 @@ export function AttentionInboxPage() {
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() => setState("active")}
+                className="min-h-11"
+                onClick={() => updateLocationState("active")}
               >
                 <Inbox className="size-4" />
                 View active
@@ -541,11 +972,12 @@ export function AttentionInboxPage() {
             type="button"
             variant="secondary"
             size="sm"
+            className="min-h-11 min-w-11"
             aria-label="Previous attention page"
             title="Previous page"
             disabled={offset === 0}
             onClick={() =>
-              setOffset((current) => Math.max(0, current - PAGE_SIZE))
+              updateLocationState(state, Math.max(0, offset - PAGE_SIZE))
             }
           >
             <ChevronLeft className="size-4" />
@@ -557,10 +989,11 @@ export function AttentionInboxPage() {
             type="button"
             variant="secondary"
             size="sm"
+            className="min-h-11 min-w-11"
             aria-label="Next attention page"
             title="Next page"
             disabled={!payload.hasMore}
-            onClick={() => setOffset((current) => current + PAGE_SIZE)}
+            onClick={() => updateLocationState(state, offset + PAGE_SIZE)}
           >
             <ChevronRight className="size-4" />
           </Button>

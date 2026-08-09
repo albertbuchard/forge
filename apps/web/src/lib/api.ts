@@ -34,6 +34,10 @@ import type {
   AttentionInboxPayload,
   AttentionInboxState,
   AttentionInboxStateRecord,
+  AttentionPrimaryActionKey,
+  AttentionResolutionCheckResponse,
+  AttentionResolutionList,
+  AttentionResolutionStartResult,
   EntityNavigationItem,
   EntityNavigationPayload,
   SavedView,
@@ -6232,6 +6236,72 @@ export function getAttentionInbox(
   appendUserIds(search, options.userIds ?? []);
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<AttentionInboxPayload>(`/api/v1/attention-inbox${suffix}`);
+}
+
+export function createAttentionResolutionIdempotencyKey(prefix = "attention") {
+  return `${prefix}_${globalThis.crypto.randomUUID()}`;
+}
+
+export function startAttentionResolutionAction(
+  itemId: string,
+  input: {
+    actionKey: AttentionPrimaryActionKey;
+    sourceUpdatedAt: string;
+    userIds?: string[];
+    idempotencyKey?: string;
+  }
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, input.userIds ?? []);
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<AttentionResolutionStartResult>(
+    `/api/v1/attention-inbox/${encodeURIComponent(itemId)}/actions/start${suffix}`,
+    {
+      method: "POST",
+      headers: {
+        "Idempotency-Key":
+          input.idempotencyKey ??
+          createAttentionResolutionIdempotencyKey("attention_start")
+      },
+      body: JSON.stringify({
+        actionKey: input.actionKey,
+        sourceUpdatedAt: input.sourceUpdatedAt
+      })
+    }
+  );
+}
+
+export function checkAttentionResolutions(
+  options: { userIds?: string[]; idempotencyKey?: string } = {}
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, options.userIds ?? []);
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<AttentionResolutionCheckResponse>(
+    `/api/v1/attention-resolutions/check${suffix}`,
+    {
+      method: "POST",
+      headers: {
+        "Idempotency-Key":
+          options.idempotencyKey ??
+          createAttentionResolutionIdempotencyKey("attention_check")
+      }
+    }
+  );
+}
+
+export function getAttentionResolutions(
+  options: { userIds?: string[]; limit?: number } = {}
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, options.userIds ?? []);
+  if (typeof options.limit === "number") {
+    search.set("limit", String(options.limit));
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<AttentionResolutionList>(
+    `/api/v1/attention-resolutions${suffix}`
+  );
 }
 
 export function getMutationReceipts(

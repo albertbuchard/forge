@@ -17,6 +17,7 @@ import {
   UploadCloud
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { MobileSyncAttentionSourceReturn } from "@/components/attention/attention-source-return";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import {
   SettingsSectionNav,
@@ -304,6 +305,7 @@ export function SettingsMobilePage() {
   if (overviewQuery.isLoading) {
     return (
       <SettingsStateFrame>
+        <MobileSyncAttentionSourceReturn />
         <SurfaceSkeleton
           eyebrow="Companion"
           title="Loading mobile companion"
@@ -318,6 +320,7 @@ export function SettingsMobilePage() {
   if (overviewQuery.isError || !overviewQuery.data) {
     return (
       <SettingsStateFrame>
+        <MobileSyncAttentionSourceReturn />
         <ErrorState
           eyebrow="Companion"
           error={
@@ -379,6 +382,8 @@ export function SettingsMobilePage() {
         description="Pair the native iPhone companion once, then sync Apple Health, watch, and location signals securely."
         badge={overview.healthState.replaceAll("_", " ")}
       />
+
+      <MobileSyncAttentionSourceReturn />
 
       <SettingsSectionNav />
 

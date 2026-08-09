@@ -22,6 +22,7 @@ import { listAgentRuntimeSessions } from "../repositories/agent-runtime-sessions
 import { filterOwnedEntities } from "../repositories/entity-ownership.js";
 import { getProjectById } from "../repositories/projects.js";
 import { getTaskById, listTasks } from "../repositories/tasks.js";
+import { attentionPrimaryActionFor } from "./attention-resolution.js";
 
 const DEFAULT_LIMIT = 25;
 const MAX_SOURCE_ITEMS = 100;
@@ -201,6 +202,11 @@ function buildTaskItems(tasks: Task[], now: Date): AttentionInboxItem[] {
           label: task.title,
           href: `/tasks/${task.id}`
         },
+        primaryAction: attentionPrimaryActionFor({
+          kind,
+          sourceRef: `task:${task.id}`,
+          href: `/tasks/${task.id}`
+        }),
         allowedActions: ["open", "snooze"],
         createdAt: task.createdAt,
         updatedAt: task.updatedAt,
@@ -289,6 +295,11 @@ function buildMobileSyncItems(
         label: "Companion sync",
         href: "/settings/mobile"
       },
+      primaryAction: attentionPrimaryActionFor({
+        kind: "sync_problem",
+        sourceRef: `health_mobile_sync_session:${row.id}`,
+        href: "/settings/mobile"
+      }),
       allowedActions: ["open", "snooze", "dismiss"],
       createdAt: row.started_at,
       updatedAt: row.updated_at,
@@ -342,6 +353,11 @@ function buildCandidates(scope: AttentionInboxScope, now: Date) {
             label: approval.title,
             href: "/settings/agents"
           },
+          primaryAction: attentionPrimaryActionFor({
+            kind: "decision",
+            sourceRef: `approval_request:${approval.id}`,
+            href: "/settings/agents"
+          }),
           allowedActions: ["open", "approve", "reject", "snooze"],
           createdAt: approval.createdAt,
           updatedAt: approval.updatedAt,
@@ -382,6 +398,11 @@ function buildCandidates(scope: AttentionInboxScope, now: Date) {
           label: insight.title,
           href: "/insights"
         },
+        primaryAction: attentionPrimaryActionFor({
+          kind: "review",
+          sourceRef: `insight:${insight.id}`,
+          href: "/insights"
+        }),
         allowedActions: ["open", "snooze", "dismiss"],
         createdAt: insight.createdAt,
         updatedAt: insight.updatedAt,
@@ -436,6 +457,11 @@ function buildCandidates(scope: AttentionInboxScope, now: Date) {
             label: session.agentLabel,
             href: "/settings/agents"
           },
+          primaryAction: attentionPrimaryActionFor({
+            kind: "runtime_problem",
+            sourceRef: `agent_runtime_session:${session.id}`,
+            href: "/settings/agents"
+          }),
           allowedActions: ["open", "snooze", "dismiss"],
           createdAt: session.createdAt,
           updatedAt: session.updatedAt,

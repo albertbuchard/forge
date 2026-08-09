@@ -39012,6 +39012,46 @@
           }
         }
       },
+      "AttentionPrimaryAction": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "label",
+          "href",
+          "sourceRef",
+          "resolutionCondition"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "review_decision",
+              "review_insight",
+              "resolve_blocker",
+              "review_due_work",
+              "recover_companion_sync",
+              "reconnect_runtime"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "href": {
+            "type": "string",
+            "pattern": "^/(?!/)",
+            "description": "Same-origin navigation target for the domain action."
+          },
+          "sourceRef": {
+            "type": "string",
+            "description": "Stable, typed reference to the authoritative source record."
+          },
+          "resolutionCondition": {
+            "type": "string",
+            "description": "Plain-language evidence condition Forge must confirm before issuing a receipt."
+          }
+        }
+      },
       "AttentionInboxItem": {
         "type": "object",
         "additionalProperties": false,
@@ -39025,6 +39065,7 @@
           "reason",
           "detail",
           "target",
+          "primaryAction",
           "allowedActions",
           "createdAt",
           "updatedAt",
@@ -39088,6 +39129,9 @@
           },
           "target": {
             "$ref": "#/components/schemas/AttentionInboxTarget"
+          },
+          "primaryAction": {
+            "$ref": "#/components/schemas/AttentionPrimaryAction"
           },
           "allowedActions": {
             "type": "array",
@@ -39307,6 +39351,335 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "AttentionResolutionAttempt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "itemId",
+          "source",
+          "kind",
+          "actionKey",
+          "sourceRef",
+          "sourceUpdatedAt",
+          "title",
+          "targetLabel",
+          "targetHref",
+          "status",
+          "startedAt",
+          "checkedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^atra_[a-z0-9]+$"
+          },
+          "itemId": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "approval",
+              "insight",
+              "task",
+              "companion_sync",
+              "agent_session"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "decision",
+              "review",
+              "blocked_work",
+              "overdue_work",
+              "sync_problem",
+              "runtime_problem"
+            ]
+          },
+          "actionKey": {
+            "type": "string",
+            "enum": [
+              "review_decision",
+              "review_insight",
+              "resolve_blocker",
+              "review_due_work",
+              "recover_companion_sync",
+              "reconnect_runtime"
+            ]
+          },
+          "sourceRef": {
+            "type": "string"
+          },
+          "sourceUpdatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "title": {
+            "type": "string"
+          },
+          "targetLabel": {
+            "type": "string"
+          },
+          "targetHref": {
+            "type": "string",
+            "pattern": "^/(?!/)"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "resolved",
+              "unavailable"
+            ]
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "checkedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "AttentionResolutionReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "attemptId",
+          "itemId",
+          "source",
+          "kind",
+          "actionKey",
+          "sourceRef",
+          "sourceUpdatedAt",
+          "title",
+          "targetLabel",
+          "targetHref",
+          "evidenceCode",
+          "evidenceSummary",
+          "activityEventId",
+          "resolvedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^atrr_[a-z0-9]+$"
+          },
+          "attemptId": {
+            "type": "string"
+          },
+          "itemId": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "approval",
+              "insight",
+              "task",
+              "companion_sync",
+              "agent_session"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "decision",
+              "review",
+              "blocked_work",
+              "overdue_work",
+              "sync_problem",
+              "runtime_problem"
+            ]
+          },
+          "actionKey": {
+            "type": "string",
+            "enum": [
+              "review_decision",
+              "review_insight",
+              "resolve_blocker",
+              "review_due_work",
+              "recover_companion_sync",
+              "reconnect_runtime"
+            ]
+          },
+          "sourceRef": {
+            "type": "string"
+          },
+          "sourceUpdatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "title": {
+            "type": "string"
+          },
+          "targetLabel": {
+            "type": "string"
+          },
+          "targetHref": {
+            "type": "string",
+            "pattern": "^/(?!/)"
+          },
+          "evidenceCode": {
+            "type": "string"
+          },
+          "evidenceSummary": {
+            "type": "string"
+          },
+          "activityEventId": {
+            "type": "string"
+          },
+          "resolvedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AttentionResolutionStartResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "attempt",
+          "primaryAction",
+          "replayed"
+        ],
+        "properties": {
+          "attempt": {
+            "$ref": "#/components/schemas/AttentionResolutionAttempt"
+          },
+          "primaryAction": {
+            "$ref": "#/components/schemas/AttentionPrimaryAction"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AttentionResolutionCheckResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "attemptId",
+          "itemId",
+          "status",
+          "explanation",
+          "receipt"
+        ],
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "itemId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "resolved",
+              "still_open",
+              "stale",
+              "deleted",
+              "denied"
+            ]
+          },
+          "explanation": {
+            "type": "string"
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttentionResolutionReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "AttentionResolutionCheckResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "results",
+          "receipts"
+        ],
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttentionResolutionCheckResult"
+            }
+          },
+          "receipts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttentionResolutionReceipt"
+            }
+          }
+        }
+      },
+      "AttentionResolutionList": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "receipts",
+          "total",
+          "limit",
+          "retention"
+        ],
+        "properties": {
+          "receipts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttentionResolutionReceipt"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5000
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "retention": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "days",
+              "maxPerActor"
+            ],
+            "properties": {
+              "days": {
+                "type": "integer",
+                "enum": [
+                  365
+                ]
+              },
+              "maxPerActor": {
+                "type": "integer",
+                "enum": [
+                  5000
+                ]
+              }
+            }
           }
         }
       },
@@ -64888,6 +65261,234 @@
           "Attention"
         ],
         "operationId": "getattention_inbox"
+      }
+    },
+    "/api/v1/attention-inbox/{id}/actions/start": {
+      "post": {
+        "summary": "Start evidence tracking for one Attention primary action",
+        "description": "Operator-session only; scoped tokens are rejected before Forge reads or reveals any source. Requires one stable Idempotency-Key. Forge first replays an exact retained key, otherwise re-reads the current user-scoped Attention item and binds the exact item, source kind, primary action key, stable sourceRef, and sourceUpdatedAt. A changed request under the same key returns 409. A stale source version, forged action key, hidden item, or missing item fails safely. This route records an attempt only: it never approves, rejects, updates, reconnects, executes, or otherwise performs the domain action. Queue snooze, dismiss, and restore are not resolution actions. Request bodies are limited to 4,096 bytes. Attempts and receipts contain no requested payload, health bytes, runtime commands or errors, credentials, or source detail.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "URL-encoded AttentionInboxItem.id from the current queue."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional operator user scope, resolved by the same policy as GET /api/v1/attention-inbox."
+          },
+          {
+            "name": "userIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true,
+            "description": "Optional repeated operator user scope; it can narrow but never widen the source read."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "actionKey",
+                  "sourceUpdatedAt"
+                ],
+                "properties": {
+                  "actionKey": {
+                    "type": "string",
+                    "enum": [
+                      "review_decision",
+                      "review_insight",
+                      "resolve_blocker",
+                      "review_due_work",
+                      "recover_companion_sync",
+                      "reconnect_runtime"
+                    ]
+                  },
+                  "sourceUpdatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-forge-maximum-body-bytes": 4096,
+        "responses": {
+          "200": {
+            "description": "Created or exactly replayed resolution attempt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttentionResolutionStartResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Attention"
+        ],
+        "operationId": "postattention_inbox_id_actions_start"
+      }
+    },
+    "/api/v1/attention-resolutions/check": {
+      "post": {
+        "summary": "Check pending Attention resolution attempts",
+        "description": "Operator-session only; scoped tokens are rejected before any attempt or source lookup, so denial cannot be used to probe source existence. Requires one stable Idempotency-Key and processes at most 100 pending attempts in the requested user scope. An exact retained retry returns the byte-equivalent stored response; changed-scope key reuse returns 409. Forge performs bounded status-only reads from each authoritative source. Positive evidence is limited to: approval approved/rejected/executed; insight accepted/applied; the original blocker clearing on the existing authorized task even when that task remains overdue; an existing overdue task becoming done, losing its due date, or moving to today or later; a later completed companion sync for the same user beginning after the offending session; or a matching canonical provider and normalized agent-label group producing a connected heartbeat newer than both the attempt and source version. Hiding, snoozing, restoring, source deletion or denial, approval cancellation, insight dismissal/snooze/expiry, mobile abort or a new failure, runtime reconnecting/disconnected/old heartbeat, and candidate disappearance alone never create a receipt. Results may truthfully classify resolved, still_open, stale, deleted, or denied without returning source payload or operational detail. Each positive result atomically commits exactly one durable receipt and one safe Activity event; any failure rolls both back. Request bodies are limited to 1,024 bytes and must be empty.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional operator user scope, resolved by the same policy as the Attention queue."
+          },
+          {
+            "name": "userIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true,
+            "description": "Optional repeated operator user scope; changed scope changes the idempotency fingerprint."
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "maxProperties": 0
+              }
+            }
+          }
+        },
+        "x-forge-maximum-body-bytes": 1024,
+        "responses": {
+          "200": {
+            "description": "Idempotent bounded resolution check",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttentionResolutionCheckResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Attention"
+        ],
+        "operationId": "postattention_resolutions_check"
+      }
+    },
+    "/api/v1/attention-resolutions": {
+      "get": {
+        "summary": "List durable Attention resolution receipts",
+        "description": "Operator-session only; scoped tokens are rejected before receipt lookup. Returns newest-first persisted evidence receipts, bounded to 100 per response and filtered through the same optional operator user scope as the Attention queue. These receipts are distinct from SYS-18 ten-minute Undo receipts and never make a domain change reversible. Forge publishes and enforces a 365-day, newest-5,000-records-per-actor storage and exact-replay window; within that window durable means persisted in the Forge database. Receipts store only safe queue identity, display, evidence-code, Activity-reference, and timestamp fields—never requested payloads, health bytes, runtime commands or errors, credentials, or source detail.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional operator user scope, resolved by the same policy as the Attention queue."
+          },
+          {
+            "name": "userIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded durable Attention resolution receipt list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttentionResolutionList"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Attention"
+        ],
+        "operationId": "getattention_resolutions"
       }
     },
     "/api/v1/attention-inbox/{id}/snooze": {

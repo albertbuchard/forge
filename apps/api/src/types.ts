@@ -3349,6 +3349,23 @@ export const attentionInboxTargetSchema = z.object({
   href: z.string()
 });
 
+export const attentionResolutionActionKeySchema = z.enum([
+  "review_decision",
+  "review_insight",
+  "resolve_blocker",
+  "review_due_work",
+  "recover_companion_sync",
+  "reconnect_runtime"
+]);
+
+export const attentionPrimaryActionSchema = z.object({
+  key: attentionResolutionActionKeySchema,
+  label: z.string().min(1),
+  href: z.string().regex(/^\/(?!\/)/),
+  sourceRef: z.string().min(1),
+  resolutionCondition: z.string().min(1)
+});
+
 export const attentionInboxItemSchema = z.object({
   id: z.string(),
   source: attentionInboxSourceSchema,
@@ -3359,6 +3376,7 @@ export const attentionInboxItemSchema = z.object({
   reason: z.string(),
   detail: z.string(),
   target: attentionInboxTargetSchema,
+  primaryAction: attentionPrimaryActionSchema,
   allowedActions: z.array(attentionInboxActionSchema),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -3413,6 +3431,94 @@ export const attentionInboxSnoozeSchema = z.object({
 
 export const attentionInboxDismissSchema = z.object({
   note: z.string().trim().max(500).default("")
+});
+
+export const attentionResolutionAttemptStatusSchema = z.enum([
+  "pending",
+  "resolved",
+  "unavailable"
+]);
+
+export const attentionResolutionAttemptSchema = z.object({
+  id: z.string(),
+  itemId: z.string(),
+  source: attentionInboxSourceSchema,
+  kind: attentionInboxKindSchema,
+  actionKey: attentionResolutionActionKeySchema,
+  sourceRef: z.string(),
+  sourceUpdatedAt: z.string(),
+  title: z.string(),
+  targetLabel: z.string(),
+  targetHref: z.string(),
+  status: attentionResolutionAttemptStatusSchema,
+  startedAt: z.string(),
+  checkedAt: z.string().nullable()
+});
+
+export const attentionResolutionReceiptSchema = z.object({
+  id: z.string(),
+  attemptId: z.string(),
+  itemId: z.string(),
+  source: attentionInboxSourceSchema,
+  kind: attentionInboxKindSchema,
+  actionKey: attentionResolutionActionKeySchema,
+  sourceRef: z.string(),
+  sourceUpdatedAt: z.string(),
+  title: z.string(),
+  targetLabel: z.string(),
+  targetHref: z.string(),
+  evidenceCode: z.string(),
+  evidenceSummary: z.string(),
+  activityEventId: z.string(),
+  resolvedAt: z.string()
+});
+
+export const attentionResolutionStartInputSchema = z.object({
+  actionKey: attentionResolutionActionKeySchema,
+  sourceUpdatedAt: dateTimeSchema
+});
+
+export const attentionResolutionStartResultSchema = z.object({
+  attempt: attentionResolutionAttemptSchema,
+  primaryAction: attentionPrimaryActionSchema,
+  replayed: z.boolean()
+});
+
+export const attentionResolutionCheckStatusSchema = z.enum([
+  "resolved",
+  "still_open",
+  "stale",
+  "deleted",
+  "denied"
+]);
+
+export const attentionResolutionCheckResultSchema = z.object({
+  attemptId: z.string(),
+  itemId: z.string(),
+  status: attentionResolutionCheckStatusSchema,
+  explanation: z.string(),
+  receipt: attentionResolutionReceiptSchema.nullable()
+});
+
+export const attentionResolutionCheckResponseSchema = z.object({
+  results: z.array(attentionResolutionCheckResultSchema),
+  receipts: z.array(attentionResolutionReceiptSchema)
+});
+
+export const attentionResolutionListSchema = z.object({
+  receipts: z.array(attentionResolutionReceiptSchema),
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().positive().max(100),
+  retention: z.object({
+    days: z.number().int().positive(),
+    maxPerActor: z.number().int().positive()
+  })
+});
+
+export const attentionResolutionCheckInputSchema = z.object({}).strict();
+
+export const attentionResolutionListQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(100).default(25)
 });
 
 export const entityNavigationAvailabilitySchema = z.enum([
@@ -6226,11 +6332,41 @@ export type AttentionInboxSeverity = z.infer<
 >;
 export type AttentionInboxState = z.infer<typeof attentionInboxStateSchema>;
 export type AttentionInboxAction = z.infer<typeof attentionInboxActionSchema>;
+export type AttentionResolutionActionKey = z.infer<
+  typeof attentionResolutionActionKeySchema
+>;
+export type AttentionPrimaryAction = z.infer<
+  typeof attentionPrimaryActionSchema
+>;
 export type AttentionInboxItem = z.infer<typeof attentionInboxItemSchema>;
 export type AttentionInboxSummary = z.infer<typeof attentionInboxSummarySchema>;
 export type AttentionInboxPayload = z.infer<typeof attentionInboxPayloadSchema>;
 export type AttentionInboxStateRecord = z.infer<
   typeof attentionInboxStateRecordSchema
+>;
+export type AttentionResolutionAttemptStatus = z.infer<
+  typeof attentionResolutionAttemptStatusSchema
+>;
+export type AttentionResolutionAttempt = z.infer<
+  typeof attentionResolutionAttemptSchema
+>;
+export type AttentionResolutionReceipt = z.infer<
+  typeof attentionResolutionReceiptSchema
+>;
+export type AttentionResolutionStartResult = z.infer<
+  typeof attentionResolutionStartResultSchema
+>;
+export type AttentionResolutionCheckStatus = z.infer<
+  typeof attentionResolutionCheckStatusSchema
+>;
+export type AttentionResolutionCheckResult = z.infer<
+  typeof attentionResolutionCheckResultSchema
+>;
+export type AttentionResolutionCheckResponse = z.infer<
+  typeof attentionResolutionCheckResponseSchema
+>;
+export type AttentionResolutionList = z.infer<
+  typeof attentionResolutionListSchema
 >;
 export type EntityNavigationAvailability = z.infer<
   typeof entityNavigationAvailabilitySchema

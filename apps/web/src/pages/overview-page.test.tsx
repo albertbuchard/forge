@@ -216,6 +216,14 @@ function attentionPayload(items = true) {
               href: "/tasks/task_overdue"
             },
             allowedActions: ["open"],
+            primaryAction: {
+              key: "review_due_work",
+              label: "Review due work",
+              href: "/tasks/task_overdue",
+              sourceRef: "task:task_overdue",
+              resolutionCondition:
+                "Resolved when the task is complete or no longer overdue."
+            },
             createdAt: "2026-08-01T11:00:00.000Z",
             updatedAt: "2026-08-01T11:00:00.000Z",
             sourceUpdatedAt: "2026-08-01T11:00:00.000Z",

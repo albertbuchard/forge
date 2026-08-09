@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { AttentionSourceReturn } from "@/components/attention/attention-source-return";
 import {
   ApplyInsightDialog,
   type ApplyInsightSubmission
@@ -522,6 +523,9 @@ export function InsightsPage() {
                     key={insight.id}
                     className={`${insightPanelClass} min-w-0 p-4`}
                   >
+                    <AttentionSourceReturn
+                      sourceRef={`insight:${insight.id}`}
+                    />
                     <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="break-words font-medium text-[var(--ui-ink-strong)]">

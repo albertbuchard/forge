@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Plus
 } from "lucide-react";
+import { AttentionSourceReturn } from "@/components/attention/attention-source-return";
 import { AgentTokenFlowDialog } from "@/components/settings/agent-token-flow-dialog";
 import { LogWorkFlowDialog } from "@/components/settings/log-work-flow-dialog";
 import { RemotePairingApprovalCard } from "@/components/settings/remote-pairing-approval-card";
@@ -719,6 +720,9 @@ export function SettingsAgentsPage() {
                     key={group.key}
                     className="min-w-0 rounded-[18px] bg-[var(--ui-surface-2)] p-4"
                   >
+                    <AttentionSourceReturn
+                      sourceRef={`agent_runtime_session:${session.id}`}
+                    />
                     <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2.5">
@@ -1297,6 +1301,9 @@ export function SettingsAgentsPage() {
                   key={approval.id}
                   className="rounded-[18px] bg-[var(--ui-surface-2)] p-4"
                 >
+                  <AttentionSourceReturn
+                    sourceRef={`approval_request:${approval.id}`}
+                  />
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="font-medium text-[var(--ui-ink-strong)]">

@@ -628,6 +628,9 @@ import {
   attentionInboxDismissSchema,
   attentionInboxQuerySchema,
   attentionInboxSnoozeSchema,
+  attentionResolutionCheckInputSchema,
+  attentionResolutionListQuerySchema,
+  attentionResolutionStartInputSchema,
   entityNavigationPinInputSchema,
   entityNavigationQuerySchema,
   entityNavigationTouchInputSchema,
@@ -754,6 +757,12 @@ import {
   listAttentionInbox,
   transitionAttentionInboxState
 } from "./services/attention-inbox.js";
+import {
+  checkAttentionResolutionAttempts,
+  findAttentionResolutionStartReplay,
+  listAttentionResolutionReceipts,
+  startAttentionResolutionAttempt
+} from "./services/attention-resolution.js";
 import {
   listEntityNavigation,
   pinEntity,
@@ -21166,10 +21175,37 @@ export async function buildServer(
     auth: ReturnType<typeof authenticateRequest>,
     query?: Record<string, unknown>
   ) => {
+    const hasExplicitUserSelection = Boolean(
+      query &&
+        (Object.prototype.hasOwnProperty.call(query, "userId") ||
+          Object.prototype.hasOwnProperty.call(query, "userIds"))
+    );
+    const requestedUserIds = resolveScopedUserIds(query);
     const readScope = resolveEffectiveReadScope(query, auth);
+    const validUserIds = listUsers().map((user) => user.id);
+    if (
+      !auth.token &&
+      hasExplicitUserSelection &&
+      (!requestedUserIds?.length ||
+        requestedUserIds.some((userId) => !validUserIds.includes(userId)))
+    ) {
+      throw new HttpError(
+        400,
+        "attention_user_scope_invalid",
+        "The selected Attention user is unavailable."
+      );
+    }
+    const policyAppliedReadScope =
+      auth.token && hasExplicitUserSelection
+        ? {
+            ...readScope,
+            userIds: requestedUserIds?.length ? (readScope.userIds ?? []) : [],
+            enforceUserIds: true
+          }
+        : readScope;
     const { scopedUserIdsForReads } = normalizeScopedUserIdsForReads({
-      scope: readScope,
-      validUserIds: listUsers().map((user) => user.id)
+      scope: policyAppliedReadScope,
+      validUserIds
     });
     return {
       userIds: scopedUserIdsForReads,
@@ -21423,6 +21459,110 @@ export async function buildServer(
       state: query.state,
       limit: query.limit,
       offset: query.offset
+    });
+  });
+  app.post(
+    "/api/v1/attention-inbox/:id/actions/start",
+    async (request, reply) => {
+      const auth = requireOperatorSession(
+        request.headers as Record<string, unknown>,
+        { route: "/api/v1/attention-inbox/:id/actions/start" }
+      );
+      const { id } = request.params as { id: string };
+      const input = attentionResolutionStartInputSchema.parse(request.body ?? {});
+      const idempotencyKey = parseIdempotencyKey(
+        request.headers as Record<string, unknown>
+      );
+      if (!idempotencyKey) {
+        throw new HttpError(
+          400,
+          "attention_resolution_idempotency_required",
+          "Starting attention resolution tracking requires an Idempotency-Key header."
+        );
+      }
+      const rawQuery = (request.query ?? {}) as Record<string, unknown>;
+      const scope = attentionScopeFor(auth, rawQuery);
+      const replay = findAttentionResolutionStartReplay({
+        actorKey: "operator",
+        idempotencyKey,
+        itemId: id,
+        actionKey: input.actionKey,
+        sourceUpdatedAt: input.sourceUpdatedAt,
+        scopedUserIds: scope.userIds
+      });
+      if (replay) {
+        reply.header("Idempotency-Replayed", "true");
+        return replay;
+      }
+      const item = getAttentionInboxItem(id, {
+        actorKey: "operator",
+        ...scope
+      });
+      if (!item) {
+        throw new HttpError(
+          404,
+          "attention_item_not_found",
+          "Attention item not found."
+        );
+      }
+      const ownerUserId =
+        item.source === "companion_sync" &&
+        typeof item.metadata.userId === "string"
+          ? item.metadata.userId
+          : item.target.entityType && item.target.entityId
+            ? getEntityOwnerId(item.target.entityType, item.target.entityId)
+            : null;
+      const result = startAttentionResolutionAttempt({
+        actorKey: "operator",
+        idempotencyKey,
+        item,
+        actionKey: input.actionKey,
+        sourceUpdatedAt: input.sourceUpdatedAt,
+        ownerUserId,
+        scopedUserIds: scope.userIds
+      });
+      reply.header("Idempotency-Replayed", result.replayed ? "true" : "false");
+      return result;
+    }
+  );
+  app.post("/api/v1/attention-resolutions/check", async (request, reply) => {
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/attention-resolutions/check" }
+    );
+    attentionResolutionCheckInputSchema.parse(request.body ?? {});
+    const idempotencyKey = parseIdempotencyKey(
+      request.headers as Record<string, unknown>
+    );
+    if (!idempotencyKey) {
+      throw new HttpError(
+        400,
+        "attention_resolution_idempotency_required",
+        "Checking attention resolutions requires an Idempotency-Key header."
+      );
+    }
+    const rawQuery = (request.query ?? {}) as Record<string, unknown>;
+    const scope = attentionScopeFor(auth, rawQuery);
+    const result = checkAttentionResolutionAttempts({
+      actorKey: "operator",
+      idempotencyKey,
+      userIds: scope.userIds
+    });
+    reply.header("Idempotency-Replayed", result.replayed ? "true" : "false");
+    return result.response;
+  });
+  app.get("/api/v1/attention-resolutions", async (request) => {
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/attention-resolutions" }
+    );
+    const rawQuery = (request.query ?? {}) as Record<string, unknown>;
+    const query = attentionResolutionListQuerySchema.parse(rawQuery);
+    const scope = attentionScopeFor(auth, rawQuery);
+    return listAttentionResolutionReceipts({
+      actorKey: "operator",
+      userIds: scope.userIds,
+      limit: query.limit
     });
   });
   app.post("/api/v1/attention-inbox/:id/snooze", async (request) => {
