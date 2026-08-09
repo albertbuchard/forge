@@ -30,6 +30,7 @@ import type {
   AttentionInboxStateRecord,
   EntityNavigationItem,
   EntityNavigationPayload,
+  SavedView,
   Artifact,
   ArtifactAuditEvent,
   ArtifactDangerLevel,
@@ -6235,6 +6236,38 @@ export function touchEntityNavigation(input: {
       method: "POST",
       body: JSON.stringify(input)
     }
+  );
+}
+
+export function getSavedViews(ownerUserId: string, limit = 20) {
+  const search = new URLSearchParams({
+    ownerUserId,
+    limit: String(limit)
+  });
+  return request<{ savedViews: SavedView[] }>(
+    `/api/v1/saved-views?${search.toString()}`
+  );
+}
+
+export function createSavedView(input: {
+  ownerUserId: string;
+  name: string;
+  query: string;
+  filterIds: string[];
+  scopeMode: "all" | "selected";
+  scopeUserIds: string[];
+}) {
+  return request<{ savedView: SavedView }>("/api/v1/saved-views", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function deleteSavedView(savedViewId: string, ownerUserId: string) {
+  const search = new URLSearchParams({ ownerUserId });
+  return request<{ deleted: true; savedViewId: string }>(
+    `/api/v1/saved-views/${encodeURIComponent(savedViewId)}?${search.toString()}`,
+    { method: "DELETE" }
   );
 }
 

@@ -585,6 +585,8 @@ import {
   entityNavigationPinInputSchema,
   entityNavigationQuerySchema,
   entityNavigationTouchInputSchema,
+  savedViewCreateSchema,
+  savedViewListQuerySchema,
   defaultAgentBootstrapPolicy,
   defaultAgentScopePolicy,
   createAgentActionSchema,
@@ -705,6 +707,11 @@ import {
   touchEntityNavigation,
   unpinEntity
 } from "./services/entity-navigation.js";
+import {
+  createSavedView,
+  deleteSavedView,
+  listSavedViews
+} from "./services/saved-views.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
 import {
@@ -20981,6 +20988,75 @@ export async function buildServer(
       );
     }
     return { recent: item };
+  });
+  app.get("/api/v1/saved-views", async (request) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/saved-views"
+    });
+    const query = savedViewListQuerySchema.parse(request.query ?? {});
+    if (!getUserById(query.ownerUserId)) {
+      throw new HttpError(
+        400,
+        "saved_view_owner_not_found",
+        "The saved-view owner does not exist."
+      );
+    }
+    return {
+      savedViews: listSavedViews(query.ownerUserId, query.limit)
+    };
+  });
+  app.post("/api/v1/saved-views", async (request, reply) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/saved-views"
+    });
+    const input = savedViewCreateSchema.parse(request.body ?? {});
+    const result = createSavedView(input);
+    if (result.status === "owner_not_found") {
+      throw new HttpError(
+        400,
+        "saved_view_owner_not_found",
+        "The saved-view owner does not exist."
+      );
+    }
+    if (result.status === "scope_user_not_found") {
+      throw new HttpError(
+        400,
+        "saved_view_scope_user_not_found",
+        "One or more people in this saved scope no longer exist.",
+        { userIds: result.userIds }
+      );
+    }
+    if (result.status === "name_conflict") {
+      throw new HttpError(
+        409,
+        "saved_view_name_conflict",
+        "This person already has a saved view with that name."
+      );
+    }
+    if (result.status === "limit_reached") {
+      throw new HttpError(
+        409,
+        "saved_view_limit_reached",
+        "You can save up to 20 views. Delete one before saving another."
+      );
+    }
+    reply.code(201);
+    return { savedView: result.view };
+  });
+  app.delete("/api/v1/saved-views/:id", async (request) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/saved-views/:id"
+    });
+    const { id } = request.params as { id: string };
+    const query = savedViewListQuerySchema.parse(request.query ?? {});
+    if (!deleteSavedView({ id, ownerUserId: query.ownerUserId })) {
+      throw new HttpError(
+        404,
+        "saved_view_not_found",
+        "Saved view not found for this person."
+      );
+    }
+    return { deleted: true, savedViewId: id };
   });
   app.get("/api/v1/approval-requests", async (request) => {
     requireOperatorSession(request.headers as Record<string, unknown>, {

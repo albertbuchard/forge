@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowRight,
+  BookmarkPlus,
   BookCopy,
   BrainCircuit,
   BriefcaseBusiness,
@@ -31,6 +32,7 @@ import {
   Settings,
   SlidersHorizontal,
   Target,
+  Trash2,
   X,
   Zap
 } from "lucide-react";
@@ -47,9 +49,13 @@ import {
 } from "@/components/shell/shell-routes";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  createSavedView,
+  deleteSavedView,
   getEntityNavigation,
+  getSavedViews,
   pinEntityNavigation,
   searchEntities,
   touchEntityNavigation,
@@ -73,7 +79,7 @@ import {
 } from "@/lib/action-bar";
 import { getEntityVisual, type EntityKind } from "@/lib/entity-visuals";
 import { useI18n } from "@/lib/i18n";
-import type { CrudEntityType, ForgeSnapshot } from "@/lib/types";
+import type { CrudEntityType, ForgeSnapshot, SavedView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type ActionBarProps = {
@@ -81,6 +87,7 @@ type ActionBarProps = {
   onOpenChange: (open: boolean) => void;
   snapshot: ForgeSnapshot;
   selectedUserIds: string[];
+  onSelectedUserIdsChange?: (userIds: string[]) => void;
   createActions: ForgeCreateAction[];
   returnFocusRef?: RefObject<HTMLElement | null>;
 };
@@ -111,6 +118,13 @@ type ActionBarItem = {
   pinId?: string | null;
   availability?: "available" | "deleted" | "missing";
 };
+
+function sameStringIds(left: string[], right: string[]) {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
+}
 
 const SEARCHABLE_ACTION_BAR_ENTITY_TYPES = new Set<CrudEntityType>(
   getActionBarEntityTypesForFilters([])
@@ -271,6 +285,7 @@ export function ActionBar({
   onOpenChange,
   snapshot,
   selectedUserIds,
+  onSelectedUserIdsChange,
   createActions,
   returnFocusRef
 }: ActionBarProps) {
@@ -281,6 +296,9 @@ export function ActionBar({
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const [selectedFilterIds, setSelectedFilterIds] = useState<string[]>([]);
+  const [savedViewName, setSavedViewName] = useState("");
+  const [savedViewNotice, setSavedViewNotice] = useState<string | null>(null);
+  const [savedViewError, setSavedViewError] = useState<string | null>(null);
   const deferredQuery = useDeferredValue(query);
   const normalizedQuery = normalizeActionBarQuery(deferredQuery);
   const selectedFilterKey = selectedFilterIds.join("|");
@@ -298,6 +316,9 @@ export function ActionBar({
       setQuery("");
       setActiveIndex(0);
       setSelectedFilterIds([]);
+      setSavedViewName("");
+      setSavedViewNotice(null);
+      setSavedViewError(null);
     }
   }, [open]);
 
@@ -317,6 +338,113 @@ export function ActionBar({
       })),
     []
   );
+
+  const savedViewOwner =
+    snapshot.users.find((user) => user.id === "user_operator") ??
+    snapshot.users.find((user) => user.kind === "human") ??
+    null;
+  const savedViewsQuery = useQuery({
+    queryKey: ["forge-saved-views", savedViewOwner?.id ?? ""],
+    enabled: open && savedViewOwner !== null,
+    queryFn: () => getSavedViews(savedViewOwner!.id)
+  });
+  const createSavedViewMutation = useMutation({
+    mutationFn: () =>
+      createSavedView({
+        ownerUserId: savedViewOwner!.id,
+        name: savedViewName.trim(),
+        query: query.trim(),
+        filterIds: selectedFilterIds,
+        scopeMode: selectedUserIds.length > 0 ? "selected" : "all",
+        scopeUserIds: selectedUserIds
+      }),
+    onMutate: () => {
+      setSavedViewNotice(null);
+      setSavedViewError(null);
+    },
+    onSuccess: async (result) => {
+      setSavedViewName("");
+      setSavedViewNotice(`Saved ${result.savedView.name}.`);
+      await queryClient.invalidateQueries({
+        queryKey: ["forge-saved-views", savedViewOwner?.id ?? ""]
+      });
+    },
+    onError: (error) => {
+      setSavedViewError(
+        error instanceof Error
+          ? error.message
+          : "Forge could not save this view."
+      );
+    }
+  });
+  const deleteSavedViewMutation = useMutation({
+    mutationFn: (savedViewId: string) =>
+      deleteSavedView(savedViewId, savedViewOwner!.id),
+    onMutate: () => {
+      setSavedViewNotice(null);
+      setSavedViewError(null);
+    },
+    onSuccess: async () => {
+      setSavedViewNotice("Saved view deleted.");
+      await queryClient.invalidateQueries({
+        queryKey: ["forge-saved-views", savedViewOwner?.id ?? ""]
+      });
+    },
+    onError: (error) => {
+      setSavedViewError(
+        error instanceof Error
+          ? error.message
+          : "Forge could not delete this saved view."
+      );
+    }
+  });
+
+  const applySavedView = (savedView: SavedView) => {
+    setSavedViewError(null);
+    if (savedView.compatibility === "unsupported") {
+      setSavedViewNotice(null);
+      setSavedViewError(
+        `${savedView.name} was saved by a newer Forge version and cannot be opened safely.`
+      );
+      return;
+    }
+    if (
+      savedView.scopeMode === "selected" &&
+      savedView.scopeUserIds.length === 0
+    ) {
+      setSavedViewNotice(null);
+      setSavedViewError(
+        `${savedView.name} cannot be opened because every saved person is unavailable.`
+      );
+      return;
+    }
+    const currentFilterIds = new Set<string>(
+      ACTION_BAR_FILTER_TOKENS.map((filter) => filter.id)
+    );
+    const currentUserIds = new Set(snapshot.users.map((user) => user.id));
+    setQuery(savedView.query);
+    const nextFilterIds = savedView.filterIds.filter((filterId) =>
+      currentFilterIds.has(filterId)
+    );
+    setSelectedFilterIds((current) =>
+      sameStringIds(current, nextFilterIds) ? current : nextFilterIds
+    );
+    const nextScopeUserIds = savedView.scopeUserIds.filter((userId) =>
+      currentUserIds.has(userId)
+    );
+    if (!sameStringIds(selectedUserIds, nextScopeUserIds)) {
+      onSelectedUserIdsChange?.(nextScopeUserIds);
+    }
+    setActiveIndex(0);
+    const skipped =
+      savedView.unavailableFilterIds.length +
+      savedView.unavailableScopeUserIds.length;
+    setSavedViewNotice(
+      skipped > 0
+        ? `Opened ${savedView.name}. ${skipped} unavailable ${skipped === 1 ? "item was" : "items were"} skipped.`
+        : `Opened ${savedView.name}.`
+    );
+  };
 
   const sectionLabels = useMemo<Record<ActionBarSection, string>>(
     () => ({
@@ -1007,6 +1135,7 @@ export function ActionBar({
                 <Input
                   autoFocus
                   value={query}
+                  maxLength={200}
                   onChange={(event) => setQuery(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === "ArrowDown") {
@@ -1061,6 +1190,136 @@ export function ActionBar({
                   emptyMessage={t("common.actionBar.filtersEmpty")}
                   variant="action-bar"
                 />
+              </div>
+
+              <div className="mt-3 border-t border-[var(--ui-border-subtle)] pt-3 sm:mt-4 sm:pt-4">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 pl-1">
+                  <span className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+                    Saved views
+                  </span>
+                  <span className="text-xs text-[var(--ui-ink-soft)]">
+                    {savedViewOwner
+                      ? `Saved for ${savedViewOwner.displayName}. Search, filters, and people. Up to 20 views.`
+                      : "Search, filters, and people scope."}
+                  </span>
+                </div>
+                <form
+                  className="flex min-w-0 flex-col gap-2 sm:flex-row"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (
+                      savedViewOwner &&
+                      savedViewName.trim() &&
+                      (normalizedQuery ||
+                        selectedFilterIds.length > 0 ||
+                        selectedUserIds.length > 0)
+                    ) {
+                      createSavedViewMutation.mutate();
+                    }
+                  }}
+                >
+                  <Input
+                    value={savedViewName}
+                    maxLength={80}
+                    onChange={(event) => setSavedViewName(event.target.value)}
+                    placeholder="Name this view"
+                    aria-label="Saved view name"
+                    className="min-w-0 flex-1"
+                  />
+                  <Button
+                    type="submit"
+                    size="lg"
+                    variant="secondary"
+                    pending={createSavedViewMutation.isPending}
+                    pendingLabel="Saving…"
+                    disabled={
+                      !savedViewOwner ||
+                      !savedViewName.trim() ||
+                      (!normalizedQuery &&
+                        selectedFilterIds.length === 0 &&
+                        selectedUserIds.length === 0)
+                    }
+                  >
+                    <BookmarkPlus className="size-4" aria-hidden="true" />
+                    Save this view
+                  </Button>
+                </form>
+                {savedViewError ? (
+                  <p
+                    className="mt-2 text-sm text-[var(--ui-danger)]"
+                    role="alert"
+                  >
+                    {savedViewError}
+                  </p>
+                ) : null}
+                {savedViewsQuery.isLoading ? (
+                  <p className="mt-3 text-sm text-[var(--ui-ink-soft)]">
+                    Loading saved views…
+                  </p>
+                ) : savedViewsQuery.isError ? (
+                  <p
+                    className="mt-3 text-sm text-[var(--ui-danger)]"
+                    role="alert"
+                  >
+                    Forge could not load saved views.
+                  </p>
+                ) : (savedViewsQuery.data?.savedViews.length ?? 0) === 0 ? (
+                  <p className="mt-3 text-sm text-[var(--ui-ink-soft)]">
+                    No saved views yet.
+                  </p>
+                ) : (
+                  <div
+                    className="mt-3 grid max-h-56 gap-2 overflow-y-auto overscroll-contain pr-1 sm:max-h-64 sm:grid-cols-2"
+                    role="region"
+                    aria-label="Saved views"
+                  >
+                    {savedViewsQuery.data?.savedViews.map((savedView) => (
+                      <div
+                        key={savedView.id}
+                        className="flex min-w-0 items-stretch rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]"
+                      >
+                        <button
+                          type="button"
+                          className="min-h-11 min-w-0 flex-1 px-3 py-2 text-left transition hover:bg-[var(--ui-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--primary)_45%,transparent)]"
+                          onClick={() => applySavedView(savedView)}
+                        >
+                          <span className="block truncate text-sm font-medium text-[var(--ui-ink-strong)]">
+                            {savedView.name}
+                          </span>
+                          <span className="block truncate text-xs text-[var(--ui-ink-soft)]">
+                            {savedView.compatibility === "unsupported"
+                              ? "Needs a newer Forge version"
+                              : savedView.scopeMode === "selected" &&
+                                  savedView.scopeUserIds.length === 0
+                                ? "All saved people are unavailable"
+                                : savedView.query ||
+                                  `${savedView.filterIds.length} filters · ${savedView.scopeMode === "all" ? "all" : savedView.scopeUserIds.length} people`}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="m-1 inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-danger)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--primary)_45%,transparent)]"
+                          aria-label={`Delete saved view ${savedView.name}`}
+                          disabled={deleteSavedViewMutation.isPending}
+                          onClick={() =>
+                            deleteSavedViewMutation.mutate(savedView.id)
+                          }
+                        >
+                          <Trash2 className="size-4" aria-hidden="true" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {savedViewNotice ? (
+                  <p
+                    className="mt-2 text-sm text-[var(--ui-ink-medium)]"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {savedViewNotice}
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>

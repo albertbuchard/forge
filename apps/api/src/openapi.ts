@@ -228,6 +228,11 @@ const API_TAGS = [
       "Canonical cross-surface pins and actor-scoped recently viewed Forge records."
   },
   {
+    name: "Saved Views",
+    description:
+      "Named, user-owned Action Bar query, filter, and people-scope combinations."
+  },
+  {
     name: "Entity Batch",
     description:
       "Batch create, update, delete, restore, and search operations across entity types."
@@ -440,6 +445,9 @@ function resolveTagsForPath(path: string) {
   }
   if (path.startsWith("/api/v1/entity-navigation")) {
     return ["Navigation"];
+  }
+  if (path.startsWith("/api/v1/saved-views")) {
+    return ["Saved Views"];
   }
   if (
     path.startsWith("/api/v1/agents") ||
@@ -4578,6 +4586,85 @@ export function buildOpenApiDocument() {
     properties: {
       entityType: { $ref: "#/components/schemas/CrudEntityType" },
       entityId: { type: "string", minLength: 1 }
+    }
+  };
+
+  const actionBarFilterId = {
+    type: "string",
+    enum: [
+      "goal",
+      "project",
+      "task",
+      "strategy",
+      "habit",
+      "note",
+      "wiki_page",
+      "calendar_event",
+      "psyche_value",
+      "behavior_pattern",
+      "behavior",
+      "belief_entry",
+      "mode_profile",
+      "flashcard",
+      "trigger_report"
+    ]
+  };
+
+  const savedView = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "ownerUserId",
+      "name",
+      "query",
+      "filterIds",
+      "scopeMode",
+      "scopeUserIds",
+      "unavailableFilterIds",
+      "unavailableScopeUserIds",
+      "compatibility",
+      "schemaVersion",
+      "createdAt",
+      "updatedAt"
+    ],
+    properties: {
+      id: { type: "string", pattern: "^svw_[a-z0-9]+$" },
+      ownerUserId: { type: "string" },
+      name: { type: "string", minLength: 1, maxLength: 80 },
+      query: { type: "string", maxLength: 200 },
+      filterIds: { ...arrayOf(actionBarFilterId), maxItems: 16 },
+      scopeMode: { type: "string", enum: ["all", "selected"] },
+      scopeUserIds: { ...arrayOf({ type: "string" }), maxItems: 100 },
+      unavailableFilterIds: {
+        ...arrayOf({ type: "string" }),
+        maxItems: 100
+      },
+      unavailableScopeUserIds: {
+        ...arrayOf({ type: "string" }),
+        maxItems: 100
+      },
+      compatibility: {
+        type: "string",
+        enum: ["ready", "unsupported"]
+      },
+      schemaVersion: { type: "integer", minimum: 1 },
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const savedViewCreateInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["ownerUserId", "name", "scopeMode"],
+    properties: {
+      ownerUserId: { type: "string", minLength: 1 },
+      name: { type: "string", minLength: 1, maxLength: 80 },
+      query: { type: "string", maxLength: 200, default: "" },
+      filterIds: { ...arrayOf(actionBarFilterId), maxItems: 16 },
+      scopeMode: { type: "string", enum: ["all", "selected"] },
+      scopeUserIds: { ...arrayOf({ type: "string" }), maxItems: 100 }
     }
   };
 
@@ -11420,6 +11507,9 @@ export function buildOpenApiDocument() {
         EntityNavigationPayload: entityNavigationPayload,
         EntityNavigationPinInput: entityNavigationPinInput,
         EntityNavigationTouchInput: entityNavigationTouchInput,
+        ActionBarFilterId: actionBarFilterId,
+        SavedView: savedView,
+        SavedViewCreateInput: savedViewCreateInput,
         AgentAction: agentAction,
         RewardRule: rewardRule,
         RewardLedgerEvent: rewardLedgerEvent,
@@ -20829,6 +20919,114 @@ export function buildOpenApiDocument() {
               },
               "Updated actor recent record"
             ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/saved-views": {
+        get: {
+          summary: "List one person's saved Action Bar views",
+          description:
+            "Requires an authenticated human operator session. Each owner can keep at most 20 views. Unsupported stored filters and deleted people are returned separately; a selected scope with no available people must not be applied as an all-people scope.",
+          security: [{ operatorSession: [] }],
+          parameters: [
+            {
+              name: "ownerUserId",
+              in: "query",
+              required: true,
+              schema: { type: "string" }
+            },
+            {
+              name: "limit",
+              in: "query",
+              schema: {
+                type: "integer",
+                minimum: 1,
+                maximum: 20,
+                default: 20
+              }
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["savedViews"],
+                properties: {
+                  savedViews: arrayOf({
+                    $ref: "#/components/schemas/SavedView"
+                  })
+                }
+              },
+              "Saved views"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        },
+        post: {
+          summary: "Save the current Action Bar view",
+          description:
+            "Requires an authenticated human operator session. Names are unique per owner, every referenced person must exist when the view is saved, and each owner can keep at most 20 views.",
+          security: [{ operatorSession: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/SavedViewCreateInput" }
+              }
+            }
+          },
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["savedView"],
+                properties: {
+                  savedView: { $ref: "#/components/schemas/SavedView" }
+                }
+              },
+              "Saved view"
+            ),
+            "409": { $ref: "#/components/responses/Error" },
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/saved-views/{id}": {
+        delete: {
+          summary: "Delete one person's saved view",
+          description: "Requires an authenticated human operator session.",
+          security: [{ operatorSession: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            },
+            {
+              name: "ownerUserId",
+              in: "query",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["deleted", "savedViewId"],
+                properties: {
+                  deleted: { type: "boolean", enum: [true] },
+                  savedViewId: { type: "string" }
+                }
+              },
+              "Deleted saved view"
+            ),
+            "404": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         }

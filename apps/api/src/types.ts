@@ -3448,6 +3448,84 @@ export const entityNavigationTouchInputSchema = z.object({
   entityId: nonEmptyTrimmedString
 });
 
+export const actionBarFilterIdSchema = z.enum([
+  "goal",
+  "project",
+  "task",
+  "strategy",
+  "habit",
+  "note",
+  "wiki_page",
+  "calendar_event",
+  "psyche_value",
+  "behavior_pattern",
+  "behavior",
+  "belief_entry",
+  "mode_profile",
+  "flashcard",
+  "trigger_report"
+]);
+
+export const currentSavedViewSchemaVersion = 1;
+export const savedViewScopeModeSchema = z.enum(["all", "selected"]);
+export const savedViewCompatibilitySchema = z.enum(["ready", "unsupported"]);
+
+const savedViewStringIdsSchema = z
+  .array(nonEmptyTrimmedString)
+  .max(100)
+  .transform((values) => Array.from(new Set(values)));
+
+export const savedViewSchema = z.object({
+  id: nonEmptyTrimmedString,
+  ownerUserId: nonEmptyTrimmedString,
+  name: z.string().trim().min(1).max(80),
+  query: z.string().trim().max(200),
+  filterIds: z.array(actionBarFilterIdSchema).max(16),
+  scopeMode: savedViewScopeModeSchema,
+  scopeUserIds: savedViewStringIdsSchema,
+  unavailableFilterIds: savedViewStringIdsSchema,
+  unavailableScopeUserIds: savedViewStringIdsSchema,
+  compatibility: savedViewCompatibilitySchema,
+  schemaVersion: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const savedViewListQuerySchema = z.object({
+  ownerUserId: nonEmptyTrimmedString,
+  limit: z.coerce.number().int().positive().max(20).default(20)
+});
+
+export const savedViewCreateSchema = z
+  .object({
+    ownerUserId: nonEmptyTrimmedString,
+    name: z.string().trim().min(1).max(80),
+    query: z.string().trim().max(200).default(""),
+    filterIds: z
+      .array(actionBarFilterIdSchema)
+      .max(16)
+      .default([])
+      .transform((values) => Array.from(new Set(values))),
+    scopeMode: savedViewScopeModeSchema,
+    scopeUserIds: savedViewStringIdsSchema.default([])
+  })
+  .superRefine((value, context) => {
+    if (value.scopeMode === "all" && value.scopeUserIds.length > 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["scopeUserIds"],
+        message: "An all-people scope cannot include selected people."
+      });
+    }
+    if (value.scopeMode === "selected" && value.scopeUserIds.length === 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["scopeUserIds"],
+        message: "A selected-people scope must include at least one person."
+      });
+    }
+  });
+
 export const agentActionSchema = z.object({
   id: z.string(),
   agentId: z.string().nullable(),
@@ -5908,6 +5986,9 @@ export type EntityNavigationItem = z.infer<typeof entityNavigationItemSchema>;
 export type EntityNavigationPayload = z.infer<
   typeof entityNavigationPayloadSchema
 >;
+export type ActionBarFilterId = z.infer<typeof actionBarFilterIdSchema>;
+export type SavedView = z.infer<typeof savedViewSchema>;
+export type SavedViewCreateInput = z.infer<typeof savedViewCreateSchema>;
 export type AgentAction = z.infer<typeof agentActionSchema>;
 export type RewardRule = z.infer<typeof rewardRuleSchema>;
 export type RewardLedgerEvent = z.infer<typeof rewardLedgerEventSchema>;

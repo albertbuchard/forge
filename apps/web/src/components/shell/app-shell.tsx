@@ -532,6 +532,7 @@ function ShellFrame({
             onOpenChange={setActionBarOpen}
             snapshot={shell.snapshot}
             selectedUserIds={shell.selectedUserIds}
+            onSelectedUserIdsChange={shell.setSelectedUserIds}
             createActions={createActions.actions}
             returnFocusRef={actionBarReturnFocusRef}
           />

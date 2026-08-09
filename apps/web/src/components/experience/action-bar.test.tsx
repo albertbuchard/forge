@@ -14,13 +14,19 @@ import type { ForgeCreateAction } from "@/components/create-menu";
 import type { ForgeSnapshot } from "@/lib/types";
 
 const {
+  createSavedViewMock,
+  deleteSavedViewMock,
   getEntityNavigationMock,
+  getSavedViewsMock,
   pinEntityNavigationMock,
   searchEntitiesMock,
   touchEntityNavigationMock,
   unpinEntityNavigationMock
 } = vi.hoisted(() => ({
+  createSavedViewMock: vi.fn(),
+  deleteSavedViewMock: vi.fn(),
   getEntityNavigationMock: vi.fn(),
+  getSavedViewsMock: vi.fn(),
   pinEntityNavigationMock: vi.fn(),
   searchEntitiesMock: vi.fn(),
   touchEntityNavigationMock: vi.fn(),
@@ -28,7 +34,10 @@ const {
 }));
 
 vi.mock("@/lib/api", () => ({
+  createSavedView: createSavedViewMock,
+  deleteSavedView: deleteSavedViewMock,
   getEntityNavigation: getEntityNavigationMock,
+  getSavedViews: getSavedViewsMock,
   pinEntityNavigation: pinEntityNavigationMock,
   searchEntities: searchEntitiesMock,
   touchEntityNavigation: touchEntityNavigationMock,
@@ -89,11 +98,13 @@ function createSnapshot(): ForgeSnapshot {
 function renderActionBar({
   createActions = [],
   onOpenChange = vi.fn(),
-  selectedUserIds = []
+  selectedUserIds = [],
+  onSelectedUserIdsChange = vi.fn()
 }: {
   createActions?: ForgeCreateAction[];
   onOpenChange?: (open: boolean) => void;
   selectedUserIds?: string[];
+  onSelectedUserIdsChange?: (userIds: string[]) => void;
 } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -110,6 +121,7 @@ function renderActionBar({
           onOpenChange={onOpenChange}
           snapshot={createSnapshot()}
           selectedUserIds={selectedUserIds}
+          onSelectedUserIdsChange={onSelectedUserIdsChange}
           createActions={createActions}
         />
       </MemoryRouter>
@@ -121,6 +133,25 @@ describe("ActionBar", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     searchEntitiesMock.mockResolvedValue({ results: [] });
+    getSavedViewsMock.mockResolvedValue({ savedViews: [] });
+    createSavedViewMock.mockImplementation((input) =>
+      Promise.resolve({
+        savedView: {
+          id: "svw_created",
+          ...input,
+          unavailableFilterIds: [],
+          unavailableScopeUserIds: [],
+          compatibility: "ready",
+          schemaVersion: 1,
+          createdAt: "2026-08-09T12:00:00.000Z",
+          updatedAt: "2026-08-09T12:00:00.000Z"
+        }
+      })
+    );
+    deleteSavedViewMock.mockResolvedValue({
+      deleted: true,
+      savedViewId: "svw_created"
+    });
     getEntityNavigationMock.mockResolvedValue({
       generatedAt: "2026-07-09T00:00:00.000Z",
       pinnedTotal: 1,
@@ -480,5 +511,223 @@ describe("ActionBar", () => {
 
     expect(onCreateHabit).toHaveBeenCalledTimes(1);
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("saves the current query, filters, and people scope under a clear name", async () => {
+    renderActionBar({ selectedUserIds: ["user_mickael"] });
+    fireEvent.change(
+      screen.getAllByPlaceholderText(/search anything in forge/i)[0]!,
+      { target: { value: "calendar review" } }
+    );
+    const filterInput = screen.getAllByPlaceholderText(
+      /add entity type filters/i
+    )[0]!;
+    fireEvent.change(filterInput, { target: { value: "calendar" } });
+    fireEvent.click(await screen.findByRole("option", { name: /Calendar/i }));
+    fireEvent.change(screen.getByLabelText("Saved view name"), {
+      target: { value: "Weekly calendar review" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save this view" }));
+
+    await waitFor(() =>
+      expect(createSavedViewMock).toHaveBeenCalledWith({
+        ownerUserId: "user_mickael",
+        name: "Weekly calendar review",
+        query: "calendar review",
+        filterIds: ["calendar_event"],
+        scopeMode: "selected",
+        scopeUserIds: ["user_mickael"]
+      })
+    );
+    expect(
+      await screen.findByText("Saved Weekly calendar review.")
+    ).toBeVisible();
+  });
+
+  it("opens a saved view and reports stale state that was skipped", async () => {
+    const onSelectedUserIdsChange = vi.fn();
+    getSavedViewsMock.mockResolvedValue({
+      savedViews: [
+        {
+          id: "svw_calendar",
+          ownerUserId: "user_mickael",
+          name: "Calendar decisions",
+          query: "decision",
+          filterIds: ["calendar_event"],
+          scopeMode: "selected",
+          scopeUserIds: ["user_mickael"],
+          unavailableFilterIds: ["retired_filter"],
+          unavailableScopeUserIds: ["user_retired"],
+          compatibility: "ready",
+          schemaVersion: 1,
+          createdAt: "2026-08-09T12:00:00.000Z",
+          updatedAt: "2026-08-09T12:00:00.000Z"
+        }
+      ]
+    });
+    renderActionBar({ onSelectedUserIdsChange });
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /^Calendar decisions decision$/
+      })
+    );
+
+    expect(
+      screen.getAllByPlaceholderText(/search anything in forge/i)[0]
+    ).toHaveValue("decision");
+    expect(screen.getByLabelText("Remove Calendar event")).toBeInTheDocument();
+    expect(onSelectedUserIdsChange).toHaveBeenCalledWith(["user_mickael"]);
+    expect(
+      screen.getByText(
+        "Opened Calendar decisions. 2 unavailable items were skipped."
+      )
+    ).toBeVisible();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Delete saved view Calendar decisions"
+      })
+    );
+    await waitFor(() =>
+      expect(deleteSavedViewMock).toHaveBeenCalledWith(
+        "svw_calendar",
+        "user_mickael"
+      )
+    );
+  });
+
+  it("blocks all-retired and unsupported saved views instead of widening scope", async () => {
+    const onSelectedUserIdsChange = vi.fn();
+    getSavedViewsMock.mockResolvedValue({
+      savedViews: [
+        {
+          id: "svw_retired",
+          ownerUserId: "user_mickael",
+          name: "Retired team",
+          query: "private review",
+          filterIds: ["task"],
+          scopeMode: "selected",
+          scopeUserIds: [],
+          unavailableFilterIds: [],
+          unavailableScopeUserIds: ["user_retired"],
+          compatibility: "ready",
+          schemaVersion: 1,
+          createdAt: "2026-08-09T12:00:00.000Z",
+          updatedAt: "2026-08-09T12:00:00.000Z"
+        },
+        {
+          id: "svw_future",
+          ownerUserId: "user_mickael",
+          name: "Future view",
+          query: "future query",
+          filterIds: [],
+          scopeMode: "all",
+          scopeUserIds: [],
+          unavailableFilterIds: [],
+          unavailableScopeUserIds: [],
+          compatibility: "unsupported",
+          schemaVersion: 2,
+          createdAt: "2026-08-09T12:00:00.000Z",
+          updatedAt: "2026-08-09T12:00:00.000Z"
+        }
+      ]
+    });
+    renderActionBar({ onSelectedUserIdsChange });
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /^Retired team All saved people are unavailable$/
+      })
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "cannot be opened because every saved person is unavailable"
+    );
+    expect(
+      screen.getAllByPlaceholderText(/search anything in forge/i)[0]
+    ).toHaveValue("");
+    expect(onSelectedUserIdsChange).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /^Future view Needs a newer Forge version$/
+      })
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "was saved by a newer Forge version"
+    );
+    expect(onSelectedUserIdsChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps all 20 allowed views in a bounded scroll region", async () => {
+    getSavedViewsMock.mockResolvedValue({
+      savedViews: Array.from({ length: 20 }, (_, index) => ({
+        id: `svw_${index + 1}`,
+        ownerUserId: "user_mickael",
+        name: `View ${index + 1}`,
+        query: `query ${index + 1}`,
+        filterIds: [],
+        scopeMode: "all",
+        scopeUserIds: [],
+        unavailableFilterIds: [],
+        unavailableScopeUserIds: [],
+        compatibility: "ready",
+        schemaVersion: 1,
+        createdAt: "2026-08-09T12:00:00.000Z",
+        updatedAt: "2026-08-09T12:00:00.000Z"
+      }))
+    });
+    renderActionBar();
+
+    const region = await screen.findByRole("region", { name: "Saved views" });
+    expect(region).toHaveClass("max-h-56", "overflow-y-auto");
+    expect(
+      screen.getAllByRole("button", { name: /^View \d+ query \d+$/ })
+    ).toHaveLength(20);
+  });
+
+  it("reports a failed deletion and clears the previous success notice", async () => {
+    getSavedViewsMock.mockResolvedValue({
+      savedViews: [
+        {
+          id: "svw_calendar",
+          ownerUserId: "user_mickael",
+          name: "Calendar decisions",
+          query: "decision",
+          filterIds: [],
+          scopeMode: "all",
+          scopeUserIds: [],
+          unavailableFilterIds: [],
+          unavailableScopeUserIds: [],
+          compatibility: "ready",
+          schemaVersion: 1,
+          createdAt: "2026-08-09T12:00:00.000Z",
+          updatedAt: "2026-08-09T12:00:00.000Z"
+        }
+      ]
+    });
+    deleteSavedViewMock.mockRejectedValue(
+      new Error("Forge could not delete this saved view.")
+    );
+    renderActionBar();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /^Calendar decisions decision$/
+      })
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Opened Calendar decisions."
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Delete saved view Calendar decisions"
+      })
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Forge could not delete this saved view."
+    );
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });

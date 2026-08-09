@@ -4500,6 +4500,22 @@ export interface EntityNavigationPayload {
   recent: EntityNavigationItem[];
 }
 
+export interface SavedView {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  query: string;
+  filterIds: string[];
+  scopeMode: "all" | "selected";
+  scopeUserIds: string[];
+  unavailableFilterIds: string[];
+  unavailableScopeUserIds: string[];
+  compatibility: "ready" | "unsupported";
+  schemaVersion: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface StrategyLinkedEntity {
   entityType: CrudEntityType;
   entityId: string;
