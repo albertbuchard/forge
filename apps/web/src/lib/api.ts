@@ -6969,16 +6969,56 @@ export function logOperatorWork(input: OperatorLogWorkInput) {
   });
 }
 
-export function createWorkAdjustment(input: {
+const implicitWorkAdjustmentRetryKeys = new Map<string, string>();
+
+function rememberImplicitWorkAdjustmentRetryKey(
+  fingerprint: string,
+  retryKey: string
+) {
+  if (
+    !implicitWorkAdjustmentRetryKeys.has(fingerprint) &&
+    implicitWorkAdjustmentRetryKeys.size >= 50
+  ) {
+    const oldestFingerprint =
+      implicitWorkAdjustmentRetryKeys.keys().next().value;
+    if (oldestFingerprint) {
+      implicitWorkAdjustmentRetryKeys.delete(oldestFingerprint);
+    }
+  }
+  implicitWorkAdjustmentRetryKeys.set(fingerprint, retryKey);
+}
+
+export async function createWorkAdjustment(input: {
   entityType: "task" | "project";
   entityId: string;
   deltaMinutes: number;
   note?: string;
+  idempotencyKey?: string;
 }) {
-  return request<WorkAdjustmentResult>("/api/v1/work-adjustments", {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+  const { idempotencyKey, ...adjustment } = input;
+  const fingerprint = JSON.stringify(adjustment);
+  const retryKey =
+    idempotencyKey ??
+    implicitWorkAdjustmentRetryKeys.get(fingerprint) ??
+    globalThis.crypto.randomUUID();
+  if (!idempotencyKey) {
+    rememberImplicitWorkAdjustmentRetryKey(fingerprint, retryKey);
+  }
+  const result = await request<WorkAdjustmentResult>(
+    "/api/v1/work-adjustments",
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": retryKey },
+      body: JSON.stringify(adjustment)
+    }
+  );
+  if (
+    !idempotencyKey &&
+    implicitWorkAdjustmentRetryKeys.get(fingerprint) === retryKey
+  ) {
+    implicitWorkAdjustmentRetryKeys.delete(fingerprint);
+  }
+  return result;
 }
 
 export function removeActivityLog(

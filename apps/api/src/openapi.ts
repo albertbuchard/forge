@@ -20193,6 +20193,18 @@ export function buildOpenApiDocument() {
         post: {
           summary:
             "Add or remove tracked work minutes on an existing task or project and return fresh XP state",
+          description:
+            "Use one stable Idempotency-Key for an exact transport retry. The first accepted request atomically stores the adjustment, reward, Activity event, and response. An exact replay returns that response without applying time or XP twice; reuse with a different payload returns 409.",
+          parameters: [
+            {
+              name: "Idempotency-Key",
+              in: "header",
+              required: false,
+              schema: { type: "string", minLength: 1, maxLength: 128 },
+              description:
+                "Stable key for one intended correction. Keep it unchanged only while retrying the same entity, signed minutes, and note."
+            }
+          ],
           requestBody: {
             required: true,
             content: {
@@ -20202,6 +20214,17 @@ export function buildOpenApiDocument() {
             }
           },
           responses: {
+            "200": {
+              ...jsonResponse(
+                { $ref: "#/components/schemas/WorkAdjustmentResult" },
+                "Exact idempotent replay of a stored work adjustment response"
+              ),
+              headers: {
+                "Idempotency-Replayed": {
+                  schema: { type: "string", enum: ["true"] }
+                }
+              }
+            },
             "201": jsonResponse(
               { $ref: "#/components/schemas/WorkAdjustmentResult" },
               "Created work adjustment and refreshed XP state"
@@ -20209,7 +20232,8 @@ export function buildOpenApiDocument() {
             "400": { $ref: "#/components/responses/Error" },
             "401": { $ref: "#/components/responses/Error" },
             "403": { $ref: "#/components/responses/Error" },
-            "404": { $ref: "#/components/responses/Error" }
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" }
           }
         }
       },

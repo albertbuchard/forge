@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   FlowChoiceGrid,
@@ -51,15 +51,21 @@ export function WorkAdjustmentDialog({
     entityId: string;
     deltaMinutes: number;
     note?: string;
+    idempotencyKey: string;
   }) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<WorkAdjustmentDraft>(buildInitialDraft);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const retryRef = useRef<{
+    fingerprint: string;
+    idempotencyKey: string;
+  } | null>(null);
 
   useEffect(() => {
     if (open) {
       setDraft(buildInitialDraft());
       setSubmitError(null);
+      retryRef.current = null;
     }
   }, [open]);
 
@@ -287,13 +293,28 @@ export function WorkAdjustmentDialog({
           return;
         }
 
+        const adjustment = {
+          entityType,
+          entityId,
+          deltaMinutes: parsed.data.deltaMinutes,
+          note: parsed.data.note || undefined
+        };
+        const fingerprint = JSON.stringify(adjustment);
+        const retry =
+          retryRef.current?.fingerprint === fingerprint
+            ? retryRef.current
+            : {
+                fingerprint,
+                idempotencyKey: globalThis.crypto.randomUUID()
+              };
+        retryRef.current = retry;
+
         try {
           await onSubmit({
-            entityType,
-            entityId,
-            deltaMinutes: parsed.data.deltaMinutes,
-            note: parsed.data.note || undefined
+            ...adjustment,
+            idempotencyKey: retry.idempotencyKey
           });
+          retryRef.current = null;
           onOpenChange(false);
         } catch (error) {
           setSubmitError(

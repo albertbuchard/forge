@@ -365,7 +365,12 @@ import {
   uncompleteTask,
   updateTask
 } from "./repositories/tasks.js";
-import { createWorkAdjustment } from "./repositories/work-adjustments.js";
+import {
+  createWorkAdjustment,
+  fingerprintWorkAdjustmentRequest,
+  readWorkAdjustmentIdempotency,
+  recordWorkAdjustmentIdempotency
+} from "./repositories/work-adjustments.js";
 import {
   createCalendarEvent,
   createTaskTimebox,
@@ -24824,34 +24829,93 @@ export async function buildServer(
     reply.code(201);
     return { task, xp: buildXpMetricsPayload() };
   });
+  const buildWorkAdjustmentMetricsForAuth = (
+    auth: ReturnType<typeof authenticateRequest>,
+    targetUserId: string | null
+  ) => {
+    if (!auth.token) {
+      return buildXpMetricsPayload();
+    }
+    const planningRestricted =
+      auth.token.scopePolicy.projectIds.length > 0 ||
+      auth.token.scopePolicy.tagIds.length > 0;
+    const userIds =
+      targetUserId && !planningRestricted
+        ? [targetUserId]
+        : EMPTY_SCOPED_USER_IDS;
+    return buildXpMetricsPayload({
+      goals: planningRestricted
+        ? []
+        : filterOwnedEntities("goal", listGoals(), userIds),
+      tasks: filterTasksForAuth(listTasks({ userIds }), auth),
+      habits: planningRestricted
+        ? []
+        : filterOwnedEntities("habit", listHabits(), userIds),
+      userIds
+    });
+  };
   app.post("/api/v1/work-adjustments", async (request, reply) => {
     const auth = requireRewardMutationAccess(
       request.headers as Record<string, unknown>,
       "/api/v1/work-adjustments"
     );
     const input = createWorkAdjustmentSchema.parse(request.body ?? {});
-    const currentTarget = resolveWorkAdjustmentTarget(
-      input.entityType,
-      input.entityId
+    const idempotencyKey = parseIdempotencyKey(
+      request.headers as Record<string, unknown>
     );
-
-    if (!currentTarget) {
-      reply.code(404);
-      return {
-        error: `${input.entityType === "task" ? "Task" : "Project"} not found`
-      };
-    }
-
-    const appliedDeltaMinutes = clampWorkAdjustmentMinutes(
-      input.deltaMinutes,
-      currentTarget.time.totalCreditedSeconds
-    );
-    const nextCreditedSeconds = Math.max(
-      0,
-      currentTarget.time.totalCreditedSeconds + appliedDeltaMinutes * 60
-    );
+    const authorityScope = auth.token
+      ? `token:${auth.token.id}`
+      : `operator:${auth.actor ?? auth.session?.actorLabel ?? "local-owner"}`;
+    const requestFingerprint = fingerprintWorkAdjustmentRequest(input);
 
     const result = runInTransaction(() => {
+      const scopedTarget =
+        input.entityType === "task"
+          ? getTaskForAuth(input.entityId, auth)
+          : getProjectForAuth(input.entityId, auth);
+      if (!scopedTarget) {
+        throw new HttpError(
+          404,
+          "work_adjustment_target_not_found",
+          `${input.entityType === "task" ? "Task" : "Project"} not found`
+        );
+      }
+      const existing = idempotencyKey
+        ? readWorkAdjustmentIdempotency({
+            authorityScope,
+            idempotencyKey,
+            requestFingerprint
+          })
+        : null;
+      if (existing) {
+        return {
+          response: workAdjustmentResultSchema.parse(
+            JSON.parse(existing.responseJson)
+          ),
+          replayed: true
+        };
+      }
+
+      const currentTarget = resolveWorkAdjustmentTarget(
+        input.entityType,
+        input.entityId
+      );
+      if (!currentTarget) {
+        throw new HttpError(
+          404,
+          "work_adjustment_target_not_found",
+          `${input.entityType === "task" ? "Task" : "Project"} not found`
+        );
+      }
+
+      const appliedDeltaMinutes = clampWorkAdjustmentMinutes(
+        input.deltaMinutes,
+        currentTarget.time.totalCreditedSeconds
+      );
+      const nextCreditedSeconds = Math.max(
+        0,
+        currentTarget.time.totalCreditedSeconds + appliedDeltaMinutes * 60
+      );
       const adjustment = createWorkAdjustment(
         {
           ...input,
@@ -24895,28 +24959,44 @@ export async function buildServer(
         }
       });
 
-      return { adjustment, reward };
-    });
-
-    const updatedTarget = resolveWorkAdjustmentTarget(
-      input.entityType,
-      input.entityId
-    );
-    if (!updatedTarget) {
-      throw new HttpError(
-        500,
-        "work_adjustment_target_missing",
-        `Could not reload ${input.entityType} ${input.entityId} after adjustment`
+      const updatedTarget = resolveWorkAdjustmentTarget(
+        input.entityType,
+        input.entityId
       );
-    }
-
-    reply.code(201);
-    return workAdjustmentResultSchema.parse({
-      adjustment: result.adjustment,
-      target: updatedTarget,
-      reward: result.reward,
-      metrics: buildXpMetricsPayload()
+      if (!updatedTarget) {
+        throw new HttpError(
+          500,
+          "work_adjustment_target_missing",
+          `Could not reload ${input.entityType} ${input.entityId} after adjustment`
+        );
+      }
+      const response = workAdjustmentResultSchema.parse({
+        adjustment,
+        target: updatedTarget,
+        reward,
+        metrics: buildWorkAdjustmentMetricsForAuth(
+          auth,
+          scopedTarget.userId ?? null
+        )
+      });
+      if (idempotencyKey) {
+        recordWorkAdjustmentIdempotency({
+          authorityScope,
+          idempotencyKey,
+          requestFingerprint,
+          adjustmentId: adjustment.id,
+          rewardId: reward?.id ?? null,
+          responseJson: JSON.stringify(response)
+        });
+      }
+      return { response, replayed: false };
     });
+
+    if (result.replayed) {
+      reply.header("Idempotency-Replayed", "true");
+    }
+    reply.code(result.replayed ? 200 : 201);
+    return result.response;
   });
   app.post("/api/v1/tasks/:id/uncomplete", async (request, reply) => {
     const auth = requireScopedAccess(

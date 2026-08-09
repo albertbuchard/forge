@@ -9,6 +9,7 @@ import {
   createGoal,
   createProject,
   createTask,
+  createWorkAdjustment,
   finalizeWeeklyReview,
   getCalendarOverview,
   getDeletedPlanningRecord,
@@ -112,6 +113,76 @@ describe("notes API contract", () => {
     expect(url.searchParams.get("observedFrom")).toBe("2026-05-01");
     expect(url.searchParams.get("observedTo")).toBe("2026-05-31");
     expect(url.searchParams.get("cursor")).toBe("opaque-cursor");
+  });
+});
+
+describe("work adjustment API contract", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends the stable retry key as a header and keeps it out of the adjustment body", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse({
+        adjustment: {},
+        target: {},
+        reward: null,
+        metrics: {}
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createWorkAdjustment({
+      entityType: "task",
+      entityId: "task_1",
+      deltaMinutes: -15,
+      note: "Corrected an overcount.",
+      idempotencyKey: "work-adjustment-retry-1"
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/v1/work-adjustments");
+    expect(new Headers(init.headers).get("Idempotency-Key")).toBe(
+      "work-adjustment-retry-1"
+    );
+    expect(JSON.parse(String(init.body))).toEqual({
+      entityType: "task",
+      entityId: "task_1",
+      deltaMinutes: -15,
+      note: "Corrected an overcount."
+    });
+  });
+
+  it("reuses an implicit key after a failed request and rotates it after success", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("network response lost"))
+      .mockResolvedValue(mockJsonResponse({ adjustment: {} }));
+    vi.stubGlobal("fetch", fetchMock);
+    const input = {
+      entityType: "project" as const,
+      entityId: "project_retry_contract",
+      deltaMinutes: 15,
+      note: "Captured offline planning."
+    };
+
+    await expect(createWorkAdjustment(input)).rejects.toThrow(
+      "network response lost"
+    );
+    await createWorkAdjustment(input);
+    const firstKey = new Headers(
+      (fetchMock.mock.calls[0]![1] as RequestInit).headers
+    ).get("Idempotency-Key");
+    const retryKey = new Headers(
+      (fetchMock.mock.calls[1]![1] as RequestInit).headers
+    ).get("Idempotency-Key");
+    expect(retryKey).toBe(firstKey);
+
+    await createWorkAdjustment(input);
+    const nextIntentKey = new Headers(
+      (fetchMock.mock.calls[2]![1] as RequestInit).headers
+    ).get("Idempotency-Key");
+    expect(nextIntentKey).not.toBe(firstKey);
   });
 });
 

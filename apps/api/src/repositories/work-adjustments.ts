@@ -1,5 +1,6 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { getDatabase } from "../db.js";
+import { HttpError } from "../errors.js";
 import {
   createWorkAdjustmentSchema,
   workAdjustmentSchema,
@@ -21,6 +22,13 @@ type WorkAdjustmentRow = {
   created_at: string;
 };
 
+type WorkAdjustmentIdempotencyRow = {
+  request_fingerprint: string;
+  adjustment_id: string;
+  reward_id: string | null;
+  response_json: string;
+};
+
 function mapWorkAdjustment(row: WorkAdjustmentRow): WorkAdjustment {
   return workAdjustmentSchema.parse({
     id: row.id,
@@ -33,6 +41,90 @@ function mapWorkAdjustment(row: WorkAdjustmentRow): WorkAdjustment {
     source: row.source,
     createdAt: row.created_at
   });
+}
+
+export function fingerprintWorkAdjustmentRequest(
+  input: CreateWorkAdjustmentInput
+): string {
+  const parsed = createWorkAdjustmentSchema.parse(input);
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        entityType: parsed.entityType,
+        entityId: parsed.entityId,
+        deltaMinutes: parsed.deltaMinutes,
+        note: parsed.note
+      })
+    )
+    .digest("hex");
+}
+
+export function readWorkAdjustmentIdempotency(input: {
+  authorityScope: string;
+  idempotencyKey: string;
+  requestFingerprint: string;
+}): {
+  adjustmentId: string;
+  rewardId: string | null;
+  responseJson: string;
+} | null {
+  const existing = getDatabase()
+    .prepare(
+      `SELECT request_fingerprint, adjustment_id, reward_id, response_json
+       FROM work_adjustment_idempotency
+       WHERE authority_scope = ? AND idempotency_key = ?`
+    )
+    .get(input.authorityScope, input.idempotencyKey) as
+    | WorkAdjustmentIdempotencyRow
+    | undefined;
+
+  if (!existing) {
+    return null;
+  }
+  if (existing.request_fingerprint !== input.requestFingerprint) {
+    throw new HttpError(
+      409,
+      "work_adjustment_idempotency_conflict",
+      "This idempotency key was already used for a different work adjustment."
+    );
+  }
+  return {
+    adjustmentId: existing.adjustment_id,
+    rewardId: existing.reward_id,
+    responseJson: existing.response_json
+  };
+}
+
+export function recordWorkAdjustmentIdempotency(input: {
+  authorityScope: string;
+  idempotencyKey: string;
+  requestFingerprint: string;
+  adjustmentId: string;
+  rewardId: string | null;
+  responseJson: string;
+  createdAt?: Date;
+}): void {
+  getDatabase()
+    .prepare(
+      `INSERT INTO work_adjustment_idempotency (
+         authority_scope,
+         idempotency_key,
+         request_fingerprint,
+         adjustment_id,
+         reward_id,
+         response_json,
+         created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      input.authorityScope,
+      input.idempotencyKey,
+      input.requestFingerprint,
+      input.adjustmentId,
+      input.rewardId,
+      input.responseJson,
+      (input.createdAt ?? new Date()).toISOString()
+    );
 }
 
 export function createWorkAdjustment(

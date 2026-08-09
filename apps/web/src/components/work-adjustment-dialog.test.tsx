@@ -101,7 +101,8 @@ describe("WorkAdjustmentDialog", () => {
         entityType: "task",
         entityId: "task_1",
         deltaMinutes: -15,
-        note: "Correcting the inflated estimate."
+        note: "Correcting the inflated estimate.",
+        idempotencyKey: expect.any(String)
       });
     });
   });
@@ -120,8 +121,32 @@ describe("WorkAdjustmentDialog", () => {
         entityType: "task",
         entityId: "task_1",
         deltaMinutes: -8,
-        note: undefined
+        note: undefined,
+        idempotencyKey: expect.any(String)
       });
     });
+  });
+
+  it("keeps one retry key for the same failed submission and rotates it when the correction changes", async () => {
+    const onSubmit = vi
+      .fn()
+      .mockRejectedValue(new Error("The response did not arrive."));
+    renderDialog({ onSubmit });
+
+    const save = screen.getByRole("button", { name: /save adjustment/i });
+    fireEvent.click(save);
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const firstKey = onSubmit.mock.calls[0]![0].idempotencyKey;
+
+    fireEvent.click(save);
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
+    expect(onSubmit.mock.calls[1]![0].idempotencyKey).toBe(firstKey);
+
+    fireEvent.change(screen.getByRole("spinbutton"), {
+      target: { value: "30" }
+    });
+    fireEvent.click(save);
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(3));
+    expect(onSubmit.mock.calls[2]![0].idempotencyKey).not.toBe(firstKey);
   });
 });
