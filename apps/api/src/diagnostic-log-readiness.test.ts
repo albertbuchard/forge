@@ -176,7 +176,8 @@ test("diagnostic logs stay operator-only, redact every context field, and expose
           source: "server",
           scope: "retention",
           eventKey: "burst_probe",
-          message: `Burst diagnostic ${index}`
+          message: `Burst diagnostic ${index}`,
+          details: { sequence: index }
         },
         new Date(burstStartedAt + index)
       );
