@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_REWARD_GROUP_PREVIEW_COUNT,
+  offlineGamificationImageUrl,
+  recoverMissingGamificationImage,
+  revealLoadedGamificationImage,
   rewardGroupPreviewCountForWidth,
   selectFeaturedTrophies,
   selectRewardGroupItems
 } from "@/pages/rewards-page";
+import {
+  gamificationThemeOptions,
+  getGamificationSpriteUrl
+} from "@/lib/gamification-assets";
+import type { SyntheticEvent } from "react";
 
 describe("reward group previews", () => {
   const items = Array.from({ length: 12 }, (_, index) => `reward-${index + 1}`);
@@ -47,12 +55,50 @@ describe("reward group previews", () => {
     ]);
 
     expect(
-      selectFeaturedTrophies([
-        { id: "trophy-next", kind: "trophy", unlocked: false },
-        { id: "unlock-next", kind: "unlock", unlocked: false }
-      ], [])
-    ).toEqual([
-      { id: "trophy-next", kind: "trophy", unlocked: false }
-    ]);
+      selectFeaturedTrophies(
+        [
+          { id: "trophy-next", kind: "trophy", unlocked: false },
+          { id: "unlock-next", kind: "unlock", unlocked: false }
+        ],
+        []
+      )
+    ).toEqual([{ id: "trophy-next", kind: "trophy", unlocked: false }]);
   });
+});
+
+describe("reward artwork recovery", () => {
+  const assetKeys = [
+    "item-trophy-xp-levels-the-first-heat",
+    "item-unlock-streaks-molten-crown-fire"
+  ];
+
+  for (const { value: theme } of gamificationThemeOptions) {
+    for (const assetKey of assetKeys) {
+      it(`keeps ${theme} ${assetKey} visible after sprite and preview failures`, () => {
+        const image = document.createElement("img");
+        image.alt = "Reward artwork";
+        image.src = getGamificationSpriteUrl(assetKey, 512, theme);
+        const event = {
+          currentTarget: image
+        } as SyntheticEvent<HTMLImageElement>;
+
+        recoverMissingGamificationImage(event, theme, assetKey);
+        expect(image.getAttribute("src")).toContain(
+          `/gamification-previews/${theme}-`
+        );
+        expect(image.dataset.gamificationImageSource).toBe("preview");
+        expect(image.hidden).toBe(false);
+
+        recoverMissingGamificationImage(event, theme, assetKey);
+        expect(image.getAttribute("src")).toBe(offlineGamificationImageUrl);
+        expect(image.dataset.gamificationImageSource).toBe("offline");
+        expect(image.hidden).toBe(false);
+        expect(image.alt).toBe("Reward artwork");
+
+        revealLoadedGamificationImage(event);
+        expect(image.dataset.gamificationImageSource).toBe("offline");
+        expect(image.hidden).toBe(false);
+      });
+    }
+  }
 });
