@@ -21,6 +21,7 @@ import {
   patchArtifact,
   patchArtifactTrust,
   replaceArtifactEntityLinks,
+  rescanArtifact,
   uploadArtifact
 } from "@/lib/api";
 import type { Artifact } from "@/lib/types";
@@ -1182,6 +1183,161 @@ describe("ArtifactsPage", () => {
     expect(screen.getByRole("button", { name: /^download$/i })).toBeDisabled();
     expect(downloadArtifact).not.toHaveBeenCalled();
     expect(downloadArtifactWithPassword).not.toHaveBeenCalled();
+  });
+
+  it("ART-05 states when no static scan evidence is available", async () => {
+    const missingScanArtifact: Artifact = {
+      ...mockArtifact,
+      scanResults: {}
+    };
+    vi.mocked(listArtifacts).mockResolvedValue({
+      artifacts: [missingScanArtifact],
+      total: 1,
+      limit: 50,
+      offset: 0,
+      hasMore: false
+    });
+    vi.mocked(getArtifact).mockResolvedValue({
+      artifact: missingScanArtifact
+    });
+
+    renderArtifactsPage();
+
+    expect(
+      await screen.findByText("No static scan result is available.")
+    ).toBeInTheDocument();
+  });
+
+  it("ART-05 states when a static scan completed without findings", async () => {
+    const cleanScanArtifact: Artifact = {
+      ...mockArtifact,
+      scanResults: {
+        ...mockArtifact.scanResults,
+        findings: []
+      }
+    };
+    vi.mocked(listArtifacts).mockResolvedValue({
+      artifacts: [cleanScanArtifact],
+      total: 1,
+      limit: 50,
+      offset: 0,
+      hasMore: false
+    });
+    vi.mocked(getArtifact).mockResolvedValue({ artifact: cleanScanArtifact });
+
+    renderArtifactsPage();
+
+    expect(
+      await screen.findByText("Static scan completed with no findings.")
+    ).toBeInTheDocument();
+  });
+
+  it("ART-05 keeps prior scan evidence visible after a rescan fails", async () => {
+    vi.mocked(listArtifacts).mockResolvedValue({
+      artifacts: [mockArtifact],
+      total: 1,
+      limit: 50,
+      offset: 0,
+      hasMore: false
+    });
+    vi.mocked(getArtifact).mockResolvedValue({ artifact: mockArtifact });
+    vi.mocked(rescanArtifact).mockRejectedValueOnce(
+      new Error("Stored bytes failed their integrity check.")
+    );
+
+    renderArtifactsPage();
+
+    expect(
+      await screen.findByText("office_external_relationship")
+    ).toBeInTheDocument();
+    const scanButton = screen.getByRole("button", { name: /^scan$/i });
+    expect(scanButton).toHaveClass("min-h-11");
+    fireEvent.click(scanButton);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Latest scan failed. Existing scan evidence remains available. Stored bytes failed their integrity check."
+    );
+    expect(rescanArtifact).toHaveBeenCalledWith("artifact_123");
+    expect(
+      screen.getAllByText(/Stored bytes failed their integrity check/)
+    ).toHaveLength(1);
+    expect(
+      screen.getByText("office_external_relationship")
+    ).toBeInTheDocument();
+  });
+
+  it("ART-05 does not carry a failed scan alert to another artifact", async () => {
+    const secondArtifact: Artifact = {
+      ...mockArtifact,
+      id: "artifact_456",
+      title: "Second artifact",
+      shortDescription: "A different artifact with its own scan state.",
+      originalFileName: "second-artifact.xlsx"
+    };
+    vi.mocked(listArtifacts).mockResolvedValue({
+      artifacts: [mockArtifact, secondArtifact],
+      total: 2,
+      limit: 50,
+      offset: 0,
+      hasMore: false
+    });
+    vi.mocked(getArtifact).mockImplementation(async (artifactId) => ({
+      artifact: artifactId === secondArtifact.id ? secondArtifact : mockArtifact
+    }));
+    vi.mocked(rescanArtifact).mockRejectedValueOnce(
+      new Error("Artifact 123 scan failed.")
+    );
+
+    renderArtifactsPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /^scan$/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Artifact 123 scan failed."
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /Second artifact/ })
+    );
+
+    expect(
+      await screen.findByText("A different artifact with its own scan state.")
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("ART-05 does not claim retained evidence after a first scan fails", async () => {
+    const missingScanArtifact: Artifact = {
+      ...mockArtifact,
+      scanResults: {}
+    };
+    vi.mocked(listArtifacts).mockResolvedValue({
+      artifacts: [missingScanArtifact],
+      total: 1,
+      limit: 50,
+      offset: 0,
+      hasMore: false
+    });
+    vi.mocked(getArtifact).mockResolvedValue({
+      artifact: missingScanArtifact
+    });
+    vi.mocked(rescanArtifact).mockRejectedValueOnce(
+      new Error("Scanner process unavailable.")
+    );
+
+    renderArtifactsPage();
+
+    expect(
+      await screen.findByText("No static scan result is available.")
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^scan$/i }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Latest scan failed. No prior static scan evidence is available. Scanner process unavailable."
+    );
+    expect(alert).not.toHaveTextContent(
+      "Existing scan evidence remains available."
+    );
   });
 
   it("paginates Artifact history deliberately and retries a failed page only on request", async () => {

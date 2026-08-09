@@ -1148,7 +1148,8 @@ export function ArtifactsPage() {
   });
 
   const scanMutation = useMutation({
-    mutationFn: () => rescanArtifact(selectedArtifact!.id),
+    mutationFn: ({ artifactId }: { artifactId: string }) =>
+      rescanArtifact(artifactId),
     onSuccess: invalidateArtifacts
   });
 
@@ -1266,6 +1267,20 @@ export function ArtifactsPage() {
   });
 
   const findings = scanFindings(selectedArtifact);
+  const selectedScanError =
+    selectedArtifact &&
+    scanMutation.isError &&
+    scanMutation.variables?.artifactId === selectedArtifact.id
+      ? scanMutation.error
+      : null;
+  const selectedScanPending = Boolean(
+    selectedArtifact &&
+      scanMutation.isPending &&
+      scanMutation.variables?.artifactId === selectedArtifact.id
+  );
+  const selectedArtifactHasScanEvidence = Boolean(
+    selectedArtifact && isScanResult(selectedArtifact.scanResults)
+  );
   const versionCount =
     versionsQuery.data?.total ?? versionsQuery.data?.versions.length ?? 0;
   const auditEvents = auditQuery.data?.events ?? [];
@@ -1279,7 +1294,6 @@ export function ArtifactsPage() {
   const artifactActionError =
     patchMutation.error ??
     trustMutation.error ??
-    scanMutation.error ??
     enrichMutation.error ??
     downloadMutation.error;
   const enrichmentStatus = selectedArtifact?.enrichmentResults as
@@ -2772,9 +2786,14 @@ export function ArtifactsPage() {
                   <div className="flex flex-wrap gap-2">
                     <Button
                       variant="secondary"
+                      size="lg"
                       type="button"
-                      onClick={() => scanMutation.mutate()}
-                      pending={scanMutation.isPending}
+                      onClick={() =>
+                        scanMutation.mutate({
+                          artifactId: selectedArtifact.id
+                        })
+                      }
+                      pending={selectedScanPending}
                     >
                       <RefreshCw className="size-4" />
                       Scan
@@ -2902,9 +2921,15 @@ export function ArtifactsPage() {
                     content needs password-gated support.
                   </p>
                 ) : null}
-                {scanMutation.error instanceof Error ? (
-                  <p className="rounded-[18px] border border-[color-mix(in_srgb,var(--warning)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-warning-soft)] px-3 py-2 text-sm text-[var(--warning)]">
-                    {scanMutation.error.message}
+                {selectedScanError ? (
+                  <p
+                    className="rounded-[18px] border border-[color-mix(in_srgb,var(--warning)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-warning-soft)] px-3 py-2 text-sm text-[var(--warning)]"
+                    role="alert"
+                  >
+                    Latest scan failed. {selectedArtifactHasScanEvidence
+                      ? "Existing scan evidence remains available."
+                      : "No prior static scan evidence is available."}{" "}
+                    {readErrorMessage(selectedScanError)}
                   </p>
                 ) : null}
               </Card>
