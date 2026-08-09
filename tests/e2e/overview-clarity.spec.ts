@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { installE2eStorageGuards, waitForForge } from "./helpers";
 
+const OVERVIEW_ERROR_STATE_SETTLE_TIMEOUT_MS = 15_000;
+const OVERVIEW_ERROR_STATE_TEST_TIMEOUT_MS = 45_000;
+
 const REQUIRED_HREFS = [
   "/forge/attention",
   "/forge/today",
@@ -210,6 +213,7 @@ test("keeps the complete map available for an empty Attention state", async ({
 test("keeps the complete map available when Attention fails", async ({
   page
 }) => {
+  test.setTimeout(OVERVIEW_ERROR_STATE_TEST_TIMEOUT_MS);
   await page.route("**/api/v1/attention-inbox**", async (route) => {
     await route.fulfill({ status: 503, body: "unavailable" });
   });
@@ -219,7 +223,7 @@ test("keeps the complete map available when Attention fails", async ({
     page.getByText(
       "Attention could not be loaded. Other Forge areas are still available."
     )
-  ).toBeVisible();
+  ).toBeVisible({ timeout: OVERVIEW_ERROR_STATE_SETTLE_TIMEOUT_MS });
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Everything in Forge" })

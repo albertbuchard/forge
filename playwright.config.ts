@@ -31,10 +31,17 @@ if (
 }
 const e2ePort = configuredE2ePort;
 const e2eBaseUrl = `http://127.0.0.1:${e2ePort}/forge/`;
-const knowledgeGraphPerformanceWebGl =
-  process.env.FORGE_KG_PERF_WEBGL === "1";
+const knowledgeGraphPerformanceWebGl = process.env.FORGE_KG_PERF_WEBGL === "1";
 const knowledgeGraphPerformanceBackground =
   process.env.FORGE_KG_PERF_BACKGROUND === "1";
+const webGlLaunchArgs = [
+  "--enable-gpu",
+  "--enable-webgl",
+  "--ignore-gpu-blocklist",
+  ...(process.platform === "darwin" ? ["--use-angle=metal"] : []),
+  "--enable-unsafe-swiftshader",
+  "--enable-precise-memory-info"
+];
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -63,17 +70,9 @@ export default defineConfig({
     headless: knowledgeGraphPerformanceWebGl
       ? knowledgeGraphPerformanceBackground
       : undefined,
-    launchOptions: knowledgeGraphPerformanceWebGl
-      ? {
-          args: [
-            "--enable-gpu",
-            "--enable-webgl",
-            "--ignore-gpu-blocklist",
-            "--use-angle=metal",
-            "--enable-precise-memory-info"
-          ]
-        }
-      : undefined,
+    launchOptions: {
+      args: webGlLaunchArgs
+    },
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure"
