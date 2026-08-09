@@ -480,6 +480,16 @@ export function EntityNotesSurface({
                             : ""}
                         </Badge>
                       ))}
+                      {(note.unavailableLinkCount ?? 0) > 0 ? (
+                        <Badge
+                          className="bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]"
+                          wrap
+                        >
+                          {note.unavailableLinkCount} linked record
+                          {note.unavailableLinkCount === 1 ? "" : "s"}{" "}
+                          unavailable
+                        </Badge>
+                      ) : null}
                       {(note.tags ?? []).map((tag) => (
                         <Badge
                           key={`${note.id}-tag-${tag}`}

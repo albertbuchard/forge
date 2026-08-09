@@ -124,6 +124,7 @@ import {
   listNotesByObservedAtRange,
   listNotes,
   listNotesPage,
+  projectNoteLinksForRead,
   resolveNoteMutationUserId,
   type NoteReadScope,
   updateNote
@@ -355,6 +356,8 @@ import {
   getTaskRunById,
   heartbeatTaskRun,
   listTaskRuns,
+  preflightTaskRunCompletionReplay,
+  preflightTaskRunReleaseReplay,
   recoverTimedOutTaskRuns,
   releaseTaskRun
 } from "./repositories/task-runs.js";
@@ -441,6 +444,7 @@ import {
 import { buildDerivedDataProvenance, latestObservedAt } from "./provenance.js";
 import {
   CRUD_OWNERSHIP_AUTHORIZATION_MATRIX,
+  crudEntityIsLiveAndVisible,
   crudEntityIsVisible,
   createContextualNote,
   createEntities,
@@ -742,6 +746,7 @@ import {
   recommendTaskTimeboxesSchema,
   strategyListQuerySchema,
   type Note,
+  type NoteLink,
   type CrudEntityType,
   type Goal,
   type Habit,
@@ -11015,6 +11020,7 @@ function compactNote(note: Note) {
     createdAt: note.createdAt,
     tags: note.tags.slice(0, 8),
     links: note.links.slice(0, 8),
+    unavailableLinkCount: note.unavailableLinkCount,
     userId: note.userId,
     detailRoute: `/api/v1/notes/${note.id}`
   };
@@ -11527,6 +11533,7 @@ function buildRecentNoteDigest(input: {
   toDateKey: string;
   userIds?: string[];
   noteScope: NoteReadScope;
+  projectNoteForRead: (note: Note) => Note;
 }) {
   const observed = listNotesByObservedAtRange(
     {
@@ -11558,7 +11565,7 @@ function buildRecentNoteDigest(input: {
       from: input.from,
       to: input.to
     },
-    notes: notes.map(compactNote),
+    notes: notes.map(input.projectNoteForRead).map(compactNote),
     counts: {
       observed: observed.length,
       updated: updated.length,
@@ -11634,6 +11641,7 @@ function buildOperatorOverview(request: {
   headers: Record<string, unknown>;
   query?: Record<string, unknown>;
   noteScope: NoteReadScope;
+  projectNoteForRead: (note: Note) => Note;
 }) {
   const auth = parseRequestAuth(request.headers);
   const readScope = resolveEffectiveReadScope(request.query, auth);
@@ -11729,7 +11737,8 @@ function buildOperatorOverview(request: {
     fromDateKey: yesterdayRange.dateKey,
     toDateKey: todayRange.dateKey,
     userIds,
-    noteScope: request.noteScope
+    noteScope: request.noteScope,
+    projectNoteForRead: request.projectNoteForRead
   });
 
   const signalMatrix = buildSignalMatrix({
@@ -12390,14 +12399,14 @@ export async function buildServer(
         (entry): entry is Record<string, unknown> & { id: string } =>
           Boolean(
             entry &&
-              typeof entry === "object" &&
-              !Array.isArray(entry) &&
-              typeof (entry as Record<string, unknown>).id === "string" &&
-              entityMatchesCrudScope(
-                ownership.entityType,
-                entry as Record<string, unknown> & { id: string },
-                auth.token!.scopePolicy
-              )
+            typeof entry === "object" &&
+            !Array.isArray(entry) &&
+            typeof (entry as Record<string, unknown>).id === "string" &&
+            entityMatchesCrudScope(
+              ownership.entityType,
+              entry as Record<string, unknown> & { id: string },
+              auth.token!.scopePolicy
+            )
           )
       );
       reply.removeHeader("content-length");
@@ -13443,7 +13452,6 @@ export async function buildServer(
     payload: unknown,
     routeFamily: string
   ) => {
-    requireNestedPsycheNoteMutationAccess(context, payload, routeFamily);
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
       return;
     }
@@ -13452,7 +13460,6 @@ export async function buildServer(
       ...(Array.isArray(record.notes) ? record.notes : []),
       ...(record.closeoutNote ? [record.closeoutNote] : [])
     ];
-    const artifactIds = new Set<string>();
     for (const note of notes) {
       if (!note || typeof note !== "object" || Array.isArray(note)) {
         continue;
@@ -13467,21 +13474,118 @@ export async function buildServer(
         }
         const candidate = link as Record<string, unknown>;
         if (
-          candidate.entityType === "artifact" &&
-          typeof candidate.entityId === "string"
+          typeof candidate.entityType !== "string" ||
+          typeof candidate.entityId !== "string"
         ) {
-          artifactIds.add(candidate.entityId);
+          continue;
+        }
+        const parsedEntityType = crudEntityTypeSchema.safeParse(
+          candidate.entityType
+        );
+        if (!parsedEntityType.success) {
+          continue;
+        }
+        const structuredLink: NoteLink = {
+          entityType: parsedEntityType.data,
+          entityId: candidate.entityId,
+          anchorKey:
+            typeof candidate.anchorKey === "string" ? candidate.anchorKey : null
+        };
+        if (!canReadStructuredNoteLink(context, structuredLink)) {
+          throw new HttpError(
+            404,
+            "note_link_not_found",
+            "Linked record not found."
+          );
+        }
+        if (
+          isPsycheEntityType(structuredLink.entityType) &&
+          isPsycheAuthRequired()
+        ) {
+          managers.authorization.requireTokenScope(context, "psyche.note", {
+            entityType: structuredLink.entityType,
+            routeFamily
+          });
         }
       }
     }
-    for (const artifactId of artifactIds) {
+  };
+  const requireTaskBatchCloseoutNoteMutationAccess = (
+    context: ReturnType<typeof authenticateRequest>,
+    operations: Array<{
+      entityType: CrudEntityType;
+      data?: unknown;
+      patch?: unknown;
+    }>
+  ) => {
+    for (const operation of operations) {
+      if (operation.entityType !== "task") {
+        continue;
+      }
+      requireTaskCloseoutNoteMutationAccess(
+        context,
+        operation.data ?? operation.patch,
+        "entity_batch"
+      );
+    }
+  };
+  const canReadStructuredNoteLink = (
+    context: ReturnType<typeof authenticateRequest>,
+    link: NoteLink
+  ) => {
+    if (
+      (link.entityType === "artifact" &&
+        !hasTokenScope(context, "artifact.readMetadata")) ||
+      (link.entityType === "person" &&
+        !hasTokenScope(context, "people:read:basic")) ||
+      (isPsycheEntityType(link.entityType) &&
+        isPsycheAuthRequired() &&
+        !hasTokenScope(context, "psyche.read"))
+    ) {
+      return false;
+    }
+    if (link.entityType === "note") {
+      const linkedNote = getNoteById(link.entityId);
       if (
-        !hasTokenScope(context, "artifact.readMetadata") ||
-        !getArtifactById(artifactId, toActivityContext(context))
+        !linkedNote ||
+        !isNoteVisibleToScope(linkedNote, noteReadScopeForAuth(context))
       ) {
-        throw new HttpError(404, "artifact_not_found", "Artifact not found.");
+        return false;
       }
     }
+    const scope = context.token?.scopePolicy;
+    return crudEntityIsLiveAndVisible(link.entityType, link.entityId, {
+      userIds: scope?.userIds ?? [],
+      projectIds: scope?.projectIds ?? [],
+      tagIds: scope?.tagIds ?? []
+    });
+  };
+  const projectNoteForRead = (
+    note: Note,
+    context: ReturnType<typeof authenticateRequest>
+  ) =>
+    projectNoteLinksForRead(note, (link) =>
+      canReadStructuredNoteLink(context, link)
+    );
+  const noteLinkIdentity = (link: NoteLink) =>
+    `${link.entityType}\u0000${link.entityId}\u0000${link.anchorKey ?? ""}`;
+  const preserveUnavailableNoteLinksForMutation = (
+    current: Note,
+    submittedLinks: NoteLink[] | undefined,
+    context: ReturnType<typeof authenticateRequest>
+  ) => {
+    if (submittedLinks === undefined) {
+      return undefined;
+    }
+    const submittedIdentities = new Set(submittedLinks.map(noteLinkIdentity));
+    return [
+      ...submittedLinks,
+      ...current.links.filter(
+        (link) =>
+          !canReadStructuredNoteLink(context, link) &&
+          !submittedIdentities.has(noteLinkIdentity(link))
+      )
+    ];
   };
   const requirePsycheNoteBatchMutationAccess = (
     context: ReturnType<typeof authenticateRequest>,
@@ -13776,6 +13880,73 @@ export async function buildServer(
       })
     } as T;
   };
+  const redactBatchNotePayload = <T>(
+    payload: T,
+    context: ReturnType<typeof authenticateRequest>
+  ): T => {
+    if (!payload || typeof payload !== "object") {
+      return payload;
+    }
+    const projectNoteRecord = (value: unknown) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return value;
+      }
+      const record = value as Record<string, unknown>;
+      if (
+        record.entityType !== "note" ||
+        !record.entity ||
+        typeof record.entity !== "object" ||
+        Array.isArray(record.entity)
+      ) {
+        return record;
+      }
+      const next: Record<string, unknown> = {
+        ...record,
+        entity: projectNoteForRead(record.entity as Note, context)
+      };
+      if (
+        record.deletedRecord &&
+        typeof record.deletedRecord === "object" &&
+        !Array.isArray(record.deletedRecord)
+      ) {
+        const deletedRecord = record.deletedRecord as Record<string, unknown>;
+        if (
+          deletedRecord.snapshot &&
+          typeof deletedRecord.snapshot === "object" &&
+          !Array.isArray(deletedRecord.snapshot)
+        ) {
+          next.deletedRecord = {
+            ...deletedRecord,
+            snapshot: projectNoteForRead(
+              deletedRecord.snapshot as Note,
+              context
+            )
+          };
+        }
+      }
+      return next;
+    };
+    const envelope = payload as Record<string, unknown>;
+    if (!Array.isArray(envelope.results)) {
+      return payload;
+    }
+    return {
+      ...envelope,
+      results: envelope.results.map((result) => {
+        if (!result || typeof result !== "object" || Array.isArray(result)) {
+          return result;
+        }
+        const record = result as Record<string, unknown>;
+        if (Array.isArray(record.matches)) {
+          return {
+            ...record,
+            matches: record.matches.map(projectNoteRecord)
+          };
+        }
+        return projectNoteRecord(record);
+      })
+    } as T;
+  };
   const redactBatchEntityPayload = <T>(
     payload: T,
     context: ReturnType<typeof authenticateRequest>,
@@ -13787,7 +13958,10 @@ export async function buildServer(
     const preferenceRedacted = transformPreferenceCatalog
       ? redactBatchPreferencePayload(personRedacted, transformPreferenceCatalog)
       : personRedacted;
-    return redactBatchArtifactPayload(preferenceRedacted);
+    return redactBatchNotePayload(
+      redactBatchArtifactPayload(preferenceRedacted),
+      context
+    );
   };
   const requirePsycheScopedAccess = (
     headers: Record<string, unknown>,
@@ -14470,70 +14644,55 @@ export async function buildServer(
     }
     return principal;
   };
-  app.get(
-    "/api/v1/auth/local/legacy-host-execution",
-    async (request) => {
-      requireScopedAccess(
-        request.headers as Record<string, unknown>,
-        ["read"],
-        { route: "/api/v1/auth/local/legacy-host-execution" }
-      );
-      requireDirectLocalOperator(request);
-      return localCapabilityApprovals.read();
-    }
-  );
-  app.post(
-    "/api/v1/auth/local/legacy-host-execution",
-    async (request) => {
-      requireScopedAccess(
-        request.headers as Record<string, unknown>,
-        ["write"],
-        { route: "/api/v1/auth/local/legacy-host-execution" }
-      );
-      const principal = requireDirectLocalOperator(request);
-      const input = z
-        .object({
-          warningVersion: z.number().int().positive(),
-          acknowledged: z.literal(true)
-        })
-        .strict()
-        .parse(request.body ?? {});
-      try {
-        return localCapabilityApprovals.approve({
-          principal,
-          directOwnerChannel: true,
-          ...input
-        });
-      } catch (error) {
-        if (error instanceof LocalCapabilityApprovalError) {
-          throw new HttpError(403, error.code, error.message);
-        }
-        throw error;
+  app.get("/api/v1/auth/local/legacy-host-execution", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
+      route: "/api/v1/auth/local/legacy-host-execution"
+    });
+    requireDirectLocalOperator(request);
+    return localCapabilityApprovals.read();
+  });
+  app.post("/api/v1/auth/local/legacy-host-execution", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/auth/local/legacy-host-execution"
+    });
+    const principal = requireDirectLocalOperator(request);
+    const input = z
+      .object({
+        warningVersion: z.number().int().positive(),
+        acknowledged: z.literal(true)
+      })
+      .strict()
+      .parse(request.body ?? {});
+    try {
+      return localCapabilityApprovals.approve({
+        principal,
+        directOwnerChannel: true,
+        ...input
+      });
+    } catch (error) {
+      if (error instanceof LocalCapabilityApprovalError) {
+        throw new HttpError(403, error.code, error.message);
       }
+      throw error;
     }
-  );
-  app.delete(
-    "/api/v1/auth/local/legacy-host-execution",
-    async (request) => {
-      requireScopedAccess(
-        request.headers as Record<string, unknown>,
-        ["write"],
-        { route: "/api/v1/auth/local/legacy-host-execution" }
-      );
-      const principal = requireDirectLocalOperator(request);
-      try {
-        return localCapabilityApprovals.revoke({
-          principal,
-          directOwnerChannel: true
-        });
-      } catch (error) {
-        if (error instanceof LocalCapabilityApprovalError) {
-          throw new HttpError(403, error.code, error.message);
-        }
-        throw error;
+  });
+  app.delete("/api/v1/auth/local/legacy-host-execution", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/auth/local/legacy-host-execution"
+    });
+    const principal = requireDirectLocalOperator(request);
+    try {
+      return localCapabilityApprovals.revoke({
+        principal,
+        directOwnerChannel: true
+      });
+    } catch (error) {
+      if (error instanceof LocalCapabilityApprovalError) {
+        throw new HttpError(403, error.code, error.message);
       }
+      throw error;
     }
-  );
+  });
   app.post("/api/v1/auth/local/begin", async (request) => {
     if (!isDirectLocalTransport(request)) {
       throw new HttpError(
@@ -16156,12 +16315,9 @@ export async function buildServer(
         })
       : (() => {
           if (!localOwnerPrincipal) {
-            requireOperatorSession(
-              request.headers as Record<string, unknown>,
-              {
-                route: "/api/v1/health/pairing-sessions"
-              }
-            );
+            requireOperatorSession(request.headers as Record<string, unknown>, {
+              route: "/api/v1/health/pairing-sessions"
+            });
           }
           const parsedInput = createCompanionPairingSessionSchema.parse(
             request.body ?? {}
@@ -16827,7 +16983,8 @@ export async function buildServer(
         hostname: request.hostname,
         headers: request.headers as Record<string, unknown>,
         query,
-        noteScope: noteReadScopeForAuth(auth, userIds)
+        noteScope: noteReadScopeForAuth(auth, userIds),
+        projectNoteForRead: (note) => projectNoteForRead(note, auth)
       })
     };
   });
@@ -18046,6 +18203,31 @@ export async function buildServer(
       { route: "/api/v1/notes" }
     );
     const query = notesListQuerySchema.parse(request.query ?? {});
+    const effectiveUserIds = resolveEffectiveUserIdsForReads(
+      query.userIds.length > 0 ? { userIds: query.userIds } : undefined,
+      auth
+    );
+    const linkedFilters: NoteLink[] = [
+      ...(query.linkedEntityType && query.linkedEntityId
+        ? [
+            {
+              entityType: query.linkedEntityType,
+              entityId: query.linkedEntityId,
+              anchorKey: null
+            }
+          ]
+        : []),
+      ...query.linkedTo.map((link) => ({ ...link, anchorKey: null }))
+    ];
+    if (linkedFilters.some((link) => !canReadStructuredNoteLink(auth, link))) {
+      return {
+        notes: [],
+        total: 0,
+        limit: query.limit ?? 40,
+        nextCursor: null,
+        hasMore: false
+      };
+    }
     const psycheLinkedEntityType = [
       query.linkedEntityType,
       ...query.linkedTo.map((link) => link.entityType)
@@ -18062,21 +18244,21 @@ export async function buildServer(
     }
     const canReadPsycheNotes =
       !isPsycheAuthRequired() || hasTokenScope(auth, "psyche.read");
-    const effectiveUserIds = resolveEffectiveUserIdsForReads(
-      query.userIds.length > 0 ? { userIds: query.userIds } : undefined,
-      auth
-    );
     const accessibleSpaceIds = listAccessibleWikiSpacesForScope(
       toWikiUserScope(auth),
       "read"
     ).map((space) => space.id);
-    return listNotesPage(
+    const page = listNotesPage(
       { ...query, userIds: effectiveUserIds },
       {
         accessibleSpaceIds,
         includePsyche: canReadPsycheNotes
       }
     );
+    return {
+      ...page,
+      notes: page.notes.map((note) => projectNoteForRead(note, auth))
+    };
   });
   app.post("/api/v1/notes", async (request, reply) => {
     const input = createNoteSchema.parse(request.body ?? {});
@@ -18106,7 +18288,7 @@ export async function buildServer(
       toActivityContext(auth)
     );
     reply.code(201);
-    return { note };
+    return { note: projectNoteForRead(note as Note, auth) };
   });
   app.get("/api/v1/notes/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -18135,7 +18317,7 @@ export async function buildServer(
         }
       );
     }
-    return { note: current };
+    return { note: projectNoteForRead(current, auth) };
   });
   app.patch("/api/v1/notes/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -18184,10 +18366,16 @@ export async function buildServer(
           userId: userId ?? current.userId
         })
       : current.spaceId;
+    const preservedLinks = preserveUnavailableNoteLinksForMutation(
+      current,
+      patch.links,
+      auth
+    );
     const note = updateNote(
       id,
       {
         ...patch,
+        ...(preservedLinks !== undefined ? { links: preservedLinks } : {}),
         ...(userId !== undefined ? { userId } : {}),
         ...(nextSpaceId ? { spaceId: nextSpaceId } : {})
       },
@@ -18197,7 +18385,7 @@ export async function buildServer(
       reply.code(404);
       return { error: "Note not found" };
     }
-    return { note };
+    return { note: projectNoteForRead(note as Note, auth) };
   });
   app.delete("/api/v1/notes/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -18235,7 +18423,7 @@ export async function buildServer(
       reply.code(404);
       return { error: "Note not found" };
     }
-    return { note };
+    return { note: projectNoteForRead(note as Note, auth) };
   });
   type WikiSpaceAuth = ReturnType<typeof requireScopedAccess>;
   type WikiSpaceAccessMode = "read" | "write";
@@ -19198,11 +19386,7 @@ export async function buildServer(
 
     const jobId = result.job?.job.id;
     if (jobId) {
-      enqueueWikiIngestJob(
-        jobId,
-        requireGatewayPrincipal(request),
-        request.id
-      );
+      enqueueWikiIngestJob(jobId, requireGatewayPrincipal(request), request.id);
     }
     reply.code(201);
     return result;
@@ -19234,11 +19418,7 @@ export async function buildServer(
     );
     const jobId = result.job?.job.id;
     if (jobId) {
-      enqueueWikiIngestJob(
-        jobId,
-        requireGatewayPrincipal(request),
-        request.id
-      );
+      enqueueWikiIngestJob(jobId, requireGatewayPrincipal(request), request.id);
     }
     reply.code(201);
     return result;
@@ -21177,8 +21357,8 @@ export async function buildServer(
   ) => {
     const hasExplicitUserSelection = Boolean(
       query &&
-        (Object.prototype.hasOwnProperty.call(query, "userId") ||
-          Object.prototype.hasOwnProperty.call(query, "userIds"))
+      (Object.prototype.hasOwnProperty.call(query, "userId") ||
+        Object.prototype.hasOwnProperty.call(query, "userIds"))
     );
     const requestedUserIds = resolveScopedUserIds(query);
     const readScope = resolveEffectiveReadScope(query, auth);
@@ -21469,7 +21649,9 @@ export async function buildServer(
         { route: "/api/v1/attention-inbox/:id/actions/start" }
       );
       const { id } = request.params as { id: string };
-      const input = attentionResolutionStartInputSchema.parse(request.body ?? {});
+      const input = attentionResolutionStartInputSchema.parse(
+        request.body ?? {}
+      );
       const idempotencyKey = parseIdempotencyKey(
         request.headers as Record<string, unknown>
       );
@@ -22473,10 +22655,7 @@ export async function buildServer(
   ) => {
     const principal = requireGatewayPrincipal(request);
     const contract = request.forgeSecurity?.contract;
-    const recordOutcome = (
-      outcome: "admitted" | "denied",
-      reason: string
-    ) =>
+    const recordOutcome = (outcome: "admitted" | "denied", reason: string) =>
       securityAuditLedger.record({
         requestId: request.id,
         method: "DATA_ADMINISTRATION",
@@ -22515,12 +22694,14 @@ export async function buildServer(
     requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
       route: "/api/v1/settings/data/backups"
     });
-    requireRecentDataAdministration(request, "creating a credential-bearing backup");
+    requireRecentDataAdministration(
+      request,
+      "creating a credential-bearing backup"
+    );
     const backup = await runAuditedDataAdministration(
       request,
       "data_backup",
-      () =>
-        createDataBackup(createDataBackupSchema.parse(request.body ?? {}))
+      () => createDataBackup(createDataBackupSchema.parse(request.body ?? {}))
     );
     reply.code(201);
     return {
@@ -22535,15 +22716,12 @@ export async function buildServer(
     requireRecentDataAdministration(request, "restoring a Forge backup");
     const { id } = request.params as { id: string };
     return {
-      data: await runAuditedDataAdministration(
-        request,
-        "data_restore",
-        () =>
-          restoreDataBackup(
-            id,
-            restoreDataBackupSchema.parse(request.body ?? {}),
-            { secretsManager: managers.secrets }
-          )
+      data: await runAuditedDataAdministration(request, "data_restore", () =>
+        restoreDataBackup(
+          id,
+          restoreDataBackupSchema.parse(request.body ?? {}),
+          { secretsManager: managers.secrets }
+        )
       )
     };
   });
@@ -22557,10 +22735,9 @@ export async function buildServer(
         request,
         "data_root_switch",
         () =>
-          switchDataRoot(
-            switchDataRootSchema.parse(request.body ?? {}),
-            { secretsManager: managers.secrets }
-          )
+          switchDataRoot(switchDataRootSchema.parse(request.body ?? {}), {
+            secretsManager: managers.secrets
+          })
       )
     };
   });
@@ -25584,6 +25761,7 @@ export async function buildServer(
       { route: "/api/v1/entities/create" }
     );
     const input = batchCreateEntitiesSchema.parse(request.body ?? {});
+    requireTaskBatchCloseoutNoteMutationAccess(auth, input.operations);
     requirePeopleBatchMutationAccess(auth, input.operations);
     requirePsycheNoteBatchMutationAccess(auth, input.operations);
     requirePsycheVocabularyBatchMutationAccess(auth, input.operations);
@@ -25599,17 +25777,53 @@ export async function buildServer(
       { route: "/api/v1/entities/update" }
     );
     const input = batchUpdateEntitiesSchema.parse(request.body ?? {});
-    requirePeopleBatchMutationAccess(auth, input.operations);
-    requirePsycheNoteBatchMutationAccess(auth, input.operations);
-    requirePsycheVocabularyBatchMutationAccess(auth, input.operations);
-    requirePreferenceCatalogBatchLinkAccess(input.operations, auth);
+    const preparedInput = {
+      ...input,
+      operations: input.operations.map((operation) => {
+        if (operation.entityType !== "note") {
+          return operation;
+        }
+        const parsedPatch = updateNoteSchema.safeParse(operation.patch);
+        if (!parsedPatch.success || parsedPatch.data.links === undefined) {
+          return operation;
+        }
+        const current = getNoteById(operation.id);
+        const allowedUserIds = auth.token?.scopePolicy.userIds ?? [];
+        const canWriteCurrent =
+          current &&
+          (allowedUserIds.length === 0 ||
+            filterOwnedEntities("note", [current], allowedUserIds).length ===
+              1) &&
+          canAccessWikiNoteForScope(toWikiUserScope(auth), current, "write");
+        if (!current || !canWriteCurrent) {
+          return operation;
+        }
+        const links = preserveUnavailableNoteLinksForMutation(
+          current,
+          parsedPatch.data.links,
+          auth
+        );
+        return {
+          ...operation,
+          patch: {
+            ...operation.patch,
+            ...(links !== undefined ? { links } : {})
+          }
+        };
+      })
+    };
+    requireTaskBatchCloseoutNoteMutationAccess(auth, preparedInput.operations);
+    requirePeopleBatchMutationAccess(auth, preparedInput.operations);
+    requirePsycheNoteBatchMutationAccess(auth, preparedInput.operations);
+    requirePsycheVocabularyBatchMutationAccess(auth, preparedInput.operations);
+    requirePreferenceCatalogBatchLinkAccess(preparedInput.operations, auth);
     const result = runInTransaction(() => {
-      const before = input.operations.map((operation) =>
+      const before = preparedInput.operations.map((operation) =>
         getEntityById(operation.entityType, operation.id)
       );
-      const updated = updateEntities(input, toActivityContext(auth));
+      const updated = updateEntities(preparedInput, toActivityContext(auth));
       updated.results = updated.results.map((operationResult, index) => {
-        const operation = input.operations[index];
+        const operation = preparedInput.operations[index];
         const previous = before[index];
         if (!operationResult.ok || !operation || !previous) {
           return operationResult;
@@ -26004,9 +26218,14 @@ export async function buildServer(
       return { error: "Task run not found" };
     }
     const input = taskRunCompleteSchema.parse(request.body ?? {});
+    const now = new Date();
+    const replayed = preflightTaskRunCompletionReplay(id, input, now);
+    if (replayed) {
+      return { taskRun: replayed };
+    }
     requireTaskCloseoutNoteMutationAccess(auth, input, "task_run_complete");
     return {
-      taskRun: completeTaskRun(id, input, new Date(), toActivityContext(auth))
+      taskRun: completeTaskRun(id, input, now, toActivityContext(auth))
     };
   });
   app.post("/api/v1/task-runs/:id/complete", async (request, reply) => {
@@ -26021,9 +26240,14 @@ export async function buildServer(
       return { error: "Task run not found" };
     }
     const input = taskRunCompleteSchema.parse(request.body ?? {});
+    const now = new Date();
+    const replayed = preflightTaskRunCompletionReplay(id, input, now);
+    if (replayed) {
+      return { taskRun: replayed };
+    }
     requireTaskCloseoutNoteMutationAccess(auth, input, "task_run_complete");
     return {
-      taskRun: completeTaskRun(id, input, new Date(), toActivityContext(auth))
+      taskRun: completeTaskRun(id, input, now, toActivityContext(auth))
     };
   });
 
@@ -26040,9 +26264,14 @@ export async function buildServer(
       return { error: "Task run not found" };
     }
     const input = taskRunReleaseSchema.parse(request.body ?? {});
+    const now = new Date();
+    const replayed = preflightTaskRunReleaseReplay(id, input, now);
+    if (replayed) {
+      return { taskRun: replayed };
+    }
     requireTaskCloseoutNoteMutationAccess(auth, input, "task_run_release");
     return {
-      taskRun: releaseTaskRun(id, input, new Date(), toActivityContext(auth))
+      taskRun: releaseTaskRun(id, input, now, toActivityContext(auth))
     };
   });
   app.post("/api/v1/task-runs/:id/release", async (request, reply) => {
@@ -26057,9 +26286,14 @@ export async function buildServer(
       return { error: "Task run not found" };
     }
     const input = taskRunReleaseSchema.parse(request.body ?? {});
+    const now = new Date();
+    const replayed = preflightTaskRunReleaseReplay(id, input, now);
+    if (replayed) {
+      return { taskRun: replayed };
+    }
     requireTaskCloseoutNoteMutationAccess(auth, input, "task_run_release");
     return {
-      taskRun: releaseTaskRun(id, input, new Date(), toActivityContext(auth))
+      taskRun: releaseTaskRun(id, input, now, toActivityContext(auth))
     };
   });
 

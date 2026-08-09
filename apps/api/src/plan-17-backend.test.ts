@@ -13,6 +13,8 @@ import {
   claimTaskRun,
   completeTaskRun,
   getTaskRunById,
+  preflightTaskRunCompletionReplay,
+  preflightTaskRunReleaseReplay,
   releaseTaskRun
 } from "./repositories/task-runs.js";
 import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
@@ -220,7 +222,7 @@ test("PLAN-17 rejects unsafe new URLs and redacts unsafe legacy URLs", async () 
 
     const legacy = getTaskById(task.id)?.gitRefs[0];
     assert.equal(legacy?.url, null);
-    assert.equal(legacy?.rawUrl, "file:///Users/private/repository");
+    assert.equal(legacy?.rawUrl, null);
     assert.equal(legacy?.urlSafety, "unsafe");
   });
 });
@@ -345,7 +347,15 @@ test("PLAN-17 completion fingerprints permit exact replay and reject changed rep
       leaseTtlSeconds: 900
     });
 
+    assert.equal(
+      preflightTaskRunCompletionReplay(claimed.run.id, structuredCloseout),
+      null
+    );
     const completed = completeTaskRun(claimed.run.id, structuredCloseout);
+    assert.equal(
+      preflightTaskRunCompletionReplay(claimed.run.id, structuredCloseout)?.id,
+      completed.id
+    );
     const replayed = completeTaskRun(claimed.run.id, structuredCloseout);
     assert.equal(completed.status, "completed");
     assert.equal(replayed.id, completed.id);
@@ -363,7 +373,7 @@ test("PLAN-17 completion fingerprints permit exact replay and reject changed rep
 
     expectHttpError(
       () =>
-        completeTaskRun(claimed.run.id, {
+        preflightTaskRunCompletionReplay(claimed.run.id, {
           ...structuredCloseout,
           completionReport: {
             ...structuredCloseout.completionReport,
@@ -411,17 +421,34 @@ test("PLAN-17 release remains handoff-only and quick completion is deferred", as
       note: "Handoff",
       closeoutNote: { contentMarkdown: "Paused for review." }
     } as const;
+    assert.equal(preflightTaskRunReleaseReplay(claimed.run.id, handoff), null);
     const released = releaseTaskRun(claimed.run.id, handoff);
+    assert.equal(
+      preflightTaskRunReleaseReplay(claimed.run.id, handoff)?.id,
+      released.id
+    );
     assert.equal(released.status, "released");
     assert.equal(getTaskById(task.id)?.status, "in_progress");
     assert.equal(getTaskById(task.id)?.completionReport, null);
     assert.equal(getTaskById(task.id)?.closeoutState, "not_applicable");
     const replayed = releaseTaskRun(claimed.run.id, handoff);
     assert.equal(replayed.id, released.id);
-    const contentFreeReplay = releaseTaskRun(claimed.run.id, {
-      actor: "Codex"
-    });
-    assert.equal(contentFreeReplay.id, released.id);
+    expectHttpError(
+      () =>
+        preflightTaskRunReleaseReplay(claimed.run.id, {
+          actor: "Codex"
+        }),
+      409,
+      "task_run_handoff_conflict"
+    );
+    expectHttpError(
+      () =>
+        releaseTaskRun(claimed.run.id, {
+          actor: "Codex"
+        }),
+      409,
+      "task_run_handoff_conflict"
+    );
 
     const activity = getDatabase()
       .prepare(
@@ -436,7 +463,7 @@ test("PLAN-17 release remains handoff-only and quick completion is deferred", as
 
     expectHttpError(
       () =>
-        releaseTaskRun(claimed.run.id, {
+        preflightTaskRunReleaseReplay(claimed.run.id, {
           ...handoff,
           note: "Changed handoff"
         }),
@@ -563,6 +590,47 @@ test("PLAN-17 onboarding publishes rich completion and distinct release contract
     assert.ok(notes.some((note) => /truthfully deferred/.test(note)));
     assert.ok(
       notes.some((note) => /Release accepts only handoff note/.test(note))
+    );
+
+    const openApiResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/openapi.json",
+      headers: { cookie }
+    });
+    assert.equal(openApiResponse.statusCode, 200, openApiResponse.body);
+    const openApi = openApiResponse.json() as {
+      components: {
+        schemas: Record<
+          string,
+          {
+            required?: string[];
+            properties?: Record<string, { description?: string }>;
+          }
+        >;
+      };
+      paths: Record<
+        string,
+        Record<string, { description?: string } | undefined>
+      >;
+    };
+    assert.ok(
+      openApi.components.schemas.Note?.required?.includes(
+        "unavailableLinkCount"
+      )
+    );
+    assert.match(
+      openApi.components.schemas.Note?.properties?.links?.description ?? "",
+      /Only live linked targets accessible/
+    );
+    assert.match(
+      JSON.stringify(
+        openApi.components.schemas.WorkItemGitRef?.properties?.rawUrl ?? {}
+      ),
+      /Unsafe legacy values are redacted to null/
+    );
+    assert.match(
+      openApi.paths["/api/v1/task-runs/{id}/complete"]?.post?.description ?? "",
+      /resolved before present-day linked-record validation/
     );
   });
 });

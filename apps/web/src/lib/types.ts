@@ -806,6 +806,7 @@ export interface Note extends OwnedEntity {
   createdAt: string;
   updatedAt: string;
   links: NoteLink[];
+  unavailableLinkCount?: number;
   tags?: string[];
   destroyAt?: string | null;
 }

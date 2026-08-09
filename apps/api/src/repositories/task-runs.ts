@@ -1171,10 +1171,6 @@ function isMinimalLegacyCompletionReplay(
   );
 }
 
-function isContentFreeReleaseReplay(input: ParsedTaskRunReleaseInput): boolean {
-  return input.note.length === 0 && input.closeoutNote === undefined;
-}
-
 function isMinimalLegacyReleaseReplay(
   input: ParsedTaskRunReleaseInput,
   current: TaskRunRow
@@ -1211,6 +1207,70 @@ function throwTaskRunHandoffConflict(
   );
 }
 
+function replayCompletedTaskRun(
+  taskRunId: string,
+  current: TaskRunRow,
+  parsedInput: ParsedTaskRunCompleteInput,
+  now: Date
+): TaskRun {
+  assertActorMatch(current, parsedInput.actor, now);
+  const persistedFingerprint = readTaskRunCloseoutFingerprint(taskRunId);
+  if (persistedFingerprint) {
+    if (persistedFingerprint !== taskRunCloseoutFingerprint(parsedInput)) {
+      throwTaskRunCloseoutConflict(taskRunId, current, now);
+    }
+  } else if (!isMinimalLegacyCompletionReplay(parsedInput, current)) {
+    throwTaskRunCloseoutConflict(taskRunId, current, now);
+  }
+  return mapTaskRun(current, now);
+}
+
+function replayReleasedTaskRun(
+  taskRunId: string,
+  current: TaskRunRow,
+  parsedInput: ParsedTaskRunReleaseInput,
+  now: Date
+): TaskRun {
+  assertActorMatch(current, parsedInput.actor, now);
+  const persistedFingerprint = readTaskRunReleaseFingerprint(taskRunId);
+  if (persistedFingerprint) {
+    if (persistedFingerprint !== taskRunReleaseFingerprint(parsedInput)) {
+      throwTaskRunHandoffConflict(taskRunId, current, now);
+    }
+  } else if (!isMinimalLegacyReleaseReplay(parsedInput, current)) {
+    throwTaskRunHandoffConflict(taskRunId, current, now);
+  }
+  return mapTaskRun(current, now);
+}
+
+export function preflightTaskRunCompletionReplay(
+  taskRunId: string,
+  input: TaskRunCompleteInput,
+  now = new Date()
+): TaskRun | null {
+  const parsedInput = taskRunCompleteSchema.parse(input);
+  return runInTransaction(() => {
+    const current = requireRun(taskRunId);
+    return current.status === "completed"
+      ? replayCompletedTaskRun(taskRunId, current, parsedInput, now)
+      : null;
+  });
+}
+
+export function preflightTaskRunReleaseReplay(
+  taskRunId: string,
+  input: TaskRunReleaseInput,
+  now = new Date()
+): TaskRun | null {
+  const parsedInput = taskRunReleaseSchema.parse(input);
+  return runInTransaction(() => {
+    const current = requireRun(taskRunId);
+    return current.status === "released"
+      ? replayReleasedTaskRun(taskRunId, current, parsedInput, now)
+      : null;
+  });
+}
+
 export function completeTaskRun(
   taskRunId: string,
   input: TaskRunCompleteInput,
@@ -1222,16 +1282,7 @@ export function completeTaskRun(
     markExpiredRunsTimedOutInTransaction(now);
     const current = requireRun(taskRunId);
     if (current.status === "completed") {
-      assertActorMatch(current, parsedInput.actor, now);
-      const persistedFingerprint = readTaskRunCloseoutFingerprint(taskRunId);
-      if (persistedFingerprint) {
-        if (persistedFingerprint !== taskRunCloseoutFingerprint(parsedInput)) {
-          throwTaskRunCloseoutConflict(taskRunId, current, now);
-        }
-      } else if (!isMinimalLegacyCompletionReplay(parsedInput, current)) {
-        throwTaskRunCloseoutConflict(taskRunId, current, now);
-      }
-      return mapTaskRun(current, now);
+      return replayCompletedTaskRun(taskRunId, current, parsedInput, now);
     }
     if (current.status !== "active") {
       throw new HttpError(
@@ -1330,19 +1381,7 @@ export function releaseTaskRun(
     markExpiredRunsTimedOutInTransaction(now);
     const current = requireRun(taskRunId);
     if (current.status === "released") {
-      assertActorMatch(current, parsedInput.actor, now);
-      const persistedFingerprint = readTaskRunReleaseFingerprint(taskRunId);
-      if (persistedFingerprint) {
-        if (
-          !isContentFreeReleaseReplay(parsedInput) &&
-          persistedFingerprint !== taskRunReleaseFingerprint(parsedInput)
-        ) {
-          throwTaskRunHandoffConflict(taskRunId, current, now);
-        }
-      } else if (!isMinimalLegacyReleaseReplay(parsedInput, current)) {
-        throwTaskRunHandoffConflict(taskRunId, current, now);
-      }
-      return mapTaskRun(current, now);
+      return replayReleasedTaskRun(taskRunId, current, parsedInput, now);
     }
     if (current.status !== "active") {
       throw new HttpError(

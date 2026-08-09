@@ -1128,6 +1128,7 @@ export const noteSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   links: z.array(noteLinkSchema).default([]),
+  unavailableLinkCount: z.number().int().nonnegative().default(0),
   tags: uniqueNoteTagArraySchema.default([]),
   destroyAt: dateTimeSchema.nullable().default(null),
   ...ownershipShape

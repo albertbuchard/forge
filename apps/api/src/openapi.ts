@@ -1354,6 +1354,8 @@ export function buildOpenApiDocument() {
   const closeoutNoteLinkInput = {
     type: "object",
     additionalProperties: false,
+    description:
+      "The target must be live and accessible under the caller's capabilities and user, project, and tag scope. Missing, deleted, and inaccessible targets all return the same generic 404.",
     required: ["entityType", "entityId"],
     properties: {
       entityType: { type: "string", maxLength: 80 },
@@ -1521,7 +1523,9 @@ export function buildOpenApiDocument() {
       workItemId: { type: "string", minLength: 1 },
       rawUrl: nullable({
         type: "string",
-        maxLength: TASK_CLOSEOUT_LIMITS.gitUrlLength
+        maxLength: TASK_CLOSEOUT_LIMITS.gitUrlLength,
+        description:
+          "Original URL when it is absent or safe. Unsafe legacy values are redacted to null."
       }),
       urlSafety: {
         type: "string",
@@ -2853,24 +2857,12 @@ export function buildOpenApiDocument() {
   const noteCreateContext = {
     type: "object",
     additionalProperties: false,
-    required: [
-      "version",
-      "sourceEntityType",
-      "sourceEntityId",
-      "anchorKey"
-    ],
+    required: ["version", "sourceEntityType", "sourceEntityId", "anchorKey"],
     properties: {
       version: { type: "integer", enum: [1] },
       sourceEntityType: {
         type: "string",
-        enum: [
-          "goal",
-          "project",
-          "task",
-          "strategy",
-          "habit",
-          "trigger_report"
-        ]
+        enum: ["goal", "project", "task", "strategy", "habit", "trigger_report"]
       },
       sourceEntityId: { type: "string", minLength: 1, maxLength: 256 },
       anchorKey: nullable({ type: "string", maxLength: 120 })
@@ -2902,6 +2894,7 @@ export function buildOpenApiDocument() {
       "createdAt",
       "updatedAt",
       "links",
+      "unavailableLinkCount",
       "tags",
       "destroyAt",
       "userId",
@@ -2927,12 +2920,27 @@ export function buildOpenApiDocument() {
       author: nullable({ type: "string" }),
       source: { type: "string", enum: ["ui", "openclaw", "agent", "system"] },
       sourcePath: { type: "string" },
-      frontmatter: { type: "object", additionalProperties: true },
+      frontmatter: {
+        type: "object",
+        additionalProperties: true,
+        description:
+          "Canonical Note metadata. Its linkedEntities mirror is projected with the same access policy as links, so unavailable identifiers are never exposed here."
+      },
       revisionHash: { type: "string" },
       lastSyncedAt: nullable({ type: "string", format: "date-time" }),
       createdAt: { type: "string", format: "date-time" },
       updatedAt: { type: "string", format: "date-time" },
-      links: arrayOf({ $ref: "#/components/schemas/NoteLink" }),
+      links: {
+        ...arrayOf({ $ref: "#/components/schemas/NoteLink" }),
+        description:
+          "Only live linked targets accessible under the caller's capabilities and user, project, and tag scope. Omitted targets are counted without exposing their identifiers or the reason they are unavailable."
+      },
+      unavailableLinkCount: {
+        type: "integer",
+        minimum: 0,
+        description:
+          "Number of stored links omitted because the target is deleted, unavailable, or outside the caller's permissions and scope."
+      },
       tags: arrayOf({ type: "string" }),
       destroyAt: nullable({ type: "string", format: "date-time" }),
       userId: nullable({ type: "string" }),
@@ -19359,7 +19367,7 @@ export function buildOpenApiDocument() {
         get: {
           summary: "Search and page accessible notes",
           description:
-            "Returns newest-first keyset pages. linkedTo and textTerms use OR semantics within their own groups; tags use exact case-insensitive AND semantics. query tokenizes one full-text expression. Ownership, Wiki-space access, deleted/expired state, and Psyche scope are applied before total and pagination.",
+            "Returns newest-first keyset pages. linkedTo and textTerms use OR semantics within their own groups; tags use exact case-insensitive AND semantics. query tokenizes one full-text expression. Ownership, Wiki-space access, deleted/expired state, and Psyche scope are applied before total and pagination. Linked records that are no longer accessible are omitted from every Note and counted only in unavailableLinkCount. Filtering on an inaccessible linked target returns an empty page rather than revealing a relationship.",
           parameters: [
             {
               name: "kind",
@@ -19548,6 +19556,8 @@ export function buildOpenApiDocument() {
       "/api/v1/notes/{id}": {
         get: {
           summary: "Get a note",
+          description:
+            "Returns only live linked records accessible under the caller's capabilities and scope. unavailableLinkCount reports how many stored links were omitted without exposing their identifiers or the reason.",
           parameters: [
             {
               in: "path",
@@ -19571,7 +19581,7 @@ export function buildOpenApiDocument() {
         patch: {
           summary: "Update a note",
           description:
-            "Use expectedRevisionHash from the last read to prevent a stale editor from overwriting a newer revision.",
+            "Use expectedRevisionHash from the last read to prevent a stale editor from overwriting a newer revision. A replacement links list cannot silently delete stored links that were omitted from the caller's read projection.",
           parameters: [
             {
               in: "path",
@@ -20930,7 +20940,7 @@ export function buildOpenApiDocument() {
         post: {
           summary: "Create a task",
           description:
-            "The created task must remain within the token's user, project, and tag scope. Forbidden targets return 403 and are rolled back.",
+            "The created task must remain within the token's user, project, and tag scope. Forbidden task targets return 403 and are rolled back. Every structured link in an attached Note must point to a live record accessible to the caller; missing, deleted, and inaccessible linked records return the same generic 404 before any task, Note, Git, or activity write.",
           security: [{ operatorSession: [] }, { bearerAuth: [] }],
           requestBody: {
             required: true,
@@ -20974,7 +20984,7 @@ export function buildOpenApiDocument() {
           summary:
             "Log work that already happened by creating or updating a task and returning fresh XP state",
           description:
-            "Atomically stores bounded completionReport, Git refs, and an optional closeout note. Summary text is not fabricated into completion evidence.",
+            "Atomically stores bounded completionReport, Git refs, and an optional closeout note. Summary text is not fabricated into completion evidence. Every structured closeout link must point to a live record accessible to the caller; missing, deleted, and inaccessible targets return the same generic 404 before any write.",
           security: [{ operatorSession: [] }, { bearerAuth: [] }],
           requestBody: {
             required: true,
@@ -21122,7 +21132,7 @@ export function buildOpenApiDocument() {
         patch: {
           summary: "Update a task",
           description:
-            "The current task must be in scope; moving the resulting task outside token user, project, or tag scope returns 403 and rolls back. A changed task returns a ten-minute mutation receipt whose Undo is concurrency checked.",
+            "The current task must be in scope; moving the resulting task outside token user, project, or tag scope returns 403 and rolls back. Every structured link in an attached Note must point to a live record accessible to the caller; missing, deleted, and inaccessible linked records return the same generic 404 before mutation. A changed task returns a ten-minute mutation receipt whose Undo is concurrency checked.",
           security: [{ operatorSession: [] }, { bearerAuth: [] }],
           requestBody: {
             required: true,
@@ -21381,7 +21391,7 @@ export function buildOpenApiDocument() {
         post: {
           summary: "Complete a live task timer and complete the task",
           description:
-            "Atomically stores completionReport, Git refs, closeout note, task completion, timer transition, timebox, rewards, and activity. Exact terminal replays succeed; changed closeout evidence returns 409 task_run_closeout_conflict.",
+            "Atomically stores completionReport, Git refs, closeout note, task completion, timer transition, timebox, rewards, and activity. Exact terminal replays are resolved before present-day linked-record validation and continue to succeed if a formerly valid target later becomes unavailable. Changed closeout evidence returns 409 task_run_closeout_conflict. A new transition with a missing, deleted, or inaccessible linked target returns the same generic 404 before any write.",
           security: [{ operatorSession: [] }, { bearerAuth: [] }],
           requestBody: {
             required: false,
@@ -21420,7 +21430,7 @@ export function buildOpenApiDocument() {
           summary:
             "Pause or release a live task timer without completing the task",
           description:
-            "Release accepts only a handoff note; it does not write completionReport or Git refs and does not complete the task.",
+            "Release accepts only a handoff note; it does not write completionReport or Git refs and does not complete the task. Exact terminal replays are resolved before present-day linked-record validation; changed evidence returns 409 task_run_handoff_conflict. A new transition with a missing, deleted, or inaccessible linked target returns the same generic 404 before any write.",
           security: [{ operatorSession: [] }, { bearerAuth: [] }],
           requestBody: {
             required: false,
@@ -23631,7 +23641,7 @@ export function buildOpenApiDocument() {
           summary:
             "Create multiple Forge entities in one ordered batch request",
           description:
-            "The default create route for normal stored entities. Agent tokens require base write. Creating or mutating event_type or emotion_definition additionally requires psyche.write when Psyche authentication is enabled. Creating a note linked to a Psyche entity requires the psyche.note scope.",
+            "The default create route for normal stored entities. Agent tokens require base write. Creating or mutating event_type or emotion_definition additionally requires psyche.write when Psyche authentication is enabled. Creating a note linked to a Psyche entity requires the psyche.note scope. Structured links in task Notes must point to live records accessible to the caller; unavailable targets return a generic 404 before the batch writes anything.",
           requestBody: {
             required: true,
             content: {
@@ -23664,7 +23674,7 @@ export function buildOpenApiDocument() {
           summary:
             "Update multiple Forge entities in one ordered batch request",
           description:
-            "Updates are owner scoped. Each changed successful result includes a ten-minute, concurrency-checked mutationReceipt; a no-op returns mutationReceipt=null. Agent tokens require base write. Updating event_type or emotion_definition additionally requires psyche.write when Psyche authentication is enabled. Updating a Psyche-linked note, or adding a Psyche link to a note, requires psyche.note.",
+            "Updates are owner scoped. Each changed successful result includes a ten-minute, concurrency-checked mutationReceipt; a no-op returns mutationReceipt=null. Agent tokens require base write. Updating event_type or emotion_definition additionally requires psyche.write when Psyche authentication is enabled. Updating a Psyche-linked note, or adding a Psyche link to a note, requires psyche.note. Structured links in task Notes must point to live records accessible to the caller; unavailable targets return a generic 404 before the batch writes anything. Updating a projected Note preserves stored links that the caller could not see.",
           requestBody: {
             required: true,
             content: {
@@ -23763,7 +23773,7 @@ export function buildOpenApiDocument() {
           summary:
             "Search across multiple Forge entity types in one ordered batch request",
           description:
-            "Agent tokens require base read or write. Explicit event_type or emotion_definition searches additionally require psyche.read when Psyche authentication is enabled; searches[].userIds selects the effective custom owner scope while built-ins remain visible. Normal note search uses the indexed Notes query and applies owner, Wiki-space, deleted/expired, and Psyche authorization before result limits. Psyche-linked notes require psyche.read.",
+            "Agent tokens require base read or write. Explicit event_type or emotion_definition searches additionally require psyche.read when Psyche authentication is enabled; searches[].userIds selects the effective custom owner scope while built-ins remain visible. Normal note search uses the indexed Notes query and applies owner, Wiki-space, deleted/expired, and Psyche authorization before result limits. Psyche-linked notes require psyche.read. Note results omit inaccessible linked records and expose only unavailableLinkCount, never their identifiers or reasons.",
           requestBody: {
             required: true,
             content: {

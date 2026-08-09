@@ -237,4 +237,23 @@ describe("EntityNotesSurface", () => {
       })
     );
   });
+
+  it("reports unavailable linked records without exposing their identifiers", async () => {
+    listNotesMock.mockResolvedValueOnce({
+      notes: [{ ...buildNote(1), links: [], unavailableLinkCount: 1 }],
+      total: 1,
+      limit: 40,
+      nextCursor: null,
+      hasMore: false
+    });
+
+    renderSurface();
+
+    expect(
+      await screen.findByText("1 linked record unavailable")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/foreign|hidden|missing/i)
+    ).not.toBeInTheDocument();
+  });
 });

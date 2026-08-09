@@ -6,6 +6,7 @@ import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase } from "./db.js";
 import { createGoal } from "./repositories/goals.js";
+import { getNoteById } from "./repositories/notes.js";
 import { createProject } from "./repositories/projects.js";
 import { claimTaskRun } from "./repositories/task-runs.js";
 import { createTag } from "./repositories/tags.js";
@@ -95,13 +96,14 @@ async function issueOperatorCookie(app: TestApp) {
 async function issueTaskToken(
   _app: TestApp,
   _cookie: string,
-  scopePolicy: { userIds: string[]; projectIds: string[]; tagIds: string[] }
+  scopePolicy: { userIds: string[]; projectIds: string[]; tagIds: string[] },
+  scopes = ["read", "write", "rewards.manage", "artifact.readMetadata"]
 ) {
   return createAgentToken(
     createAgentTokenSchema.parse({
       label: "PLAN-17 scoped task token",
       agentLabel: "PLAN-17 scoped task agent",
-      scopes: ["read", "write", "rewards.manage", "artifact.readMetadata"],
+      scopes,
       scopePolicy
     }),
     { actor: "PLAN-17 test", source: "system" }
@@ -194,6 +196,35 @@ async function uploadArtifact(input: {
   });
   assert.equal(response.statusCode, 201, response.body);
   return (response.json() as { artifact: { id: string } }).artifact.id;
+}
+
+async function softDeleteEntity(input: {
+  app: TestApp;
+  cookie: string;
+  entityType: string;
+  entityId: string;
+}) {
+  const response = await input.app.inject({
+    method: "POST",
+    url: "/api/v1/entities/delete",
+    headers: { cookie: input.cookie },
+    payload: {
+      operations: [
+        {
+          entityType: input.entityType,
+          id: input.entityId,
+          mode: "soft",
+          reason: "PLAN-17 access regression"
+        }
+      ]
+    }
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  assert.equal(
+    (response.json() as { results: Array<{ ok: boolean }> }).results[0]?.ok,
+    true,
+    response.body
+  );
 }
 
 function taskIds(
@@ -495,11 +526,30 @@ test("PLAN-17 closeout Artifact links enforce visibility without existence oracl
       projectId: foreign.project.id,
       tagId: foreign.tag.id
     });
-    const token = await issueTaskToken(app, cookie, {
-      userIds: [allowed.user.id],
-      projectIds: [allowed.project.id],
-      tagIds: [allowed.tag.id]
+    const deletedArtifactId = await uploadArtifact({
+      app,
+      cookie,
+      title: "plan17-deleted-artifact",
+      userId: allowed.user.id,
+      projectId: allowed.project.id,
+      tagId: allowed.tag.id
     });
+    await softDeleteEntity({
+      app,
+      cookie,
+      entityType: "artifact",
+      entityId: deletedArtifactId
+    });
+    const token = await issueTaskToken(
+      app,
+      cookie,
+      {
+        userIds: [allowed.user.id],
+        projectIds: [allowed.project.id],
+        tagIds: [allowed.tag.id]
+      },
+      ["*"]
+    );
     const headers = { authorization: `Bearer ${token}` };
     const closeout = (artifactId: string) => ({
       taskId: task.id,
@@ -521,7 +571,11 @@ test("PLAN-17 closeout Artifact links enforce visibility without existence oracl
       }
     });
 
-    for (const artifactId of [hiddenArtifactId, "artifact_missing_plan17"]) {
+    for (const artifactId of [
+      hiddenArtifactId,
+      deletedArtifactId,
+      "artifact_missing_plan17"
+    ]) {
       const response = await app.inject({
         method: "POST",
         url: "/api/v1/operator/log-work",
@@ -529,10 +583,92 @@ test("PLAN-17 closeout Artifact links enforce visibility without existence oracl
         payload: closeout(artifactId)
       });
       assert.equal(response.statusCode, 404, response.body);
-      assert.equal(response.json().code, "artifact_not_found");
+      assert.deepEqual(response.json(), {
+        code: "note_link_not_found",
+        error: "Linked record not found.",
+        statusCode: 404
+      });
       assert.equal(getTaskById(task.id)?.completionReport, null);
       assert.deepEqual(getTaskById(task.id)?.gitRefs, []);
     }
+
+    const hiddenNestedNote = {
+      contentMarkdown: "Must not retain a hidden structured link.",
+      links: [{ entityType: "artifact", entityId: hiddenArtifactId }]
+    };
+    const guardedRequests = [
+      {
+        method: "POST",
+        url: "/api/v1/tasks",
+        payload: {
+          title: "PLAN-17 rejected direct task",
+          userId: allowed.user.id,
+          goalId: allowed.goal.id,
+          projectId: allowed.project.id,
+          tagIds: [allowed.tag.id],
+          notes: [hiddenNestedNote]
+        }
+      },
+      {
+        method: "PATCH",
+        url: `/api/v1/tasks/${task.id}`,
+        payload: {
+          title: "PLAN-17 rejected direct update",
+          notes: [hiddenNestedNote]
+        }
+      },
+      {
+        method: "POST",
+        url: "/api/v1/entities/create",
+        payload: {
+          operations: [
+            {
+              entityType: "task",
+              data: {
+                title: "PLAN-17 rejected batch task",
+                userId: allowed.user.id,
+                goalId: allowed.goal.id,
+                projectId: allowed.project.id,
+                tagIds: [allowed.tag.id],
+                notes: [hiddenNestedNote]
+              }
+            }
+          ]
+        }
+      },
+      {
+        method: "POST",
+        url: "/api/v1/entities/update",
+        payload: {
+          operations: [
+            {
+              entityType: "task",
+              id: task.id,
+              patch: {
+                title: "PLAN-17 rejected batch update",
+                notes: [hiddenNestedNote]
+              }
+            }
+          ]
+        }
+      }
+    ] as const;
+    for (const request of guardedRequests) {
+      const response = await app.inject({ ...request, headers });
+      assert.equal(
+        response.statusCode,
+        404,
+        `${request.url}: ${response.body}`
+      );
+      assert.equal(response.json().code, "note_link_not_found");
+    }
+    assert.equal(
+      listTasks().some((candidate) =>
+        candidate.title.startsWith("PLAN-17 rejected")
+      ),
+      false
+    );
+    assert.equal(getTaskById(task.id)?.title, "PLAN-17 artifact closeout task");
 
     const visible = await app.inject({
       method: "POST",
@@ -543,6 +679,392 @@ test("PLAN-17 closeout Artifact links enforce visibility without existence oracl
     assert.equal(visible.statusCode, 200, visible.body);
     const saved = (visible.json() as { task: { closeoutState: string } }).task;
     assert.equal(saved.closeoutState, "complete");
+  });
+});
+
+test("PLAN-17 projects Note links for every read and preserves hidden links through edits", async () => {
+  await withIsolatedForge(async (app) => {
+    const allowed = createOwnedPlanningFixture("note-read-allowed");
+    const foreign = createOwnedPlanningFixture("note-read-foreign");
+    const allowedTask = createScopedTask({
+      title: "PLAN-17 visible linked task",
+      userId: allowed.user.id,
+      owner: allowed.user.displayName,
+      goalId: allowed.goal.id,
+      projectId: allowed.project.id,
+      tagId: allowed.tag.id
+    });
+    const foreignTask = createScopedTask({
+      title: "PLAN-17 hidden linked task",
+      userId: foreign.user.id,
+      owner: foreign.user.displayName,
+      goalId: foreign.goal.id,
+      projectId: foreign.project.id,
+      tagId: foreign.tag.id
+    });
+    const cookie = await issueOperatorCookie(app);
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/notes",
+      headers: { cookie },
+      payload: {
+        title: "PLAN-17 projected note",
+        contentMarkdown: "Visible body with one inaccessible structured link.",
+        userId: allowed.user.id,
+        links: [
+          {
+            entityType: "task",
+            entityId: allowedTask.id,
+            anchorKey: "visible"
+          },
+          {
+            entityType: "task",
+            entityId: foreignTask.id,
+            anchorKey: "hidden"
+          }
+        ]
+      }
+    });
+    assert.equal(created.statusCode, 201, created.body);
+    const noteId = (created.json() as { note: { id: string } }).note.id;
+    const token = await issueTaskToken(app, cookie, {
+      userIds: [allowed.user.id],
+      projectIds: [],
+      tagIds: []
+    });
+    const headers = { authorization: `Bearer ${token}` };
+
+    const assertProjectedNote = (
+      note: {
+        links: Array<{ entityType: string; entityId: string }>;
+        unavailableLinkCount: number;
+      },
+      body: string
+    ) => {
+      assert.deepEqual(note.links, [
+        {
+          entityType: "task",
+          entityId: allowedTask.id,
+          anchorKey: "visible"
+        }
+      ]);
+      assert.equal(note.unavailableLinkCount, 1);
+      assert.equal(body.includes(foreignTask.id), false, body);
+    };
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/v1/notes/${noteId}`,
+      headers
+    });
+    assert.equal(detail.statusCode, 200, detail.body);
+    assertProjectedNote(
+      (detail.json() as { note: Parameters<typeof assertProjectedNote>[0] })
+        .note,
+      detail.body
+    );
+
+    const page = await app.inject({
+      method: "GET",
+      url: `/api/v1/notes?userIds=${encodeURIComponent(allowed.user.id)}`,
+      headers
+    });
+    assert.equal(page.statusCode, 200, page.body);
+    const pageNote = (
+      page.json() as { notes: Array<Parameters<typeof assertProjectedNote>[0]> }
+    ).notes.find((note) =>
+      note.links.some((link) => link.entityId === allowedTask.id)
+    );
+    assert.ok(pageNote);
+    assertProjectedNote(pageNote, page.body);
+
+    const hiddenFilter = await app.inject({
+      method: "GET",
+      url: `/api/v1/notes?linkedEntityType=task&linkedEntityId=${encodeURIComponent(foreignTask.id)}`,
+      headers
+    });
+    assert.equal(hiddenFilter.statusCode, 200, hiddenFilter.body);
+    assert.deepEqual(hiddenFilter.json(), {
+      notes: [],
+      total: 0,
+      limit: 40,
+      nextCursor: null,
+      hasMore: false
+    });
+    const forbiddenOwnerFilter = await app.inject({
+      method: "GET",
+      url: `/api/v1/notes?userIds=${encodeURIComponent(foreign.user.id)}&linkedEntityType=task&linkedEntityId=${encodeURIComponent(foreignTask.id)}`,
+      headers
+    });
+    assert.equal(
+      forbiddenOwnerFilter.statusCode,
+      403,
+      forbiddenOwnerFilter.body
+    );
+
+    const batchSearch = await app.inject({
+      method: "POST",
+      url: "/api/v1/entities/search",
+      headers,
+      payload: {
+        searches: [{ entityTypes: ["note"], limit: 100 }]
+      }
+    });
+    assert.equal(batchSearch.statusCode, 200, batchSearch.body);
+    const batchNote = (
+      batchSearch.json() as {
+        results: Array<{
+          matches: Array<{
+            id: string;
+            entity: Parameters<typeof assertProjectedNote>[0];
+          }>;
+        }>;
+      }
+    ).results[0]?.matches.find((match) => match.id === noteId);
+    assert.ok(batchNote);
+    assertProjectedNote(batchNote.entity, batchSearch.body);
+
+    const overview = await app.inject({
+      method: "GET",
+      url: "/api/v1/operator/overview",
+      headers
+    });
+    assert.equal(overview.statusCode, 200, overview.body);
+    assert.match(overview.body, new RegExp(noteId));
+    assert.equal(overview.body.includes(foreignTask.id), false);
+    assert.match(overview.body, /"unavailableLinkCount":1/);
+
+    const directUpdate = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/notes/${noteId}`,
+      headers,
+      payload: {
+        summary: "Edited without seeing the hidden link.",
+        links: [
+          {
+            entityType: "task",
+            entityId: allowedTask.id,
+            anchorKey: "visible"
+          }
+        ]
+      }
+    });
+    assert.equal(directUpdate.statusCode, 200, directUpdate.body);
+    assertProjectedNote(
+      (
+        directUpdate.json() as {
+          note: Parameters<typeof assertProjectedNote>[0];
+        }
+      ).note,
+      directUpdate.body
+    );
+    assert.equal(
+      getNoteById(noteId)?.links.some(
+        (link) => link.entityId === foreignTask.id
+      ),
+      true
+    );
+
+    const batchUpdate = await app.inject({
+      method: "POST",
+      url: "/api/v1/entities/update",
+      headers,
+      payload: {
+        operations: [
+          {
+            entityType: "note",
+            id: noteId,
+            patch: {
+              contentMarkdown: "Edited again through the batch route.",
+              links: [
+                {
+                  entityType: "task",
+                  entityId: allowedTask.id,
+                  anchorKey: "visible"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    });
+    assert.equal(batchUpdate.statusCode, 200, batchUpdate.body);
+    const batchUpdatedNote = (
+      batchUpdate.json() as {
+        results: Array<{
+          ok: boolean;
+          entity: Parameters<typeof assertProjectedNote>[0];
+        }>;
+      }
+    ).results[0];
+    assert.equal(batchUpdatedNote?.ok, true, batchUpdate.body);
+    assert.ok(batchUpdatedNote?.entity);
+    assertProjectedNote(batchUpdatedNote.entity, batchUpdate.body);
+    const stored = getNoteById(noteId);
+    assert.equal(stored?.links.length, 2);
+    assert.equal(
+      stored?.links.some((link) => link.entityId === foreignTask.id),
+      true
+    );
+  });
+});
+
+test("PLAN-17 resolves exact terminal replay before current link validation", async () => {
+  await withIsolatedForge(async (app) => {
+    const fixture = createOwnedPlanningFixture("terminal-replay");
+    const completionTask = createScopedTask({
+      title: "PLAN-17 completion replay task",
+      userId: fixture.user.id,
+      owner: fixture.user.displayName,
+      goalId: fixture.goal.id,
+      projectId: fixture.project.id,
+      tagId: fixture.tag.id
+    });
+    const releaseTask = createScopedTask({
+      title: "PLAN-17 release replay task",
+      userId: fixture.user.id,
+      owner: fixture.user.displayName,
+      goalId: fixture.goal.id,
+      projectId: fixture.project.id,
+      tagId: fixture.tag.id
+    });
+    const completionRun = claimTaskRun(completionTask.id, {
+      actor: "PLAN-17 replay agent",
+      leaseTtlSeconds: 900
+    }).run;
+    const cookie = await issueOperatorCookie(app);
+    const completionArtifactId = await uploadArtifact({
+      app,
+      cookie,
+      title: "plan17-completion-replay-artifact",
+      userId: fixture.user.id,
+      projectId: fixture.project.id,
+      tagId: fixture.tag.id
+    });
+    const releaseArtifactId = await uploadArtifact({
+      app,
+      cookie,
+      title: "plan17-release-replay-artifact",
+      userId: fixture.user.id,
+      projectId: fixture.project.id,
+      tagId: fixture.tag.id
+    });
+    const token = await issueTaskToken(app, cookie, {
+      userIds: [fixture.user.id],
+      projectIds: [fixture.project.id],
+      tagIds: [fixture.tag.id]
+    });
+    const headers = { authorization: `Bearer ${token}` };
+    const completionPayload = {
+      actor: "PLAN-17 replay agent",
+      note: "Completed with durable evidence.",
+      completionReport: {
+        workSummary: "Verified exact terminal replay ordering.",
+        modifiedFiles: ["apps/api/src/app.ts"],
+        linkedGitRefIds: ["plan17-terminal-replay-ref"]
+      },
+      gitRefs: [
+        {
+          id: "plan17-terminal-replay-ref",
+          refType: "commit",
+          refValue: "plan17-terminal-replay-sha"
+        }
+      ],
+      closeoutNote: {
+        contentMarkdown: "Completion evidence linked to an Artifact.",
+        links: [{ entityType: "artifact", entityId: completionArtifactId }]
+      }
+    };
+    const completed = await app.inject({
+      method: "POST",
+      url: `/api/v1/task-runs/${completionRun.id}/complete`,
+      headers,
+      payload: completionPayload
+    });
+    assert.equal(completed.statusCode, 200, completed.body);
+    await softDeleteEntity({
+      app,
+      cookie,
+      entityType: "artifact",
+      entityId: completionArtifactId
+    });
+    const completionReplay = await app.inject({
+      method: "POST",
+      url: `/api/v1/task-runs/${completionRun.id}/complete`,
+      headers,
+      payload: completionPayload
+    });
+    assert.equal(completionReplay.statusCode, 200, completionReplay.body);
+    const changedCompletion = await app.inject({
+      method: "POST",
+      url: `/api/v1/task-runs/${completionRun.id}/complete`,
+      headers,
+      payload: {
+        ...completionPayload,
+        completionReport: {
+          ...completionPayload.completionReport,
+          workSummary: "Changed replay evidence must still conflict."
+        }
+      }
+    });
+    assert.equal(changedCompletion.statusCode, 409, changedCompletion.body);
+    assert.equal(changedCompletion.json().code, "task_run_closeout_conflict");
+
+    const releaseRun = claimTaskRun(releaseTask.id, {
+      actor: "PLAN-17 replay agent",
+      leaseTtlSeconds: 900
+    }).run;
+    const releasePayload = {
+      actor: "PLAN-17 replay agent",
+      note: "Paused with a durable handoff.",
+      closeoutNote: {
+        contentMarkdown: "Release evidence linked to an Artifact.",
+        links: [{ entityType: "artifact", entityId: releaseArtifactId }]
+      }
+    };
+    const released = await app.inject({
+      method: "POST",
+      url: `/api/v1/task-runs/${releaseRun.id}/release`,
+      headers,
+      payload: releasePayload
+    });
+    assert.equal(released.statusCode, 200, released.body);
+    await softDeleteEntity({
+      app,
+      cookie,
+      entityType: "artifact",
+      entityId: releaseArtifactId
+    });
+    const releaseReplay = await app.inject({
+      method: "POST",
+      url: `/api/v1/task-runs/${releaseRun.id}/release`,
+      headers,
+      payload: releasePayload
+    });
+    assert.equal(releaseReplay.statusCode, 200, releaseReplay.body);
+    const contentFreeReleaseReplay = await app.inject({
+      method: "POST",
+      url: `/api/v1/task-runs/${releaseRun.id}/release`,
+      headers,
+      payload: { actor: "PLAN-17 replay agent" }
+    });
+    assert.equal(
+      contentFreeReleaseReplay.statusCode,
+      409,
+      contentFreeReleaseReplay.body
+    );
+    assert.equal(
+      contentFreeReleaseReplay.json().code,
+      "task_run_handoff_conflict"
+    );
+    const changedRelease = await app.inject({
+      method: "POST",
+      url: `/api/v1/task-runs/${releaseRun.id}/release`,
+      headers,
+      payload: { ...releasePayload, note: "Changed replay handoff." }
+    });
+    assert.equal(changedRelease.statusCode, 409, changedRelease.body);
+    assert.equal(changedRelease.json().code, "task_run_handoff_conflict");
   });
 });
 

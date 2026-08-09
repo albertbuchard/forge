@@ -508,6 +508,50 @@ function mapNotes(rows: NoteRow[], linkRows: NoteLinkRow[]): Note[] {
   ).map((note) => noteSchema.parse(note));
 }
 
+export function projectNoteLinksForRead(
+  note: Note,
+  canReadLink: (link: NoteLink) => boolean
+): Note {
+  const visibleLinks = note.links.filter(canReadLink);
+  const visibleLinkIdentities = new Set(
+    visibleLinks.map(
+      (link) =>
+        `${link.entityType}\u0000${link.entityId}\u0000${link.anchorKey ?? ""}`
+    )
+  );
+  const linkedEntities = note.frontmatter.linkedEntities;
+  const frontmatter = Array.isArray(linkedEntities)
+    ? {
+        ...note.frontmatter,
+        linkedEntities: linkedEntities.filter((value) => {
+          if (!value || typeof value !== "object" || Array.isArray(value)) {
+            return false;
+          }
+          const link = value as Record<string, unknown>;
+          if (
+            typeof link.entityType !== "string" ||
+            typeof link.entityId !== "string"
+          ) {
+            return false;
+          }
+          const anchorKey =
+            typeof link.anchorKey === "string" ? link.anchorKey : "";
+          return visibleLinkIdentities.has(
+            `${link.entityType}\u0000${link.entityId}\u0000${anchorKey}`
+          );
+        })
+      }
+    : note.frontmatter;
+  return noteSchema.parse({
+    ...note,
+    links: visibleLinks,
+    frontmatter,
+    unavailableLinkCount:
+      (note.unavailableLinkCount ?? 0) +
+      (note.links.length - visibleLinks.length)
+  });
+}
+
 function upsertSearchRow(
   noteId: string,
   contentPlain: string,

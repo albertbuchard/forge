@@ -166,6 +166,7 @@ function readTaskTagIdsIndex(taskIds: string[]): Map<string, string[]> {
 function mapWorkItemGitRef(row: WorkItemGitRefRow): WorkItemGitRef {
   const rawUrl = row.url?.trim() || null;
   const safeUrl = getSafeHttpUrl(rawUrl);
+  const urlSafety = rawUrl === null ? "absent" : safeUrl ? "safe" : "unsafe";
   return {
     id: row.id,
     workItemId: row.work_item_id,
@@ -179,8 +180,8 @@ function mapWorkItemGitRef(row: WorkItemGitRefRow): WorkItemGitRef {
     repository: row.repository,
     refValue: row.ref_value,
     url: safeUrl,
-    rawUrl,
-    urlSafety: rawUrl === null ? "absent" : safeUrl ? "safe" : "unsafe",
+    rawUrl: urlSafety === "unsafe" ? null : rawUrl,
+    urlSafety,
     displayTitle: row.display_title,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -488,7 +489,9 @@ function mapTaskBase(
   };
 }
 
-function parseStoredCompletionReport(value: string | null): CompletionReport | null {
+function parseStoredCompletionReport(
+  value: string | null
+): CompletionReport | null {
   if (value === null) {
     return null;
   }
