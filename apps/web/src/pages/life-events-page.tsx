@@ -87,6 +87,7 @@ type LifeEventDraft = {
   shortDescription: string;
   description: string;
   eventType: LifeEventType;
+  customTypeLabel: string;
   spanPreset: "same_day" | "overnight" | "multi_day" | "multi_month" | "custom";
   importance: "ordinary" | "meaningful" | "major" | "life_changing";
   startsAt: string;
@@ -472,6 +473,7 @@ const defaultDraft = (): LifeEventDraft => {
     shortDescription: "",
     description: "",
     eventType: "custom",
+    customTypeLabel: "",
     spanPreset: "same_day",
     importance: "meaningful",
     startsAt: formatDateTimeInputInTimeZone(now.toISOString(), timezone),
@@ -500,6 +502,7 @@ function draftFromLifeEvent(event: LifeEvent): LifeEventDraft {
     shortDescription: event.shortDescription,
     description: event.description,
     eventType: event.eventType,
+    customTypeLabel: customTypeLabelFor(event),
     spanPreset: inferSpanPreset(event.startsAt, event.endsAt, event.timezone),
     importance: event.importance,
     startsAt: formatDateTimeInputInTimeZone(event.startsAt, event.timezone),
@@ -698,11 +701,28 @@ function transportModeForEventType(
   return fallback;
 }
 
-function formatEventType(type: LifeEventType) {
-  return (
-    EVENT_TYPES.find((entry) => entry.value === type)?.label ??
-    type.replaceAll("_", " ")
-  );
+function customTypeLabelFor(
+  event: Pick<LifeEvent, "eventType" | "metadata">
+) {
+  if (event.eventType !== "custom") {
+    return "";
+  }
+  const explicitLabel = event.metadata.customTypeLabel;
+  if (typeof explicitLabel === "string" && explicitLabel.trim()) {
+    return explicitLabel.trim();
+  }
+  const legacyType = event.metadata.legacyEventType;
+  return typeof legacyType === "string" && legacyType.trim()
+    ? legacyType.trim().replaceAll("_", " ")
+    : "";
+}
+
+function formatEventType(event: Pick<LifeEvent, "eventType" | "metadata">) {
+  const customLabel = customTypeLabelFor(event);
+  return customLabel
+    ? customLabel
+    : (EVENT_TYPES.find((entry) => entry.value === event.eventType)?.label ??
+        event.eventType.replaceAll("_", " "));
 }
 
 function eventIcon(type: LifeEventType) {
@@ -1470,7 +1490,7 @@ function LifeEventCard({
               </Badge>
             ) : null}
             <Badge tone="meta" size="xs">
-              {formatEventType(event.eventType)}
+              {formatEventType(event)}
             </Badge>
             {showDurationBadge ? (
               <Badge tone="signal" size="xs">
@@ -1781,7 +1801,10 @@ export function LifeEventsPage() {
     setSearchParams(nextSearchParams, { replace: true });
   }
 
-  const buildLifeEventPayload = (value: LifeEventDraft) => {
+  const buildLifeEventPayload = (
+    value: LifeEventDraft,
+    storedMetadata: Record<string, unknown> = {}
+  ) => {
     const startsAt = parseDateTimeInputInTimeZone(
       value.startsAt,
       value.timezone
@@ -1799,6 +1822,13 @@ export function LifeEventsPage() {
     if (Date.parse(endsAt) <= Date.parse(startsAt)) {
       throw new Error("The Life Event must end after it starts.");
     }
+    const metadata = { ...storedMetadata };
+    const customTypeLabel = value.customTypeLabel.trim();
+    if (value.eventType === "custom" && customTypeLabel) {
+      metadata.customTypeLabel = customTypeLabel;
+    } else {
+      delete metadata.customTypeLabel;
+    }
     const data: Record<string, unknown> = {
       title: value.title.trim(),
       shortDescription: value.shortDescription.trim(),
@@ -1811,7 +1841,8 @@ export function LifeEventsPage() {
       placeLabel: value.placeLabel.trim(),
       originLabel: value.originLabel.trim(),
       destinationLabel: value.destinationLabel.trim(),
-      calendarProjection: value.calendarProjection
+      calendarProjection: value.calendarProjection,
+      metadata
     };
     if (value.transportMode) {
       data.transportMode = value.transportMode;
@@ -1852,7 +1883,7 @@ export function LifeEventsPage() {
           {
             entityType: "life_event",
             id: event.id,
-            patch: buildLifeEventPayload(value)
+            patch: buildLifeEventPayload(value, event.metadata)
           }
         ],
         atomic: true
@@ -1984,6 +2015,33 @@ export function LifeEventsPage() {
                 </div>
               </section>
             ))}
+            {value.eventType === "custom" ? (
+              <div className="grid gap-1 rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3">
+                <label
+                  htmlFor="life-event-custom-type-name"
+                  className="text-sm font-medium text-[var(--ui-ink-strong)]"
+                >
+                  Custom type name
+                </label>
+                <Input
+                  id="life-event-custom-type-name"
+                  aria-describedby="life-event-custom-type-help"
+                  className="min-h-11"
+                  value={value.customTypeLabel}
+                  maxLength={80}
+                  onChange={(event) =>
+                    setValue({ customTypeLabel: event.target.value })
+                  }
+                  placeholder="For example, community gathering"
+                />
+                <span
+                  id="life-event-custom-type-help"
+                  className="text-xs leading-5 text-[var(--ui-ink-soft)]"
+                >
+                  Use the name you want to see on the Life Events timeline.
+                </span>
+              </div>
+            ) : null}
           </div>
         )
       },

@@ -3,7 +3,8 @@ import {
   fireEvent,
   render,
   screen,
-  waitFor
+  waitFor,
+  within
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -31,6 +32,48 @@ const {
   uploadArtifactMock: vi.fn(),
   importLifeEventTicketMock: vi.fn()
 }));
+
+const LIFE_EVENT_TYPE_LABELS = [
+  "Flight",
+  "Train",
+  "Car trip",
+  "Boat",
+  "Trip",
+  "Travel day",
+  "Stay",
+  "Lodging",
+  "Holiday",
+  "Vacation",
+  "Visit",
+  "Move",
+  "Festival",
+  "Conference",
+  "Retreat",
+  "Concert",
+  "Cinema",
+  "Meal",
+  "Party",
+  "Ceremony",
+  "Date",
+  "Friends",
+  "Family",
+  "Work milestone",
+  "Work phase",
+  "Thesis milestone",
+  "Creative work",
+  "Class or course",
+  "Exam",
+  "Deadline",
+  "Medical",
+  "Health episode",
+  "Therapy",
+  "Admin",
+  "Legal or financial",
+  "Errand",
+  "Celebration",
+  "Memory",
+  "Custom"
+] as const;
 
 vi.mock("@tanstack/react-virtual", () => {
   const buildVirtualizer = ({ count }: { count: number }) => ({
@@ -334,6 +377,109 @@ describe("LifeEventsPage", () => {
     expect(
       screen.getAllByTestId("guided-question-flow").at(-1)
     ).toHaveTextContent("Import tickets");
+  });
+
+  it("offers every supported type and saves a readable Custom type name", async () => {
+    createEntitiesMock.mockResolvedValue({ results: [{ ok: true }] });
+    renderPage({
+      events: [buildLifeEvent()],
+      now: "2026-07-01T12:00:00.000Z",
+      nextLifeEventId: "lifeevent_123",
+      limit: 500,
+      offset: 0
+    });
+
+    expect(await screen.findByText("Flight to Paris")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /add event/i }));
+    const guidedFlow = within(screen.getByTestId("guided-question-flow"));
+    for (const label of LIFE_EVENT_TYPE_LABELS) {
+      const accessibleName =
+        label === "Custom"
+          ? /^Custom Write your own shape$/i
+          : new RegExp(`^${label}\\b`, "i");
+      expect(
+        guidedFlow.getByRole("button", { name: accessibleName })
+      ).toBeInTheDocument();
+    }
+    expect(LIFE_EVENT_TYPE_LABELS).toHaveLength(39);
+
+    fireEvent.change(screen.getByLabelText("Custom type name"), {
+      target: { value: "Community gathering" }
+    });
+    fireEvent.change(screen.getByPlaceholderText("Flight to Paris"), {
+      target: { value: "Neighborhood assembly" }
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /create life event/i })
+    );
+
+    await waitFor(() => {
+      expect(createEntitiesMock).toHaveBeenCalledWith({
+        atomic: true,
+        operations: [
+          {
+            entityType: "life_event",
+            data: expect.objectContaining({
+              title: "Neighborhood assembly",
+              eventType: "custom",
+              metadata: { customTypeLabel: "Community gathering" }
+            })
+          }
+        ]
+      });
+    });
+  });
+
+  it("shows and preserves the truthful type name from a legacy Custom event", async () => {
+    updateEntitiesMock.mockResolvedValue({ results: [{ ok: true }] });
+    renderPage({
+      events: [
+        buildLifeEvent({
+          title: "Legacy community gathering",
+          eventType: "custom",
+          metadata: {
+            importedFrom: "legacy-fixture",
+            legacyEventType: "community_hackathon"
+          }
+        })
+      ],
+      now: "2026-07-01T12:00:00.000Z",
+      nextLifeEventId: "lifeevent_123",
+      limit: 500,
+      offset: 0
+    });
+
+    expect(await screen.findByText("community hackathon")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: /legacy community gathering/i })
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    const customTypeInput = screen.getByLabelText("Custom type name");
+    expect(customTypeInput).toHaveValue("community hackathon");
+    fireEvent.change(customTypeInput, {
+      target: { value: "Neighborhood assembly" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /update life event/i }));
+
+    await waitFor(() => {
+      expect(updateEntitiesMock).toHaveBeenCalledWith({
+        atomic: true,
+        operations: [
+          expect.objectContaining({
+            entityType: "life_event",
+            id: "lifeevent_123",
+            patch: expect.objectContaining({
+              eventType: "custom",
+              metadata: {
+                importedFrom: "legacy-fixture",
+                legacyEventType: "community_hackathon",
+                customTypeLabel: "Neighborhood assembly"
+              }
+            })
+          })
+        ]
+      });
+    });
   });
 
   it("keeps the timeline searchable without loading nonmatching cards", async () => {

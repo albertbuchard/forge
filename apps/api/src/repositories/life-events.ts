@@ -316,13 +316,21 @@ function listSegments(lifeEventId: string): LifeEventSegment[] {
 }
 
 function mapLifeEvent(row: LifeEventRow): LifeEvent {
+  const parsedEventType = lifeEventTypeSchema.safeParse(row.event_type);
+  const storedMetadata = parseJsonObject(row.metadata_json);
+  const metadata = parsedEventType.success
+    ? storedMetadata
+    : {
+        ...storedMetadata,
+        legacyEventType: row.event_type
+      };
   return lifeEventSchema.parse(
     decorateOwnedEntity("life_event", {
       id: row.id,
       title: row.title,
       shortDescription: row.short_description,
       description: row.description,
-      eventType: row.event_type,
+      eventType: parsedEventType.success ? parsedEventType.data : "custom",
       status: row.status,
       importance: row.importance,
       startsAt: row.starts_at,
@@ -354,7 +362,7 @@ function mapLifeEvent(row: LifeEventRow): LifeEvent {
       extractionSummary: parseJsonObject(row.extraction_summary_json),
       travelDetails: parseJsonObject(row.travel_details_json),
       displayStyle: parseJsonObject(row.display_style_json),
-      metadata: parseJsonObject(row.metadata_json),
+      metadata,
       segments: listSegments(row.id),
       links: listEntityLinksForSources("life_event", [row.id]),
       deletedAt: row.deleted_at,
