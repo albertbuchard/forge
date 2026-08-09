@@ -42,6 +42,11 @@ export const dataBackupEntrySchema = z.object({
   manifestPath: z.string(),
   databasePath: z.string(),
   sizeBytes: z.number().int().nonnegative(),
+  archiveSha256: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/u)
+    .nullable()
+    .default(null),
   includesWiki: z.boolean(),
   includesSecretsKey: z.boolean(),
   counts: dataEntityCountSummarySchema
@@ -131,7 +136,9 @@ export type DataBackupEntry = z.infer<typeof dataBackupEntrySchema>;
 export type DataRuntimeSnapshot = z.infer<typeof dataRuntimeSnapshotSchema>;
 export type DataRecoveryCandidate = z.infer<typeof dataRecoveryCandidateSchema>;
 export type DataExportOption = z.infer<typeof dataExportOptionSchema>;
-export type DataManagementSettings = z.infer<typeof dataManagementSettingsSchema>;
+export type DataManagementSettings = z.infer<
+  typeof dataManagementSettingsSchema
+>;
 export type DataManagementState = z.infer<typeof dataManagementStateSchema>;
 export type UpdateDataManagementSettingsInput = z.infer<
   typeof updateDataManagementSettingsSchema

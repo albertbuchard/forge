@@ -551,8 +551,18 @@ export function SettingsDataPage() {
             The restore does not start if that backup fails.
           </div>
           <div className="rounded-[20px] border border-[color-mix(in_srgb,var(--warning)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-warning-soft)] px-4 py-3 text-sm leading-6 text-[var(--warning)]">
-            Backup manifests identify the archive and record counts, but the
-            current settings contract does not expose an archive checksum.
+            {restoreTarget?.archiveSha256 ? (
+              <>
+                Forge will verify this archive against its recorded SHA-256
+                checksum before replacing any data.
+              </>
+            ) : (
+              <>
+                This legacy backup has no recorded whole-archive SHA-256. Forge
+                will still verify every ZIP entry's size and checksum before
+                replacing any data.
+              </>
+            )}
           </div>
         </div>
       )
@@ -1021,7 +1031,11 @@ export function SettingsDataPage() {
                       <div className="break-all">
                         Manifest: {backup.manifestPath}
                       </div>
-                      <div>Archive checksum: not exposed</div>
+                      <div className="break-all">
+                        {backup.archiveSha256
+                          ? `SHA-256: ${backup.archiveSha256}`
+                          : "Whole-archive SHA-256 unavailable for this legacy backup"}
+                      </div>
                     </div>
                   </div>
                 ))

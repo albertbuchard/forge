@@ -35,6 +35,7 @@ export interface DataBackupEntry {
   manifestPath: string;
   databasePath: string;
   sizeBytes: number;
+  archiveSha256: string | null;
   includesWiki: boolean;
   includesSecretsKey: boolean;
   counts: DataEntityCountSummary;

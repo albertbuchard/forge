@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   close as closeFileDescriptor,
   constants as fsConstants,
+  createReadStream,
   createWriteStream,
   existsSync,
   fstat as fstatFileDescriptor,
@@ -1210,6 +1211,26 @@ export function backupArchiveLimitsForTest() {
   };
 }
 
+async function sha256File(filePath: string) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(filePath)) {
+    hash.update(chunk);
+  }
+  return hash.digest("hex");
+}
+
+async function sha256Descriptor(filePath: string, descriptor: number) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(filePath, {
+    autoClose: false,
+    fd: descriptor,
+    start: 0
+  })) {
+    hash.update(chunk);
+  }
+  return hash.digest("hex");
+}
+
 async function extractVerifiedBackupArchive(input: {
   backup: DataBackupEntry;
   backupDirectory: string;
@@ -1265,6 +1286,19 @@ async function extractVerifiedBackupArchive(input: {
         "backup_path_not_owner_controlled",
         "The backup artifact changed after Forge verified it."
       );
+    }
+    if (input.backup.archiveSha256) {
+      const actualArchiveSha256 = await sha256Descriptor(
+        expectedArchivePath,
+        descriptor
+      );
+      if (actualArchiveSha256 !== input.backup.archiveSha256) {
+        throw new HttpError(
+          400,
+          "backup_archive_checksum_mismatch",
+          "The selected backup archive does not match its recorded SHA-256 checksum."
+        );
+      }
     }
     archive = await fromFdPromise(descriptor, {
       autoClose: false,
@@ -1624,6 +1658,7 @@ export async function createDataBackup(
     }
     await chmod(stagedArchivePath, PRIVATE_FILE_MODE);
     const archiveStat = await stat(stagedArchivePath);
+    const archiveSha256 = await sha256File(stagedArchivePath);
     const backup = dataBackupEntrySchema.parse({
       id: backupId,
       createdAt,
@@ -1635,6 +1670,7 @@ export async function createDataBackup(
       manifestPath,
       databasePath: snapshot.databasePath,
       sizeBytes: archiveStat.size,
+      archiveSha256,
       includesWiki: false,
       includesSecretsKey: existsSync(secretsKeyPath),
       counts: snapshot.counts

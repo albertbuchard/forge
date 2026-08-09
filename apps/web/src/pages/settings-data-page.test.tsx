@@ -182,6 +182,7 @@ function makeBackup(overrides: Partial<DataBackupEntry> = {}): DataBackupEntry {
     databasePath:
       "/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite",
     sizeBytes: 2048,
+    archiveSha256: "a".repeat(64),
     includesWiki: false,
     includesSecretsKey: true,
     counts: {
@@ -470,11 +471,20 @@ describe("SettingsDataPage", () => {
   it("opens the restore flow from backup history and restores the selected backup", async () => {
     renderPage();
 
+    expect(
+      await screen.findByText(`SHA-256: ${"a".repeat(64)}`)
+    ).toBeInTheDocument();
+
     fireEvent.click(
       (await screen.findAllByRole("button", { name: "Restore" }))[0]
     );
 
     expect(await screen.findByText("Restore Forge backup")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /verify this archive against its recorded SHA-256 checksum before replacing any data/u
+      )
+    ).toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: "Restore this backup" })
     );
@@ -482,6 +492,28 @@ describe("SettingsDataPage", () => {
     await waitFor(() =>
       expect(restoreRuntimeDataBackupMock).toHaveBeenCalledWith("bkp_1", true)
     );
+  });
+
+  it("explains the reduced verification available for a legacy backup", async () => {
+    getDataManagementStateMock.mockResolvedValue({
+      data: makeDataState({ backups: [makeBackup({ archiveSha256: null })] })
+    });
+    renderPage();
+
+    expect(
+      await screen.findByText(
+        "Whole-archive SHA-256 unavailable for this legacy backup"
+      )
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "Restore" }))[0]
+    );
+    expect(
+      await screen.findByText(
+        /legacy backup has no recorded whole-archive SHA-256/u
+      )
+    ).toBeInTheDocument();
   });
 
   it("scans for other copies and downloads an export", async () => {

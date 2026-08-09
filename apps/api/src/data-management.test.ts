@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -47,6 +48,16 @@ async function createRuntimeRoot(prefix: string) {
   closeDatabase();
   await initializeDatabase();
   return dataRoot;
+}
+
+async function removeRecordedArchiveChecksum(manifestPath: string) {
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<
+    string,
+    unknown
+  >;
+  delete manifest.archiveSha256;
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await chmod(manifestPath, 0o600);
 }
 
 function insertTag(id: string, name: string) {
@@ -369,6 +380,7 @@ test("createDataBackup captures the database, schema, ingest artifacts, and secr
     const manifest = JSON.parse(
       await readFile(backup.manifestPath, "utf8")
     ) as {
+      archiveSha256: string;
       sensitivity: {
         classification: string;
         credentialMaterialIncluded: boolean;
@@ -384,6 +396,14 @@ test("createDataBackup captures the database, schema, ingest artifacts, and secr
     assert.equal(backup.counts.tags, baselineTagCount + 1);
     assert.equal(backup.includesWiki, false);
     assert.equal(backup.includesSecretsKey, true);
+    assert.match(backup.archiveSha256 ?? "", /^[a-f0-9]{64}$/u);
+    assert.equal(manifest.archiveSha256, backup.archiveSha256);
+    assert.equal(
+      backup.archiveSha256,
+      createHash("sha256")
+        .update(await readFile(backup.archivePath))
+        .digest("hex")
+    );
     assert.ok(archiveEntries.includes("forge.sqlite"));
     assert.ok(archiveEntries.includes("schema.sql"));
     assert.ok(archiveEntries.includes("schema.json"));
@@ -909,6 +929,7 @@ test("restoreDataBackup rejects encrypted, unsupported, corrupt, and truncated e
     );
     await writeFile(encrypted.archivePath, encryptedBytes);
     await chmod(encrypted.archivePath, 0o600);
+    await removeRecordedArchiveChecksum(encrypted.manifestPath);
     await assert.rejects(
       restoreDataBackup(encrypted.id, { createSafetyBackup: false }),
       /does not restore encrypted/u
@@ -924,6 +945,7 @@ test("restoreDataBackup rejects encrypted, unsupported, corrupt, and truncated e
     );
     await writeFile(unsupported.archivePath, unsupportedBytes);
     await chmod(unsupported.archivePath, 0o600);
+    await removeRecordedArchiveChecksum(unsupported.manifestPath);
     await assert.rejects(
       restoreDataBackup(unsupported.id, { createSafetyBackup: false }),
       /unsupported compression method/u
@@ -942,6 +964,7 @@ test("restoreDataBackup rejects encrypted, unsupported, corrupt, and truncated e
     );
     await writeFile(corrupt.archivePath, corruptBytes);
     await chmod(corrupt.archivePath, 0o600);
+    await removeRecordedArchiveChecksum(corrupt.manifestPath);
     await assert.rejects(
       restoreDataBackup(corrupt.id, { createSafetyBackup: false }),
       /size or checksum verification/u
@@ -954,11 +977,44 @@ test("restoreDataBackup rejects encrypted, unsupported, corrupt, and truncated e
       completeBytes.subarray(0, completeBytes.length - 22)
     );
     await chmod(truncated.archivePath, 0o600);
+    await removeRecordedArchiveChecksum(truncated.manifestPath);
     await assert.rejects(
       restoreDataBackup(truncated.id, { createSafetyBackup: false }),
       /central directory|end of central directory|invalid zip/u
     );
 
+    assert.deepEqual(listTagIds(), expectedTagIds);
+    assert.equal(
+      (await readdir(dataRoot)).some((entry) =>
+        entry.startsWith(".forge-restore-stage-")
+      ),
+      false
+    );
+  } finally {
+    await rm(dataRoot, { recursive: true, force: true });
+  }
+});
+
+test("restoreDataBackup rejects archive bytes that do not match the recorded SHA-256 without changing live data", async () => {
+  const dataRoot = await createRuntimeRoot("forge-data-restore-checksum-");
+  try {
+    insertTag("tag_live_before_checksum", "Live before checksum failure");
+    const expectedTagIds = listTagIds();
+    await updateDataManagementSettings({
+      backupDirectory: path.join(dataRoot, "backups"),
+      autoRepairEnabled: true
+    });
+
+    const backup = await createDataBackup({ note: "Checksum fixture" });
+    const archiveBytes = await readFile(backup.archivePath);
+    archiveBytes[0] = archiveBytes[0] ^ 0xff;
+    await writeFile(backup.archivePath, archiveBytes);
+    await chmod(backup.archivePath, 0o600);
+
+    await assert.rejects(
+      restoreDataBackup(backup.id, { createSafetyBackup: false }),
+      /does not match its recorded SHA-256 checksum/u
+    );
     assert.deepEqual(listTagIds(), expectedTagIds);
     assert.equal(
       (await readdir(dataRoot)).some((entry) =>
