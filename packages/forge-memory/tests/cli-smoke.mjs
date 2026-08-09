@@ -105,6 +105,7 @@ const env = {
   USERPROFILE: tempHome,
   PATH: `${fakeBinDir}${path.delimiter}${process.env.PATH ?? ""}`,
   FORGE_COMPANION_IROH_BIN: fakeIrohBin,
+  FORGE_DATA_ROOT: dataRoot,
   FORGE_API_TOKEN: "forge-memory-cli-smoke-token",
   FORGE_MEMORY_TEST_DISABLE_MACOS_BROWSER_HANDLER: "1",
   FORGE_MEMORY_SKIP_TAILSCALE_AUTODETECT: "1"
