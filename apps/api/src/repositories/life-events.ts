@@ -551,24 +551,25 @@ function ensureCalendarLink(event: LifeEvent, calendarEventId: string) {
   if (!calendarEvent) {
     return;
   }
-  const links = [
-    ...calendarEvent.links
-      .filter(
-        (link) =>
-          !(link.entityType === "life_event" && link.entityId === event.id)
-      )
-      .map((link) => ({
-        entityType: link.entityType,
-        entityId: link.entityId,
-        relationshipType: link.relationshipType
-      })),
-    {
-      entityType: "life_event" as const,
-      entityId: event.id,
-      relationshipType: "life_event"
-    }
-  ];
-  updateCalendarEvent(calendarEventId, { links });
+  const timestamp = nowIso();
+  getDatabase()
+    .prepare(
+      `INSERT INTO forge_event_links (
+        id, forge_event_id, entity_type, entity_id, relationship_type,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(forge_event_id, entity_type, entity_id, relationship_type)
+      DO NOTHING`
+    )
+    .run(
+      makeId("evlink"),
+      calendarEvent.id,
+      "life_event",
+      event.id,
+      "life_event",
+      timestamp,
+      timestamp
+    );
 }
 
 function buildCalendarInput(

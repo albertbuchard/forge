@@ -24,6 +24,7 @@ vi.setConfig({ testTimeout: CALENDAR_INTEGRATION_TEST_TIMEOUT_MS });
 const {
   useForgeShellMock,
   getLifeForceMock,
+  getLifeEventsTimelineMock,
   getCalendarOverviewMock,
   createWorkBlockTemplateMock,
   patchWorkBlockTemplateMock,
@@ -34,6 +35,7 @@ const {
   createCalendarEventMock,
   patchCalendarEventMock,
   deleteCalendarEventMock,
+  createLifeEventFromCalendarMock,
   patchTaskMock,
   ensureOperatorSessionMock,
   getSettingsMock,
@@ -57,6 +59,7 @@ const {
 } = vi.hoisted(() => ({
   useForgeShellMock: vi.fn(),
   getLifeForceMock: vi.fn(),
+  getLifeEventsTimelineMock: vi.fn(),
   getCalendarOverviewMock: vi.fn(),
   createWorkBlockTemplateMock: vi.fn(),
   patchWorkBlockTemplateMock: vi.fn(),
@@ -67,6 +70,7 @@ const {
   createCalendarEventMock: vi.fn(),
   patchCalendarEventMock: vi.fn(),
   deleteCalendarEventMock: vi.fn(),
+  createLifeEventFromCalendarMock: vi.fn(),
   patchTaskMock: vi.fn(),
   ensureOperatorSessionMock: vi.fn(),
   getSettingsMock: vi.fn(),
@@ -115,6 +119,7 @@ vi.mock("@/components/shell/page-hero", () => ({
 
 vi.mock("@/lib/api", () => ({
   getLifeForce: getLifeForceMock,
+  getLifeEventsTimeline: getLifeEventsTimelineMock,
   getCalendarOverview: getCalendarOverviewMock,
   createWorkBlockTemplate: createWorkBlockTemplateMock,
   patchWorkBlockTemplate: patchWorkBlockTemplateMock,
@@ -125,6 +130,7 @@ vi.mock("@/lib/api", () => ({
   createCalendarEvent: createCalendarEventMock,
   patchCalendarEvent: patchCalendarEventMock,
   deleteCalendarEvent: deleteCalendarEventMock,
+  createLifeEventFromCalendar: createLifeEventFromCalendarMock,
   patchTask: patchTaskMock,
   ensureOperatorSession: ensureOperatorSessionMock,
   getSettings: getSettingsMock,
@@ -463,6 +469,9 @@ beforeEach(() => {
     }
   });
   getLifeForceMock.mockResolvedValue(createLifeForceResponse());
+  getLifeEventsTimelineMock.mockResolvedValue({
+    timeline: { events: [], groups: [] }
+  });
   createWorkBlockTemplateMock.mockResolvedValue({
     template: { id: "wbtpl_new" }
   });
@@ -706,6 +715,11 @@ beforeEach(() => {
   deleteCalendarEventMock.mockResolvedValue({
     event: { id: "calevent_1" }
   });
+  createLifeEventFromCalendarMock.mockResolvedValue({
+    action: "created_from_calendar_event",
+    lifeEvent: { id: "lifeevent_calendar_1" },
+    calendarEvent: null
+  });
   startMicrosoftCalendarOauthMock.mockResolvedValue({
     session: {
       sessionId: "ms_session_1",
@@ -877,6 +891,156 @@ describe("calendar routing surfaces", () => {
     fireEvent.click(screen.getByText("Open work-block guide"));
 
     expect(await screen.findByText("Create a work block")).toBeInTheDocument();
+  });
+
+  it("keeps a recurring provider occurrence linked to one canonical Life Event", async () => {
+    getCalendarOverviewMock.mockResolvedValue({
+      calendar: {
+        generatedAt: "2026-04-15T09:00:00.000Z",
+        providers: [],
+        connections: [],
+        calendars: [
+          {
+            id: "calendar_provider",
+            connectionId: "conn_google",
+            remoteId: "remote_calendar_provider",
+            title: "Provider calendar",
+            description: "",
+            color: "#7dd3fc",
+            timezone: "Europe/Zurich",
+            isPrimary: true,
+            canWrite: false,
+            selectedForSync: true,
+            forgeManaged: false,
+            lastSyncedAt: "2026-04-15T08:55:00.000Z",
+            createdAt: "2026-04-01T08:00:00.000Z",
+            updatedAt: "2026-04-15T08:55:00.000Z"
+          }
+        ],
+        events: [
+          {
+            id: "event_provider_occurrence",
+            connectionId: "conn_google",
+            calendarId: "calendar_provider",
+            remoteId: "remote_recurring_visit_20260415",
+            ownership: "external",
+            originType: "google",
+            status: "confirmed",
+            title: "Recurring provider visit",
+            description: "Imported recurring occurrence",
+            location: "Zurich",
+            place: {
+              label: "Zurich",
+              address: "Zurich, Switzerland",
+              timezone: "Europe/Zurich",
+              latitude: null,
+              longitude: null,
+              source: "provider",
+              externalPlaceId: ""
+            },
+            startAt: "2026-04-15T10:00:00.000Z",
+            endAt: "2026-04-15T11:00:00.000Z",
+            timezone: "Europe/Zurich",
+            isAllDay: false,
+            availability: "busy",
+            eventType: "visit",
+            categories: ["recurring"],
+            sourceMappings: [
+              {
+                id: "source_provider_occurrence",
+                provider: "google",
+                connectionId: "conn_google",
+                calendarId: "calendar_provider",
+                remoteCalendarId: "remote_calendar_provider",
+                remoteEventId: "remote_recurring_visit_20260415",
+                remoteUid: "recurring-visit@example.com",
+                recurrenceInstanceId: "20260415T100000Z",
+                isMasterRecurring: false,
+                remoteHref: "https://calendar.google.test/event/occurrence",
+                remoteEtag: '"v1"',
+                syncState: "synced",
+                lastSyncedAt: "2026-04-15T08:55:00.000Z",
+                createdAt: "2026-04-01T08:00:00.000Z",
+                updatedAt: "2026-04-15T08:55:00.000Z"
+              }
+            ],
+            links: [],
+            remoteUpdatedAt: "2026-04-15T08:54:00.000Z",
+            deletedAt: null,
+            createdAt: "2026-04-01T08:00:00.000Z",
+            updatedAt: "2026-04-15T08:55:00.000Z"
+          }
+        ],
+        workBlockTemplates: [],
+        workBlockInstances: [],
+        timeboxes: []
+      }
+    });
+    createLifeEventFromCalendarMock
+      .mockResolvedValueOnce({
+        action: "created_from_calendar_event",
+        lifeEvent: { id: "lifeevent_provider_occurrence" },
+        calendarEvent: null
+      })
+      .mockResolvedValueOnce({
+        action: "already_linked",
+        lifeEvent: { id: "lifeevent_provider_occurrence" },
+        calendarEvent: null
+      });
+
+    renderWithRouter(<CalendarPage />, "/calendar");
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Open quick actions for Recurring provider visit"
+      })
+    );
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: /Mark as Life Event/ })
+    );
+
+    await waitFor(() => {
+      expect(createLifeEventFromCalendarMock).toHaveBeenNthCalledWith(1, {
+        calendarEventId: "event_provider_occurrence",
+        eventType: "custom",
+        importance: "meaningful"
+      });
+    });
+    expect(
+      await screen.findByText("Life Event created and linked.")
+    ).toBeInTheDocument();
+    let openLifeEvent = screen.getByRole("link", { name: "Open Life Event" });
+    expect(openLifeEvent).toHaveAttribute(
+      "href",
+      "/life-events?focus=lifeevent_provider_occurrence"
+    );
+    expect(openLifeEvent).toHaveClass("min-h-11");
+    await waitFor(() => {
+      expect(getLifeEventsTimelineMock.mock.calls.length).toBeGreaterThan(1);
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Open quick actions for Recurring provider visit"
+      })
+    );
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: /Mark as Life Event/ })
+    );
+
+    await waitFor(() => {
+      expect(createLifeEventFromCalendarMock).toHaveBeenCalledTimes(2);
+    });
+    expect(
+      await screen.findByText(
+        "This calendar event was already linked to a Life Event."
+      )
+    ).toBeInTheDocument();
+    openLifeEvent = screen.getByRole("link", { name: "Open Life Event" });
+    expect(openLifeEvent).toHaveAttribute(
+      "href",
+      "/life-events?focus=lifeevent_provider_occurrence"
+    );
   });
 
   it("surfaces Life Force summary and AP badges across work blocks, events, and timeboxes", async () => {

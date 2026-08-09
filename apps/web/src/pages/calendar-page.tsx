@@ -16,7 +16,7 @@ import {
   Sparkles,
   Trash2
 } from "lucide-react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { CalendarEventFlowDialog } from "@/components/calendar/calendar-event-flow-dialog";
 import { CalendarQuickRenameDialog } from "@/components/calendar/calendar-quick-rename-dialog";
 import { CalendarWeekToolbar } from "@/components/calendar/calendar-week-toolbar";
@@ -116,8 +116,10 @@ type CalendarOverviewQueryData = Awaited<
   ReturnType<typeof getCalendarOverview>
 >;
 type EventSyncStatus = {
-  tone: "saving" | "warning" | "error";
+  tone: "saving" | "success" | "warning" | "error";
   message: string;
+  href?: string;
+  actionLabel?: string;
 };
 
 function buildDefaultEventSeed(day: Date) {
@@ -946,8 +948,19 @@ export function CalendarPage() {
             : "Forge could not mark that event as a Life Event."
       });
     },
-    onSuccess: () => {
-      setEventSyncStatus(null);
+    onSuccess: ({ lifeEvent, action }) => {
+      setEventSyncStatus({
+        tone: "success",
+        message:
+          action === "already_linked"
+            ? "This calendar event was already linked to a Life Event."
+            : "Life Event created and linked.",
+        href: `/life-events?focus=${encodeURIComponent(lifeEvent.id)}`,
+        actionLabel: "Open Life Event"
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["life-events-timeline"]
+      });
     },
     onSettled: invalidateCalendar
   });
@@ -1441,7 +1454,7 @@ export function CalendarPage() {
               <div
                 role={eventSyncStatus.tone === "error" ? "alert" : "status"}
                 aria-live="polite"
-                className={`inline-flex max-w-full items-center gap-2 rounded-full px-3 py-1.5 text-xs ${
+                className={`inline-flex max-w-full flex-wrap items-center gap-2 rounded-[var(--radius-control)] px-3 py-1.5 text-xs ${
                   eventSyncStatus.tone === "error"
                     ? "border border-[color-mix(in_srgb,var(--danger)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]"
                     : eventSyncStatus.tone === "warning"
@@ -1449,7 +1462,15 @@ export function CalendarPage() {
                       : "border border-[var(--primary)]/18 bg-[var(--primary)]/12 text-[var(--primary)]"
                 }`}
               >
-                {eventSyncStatus.message}
+                <span>{eventSyncStatus.message}</span>
+                {eventSyncStatus.href && eventSyncStatus.actionLabel ? (
+                  <Link
+                    to={eventSyncStatus.href}
+                    className="inline-flex min-h-11 items-center rounded-[var(--radius-control)] px-3 font-semibold underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40"
+                  >
+                    {eventSyncStatus.actionLabel}
+                  </Link>
+                ) : null}
               </div>
             ) : null
           }
