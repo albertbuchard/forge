@@ -104,6 +104,13 @@ export const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     icon: SlidersHorizontal
   },
   {
+    id: "compare",
+    to: "/compare",
+    label: "Compare records",
+    detail: ROUTE_VIEW_CATALOG["comparison-index"].description,
+    icon: BarChart3
+  },
+  {
     id: "people",
     to: "/people",
     label: "People",

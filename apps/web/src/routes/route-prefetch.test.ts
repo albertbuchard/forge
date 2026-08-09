@@ -12,6 +12,7 @@ describe("route module prefetch", () => {
   });
 
   it.each([
+    ["/compare?selection=health%3Aresting_heart_rate", "comparison"],
     ["/projects/project_123", "projectDetail"],
     ["/projects/hierarchy", "projectHierarchy"],
     ["/strategies/strategy_123", "strategyDetail"],

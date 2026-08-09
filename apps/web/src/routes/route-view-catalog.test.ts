@@ -94,4 +94,19 @@ describe("route view copy", () => {
       resolveRouteViewIdFromPathname("/concepts/local-invertibility")
     ).toBe("concept-detail");
   });
+
+  it("registers record comparison as a first-class, globally findable destination", () => {
+    const comparisonRoute = PRIMARY_ROUTES.find(
+      (route) => route.id === "compare"
+    );
+    expect(comparisonRoute).toMatchObject({
+      to: "/compare",
+      label: "Compare records"
+    });
+    expect(NAV_ROUTE_REGISTRY).toContain(comparisonRoute);
+    expect(resolveRouteViewIdFromPathname("/compare")).toBe("comparison-index");
+    expect(getRouteDetail(comparisonRoute!, t)).toBe(
+      ROUTE_VIEW_CATALOG["comparison-index"].description
+    );
+  });
 });

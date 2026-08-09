@@ -7,6 +7,12 @@ import type {
   DataRootSwitchMode
 } from "./data-management-types";
 import type {
+  ComparisonAlignment,
+  ComparisonCatalogResponse,
+  ComparisonFamily,
+  ComparisonResponse
+} from "./comparison-types";
+import type {
   AssessmentFeedback,
   ConceptDetail,
   CourseDetail,
@@ -7103,5 +7109,49 @@ export function listForgeConcepts(
 export function getForgeConcept(conceptId: string, userId?: string) {
   return request<ConceptDetail>(
     withCourseUser(`/api/v1/concepts/${encodeURIComponent(conceptId)}`, userId)
+  );
+}
+
+export function listComparisonCatalog(input: {
+  userId: string;
+  query?: string;
+  family?: ComparisonFamily;
+  limit?: number;
+  cursor?: string;
+  signal?: AbortSignal;
+}) {
+  const search = new URLSearchParams({ userId: input.userId });
+  if (input.query?.trim()) search.set("query", input.query.trim());
+  if (input.family) search.set("family", input.family);
+  if (input.limit !== undefined) search.set("limit", String(input.limit));
+  if (input.cursor) search.set("cursor", input.cursor);
+  return request<ComparisonCatalogResponse>(
+    `/api/v1/comparisons/catalog?${search.toString()}`,
+    { signal: input.signal }
+  );
+}
+
+export function getComparison(input: {
+  userId: string;
+  selections: string[];
+  from: string;
+  to: string;
+  timeZone: string;
+  alignment: ComparisonAlignment;
+  signal?: AbortSignal;
+}) {
+  const search = new URLSearchParams({
+    userId: input.userId,
+    from: input.from,
+    to: input.to,
+    timeZone: input.timeZone,
+    alignment: input.alignment
+  });
+  for (const selection of input.selections) {
+    search.append("selection", selection);
+  }
+  return request<ComparisonResponse>(
+    `/api/v1/comparisons?${search.toString()}`,
+    { signal: input.signal }
   );
 }

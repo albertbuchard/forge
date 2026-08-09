@@ -306,6 +306,11 @@ const API_TAGS = [
       "Preference profiles, comparisons, concepts, contexts, and learned scores."
   },
   {
+    name: "Comparisons",
+    description:
+      "Permission-first, single-user comparison catalogs and read-only timelines across six existing Forge record families."
+  },
+  {
     name: "Psyche",
     description:
       "Values, patterns, behaviors, beliefs, modes, reports, and related Psyche surfaces."
@@ -380,6 +385,7 @@ const API_TAG_GROUPS = [
       "Wiki",
       "Artifacts",
       "Preferences",
+      "Comparisons",
       "Psyche",
       "Questionnaires"
     ]
@@ -469,6 +475,9 @@ function resolveTagsForPath(path: string) {
   }
   if (path.startsWith("/api/v1/artifacts")) {
     return ["Artifacts"];
+  }
+  if (path.startsWith("/api/v1/comparisons")) {
+    return ["Comparisons"];
   }
   if (path.startsWith("/api/v1/preferences")) {
     return ["Preferences"];
@@ -614,6 +623,204 @@ export function buildOpenApiDocument() {
       expectedShape: {
         $ref: "#/components/schemas/ValidationExpectedShape"
       }
+    }
+  };
+  const comparisonFamily = {
+    type: "string",
+    enum: ["preference", "health", "psyche", "insight", "note", "wiki"]
+  };
+  const comparisonCatalogItem = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "selector",
+      "family",
+      "title",
+      "description",
+      "valueKind",
+      "unit",
+      "availability",
+      "sourceHref"
+    ],
+    properties: {
+      selector: { type: "string" },
+      family: { $ref: "#/components/schemas/ComparisonFamily" },
+      title: { type: "string" },
+      description: { type: "string" },
+      valueKind: { type: "string", enum: ["number", "event"] },
+      unit: nullable({ type: "string" }),
+      availability: {
+        type: "string",
+        enum: ["history", "current_only"]
+      },
+      sourceHref: { type: "string" }
+    }
+  };
+  const comparisonCatalogResponse = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "userId",
+      "query",
+      "family",
+      "items",
+      "total",
+      "limit",
+      "nextCursor",
+      "hasMore"
+    ],
+    properties: {
+      userId: { type: "string" },
+      query: { type: "string" },
+      family: nullable({ $ref: "#/components/schemas/ComparisonFamily" }),
+      items: arrayOf({ $ref: "#/components/schemas/ComparisonCatalogItem" }),
+      total: { type: "integer", minimum: 0 },
+      limit: { type: "integer", minimum: 1, maximum: 100 },
+      nextCursor: nullable({ type: "string" }),
+      hasMore: { type: "boolean" }
+    }
+  };
+  const comparisonEvidenceReference = {
+    type: "object",
+    additionalProperties: false,
+    required: ["key", "label"],
+    properties: {
+      key: { type: "string" },
+      label: { type: "string" }
+    }
+  };
+  const comparisonSourceReference = {
+    type: "object",
+    additionalProperties: false,
+    required: ["entityType", "entityId", "href"],
+    properties: {
+      entityType: { type: "string" },
+      entityId: { type: "string" },
+      href: { type: "string" }
+    }
+  };
+  const comparisonPoint = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "at",
+      "dateKey",
+      "value",
+      "label",
+      "missingReason",
+      "source",
+      "evidence"
+    ],
+    properties: {
+      at: { type: "string", format: "date-time" },
+      dateKey: { type: "string", format: "date" },
+      value: nullable({ type: "number" }),
+      label: nullable({ type: "string" }),
+      missingReason: nullable({
+        type: "string",
+        enum: ["not_recorded", "not_stored"]
+      }),
+      source: nullable({
+        $ref: "#/components/schemas/ComparisonSourceReference"
+      }),
+      evidence: {
+        type: "array",
+        maxItems: 12,
+        items: { $ref: "#/components/schemas/ComparisonEvidenceReference" }
+      }
+    }
+  };
+  const comparisonLane = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "selector",
+      "family",
+      "title",
+      "valueKind",
+      "unit",
+      "availability",
+      "state",
+      "limitation",
+      "sourceHref",
+      "points",
+      "pointCount",
+      "sourceReferenceCount",
+      "sourceReferencesTruncated"
+    ],
+    properties: {
+      selector: { type: "string" },
+      family: nullable({ $ref: "#/components/schemas/ComparisonFamily" }),
+      title: { type: "string" },
+      valueKind: nullable({
+        type: "string",
+        enum: ["number", "event"]
+      }),
+      unit: nullable({ type: "string" }),
+      availability: nullable({
+        type: "string",
+        enum: ["history", "current_only"]
+      }),
+      state: { type: "string", enum: ["available", "unavailable"] },
+      limitation: nullable({ type: "string" }),
+      sourceHref: nullable({ type: "string" }),
+      points: arrayOf({ $ref: "#/components/schemas/ComparisonPoint" }),
+      pointCount: { type: "integer", minimum: 0 },
+      sourceReferenceCount: { type: "integer", minimum: 0 },
+      sourceReferencesTruncated: { type: "boolean" }
+    }
+  };
+  const comparisonTotals = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "laneCount",
+      "pointCount",
+      "sourceReferenceCount",
+      "sourceReferencesTruncated"
+    ],
+    properties: {
+      laneCount: { type: "integer", minimum: 0, maximum: 8 },
+      pointCount: { type: "integer", minimum: 0, maximum: 3000 },
+      sourceReferenceCount: { type: "integer", minimum: 0 },
+      sourceReferencesTruncated: { type: "boolean" }
+    }
+  };
+  const comparisonResponse = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "userId",
+      "from",
+      "to",
+      "timeZone",
+      "alignmentRequested",
+      "alignmentApplied",
+      "sharedAxisReason",
+      "lanes",
+      "totals"
+    ],
+    properties: {
+      userId: { type: "string" },
+      from: { type: "string", format: "date" },
+      to: { type: "string", format: "date" },
+      timeZone: { type: "string" },
+      alignmentRequested: {
+        type: "string",
+        enum: ["separate_tracks", "shared_axis"]
+      },
+      alignmentApplied: {
+        type: "string",
+        enum: ["separate_tracks", "shared_axis"]
+      },
+      sharedAxisReason: nullable({ type: "string" }),
+      lanes: {
+        type: "array",
+        minItems: 1,
+        maxItems: 8,
+        items: { $ref: "#/components/schemas/ComparisonLane" }
+      },
+      totals: { $ref: "#/components/schemas/ComparisonTotals" }
     }
   };
   const preferenceErrorResponses = (
@@ -11254,6 +11461,15 @@ export function buildOpenApiDocument() {
         ValidationIssue: validationIssue,
         ValidationExpectedShape: validationExpectedShape,
         ErrorResponse: errorResponse,
+        ComparisonFamily: comparisonFamily,
+        ComparisonCatalogItem: comparisonCatalogItem,
+        ComparisonCatalogResponse: comparisonCatalogResponse,
+        ComparisonEvidenceReference: comparisonEvidenceReference,
+        ComparisonSourceReference: comparisonSourceReference,
+        ComparisonPoint: comparisonPoint,
+        ComparisonLane: comparisonLane,
+        ComparisonTotals: comparisonTotals,
+        ComparisonResponse: comparisonResponse,
         UserSummary: userSummary,
         Tag: tag,
         Goal: goal,
@@ -11537,6 +11753,173 @@ export function buildOpenApiDocument() {
       ...buildPeerOpenApiPaths(),
       ...buildCourseOpenApiPaths(),
       ...buildSecurityPairingOpenApiPaths(),
+      "/api/v1/comparisons/catalog": {
+        get: {
+          tags: ["Comparisons"],
+          summary: "List records that the caller can open and compare",
+          description:
+            "Requires base read scope before Forge parses the query or looks up a user. The request selects exactly one authorized Forge user. Invalid, unknown, and token-disallowed user IDs receive the same unavailable response. The catalog contains only authorized, openable preference, health, Psyche, insight, Note, and Wiki records. Its opaque cursor is bound to the exact user, family, and normalized search query and supports offsets no greater than 10,000. Notes and Wiki pages retain their Wiki-space and Psyche visibility rules.",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
+          parameters: [
+            {
+              name: "userId",
+              in: "query",
+              required: true,
+              description:
+                "Exactly one Forge user. A scoped token may select only a user in its user scope policy.",
+              schema: { type: "string", minLength: 1, maxLength: 160 }
+            },
+            {
+              name: "query",
+              in: "query",
+              required: false,
+              description:
+                "Case-insensitive text search within the selected, authorized catalog.",
+              schema: { type: "string", maxLength: 160, default: "" }
+            },
+            {
+              name: "family",
+              in: "query",
+              required: false,
+              description: "Return one of the six supported record families.",
+              schema: { $ref: "#/components/schemas/ComparisonFamily" }
+            },
+            {
+              name: "limit",
+              in: "query",
+              required: false,
+              schema: {
+                type: "integer",
+                minimum: 1,
+                maximum: 100,
+                default: 40
+              }
+            },
+            {
+              name: "cursor",
+              in: "query",
+              required: false,
+              description:
+                "Opaque cursor returned by the preceding page. It cannot be reused with another user, family, or search query.",
+              schema: { type: "string", maxLength: 1024 }
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              { $ref: "#/components/schemas/ComparisonCatalogResponse" },
+              "Authorized comparison catalog page"
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": {
+              description:
+                "Generic unavailable response for an unknown or token-disallowed user scope.",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/comparisons": {
+        get: {
+          tags: ["Comparisons"],
+          summary: "Compare up to eight authorized Forge records",
+          description:
+            "Requires base read scope before Forge parses selectors or reads data. Forge applies the scoped-token user policy before returning any distinguishable user-validity result, then re-resolves every selector under that exact user and read permission. A malformed selector or query returns 400. A well-formed missing, deleted, hidden, or inaccessible selector becomes a generic unavailable lane that does not expose its family, title, source, or existence. Daily Health and Psyche numeric lanes cover every requested date and mark absent observations as not_recorded. Preference snapshots mark an item absent from their stored top 12 as not_stored. Forge never substitutes zero. Insight, Note, and Wiki lanes expose current-only events and do not reconstruct historical content. Responses above 3,000 points are rejected instead of truncated. A shared axis is applied only when every available lane is numeric and has exactly the same non-null unit.",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
+          parameters: [
+            {
+              name: "userId",
+              in: "query",
+              required: true,
+              description:
+                "Exactly one Forge user. A scoped token may select only a user in its user scope policy.",
+              schema: { type: "string", minLength: 1, maxLength: 160 }
+            },
+            {
+              name: "selection",
+              in: "query",
+              required: true,
+              style: "form",
+              explode: true,
+              description:
+                "Repeat 1 to 8 unique selectors in display order. Supported forms are preference:itemId:contextId, health:metric, psyche:metric, insight:id, note:id, and wiki:id.",
+              schema: {
+                type: "array",
+                minItems: 1,
+                maxItems: 8,
+                uniqueItems: true,
+                items: { type: "string", minLength: 3, maxLength: 512 }
+              }
+            },
+            {
+              name: "from",
+              in: "query",
+              required: true,
+              description: "Inclusive first local date in YYYY-MM-DD form.",
+              schema: { type: "string", format: "date" }
+            },
+            {
+              name: "to",
+              in: "query",
+              required: true,
+              description:
+                "Inclusive final local date. The inclusive range may contain at most 366 days.",
+              schema: { type: "string", format: "date" }
+            },
+            {
+              name: "timeZone",
+              in: "query",
+              required: true,
+              description:
+                "Valid IANA time zone used to assign stored timestamps to local dates.",
+              schema: { type: "string", minLength: 1, maxLength: 100 }
+            },
+            {
+              name: "alignment",
+              in: "query",
+              required: false,
+              description:
+                "separate_tracks is the default. shared_axis is accepted only when every available lane is numeric and has the same non-null unit.",
+              schema: {
+                type: "string",
+                enum: ["separate_tracks", "shared_axis"],
+                default: "separate_tracks"
+              }
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              { $ref: "#/components/schemas/ComparisonResponse" },
+              "Ordered comparison lanes with explicit gaps, sources, evidence, totals, and alignment result"
+            ),
+            "400": {
+              description:
+                "Malformed or oversized comparison. This includes invalid selectors, duplicate or excessive selections, an invalid or longer-than-366-day range, an invalid time zone, and responses above 3,000 points.",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" }
+                }
+              }
+            },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": {
+              description:
+                "Generic unavailable response for an unknown or token-disallowed user scope.",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" }
+                }
+              }
+            }
+          }
+        }
+      },
       "/api/v1/artifacts": {
         get: {
           summary: "List artifact metadata",

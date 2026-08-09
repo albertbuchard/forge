@@ -155,6 +155,14 @@ export const ROUTE_VIEW_CATALOG = {
     tone: "psyche",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
+  "comparison-index": {
+    surfaceId: "comparison-index",
+    title: "Compare records",
+    description:
+      "Compare selected Forge records across time while preserving their original units, gaps, sources, and evidence.",
+    tone: "knowledge",
+    skeleton: { blocks: 5, columns: 2, sideRail: true }
+  },
   "people-index": {
     surfaceId: "people-index",
     title: "People",
@@ -689,6 +697,7 @@ const ROUTE_VIEW_PATH_MATCHERS: RouteViewPathMatcher[] = [
   { viewId: "strategies-index", match: exactly("/strategies") },
   { viewId: "strategy-detail", match: matches(/^\/strategies\/[^/]+$/) },
   { viewId: "preferences-index", match: startsWithSegment("/preferences") },
+  { viewId: "comparison-index", match: exactly("/compare") },
   { viewId: "people-index", match: startsWithSegment("/people") },
   { viewId: "calendar-index", match: exactly("/calendar") },
   { viewId: "life-events-index", match: startsWithSegment("/life-events") },

@@ -71,6 +71,10 @@ vi.mock("@/pages/preferences-page", () => ({
   PreferencesPage: () => <div>Preferences route</div>
 }));
 
+vi.mock("@/pages/comparison-page", () => ({
+  ComparisonPage: () => <div>Comparison route</div>
+}));
+
 vi.mock("@/pages/people-page", () => ({
   PeoplePage: () => <div>People route</div>
 }));
@@ -258,6 +262,13 @@ describe("App routing", () => {
 
     expect(await screen.findByText("Forge shell")).toBeInTheDocument();
     expect(await screen.findByText("Settings route")).toBeInTheDocument();
+  });
+
+  it("renders the comparison route inside the shell", async () => {
+    renderApp("/compare?selection=health%3Aresting_heart_rate");
+
+    expect(await screen.findByText("Forge shell")).toBeInTheDocument();
+    expect(await screen.findByText("Comparison route")).toBeInTheDocument();
   });
 
   it("renders the data settings route inside the shell", async () => {

@@ -11,6 +11,7 @@ import {
   ArtifactsPage,
   AttentionInboxPage,
   CalendarPage,
+  ComparisonPage,
   CompanionSyncLabPage,
   ConceptDetailPage,
   ConceptsPage,
@@ -323,6 +324,15 @@ export function App() {
               "Preferences",
               "Preference profiles, pairwise judgments, and model state.",
               <PreferencesPage />
+            )}
+          />
+          <Route
+            path="compare"
+            element={surface(
+              "comparison-index",
+              "Compare records",
+              "Compare selected records on one timeline while keeping their original units and sources.",
+              <ComparisonPage />
             )}
           />
           <Route

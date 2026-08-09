@@ -122,6 +122,8 @@ const LEGACY_SCOPE_COMPATIBILITY = new Map<string, readonly string[]>([
   ["POST /api/v1/tasks/:id/runs", ["write"]],
   ["POST /api/v1/tasks/:id/split", ["write"]],
   ["GET /api/v1/task-runs", ["read"]],
+  ["GET /api/v1/comparisons/catalog", ["read"]],
+  ["GET /api/v1/comparisons", ["read"]],
   ["POST /api/v1/task-runs/:id/heartbeat", ["write"]],
   ["POST /api/v1/task-runs/:id/release", ["write"]],
   ["POST /api/v1/task-runs/:id/focus", ["write"]],

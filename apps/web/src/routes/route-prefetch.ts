@@ -3,6 +3,7 @@ const routeModules = {
   attention: () => import("@/pages/attention-inbox-page"),
   artifacts: () => import("@/pages/artifacts-page"),
   calendar: () => import("@/pages/calendar-page"),
+  comparison: () => import("@/pages/comparison-page"),
   companionLab: () => import("@/pages/companion-sync-lab-page"),
   concepts: () => import("@/pages/concepts-page"),
   conceptDetail: () => import("@/pages/concept-detail-page"),
@@ -81,6 +82,7 @@ const routeModules = {
 export type RouteModuleKey = keyof typeof routeModules;
 
 const routeMatchers: Array<[RegExp, RouteModuleKey]> = [
+  [/^\/compare\/?$/, "comparison"],
   [/^\/courses\/[^/]+\/learn\/?$/, "courseLearn"],
   [/^\/courses\/[^/]+\/?$/, "courseDetail"],
   [/^\/courses\/?$/, "courses"],

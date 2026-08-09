@@ -20,6 +20,11 @@ export const CalendarPage = lazy(() =>
     default: module.CalendarPage
   }))
 );
+export const ComparisonPage = lazy(() =>
+  import("@/pages/comparison-page").then((module) => ({
+    default: module.ComparisonPage
+  }))
+);
 export const CoursesPage = lazy(() =>
   import("@/pages/courses-page").then((module) => ({
     default: module.CoursesPage

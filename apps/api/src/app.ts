@@ -271,6 +271,13 @@ import {
   buildKnowledgeGraphFocus
 } from "./services/knowledge-graph.js";
 import {
+  comparisonScopeUnavailable,
+  getComparison,
+  listComparisonCatalog,
+  parseComparisonCatalogQuery,
+  parseComparisonQuery
+} from "./services/comparisons.js";
+import {
   applyForgeDoctorFixes,
   buildForgeDoctorReport
 } from "./services/doctor.js";
@@ -16452,6 +16459,52 @@ export async function buildServer(
   app.get("/api/v1/domains", async () => ({
     domains: listDomains()
   }));
+  const requireComparisonUser = (
+    userId: string,
+    auth: ReturnType<typeof authenticateRequest>
+  ) => {
+    const tokenUserIds = auth.token?.scopePolicy.userIds ?? [];
+    if (tokenUserIds.length > 0 && !tokenUserIds.includes(userId)) {
+      comparisonScopeUnavailable();
+    }
+    if (!getUserById(userId)) {
+      comparisonScopeUnavailable();
+    }
+  };
+  app.get("/api/v1/comparisons/catalog", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read"],
+      { route: "/api/v1/comparisons/catalog" }
+    );
+    const query = parseComparisonCatalogQuery(
+      request.query as Record<string, unknown>
+    );
+    requireComparisonUser(query.userId, auth);
+    const noteScope = noteReadScopeForAuth(auth, [query.userId]);
+    return listComparisonCatalog({
+      query,
+      noteScope,
+      canReadPsyche: noteScope.includePsyche !== false
+    });
+  });
+  app.get("/api/v1/comparisons", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read"],
+      { route: "/api/v1/comparisons" }
+    );
+    const query = parseComparisonQuery(
+      request.query as Record<string, unknown>
+    );
+    requireComparisonUser(query.userId, auth);
+    const noteScope = noteReadScopeForAuth(auth, [query.userId]);
+    return getComparison({
+      query,
+      noteScope,
+      canReadPsyche: noteScope.includePsyche !== false
+    });
+  });
   app.get("/api/v1/psyche/overview", async (request) => {
     requirePsycheScopedAccess(
       request.headers as Record<string, unknown>,
