@@ -333,9 +333,12 @@ const groups = Object.freeze({
     command("companion-iroh release build", "cargo", ["build", "--release"], {
       cwd: "packages/companion-iroh"
     }),
-    command("companion-iroh advisory audit", "cargo", ["audit"], {
-      cwd: "packages/companion-iroh"
-    }),
+    command(
+      "companion-iroh advisory audit",
+      "cargo",
+      ["audit", "--db", "{artifactRoot}/cargo-audit-db"],
+      { cwd: "packages/companion-iroh" }
+    ),
     command("companion-iroh policy audit", "cargo", [
       "deny",
       "--manifest-path",
@@ -390,7 +393,10 @@ const groups = Object.freeze({
       id: "forge-peer-release-build"
     }),
     command("forge-peer advisory audit", "sh", ["scripts/audit.sh"], {
-      cwd: "packages/forge-peer"
+      cwd: "packages/forge-peer",
+      environment: {
+        FORGE_CARGO_AUDIT_DB: "{artifactRoot}/cargo-audit-db"
+      }
     }),
     command("forge-peer policy audit", "cargo", [
       "deny",

@@ -266,6 +266,46 @@ test("release plan enforces generation, build, Rust, test, and archive order", (
   ]);
 });
 
+test("release Cargo audits share one clean database inside the artifact root", () => {
+  const plan = releasePlanEntries(["rust"]);
+  const step = (id) => {
+    const entry = plan.find((candidate) => candidate.id === id);
+    assert.ok(entry, `missing Rust release step ${id}`);
+    return entry;
+  };
+  const context = {
+    artifactRoot: "/private/tmp/forge-release-artifacts",
+    repoRoot: "/private/tmp/forge-release-repository"
+  };
+
+  const companionAudit = materializeReleaseEntry(
+    step("companion-iroh-advisory-audit"),
+    context
+  );
+  assert.deepEqual(companionAudit.args, [
+    "audit",
+    "--db",
+    "/private/tmp/forge-release-artifacts/cargo-audit-db"
+  ]);
+
+  const peerAudit = materializeReleaseEntry(
+    step("forge-peer-advisory-audit"),
+    context
+  );
+  assert.deepEqual(peerAudit.environment, {
+    FORGE_CARGO_AUDIT_DB: "/private/tmp/forge-release-artifacts/cargo-audit-db"
+  });
+
+  const peerScript = readFileSync(
+    path.join(process.cwd(), "packages/forge-peer/scripts/audit.sh"),
+    "utf8"
+  );
+  assert.match(
+    peerScript,
+    /cargo audit --db "\$FORGE_CARGO_AUDIT_DB" --file "\$lockfile"/
+  );
+});
+
 test("native admission is unsigned, credential-free, and covers iPhone and watch", () => {
   const plan = releasePlanEntries(["native"]);
   const step = (id) => {
