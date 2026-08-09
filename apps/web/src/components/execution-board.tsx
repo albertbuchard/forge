@@ -29,6 +29,7 @@ import {
 import {
   DndContext,
   DragOverlay,
+  KeyboardSensor,
   PointerSensor,
   closestCorners,
   pointerWithin,
@@ -43,6 +44,7 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
+  sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy
 } from "@dnd-kit/sortable";
@@ -182,7 +184,7 @@ export function buildExecutionBoardTaskMenuItems({
   ];
 }
 
-type BoardItem =
+export type ExecutionBoardItem =
   | {
       kind: "task";
       id: string;
@@ -199,6 +201,86 @@ type BoardItem =
       project: ProjectSummary;
       goal: Goal | undefined;
     };
+
+type BoardItem = ExecutionBoardItem;
+
+export function buildExecutionBoardItems({
+  tasks,
+  projects,
+  activeRuns,
+  goals,
+  tags
+}: {
+  tasks: Task[];
+  projects: ProjectSummary[];
+  activeRuns: TaskRun[];
+  goals: Goal[];
+  tags: Tag[];
+}): ExecutionBoardItem[] {
+  const goalById = new Map<string, Goal>();
+  const tagById = new Map<string, Tag>();
+  const activeRunByTaskId = new Map<string, TaskRun>();
+
+  for (const goal of goals) {
+    if (!goalById.has(goal.id)) {
+      goalById.set(goal.id, goal);
+    }
+  }
+  for (const tag of tags) {
+    if (!tagById.has(tag.id)) {
+      tagById.set(tag.id, tag);
+    }
+  }
+
+  for (const run of activeRuns) {
+    if (run.status !== "active") {
+      continue;
+    }
+    const current = activeRunByTaskId.get(run.taskId);
+    if (!current || run.isCurrent || run.updatedAt > current.updatedAt) {
+      activeRunByTaskId.set(run.taskId, run);
+    }
+  }
+
+  return [
+    ...projects.map((project) => ({
+      kind: "project" as const,
+      id: project.id,
+      status: project.workflowStatus,
+      project,
+      goal: goalById.get(project.goalId)
+    })),
+    ...tasks.map((task) => ({
+      kind: "task" as const,
+      id: task.id,
+      status: task.status,
+      task,
+      goal: task.goalId ? goalById.get(task.goalId) : undefined,
+      tags: task.tagIds
+        .map((tagId) => tagById.get(tagId))
+        .filter((tag): tag is Tag => tag !== undefined),
+      activeRun: activeRunByTaskId.get(task.id) ?? null
+    }))
+  ];
+}
+
+export function groupExecutionBoardItemsByLane(
+  boardItems: ExecutionBoardItem[]
+): Record<TaskStatus, ExecutionBoardItem[]> {
+  const grouped = Object.fromEntries(
+    LANE_ORDER.map((status) => [status, [] as ExecutionBoardItem[]])
+  ) as Record<TaskStatus, ExecutionBoardItem[]>;
+
+  for (const item of boardItems) {
+    grouped[item.status]?.push(item);
+  }
+
+  return grouped;
+}
+
+function boardItemIdentity(kind: BoardItem["kind"], id: string) {
+  return `${kind}:${id}`;
+}
 
 function isLaneContainerId(value: string) {
   return value.startsWith("lane:") || value.includes(":lane:");
@@ -457,7 +539,7 @@ function TaskCardShell({
             <button
               type="button"
               aria-label={`Open ${task.title} actions`}
-              className="inline-flex size-8 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)]"
+              className="inline-flex size-11 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)]"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -475,7 +557,7 @@ function TaskCardShell({
               <button
                 type="button"
                 aria-label={`Move ${task.title} to the previous lane`}
-                className="inline-flex size-7 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)] disabled:opacity-35"
+                className="inline-flex size-11 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)] disabled:opacity-35"
                 disabled={!previousStatus}
                 onClick={() => {
                   if (previousStatus) {
@@ -488,7 +570,7 @@ function TaskCardShell({
               <button
                 type="button"
                 aria-label={`Move ${task.title} to the next lane`}
-                className="inline-flex size-7 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)] disabled:opacity-35"
+                className="inline-flex size-11 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)] disabled:opacity-35"
                 disabled={!nextStatus}
                 onClick={() => {
                   if (nextStatus) {
@@ -504,7 +586,7 @@ function TaskCardShell({
             <button
               type="button"
               aria-label={`Stop work on ${task.title}`}
-              className="inline-flex size-8 items-center justify-center rounded-full bg-[var(--ui-danger-soft)] text-[var(--danger)] transition hover:bg-[color-mix(in_srgb,var(--danger)_22%,var(--ui-surface-1)_78%)]"
+              className="inline-flex size-11 items-center justify-center rounded-full bg-[var(--ui-danger-soft)] text-[var(--danger)] transition hover:bg-[color-mix(in_srgb,var(--danger)_22%,var(--ui-surface-1)_78%)]"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -517,7 +599,7 @@ function TaskCardShell({
             <button
               type="button"
               aria-label={`Start work on ${task.title}`}
-              className="inline-flex size-8 items-center justify-center rounded-full bg-[var(--primary)]/16 text-[var(--primary)] transition hover:bg-[var(--primary)]/24"
+              className="inline-flex size-11 items-center justify-center rounded-full bg-[var(--primary)]/16 text-[var(--primary)] transition hover:bg-[var(--primary)]/24"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -531,7 +613,7 @@ function TaskCardShell({
             <button
               type="button"
               aria-label={`Split ${task.title}`}
-              className="inline-flex items-center gap-1 rounded-full bg-[var(--ui-warning-soft)] px-2.5 py-1 text-[10px] font-medium tracking-[0.14em] text-[var(--warning)] transition hover:bg-[color-mix(in_srgb,var(--warning)_20%,var(--ui-surface-1)_80%)]"
+              className="inline-flex min-h-11 items-center gap-1 rounded-full bg-[var(--ui-warning-soft)] px-3 py-1 text-[10px] font-medium tracking-[0.14em] text-[var(--warning)] transition hover:bg-[color-mix(in_srgb,var(--warning)_20%,var(--ui-surface-1)_80%)]"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -919,7 +1001,7 @@ function ProjectCardShell({
             <button
               type="button"
               aria-label={`Open ${project.title} actions`}
-              className="inline-flex size-8 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)]"
+              className="inline-flex size-11 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)]"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -937,7 +1019,7 @@ function ProjectCardShell({
               <button
                 type="button"
                 aria-label={`Move ${project.title} to the previous lane`}
-                className="inline-flex size-7 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)] disabled:opacity-35"
+                className="inline-flex size-11 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)] disabled:opacity-35"
                 disabled={!previousStatus}
                 onClick={() => {
                   if (previousStatus) {
@@ -950,7 +1032,7 @@ function ProjectCardShell({
               <button
                 type="button"
                 aria-label={`Move ${project.title} to the next lane`}
-                className="inline-flex size-7 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)] disabled:opacity-35"
+                className="inline-flex size-11 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)] disabled:opacity-35"
                 disabled={!nextStatus}
                 onClick={() => {
                   if (nextStatus) {
@@ -1276,9 +1358,15 @@ export function ExecutionBoard({
     return window.matchMedia("(max-width: 1023px)").matches;
   });
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates
+    })
   );
-  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [activeItemIdentity, setActiveItemIdentity] = useState<{
+    kind: BoardItem["kind"];
+    id: string;
+  } | null>(null);
   const [menuState, setMenuState] = useState<{
     kind: "project" | "task";
     entityId: string;
@@ -1348,44 +1436,35 @@ export function ExecutionBoard({
       }),
     [optimisticProjectStatuses, projects]
   );
-  const activeRunByTaskId = useMemo(() => {
-    const lookup = new Map<string, TaskRun>();
-    for (const run of activeRuns) {
-      if (run.status !== "active") {
-        continue;
-      }
-      const current = lookup.get(run.taskId);
-      if (!current || run.isCurrent || run.updatedAt > current.updatedAt) {
-        lookup.set(run.taskId, run);
+  const boardItems = useMemo<BoardItem[]>(
+    () =>
+      buildExecutionBoardItems({
+        tasks: boardTasks,
+        projects: boardProjects,
+        activeRuns,
+        goals,
+        tags
+      }),
+    [activeRuns, boardProjects, boardTasks, goals, tags]
+  );
+  const boardItemsByLane = useMemo(
+    () => groupExecutionBoardItemsByLane(boardItems),
+    [boardItems]
+  );
+  const boardItemByIdentity = useMemo(() => {
+    const indexed = new Map<string, BoardItem>();
+    for (const item of boardItems) {
+      const identity = boardItemIdentity(item.kind, item.id);
+      if (!indexed.has(identity)) {
+        indexed.set(identity, item);
       }
     }
-    return lookup;
-  }, [activeRuns]);
-  const boardItems = useMemo<BoardItem[]>(
-    () => [
-      ...boardProjects.map((project) => ({
-        kind: "project" as const,
-        id: project.id,
-        status: project.workflowStatus,
-        project,
-        goal: goals.find((goal) => goal.id === project.goalId)
-      })),
-      ...boardTasks.map((task) => ({
-        kind: "task" as const,
-        id: task.id,
-        status: task.status,
-        task,
-        goal: goals.find((goal) => goal.id === task.goalId),
-        tags: task.tagIds
-          .map((tagId) => tags.find((tag) => tag.id === tagId))
-          .filter(Boolean) as Tag[],
-        activeRun: activeRunByTaskId.get(task.id) ?? null
-      }))
-    ],
-    [activeRunByTaskId, boardProjects, boardTasks, goals, tags]
-  );
-  const activeBoardItem = activeTaskId
-    ? (boardItems.find((item) => item.id === activeTaskId) ?? null)
+    return indexed;
+  }, [boardItems]);
+  const activeBoardItem = activeItemIdentity
+    ? (boardItemByIdentity.get(
+        boardItemIdentity(activeItemIdentity.kind, activeItemIdentity.id)
+      ) ?? null)
     : null;
   const activeMenuItems: FloatingActionMenuItem[] = (() => {
     if (!menuState) {
@@ -1474,7 +1553,7 @@ export function ExecutionBoard({
       return laneItems.map((item) =>
         item.kind === "task" ? (
           <SortableTaskCard
-            key={item.task.id}
+            key={`task:${item.task.id}`}
             sortableId={`${boardInstanceId}:task:${item.task.id}`}
             task={item.task}
             goal={item.goal}
@@ -1493,7 +1572,7 @@ export function ExecutionBoard({
           />
         ) : (
           <SortableProjectCard
-            key={item.project.id}
+            key={`project:${item.project.id}`}
             sortableId={`${boardInstanceId}:project:${item.project.id}`}
             project={item.project}
             goal={item.goal}
@@ -1555,7 +1634,7 @@ export function ExecutionBoard({
         return cluster.items.map((item) =>
           item.kind === "task" ? (
             <SortableTaskCard
-              key={item.task.id}
+              key={`task:${item.task.id}`}
               sortableId={`${boardInstanceId}:task:${item.task.id}`}
               task={item.task}
               goal={item.goal}
@@ -1574,7 +1653,7 @@ export function ExecutionBoard({
             />
           ) : (
             <SortableProjectCard
-              key={item.project.id}
+              key={`project:${item.project.id}`}
               sortableId={`${boardInstanceId}:project:${item.project.id}`}
               project={item.project}
               goal={item.goal}
@@ -1595,7 +1674,7 @@ export function ExecutionBoard({
           {cluster.items.map((item) =>
             item.kind === "task" ? (
               <SortableTaskCard
-                key={item.task.id}
+                key={`task:${item.task.id}`}
                 sortableId={`${boardInstanceId}:task:${item.task.id}`}
                 task={item.task}
                 goal={item.goal}
@@ -1614,7 +1693,7 @@ export function ExecutionBoard({
               />
             ) : (
               <SortableProjectCard
-                key={item.project.id}
+                key={`project:${item.project.id}`}
                 sortableId={`${boardInstanceId}:project:${item.project.id}`}
                 project={item.project}
                 goal={item.goal}
@@ -1654,7 +1733,7 @@ export function ExecutionBoard({
   }, []);
 
   useEffect(() => {
-    if (!activeTaskId) {
+    if (!activeItemIdentity) {
       document.body.style.cursor = "";
       return;
     }
@@ -1663,7 +1742,7 @@ export function ExecutionBoard({
     return () => {
       document.body.style.cursor = "";
     };
-  }, [activeTaskId]);
+  }, [activeItemIdentity]);
 
   useEffect(() => {
     setOptimisticStatuses((current) => {
@@ -1711,9 +1790,9 @@ export function ExecutionBoard({
     const taskId = event.active.data.current?.taskId;
     const projectId = event.active.data.current?.projectId;
     if (typeof taskId === "string") {
-      setActiveTaskId(taskId);
+      setActiveItemIdentity({ kind: "task", id: taskId });
     } else if (typeof projectId === "string") {
-      setActiveTaskId(projectId);
+      setActiveItemIdentity({ kind: "project", id: projectId });
     }
   }
 
@@ -1821,7 +1900,7 @@ export function ExecutionBoard({
 
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
-    setActiveTaskId(null);
+    setActiveItemIdentity(null);
     if (!over || active.id === over.id) {
       return;
     }
@@ -1969,7 +2048,7 @@ export function ExecutionBoard({
       sensors={sensors}
       collisionDetection={laneFirstCollision}
       onDragStart={handleDragStart}
-      onDragCancel={() => setActiveTaskId(null)}
+      onDragCancel={() => setActiveItemIdentity(null)}
       onDragEnd={(event) => void handleDragEnd(event)}
     >
       {activeBoardItem?.kind === "task" && onDeleteTask ? (
@@ -1988,7 +2067,7 @@ export function ExecutionBoard({
           <span className="min-w-0 flex-1">{moveError}</span>
           <button
             type="button"
-            className="inline-flex size-8 shrink-0 items-center justify-center rounded-full transition hover:bg-[var(--ui-surface-hover)]"
+            className="inline-flex size-11 shrink-0 items-center justify-center rounded-full transition hover:bg-[var(--ui-surface-hover)]"
             aria-label="Dismiss board move error"
             onClick={() => setMoveError(null)}
           >
@@ -2000,9 +2079,7 @@ export function ExecutionBoard({
         {isMobileBoard ? (
           <div className="grid w-full max-w-full min-w-0 gap-2">
             {LANE_ORDER.map((status) => {
-              const laneItems = boardItems.filter(
-                (item) => item.status === status
-              );
+              const laneItems = boardItemsByLane[status];
               return (
                 <SortableContext
                   key={status}
@@ -2017,7 +2094,7 @@ export function ExecutionBoard({
                     title={laneLabels[status].title}
                     detail={laneLabels[status].detail}
                     count={laneItems.length}
-                    dragging={activeTaskId !== null}
+                    dragging={activeItemIdentity !== null}
                   >
                     {renderLaneItems(laneItems)}
                   </LaneDropzone>
@@ -2028,9 +2105,7 @@ export function ExecutionBoard({
         ) : (
           <div className="grid w-full min-w-0 gap-0.5 xl:grid-cols-[repeat(5,minmax(0,1fr))]">
             {LANE_ORDER.map((status) => {
-              const laneItems = boardItems.filter(
-                (item) => item.status === status
-              );
+              const laneItems = boardItemsByLane[status];
               return (
                 <SortableContext
                   key={status}
@@ -2045,7 +2120,7 @@ export function ExecutionBoard({
                     title={laneLabels[status].title}
                     detail={laneLabels[status].detail}
                     count={laneItems.length}
-                    dragging={activeTaskId !== null}
+                    dragging={activeItemIdentity !== null}
                   >
                     {renderLaneItems(laneItems)}
                   </LaneDropzone>
@@ -2057,7 +2132,12 @@ export function ExecutionBoard({
       </div>
       <DragOverlay adjustScale={false} dropAnimation={null}>
         {activeBoardItem ? (
-          <div className="w-[20rem] max-w-[calc(100vw-2rem)]">
+          <div
+            className="w-[20rem] max-w-[calc(100vw-2rem)]"
+            data-testid="kanban-drag-overlay"
+            data-active-kind={activeBoardItem.kind}
+            data-active-id={activeBoardItem.id}
+          >
             {activeBoardItem.kind === "task" ? (
               <TaskCardShell
                 task={activeBoardItem.task}
