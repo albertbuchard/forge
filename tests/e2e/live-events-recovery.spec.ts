@@ -15,7 +15,9 @@ function streamResponseIndexes(responses: ObservedResponse[], status: number) {
 }
 
 test.beforeEach(async ({ page }, testInfo) => {
-  await installE2eStorageGuards(page, testInfo.testId);
+  await installE2eStorageGuards(page, testInfo.testId, {
+    authorityPool: "stream-quota-isolated"
+  });
 });
 
 test("live updates reconnect after the owner stream quota asks the browser to retry", async ({

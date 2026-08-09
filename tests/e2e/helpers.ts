@@ -11,7 +11,10 @@ type E2eBrowserAuthority = {
 type E2eBrowserAuthorityPool = {
   runId: string;
   authorities: E2eBrowserAuthority[];
+  streamQuotaAuthorities: E2eBrowserAuthority[];
 };
+
+type E2eBrowserAuthorityPoolName = "shared" | "stream-quota-isolated";
 
 const selectedAuthorities = new WeakMap<Page, E2eBrowserAuthority>();
 
@@ -29,44 +32,57 @@ async function readE2eBrowserAuthorities(): Promise<E2eBrowserAuthorityPool | nu
     schema?: unknown;
     runId?: unknown;
     authorities?: unknown;
+    streamQuotaAuthorities?: unknown;
   };
-  if (
-    authority.schema !== "forge-e2e-browser-authority/1" ||
-    typeof authority.runId !== "string" ||
-    !/^[0-9a-f-]{36}$/i.test(authority.runId) ||
-    !Array.isArray(authority.authorities) ||
-    authority.authorities.length < 1 ||
-    !authority.authorities.every(
+  const validAuthorities = (value: unknown) =>
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every(
       (entry) =>
         typeof entry === "object" &&
         entry !== null &&
         typeof (entry as { sessionToken?: unknown }).sessionToken ===
           "string" &&
         typeof (entry as { csrfToken?: unknown }).csrfToken === "string"
-    )
+    );
+  if (
+    authority.schema !== "forge-e2e-browser-authority/2" ||
+    typeof authority.runId !== "string" ||
+    !/^[0-9a-f-]{36}$/i.test(authority.runId) ||
+    !validAuthorities(authority.authorities) ||
+    !validAuthorities(authority.streamQuotaAuthorities)
   ) {
     throw new Error("The isolated E2E browser authority is malformed.");
   }
   return {
     runId: authority.runId,
-    authorities: authority.authorities as E2eBrowserAuthority[]
+    authorities: authority.authorities as E2eBrowserAuthority[],
+    streamQuotaAuthorities:
+      authority.streamQuotaAuthorities as E2eBrowserAuthority[]
   };
 }
 
-async function claimE2eBrowserAuthority(testId: string) {
+async function claimE2eBrowserAuthority(
+  testId: string,
+  poolName: E2eBrowserAuthorityPoolName
+) {
   const dataRoot = process.env.FORGE_E2E_DATA_ROOT?.trim();
   const pool = await readE2eBrowserAuthorities();
   if (!dataRoot || !pool) {
     throw new Error("The isolated E2E browser authority is unavailable.");
   }
+  const authorities =
+    poolName === "stream-quota-isolated"
+      ? pool.streamQuotaAuthorities
+      : pool.authorities;
   const start =
     createHash("sha256").update(testId).digest().readUInt32BE(0) %
-    pool.authorities.length;
-  for (let offset = 0; offset < pool.authorities.length; offset += 1) {
-    const index = (start + offset) % pool.authorities.length;
+    authorities.length;
+  for (let offset = 0; offset < authorities.length; offset += 1) {
+    const index = (start + offset) % authorities.length;
     const claimPath = path.join(
       dataRoot,
-      `.forge-e2e-authority-claim-${pool.runId}-${index}`
+      `.forge-e2e-authority-claim-${pool.runId}-${poolName}-${index}`
     );
     try {
       const claim = await open(claimPath, "wx", 0o600);
@@ -75,7 +91,7 @@ async function claimE2eBrowserAuthority(testId: string) {
       } finally {
         await claim.close();
       }
-      return pool.authorities[index]!;
+      return authorities[index]!;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
         throw error;
@@ -100,16 +116,19 @@ export async function e2eMutationHeaders(page: Page) {
 
 export async function installE2eStorageGuards(
   page: Page,
-  testId: string
+  testId: string,
+  options: {
+    authorityPool?: E2eBrowserAuthorityPoolName;
+  } = {}
 ) {
   const dataRoot = process.env.FORGE_E2E_DATA_ROOT?.trim();
-  const configuredPort = Number.parseInt(
-    process.env.FORGE_E2E_PORT ?? "",
-    10
-  );
+  const configuredPort = Number.parseInt(process.env.FORGE_E2E_PORT ?? "", 10);
   let csrfToken: string | null = null;
   if (dataRoot) {
-    const authority = await claimE2eBrowserAuthority(testId);
+    const authority = await claimE2eBrowserAuthority(
+      testId,
+      options.authorityPool ?? "shared"
+    );
     selectedAuthorities.set(page, authority);
     csrfToken = authority.csrfToken;
     await page.context().addCookies([
@@ -148,7 +167,9 @@ export async function installE2eStorageGuards(
 }
 
 export async function dismissOptionalRewardArtDialog(page: Page) {
-  const dialog = page.getByRole("dialog", { name: "Download Forge reward art" });
+  const dialog = page.getByRole("dialog", {
+    name: "Download Forge reward art"
+  });
   const notNowButton = dialog.getByRole("button", { name: "Not now" });
   if (
     await notNowButton
