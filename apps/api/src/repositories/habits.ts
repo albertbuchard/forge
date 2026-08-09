@@ -247,76 +247,126 @@ function calculateCompletionRate(
   return Math.round((aligned / checkIns.length) * 100);
 }
 
-function calculateStreak(
-  habit: Pick<Habit, "polarity" | "frequency" | "weekDays" | "targetCount">,
-  checkIns: HabitCheckIn[],
+function alignedHabitStatus(habit: Pick<Habit, "polarity">) {
+  return habit.polarity === "positive" ? "done" : "missed";
+}
+
+function calculateDailyStreak(
+  habitId: string,
+  habit: Pick<Habit, "polarity">,
   currentDateKey: string
 ) {
-  if (habit.frequency === "weekly" && habit.weekDays.length === 0) {
+  const current = getDatabase()
+    .prepare(
+      `SELECT status
+       FROM habit_check_ins
+       WHERE habit_id = ? AND date_key = ?`
+    )
+    .get(habitId, currentDateKey) as
+    | { status: HabitCheckIn["status"] }
+    | undefined;
+  const streakEndDateKey = current
+    ? currentDateKey
+    : addDateKeyDays(currentDateKey, -1);
+  const result = getDatabase()
+    .prepare(
+      `WITH aligned AS (
+         SELECT
+           date_key,
+           ROW_NUMBER() OVER (ORDER BY date_key DESC) AS sequence
+         FROM habit_check_ins
+         WHERE habit_id = ?
+           AND status = ?
+           AND date_key <= ?
+       )
+       SELECT COUNT(*) AS count
+       FROM aligned
+       WHERE CAST(julianday(?) - julianday(date_key) AS INTEGER) = sequence - 1`
+    )
+    .get(
+      habitId,
+      alignedHabitStatus(habit),
+      streakEndDateKey,
+      streakEndDateKey
+    ) as { count: number };
+  return result.count;
+}
+
+function calculateWeeklyStreak(
+  habitId: string,
+  habit: Pick<Habit, "polarity" | "weekDays" | "targetCount">,
+  currentDateKey: string
+) {
+  if (habit.weekDays.length === 0) {
     return 0;
   }
-
-  const statusByDate = new Map<string, HabitCheckIn["status"]>();
-  for (const checkIn of checkIns) {
-    if (!statusByDate.has(checkIn.dateKey)) {
-      statusByDate.set(checkIn.dateKey, checkIn.status);
-    }
-  }
-
-  const isScheduledOn = (dateKey: string) =>
-    habit.frequency === "daily" ||
-    habit.weekDays.includes(weekdayForDateKey(dateKey));
-  const previousScheduledDate = (dateKey: string) => {
-    let cursor = dateKey;
-    do {
-      cursor = addDateKeyDays(cursor, -1);
-    } while (!isScheduledOn(cursor));
-    return cursor;
-  };
-  const previousWeek = (weekStart: string) => addDateKeyDays(weekStart, -7);
-  const alignedStatusOn = (dateKey: string) => {
-    const status = statusByDate.get(dateKey);
-    return status ? isAligned(habit, { status }) : false;
-  };
-
-  if (habit.frequency === "daily") {
-    let cursor =
-      isScheduledOn(currentDateKey) && !statusByDate.has(currentDateKey)
-        ? previousScheduledDate(currentDateKey)
-        : currentDateKey;
-
-    let streak = 0;
-    while (alignedStatusOn(cursor)) {
-      streak += 1;
-      cursor = previousScheduledDate(cursor);
-    }
-    return streak;
-  }
-
-  const alignedCountForWeek = (weekStart: string) => {
-    let count = 0;
-    for (let offset = 0; offset < 7; offset += 1) {
-      const day = addDateKeyDays(weekStart, offset);
-      if (isScheduledOn(day) && alignedStatusOn(day)) {
-        count += 1;
-      }
-    }
-    return count;
-  };
-
   const currentWeekStart = startOfWeekDateKey(currentDateKey);
-  let cursor =
-    alignedCountForWeek(currentWeekStart) >= habit.targetCount
+  const currentWeekEnd = addDateKeyDays(currentWeekStart, 6);
+  const weekdayPlaceholders = habit.weekDays.map(() => "?").join(", ");
+  const currentWeek = getDatabase()
+    .prepare(
+      `SELECT COUNT(*) AS count
+       FROM habit_check_ins
+       WHERE habit_id = ?
+         AND status = ?
+         AND date_key BETWEEN ? AND ?
+         AND CAST(strftime('%w', date_key) AS INTEGER) IN (${weekdayPlaceholders})`
+    )
+    .get(
+      habitId,
+      alignedHabitStatus(habit),
+      currentWeekStart,
+      currentWeekEnd,
+      ...habit.weekDays
+    ) as { count: number };
+  const streakEndWeek =
+    currentWeek.count >= habit.targetCount
       ? currentWeekStart
-      : previousWeek(currentWeekStart);
-  let streak = 0;
+      : addDateKeyDays(currentWeekStart, -7);
+  const streakEndDate = addDateKeyDays(streakEndWeek, 6);
+  const result = getDatabase()
+    .prepare(
+      `WITH qualified_weeks AS (
+         SELECT
+           date(date_key, '-' || ((CAST(strftime('%w', date_key) AS INTEGER) + 6) % 7) || ' days') AS week_start
+         FROM habit_check_ins
+         WHERE habit_id = ?
+           AND status = ?
+           AND date_key <= ?
+           AND CAST(strftime('%w', date_key) AS INTEGER) IN (${weekdayPlaceholders})
+         GROUP BY week_start
+         HAVING COUNT(*) >= ?
+       ), ordered AS (
+         SELECT
+           week_start,
+           ROW_NUMBER() OVER (ORDER BY week_start DESC) AS sequence
+         FROM qualified_weeks
+         WHERE week_start <= ?
+       )
+       SELECT COUNT(*) AS count
+       FROM ordered
+       WHERE CAST((julianday(?) - julianday(week_start)) / 7 AS INTEGER) = sequence - 1`
+    )
+    .get(
+      habitId,
+      alignedHabitStatus(habit),
+      streakEndDate,
+      ...habit.weekDays,
+      habit.targetCount,
+      streakEndWeek,
+      streakEndWeek
+    ) as { count: number };
+  return result.count;
+}
 
-  while (alignedCountForWeek(cursor) >= habit.targetCount) {
-    streak += 1;
-    cursor = previousWeek(cursor);
-  }
-
-  return streak;
+function calculateStreak(
+  habitId: string,
+  habit: Pick<Habit, "polarity" | "frequency" | "weekDays" | "targetCount">,
+  currentDateKey: string
+) {
+  return habit.frequency === "daily"
+    ? calculateDailyStreak(habitId, habit, currentDateKey)
+    : calculateWeeklyStreak(habitId, habit, currentDateKey);
 }
 
 function isHabitDueToday(
@@ -420,13 +470,13 @@ function mapHabit(
     lastCheckInAt: latestCheckIn?.createdAt ?? null,
     lastCheckInStatus: latestCheckIn?.status ?? null,
     streakCount: calculateStreak(
+      row.id,
       {
         polarity: row.polarity,
         frequency: row.frequency,
         targetCount: row.target_count,
         weekDays: parseWeekDays(row.week_days_json)
       },
-      checkIns,
       currentDateKey
     ),
     completionRate: calculateCompletionRate(
@@ -895,7 +945,7 @@ export function updateHabit(
   });
 
   return parsed.checkIn
-    ? createHabitCheckIn(habitId, parsed.checkIn, activity) ?? updatedHabit
+    ? (createHabitCheckIn(habitId, parsed.checkIn, activity) ?? updatedHabit)
     : updatedHabit;
 }
 
@@ -939,10 +989,7 @@ export function createHabitCheckIn(
     return undefined;
   }
   const effectiveTimezone = resolveEffectiveTimeZone(habit, parsed.timezone);
-  const currentDateKey = formatDateKeyInTimeZone(
-    new Date(),
-    effectiveTimezone
-  );
+  const currentDateKey = formatDateKeyInTimeZone(new Date(), effectiveTimezone);
   const dateKey = parsed.dateKey ?? currentDateKey;
   if (dateKey > currentDateKey) {
     throw new HttpError(
@@ -973,7 +1020,8 @@ export function createHabitCheckIn(
     const statusChanged = existing?.status !== parsed.status;
     const evidenceChanged = existing?.note !== parsed.note;
     const descriptionChanged =
-      parsed.description !== undefined && parsed.description !== habit.description;
+      parsed.description !== undefined &&
+      parsed.description !== habit.description;
     if (existing && !statusChanged && !evidenceChanged && !descriptionChanged) {
       return getHabitById(habitId, { timezone: parsed.timezone });
     }
