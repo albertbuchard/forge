@@ -2,10 +2,23 @@ import { spawn } from "node:child_process";
 import { gzipSync, brotliCompressSync } from "node:zlib";
 import http from "node:http";
 import net from "node:net";
-import { readFile, stat } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  symlink,
+  writeFile
+} from "node:fs/promises";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
+import {
+  patchCompiledJsSpecifiers,
+  removeCompiledTests
+} from "../build/compiled-server-specifiers.mjs";
 import {
   allChecksPass,
   evaluateCeiling,
@@ -18,6 +31,114 @@ import { verifyPeopleScalePerformanceFixture } from "./people-performance-scale-
 const PROCESS_OUTPUT_LIMIT = 40_000;
 const PEOPLE_LIST_RATE_WINDOW_MS = 60_000;
 const PEOPLE_LIST_SAFE_WINDOW_COUNT = 175;
+
+async function compiledRuntimeTreeIdentity(serverDir) {
+  const digest = sha256;
+  const files = [];
+  const visit = async (directory) => {
+    const entries = await readdir(directory, { withFileTypes: true });
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      const fullPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await visit(fullPath);
+      } else if (entry.isFile()) {
+        files.push(fullPath);
+      }
+    }
+  };
+  await visit(serverDir);
+  const framed = [];
+  for (const filePath of files) {
+    const relativePath = path
+      .relative(serverDir, filePath)
+      .split(path.sep)
+      .join("/");
+    const bytes = await readFile(filePath);
+    framed.push(
+      Buffer.from(
+        `${Buffer.byteLength(relativePath)}:${relativePath}:${bytes.length}:`
+      ),
+      bytes
+    );
+  }
+  return {
+    fileCount: files.length,
+    sha256: digest(Buffer.concat(framed))
+  };
+}
+
+export function peoplePerformanceServerSpawnArgs(serverScript) {
+  return ["--expose-gc", serverScript];
+}
+
+export async function buildPeoplePerformanceServer({
+  repositoryRoot,
+  runRoot,
+  signal = null
+}) {
+  const runtimeRoot = path.join(runRoot, "compiled-server-runtime");
+  const serverDir = path.join(runtimeRoot, "server");
+  await rm(runtimeRoot, { recursive: true, force: true });
+  await mkdir(runtimeRoot, { recursive: true });
+  await writeFile(
+    path.join(runtimeRoot, "package.json"),
+    `${JSON.stringify({ private: true, type: "module" })}\n`,
+    { encoding: "utf8", mode: 0o600, flag: "wx" }
+  );
+  await symlink(
+    path.join(repositoryRoot, "node_modules"),
+    path.join(runtimeRoot, "node_modules")
+  );
+  const startedAt = performance.now();
+  await runCheckedSubprocess({
+    command: "npm",
+    args: [
+      "exec",
+      "--",
+      "tsc",
+      "-p",
+      "apps/api/tsconfig.json",
+      "--outDir",
+      serverDir,
+      "--noCheck"
+    ],
+    cwd: repositoryRoot,
+    timeoutMs: 180_000,
+    signal
+  });
+  await removeCompiledTests(serverDir);
+  await patchCompiledJsSpecifiers(serverDir, {
+    emittedWebSrcRoot: path.join(serverDir, "apps", "web", "src")
+  });
+  await mkdir(path.join(serverDir, "apps", "api"), { recursive: true });
+  await cp(
+    path.join(repositoryRoot, "apps", "api", "migrations"),
+    path.join(serverDir, "apps", "api", "migrations"),
+    { recursive: true, force: true }
+  );
+  await cp(
+    path.join(repositoryRoot, "apps", "api", "src", "course-catalog"),
+    path.join(serverDir, "apps", "api", "src", "course-catalog"),
+    { recursive: true, force: true }
+  );
+  const appEntry = path.join(serverDir, "apps", "api", "src", "app.js");
+  const databaseEntry = path.join(serverDir, "apps", "api", "src", "db.js");
+  await Promise.all([stat(appEntry), stat(databaseEntry)]);
+  const identity = await compiledRuntimeTreeIdentity(serverDir);
+  return {
+    runtimeRoot,
+    serverDir,
+    appEntry,
+    databaseEntry,
+    loader: "compiled_javascript",
+    containsTypeScriptLoader: false,
+    identity,
+    durationMs: performance.now() - startedAt,
+    command:
+      "npm exec -- tsc -p apps/api/tsconfig.json --outDir <run-root>/compiled-server-runtime/server --noCheck; shared packaged-runtime specifier patch"
+  };
+}
 
 function unrefDelay(milliseconds) {
   return delay(milliseconds, undefined, { ref: false });
@@ -124,12 +245,25 @@ export async function runCheckedSubprocess({
 export async function startPeoplePerformanceServer({
   repositoryRoot,
   dataRoot,
+  compiledServer,
   port = null,
   webOrigin = null,
   startupTimeoutMs = 120_000,
   signal = null
 }) {
   signal?.throwIfAborted();
+  if (
+    compiledServer?.loader !== "compiled_javascript" ||
+    compiledServer.containsTypeScriptLoader !== false
+  ) {
+    throw new Error(
+      "People performance requires a freshly compiled JavaScript server runtime."
+    );
+  }
+  await Promise.all([
+    stat(compiledServer.appEntry),
+    stat(compiledServer.databaseEntry)
+  ]);
   const resolvedPort = port ?? (await reserveLoopbackPort());
   const serverScript = path.join(
     repositoryRoot,
@@ -137,23 +271,22 @@ export async function startPeoplePerformanceServer({
     "perf",
     "people-performance-server.mjs"
   );
-  const child = spawn(
-    process.execPath,
-    ["--expose-gc", "--import", "tsx", serverScript],
-    {
-      cwd: repositoryRoot,
-      env: {
-        ...process.env,
-        FORGE_PEOPLE_PERF_DATA_ROOT: dataRoot,
-        FORGE_PEOPLE_PERF_PORT: String(resolvedPort),
-        FORGE_BASE_PATH: "/forge/",
-        FORGE_DEV_WEB_AUTOSTART: "0",
-        FORGE_PEER_ENABLED: "0",
-        ...(webOrigin ? { FORGE_DEV_WEB_ORIGIN: webOrigin } : {})
-      },
-      stdio: ["ignore", "pipe", "pipe", "ipc"]
-    }
-  );
+  const spawnArgs = peoplePerformanceServerSpawnArgs(serverScript);
+  const child = spawn(process.execPath, spawnArgs, {
+    cwd: repositoryRoot,
+    env: {
+      ...process.env,
+      FORGE_PEOPLE_PERF_DATA_ROOT: dataRoot,
+      FORGE_PEOPLE_PERF_PORT: String(resolvedPort),
+      FORGE_PEOPLE_PERF_COMPILED_APP_ENTRY: compiledServer.appEntry,
+      FORGE_PEOPLE_PERF_COMPILED_DATABASE_ENTRY: compiledServer.databaseEntry,
+      FORGE_BASE_PATH: "/forge/",
+      FORGE_DEV_WEB_AUTOSTART: "0",
+      FORGE_PEER_ENABLED: "0",
+      ...(webOrigin ? { FORGE_DEV_WEB_ORIGIN: webOrigin } : {})
+    },
+    stdio: ["ignore", "pipe", "pipe", "ipc"]
+  });
   let stdout = "";
   let stderr = "";
   child.stdout?.on("data", (chunk) => {
@@ -191,6 +324,17 @@ export async function startPeoplePerformanceServer({
               operatorSessionCookie: receivedOperatorSessionCookie,
               ...publicReady
             } = message;
+            if (
+              publicReady.runtime?.loader !== "compiled_javascript" ||
+              publicReady.runtime?.containsTypeScriptLoader !== false
+            ) {
+              reject(
+                new Error(
+                  "People performance server did not start from compiled JavaScript."
+                )
+              );
+              return;
+            }
             if (
               typeof receivedOperatorSessionCookie !== "string" ||
               !receivedOperatorSessionCookie.startsWith("forge_session=")
@@ -281,6 +425,13 @@ export async function startPeoplePerformanceServer({
       }
       return operatorSessionCookie;
     },
+    spawn: {
+      executable: process.execPath,
+      args: spawnArgs,
+      containsTypeScriptLoader: spawnArgs.some((argument) =>
+        /(?:^|[/\\])tsx(?:$|[/\\])/u.test(argument)
+      )
+    },
     stop,
     getOutput: () => ({ stdout, stderr })
   };
@@ -289,11 +440,13 @@ export async function startPeoplePerformanceServer({
 export async function initializeIsolatedForgeDatabase(
   dataRoot,
   repositoryRoot,
+  compiledServer,
   signal = null
 ) {
   const server = await startPeoplePerformanceServer({
     repositoryRoot,
     dataRoot,
+    compiledServer,
     signal
   });
   await server.stop();
@@ -659,6 +812,7 @@ async function runPeopleCursorTraversal({
 export async function runPeopleApiProtocol({
   repositoryRoot,
   dataRoot,
+  compiledServer,
   profile,
   budgets,
   signal = null
@@ -672,6 +826,7 @@ export async function runPeopleApiProtocol({
   const server = await startPeoplePerformanceServer({
     repositoryRoot,
     dataRoot,
+    compiledServer,
     signal
   });
   const agent = new http.Agent({

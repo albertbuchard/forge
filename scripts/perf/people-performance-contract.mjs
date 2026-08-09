@@ -120,6 +120,7 @@ const REQUIRED_SUITE_CHECK_IDS = Object.freeze({
     "scale.outbox_claim.p95",
     "scale.outbox_claim.row_accounting",
     "scale.server.rss_max",
+    "scale.server.rss_high_water_max",
     "scale.server.heap_max",
     "scale.claim_worker.rss_max",
     "scale.claim_worker.rss_retained",

@@ -1,19 +1,33 @@
 import { performance } from "node:perf_hooks";
+import { setImmediate as nextEventLoopTurn } from "node:timers/promises";
+import { pathToFileURL } from "node:url";
+import { getHeapSpaceStatistics } from "node:v8";
 
 async function main() {
   const dataRoot = process.env.FORGE_PEOPLE_PERF_DATA_ROOT;
+  const compiledAppEntry =
+    process.env.FORGE_PEOPLE_PERF_COMPILED_APP_ENTRY?.trim();
+  const compiledDatabaseEntry =
+    process.env.FORGE_PEOPLE_PERF_COMPILED_DATABASE_ENTRY?.trim();
   const port = Number.parseInt(process.env.FORGE_PEOPLE_PERF_PORT ?? "", 10);
   const host = "127.0.0.1";
-  if (!dataRoot || !Number.isInteger(port) || port < 1 || port > 65_535) {
+  if (
+    !dataRoot ||
+    !compiledAppEntry?.endsWith(".js") ||
+    !compiledDatabaseEntry?.endsWith(".js") ||
+    !Number.isInteger(port) ||
+    port < 1 ||
+    port > 65_535
+  ) {
     throw new Error(
-      "People performance server requires an isolated data root and port."
+      "People performance server requires an isolated data root, compiled JavaScript runtime, and port."
     );
   }
 
   const startedAt = performance.now();
   const [{ buildServer }, { closeDatabase }] = await Promise.all([
-    import("../../apps/api/src/app.ts"),
-    import("../../apps/api/src/db.ts")
+    import(pathToFileURL(compiledAppEntry).href),
+    import(pathToFileURL(compiledDatabaseEntry).href)
   ]);
   let securityRuntime = null;
   const app = await buildServer({
@@ -58,17 +72,31 @@ async function main() {
     closeDatabase();
   };
 
+  const sampleMemory = async (message) => {
+    if (message.collect && typeof globalThis.gc === "function") {
+      globalThis.gc();
+      await nextEventLoopTurn();
+      globalThis.gc();
+      await nextEventLoopTurn();
+    }
+    process.send?.({
+      type: "memory",
+      requestId: message.requestId,
+      memory: process.memoryUsage(),
+      resourceUsage: process.resourceUsage(),
+      heapSpaces: getHeapSpaceStatistics(),
+      sampledAt: new Date().toISOString()
+    });
+  };
+
   process.on("message", (message) => {
     if (!message || typeof message !== "object") return;
     if (message.type === "memory") {
-      if (message.collect && typeof globalThis.gc === "function") {
-        globalThis.gc();
-      }
-      process.send?.({
-        type: "memory",
-        requestId: message.requestId,
-        memory: process.memoryUsage(),
-        sampledAt: new Date().toISOString()
+      void sampleMemory(message).catch((error) => {
+        process.send?.({
+          type: "fatal",
+          message: error instanceof Error ? error.message : String(error)
+        });
       });
       return;
     }
@@ -108,6 +136,10 @@ async function main() {
     pid: process.pid,
     port,
     startupMs: performance.now() - startedAt,
+    runtime: {
+      loader: "compiled_javascript",
+      containsTypeScriptLoader: false
+    },
     operatorSessionCookie
   });
 }

@@ -144,7 +144,13 @@ function collectCriticalQueryPlans(dataRoot, outboxStatements) {
   }
 }
 
-async function measureRestarts({ repositoryRoot, dataRoot, samples, signal }) {
+async function measureRestarts({
+  repositoryRoot,
+  dataRoot,
+  compiledServer,
+  samples,
+  signal
+}) {
   const startupMs = [];
   const memory = [];
   for (let index = 0; index < samples; index += 1) {
@@ -152,6 +158,7 @@ async function measureRestarts({ repositoryRoot, dataRoot, samples, signal }) {
     const server = await startPeoplePerformanceServer({
       repositoryRoot,
       dataRoot,
+      compiledServer,
       startupTimeoutMs: 120_000,
       signal
     });
@@ -177,7 +184,12 @@ async function measureRestarts({ repositoryRoot, dataRoot, samples, signal }) {
         startupMs: server.ready.startupMs,
         rssBytes: sample.memory.rss,
         heapUsedBytes: sample.memory.heapUsed,
-        heapTotalBytes: sample.memory.heapTotal
+        heapTotalBytes: sample.memory.heapTotal,
+        externalBytes: sample.memory.external,
+        arrayBuffersBytes: sample.memory.arrayBuffers,
+        maxRssBytes: sample.resourceUsage.maxRSS * 1024,
+        resourceUsage: sample.resourceUsage,
+        heapSpaces: sample.heapSpaces
       });
     } finally {
       agent.destroy();
@@ -190,12 +202,17 @@ async function measureRestarts({ repositoryRoot, dataRoot, samples, signal }) {
       process: "fresh assembled Fastify process per sample",
       readiness:
         "server listen plus public GET /api/health = 200 with the Forge credential-required identity",
+      memoryObservation:
+        "two synchronous full garbage collections separated by event-loop turns, followed by complete process-memory and V8 heap-space capture",
       shutdown: "IPC graceful close with SIGTERM/SIGKILL fallback"
     },
     summary: summarizeDurations(startupMs),
     samplesMs: startupMs,
     memory: {
       rssMaxBytes: Math.max(...memory.map((sample) => sample.rssBytes)),
+      rssHighWaterMaxBytes: Math.max(
+        ...memory.map((sample) => sample.maxRssBytes)
+      ),
       heapUsedMaxBytes: Math.max(
         ...memory.map((sample) => sample.heapUsedBytes)
       ),
@@ -266,6 +283,7 @@ async function runOutboxClaimWorker({
 export async function runPeopleScalePerformanceProtocol({
   repositoryRoot,
   dataRoot,
+  compiledServer,
   runRoot,
   profile,
   budgets,
@@ -283,6 +301,7 @@ export async function runPeopleScalePerformanceProtocol({
   const restart = await measureRestarts({
     repositoryRoot,
     dataRoot,
+    compiledServer,
     samples: profile.scale.restartSamples,
     signal
   });
@@ -330,6 +349,12 @@ export async function runPeopleScalePerformanceProtocol({
     evaluateCeiling({
       id: "scale.server.rss_max",
       actual: restart.memory.rssMaxBytes / MEBIBYTE,
+      ceiling: budgets.memory.serverRssMaxMiB,
+      unit: "MiB"
+    }),
+    evaluateCeiling({
+      id: "scale.server.rss_high_water_max",
+      actual: restart.memory.rssHighWaterMaxBytes / MEBIBYTE,
       ceiling: budgets.memory.serverRssMaxMiB,
       unit: "MiB"
     }),

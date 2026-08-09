@@ -24,6 +24,7 @@ import { createPeopleScalePerformanceFixture } from "./people-performance-scale-
 import { runPeopleScalePerformanceProtocol } from "./people-performance-scale.mjs";
 import {
   accountPeopleRouteChunks,
+  buildPeoplePerformanceServer,
   buildPeoplePerformanceWeb,
   initializeIsolatedForgeDatabase,
   runPeopleApiProtocol
@@ -193,6 +194,7 @@ async function runBrowserSpec({
   runRoot,
   dataRoot,
   buildDir,
+  compiledServer,
   mode,
   budgets,
   signal = null
@@ -209,7 +211,15 @@ async function runBrowserSpec({
   await writeFile(
     configPath,
     `${JSON.stringify(
-      { mode, repositoryRoot, dataRoot, buildDir, runRoot, budgets },
+      {
+        mode,
+        repositoryRoot,
+        dataRoot,
+        buildDir,
+        compiledServer,
+        runRoot,
+        budgets
+      },
       null,
       2
     )}\n`,
@@ -344,6 +354,15 @@ function selectedSuiteNeedsBuild(suites) {
   return suites.has("bundle") || suites.has("browser");
 }
 
+function selectedSuiteNeedsCompiledServer(suites) {
+  return (
+    suites.has("fixture") ||
+    suites.has("api") ||
+    suites.has("scale") ||
+    suites.has("browser")
+  );
+}
+
 function replacePath(value, root, replacement) {
   if (!root || typeof value !== "string") return value;
   return value.split(path.resolve(root)).join(replacement);
@@ -462,6 +481,10 @@ export async function runPeoplePerformanceCli(args = process.argv.slice(2)) {
   const browserDataRoot = path.join(runRoot, "browser-fixture");
   const scaleDataRoot = path.join(runRoot, "scale-fixture");
   const buildDir = path.join(runRoot, "web-dist");
+  const compiledServerRuntimeRoot = path.join(
+    runRoot,
+    "compiled-server-runtime"
+  );
   const profile = profileForMode(options.mode);
   const budgets = await loadBudgets(options.budgetPath);
   const abortController = new AbortController();
@@ -509,6 +532,11 @@ export async function runPeoplePerformanceCli(args = process.argv.slice(2)) {
         ? scaleDataRoot
         : null,
       buildDir: selectedSuiteNeedsBuild(options.suites) ? buildDir : null,
+      compiledServerRuntimeRoot: selectedSuiteNeedsCompiledServer(
+        options.suites
+      )
+        ? compiledServerRuntimeRoot
+        : null,
       browserProfileRoot: options.suites.has("browser")
         ? path.join(runRoot, "browser-profiles")
         : null,
@@ -520,6 +548,19 @@ export async function runPeoplePerformanceCli(args = process.argv.slice(2)) {
   process.stderr.write(`[people-performance] owned run root: ${runRoot}\n`);
   try {
     const checkpoint = () => abortController.signal.throwIfAborted();
+    let compiledServer = null;
+    if (selectedSuiteNeedsCompiledServer(options.suites)) {
+      checkpoint();
+      process.stderr.write(
+        "[people-performance] building isolated compiled server runtime\n"
+      );
+      compiledServer = await buildPeoplePerformanceServer({
+        repositoryRoot,
+        runRoot,
+        signal: abortController.signal
+      });
+      result.compiledServer = compiledServer;
+    }
     result.fixtures = {};
     if (selectedSuiteNeedsFixture(options.suites)) {
       checkpoint();
@@ -531,7 +572,12 @@ export async function runPeoplePerformanceCli(args = process.argv.slice(2)) {
         repositoryRoot,
         profile,
         initializeDatabase: (root, signal) =>
-          initializeIsolatedForgeDatabase(root, repositoryRoot, signal),
+          initializeIsolatedForgeDatabase(
+            root,
+            repositoryRoot,
+            compiledServer,
+            signal
+          ),
         signal: abortController.signal
       });
     }
@@ -545,7 +591,12 @@ export async function runPeoplePerformanceCli(args = process.argv.slice(2)) {
         repositoryRoot,
         profile,
         initializeDatabase: (root, signal) =>
-          initializeIsolatedForgeDatabase(root, repositoryRoot, signal),
+          initializeIsolatedForgeDatabase(
+            root,
+            repositoryRoot,
+            compiledServer,
+            signal
+          ),
         signal: abortController.signal
       });
     }
@@ -568,6 +619,7 @@ export async function runPeoplePerformanceCli(args = process.argv.slice(2)) {
       result.api = await runPeopleApiProtocol({
         repositoryRoot,
         dataRoot: scaleDataRoot,
+        compiledServer,
         profile,
         budgets,
         signal: abortController.signal
@@ -581,6 +633,7 @@ export async function runPeoplePerformanceCli(args = process.argv.slice(2)) {
       result.scale = await runPeopleScalePerformanceProtocol({
         repositoryRoot,
         dataRoot: scaleDataRoot,
+        compiledServer,
         runRoot,
         profile,
         budgets,
@@ -606,6 +659,7 @@ export async function runPeoplePerformanceCli(args = process.argv.slice(2)) {
         runRoot,
         dataRoot: browserDataRoot,
         buildDir,
+        compiledServer,
         mode: options.mode,
         budgets,
         signal: abortController.signal

@@ -17,6 +17,14 @@ test("People production browser performance stays within configured ceilings", a
     repositoryRoot: string;
     dataRoot: string;
     buildDir: string;
+    compiledServer: {
+      runtimeRoot: string;
+      serverDir: string;
+      appEntry: string;
+      databaseEntry: string;
+      loader: "compiled_javascript";
+      containsTypeScriptLoader: false;
+    };
     runRoot: string;
     budgets: Record<string, Record<string, number>>;
   };
@@ -24,6 +32,7 @@ test("People production browser performance stays within configured ceilings", a
     repositoryRoot: config.repositoryRoot,
     dataRoot: config.dataRoot,
     buildDir: config.buildDir,
+    compiledServer: config.compiledServer,
     runRoot: config.runRoot,
     profile: profileForMode(config.mode),
     budgets: config.budgets

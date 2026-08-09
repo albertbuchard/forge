@@ -33,7 +33,9 @@ import {
 } from "./people-performance-contract.mjs";
 import {
   classifyFramePixels,
+  isExactPrivateOperatorSessionPayload,
   normalizeRafToReference,
+  parsePrivateOperatorSessionCookie,
   positiveFiniteFrameDurations,
   selectMeasuredRafBaseline
 } from "./people-performance-browser.mjs";
@@ -53,8 +55,10 @@ import {
 } from "./people-performance-scale-fixture.mjs";
 import { runPeopleScalePerformanceProtocol } from "./people-performance-scale.mjs";
 import {
+  buildPeoplePerformanceServer,
   initializeIsolatedForgeDatabase,
   isExactPublicForgeHealthIdentity,
+  peoplePerformanceServerSpawnArgs,
   runPeopleApiProtocol,
   runCheckedSubprocess
 } from "./people-performance-runtime.mjs";
@@ -80,6 +84,62 @@ test("public Forge health identity is exact and data-free", () => {
   );
   assert.equal(
     isExactPublicForgeHealthIdentity({ ...exact, status: 401 }),
+    false
+  );
+});
+
+test("private browser authority is exact and malformed cookies stay secret", () => {
+  assert.equal(
+    parsePrivateOperatorSessionCookie("forge_session=opaque_private_value"),
+    "opaque_private_value"
+  );
+  assert.throws(
+    () =>
+      parsePrivateOperatorSessionCookie(
+        "forge_session=must-not-appear; Path=/; HttpOnly"
+      ),
+    (error) =>
+      error instanceof Error &&
+      /invalid private operator session/u.test(error.message) &&
+      !error.message.includes("must-not-appear")
+  );
+  const exact = {
+    session: {
+      id: "session_test",
+      actorLabel: "Local Operator",
+      principalKind: "operator_session",
+      localOwner: true,
+      profile: "operator",
+      expiresAt: "2026-08-09T12:00:00.000Z"
+    }
+  };
+  assert.equal(isExactPrivateOperatorSessionPayload(200, exact), true);
+  assert.equal(
+    isExactPrivateOperatorSessionPayload(200, {
+      ...exact,
+      session: { ...exact.session, localOwner: false }
+    }),
+    false
+  );
+  assert.equal(
+    isExactPrivateOperatorSessionPayload(200, {
+      ...exact,
+      credential: "must-not-be-serialized"
+    }),
+    false
+  );
+  assert.equal(isExactPrivateOperatorSessionPayload(401, exact), false);
+  const spawnArgs = peoplePerformanceServerSpawnArgs(
+    path.join(
+      repositoryRoot,
+      "scripts",
+      "perf",
+      "people-performance-server.mjs"
+    )
+  );
+  assert.deepEqual(spawnArgs.slice(0, 1), ["--expose-gc"]);
+  assert.equal(
+    spawnArgs.some((argument) => argument.includes("tsx")),
     false
   );
 });
@@ -705,6 +765,10 @@ test("small fixtures are deterministic, exact, and independently verifiable", as
   );
   t.after(() => rm(runRoot, { recursive: true, force: true }));
   const dataRoot = path.join(runRoot, "fixture");
+  const compiledServer = await buildPeoplePerformanceServer({
+    repositoryRoot,
+    runRoot
+  });
   const expectedHash = logicalFixtureSha256(
     expectedLogicalFixtureRows(TEST_PROFILE)
   );
@@ -713,7 +777,7 @@ test("small fixtures are deterministic, exact, and independently verifiable", as
     repositoryRoot,
     profile: TEST_PROFILE,
     initializeDatabase: (root) =>
-      initializeIsolatedForgeDatabase(root, repositoryRoot)
+      initializeIsolatedForgeDatabase(root, repositoryRoot, compiledServer)
   });
   assert.deepEqual(fixture.counts, {
     people: TEST_PROFILE.fixture.people,
@@ -737,7 +801,7 @@ test("small fixtures are deterministic, exact, and independently verifiable", as
         repositoryRoot,
         profile: TEST_PROFILE,
         initializeDatabase: (root) =>
-          initializeIsolatedForgeDatabase(root, repositoryRoot)
+          initializeIsolatedForgeDatabase(root, repositoryRoot, compiledServer)
       }),
     /unexpectedly contains/u
   );
@@ -749,12 +813,16 @@ test("small scale fixtures exercise production claims, restarts, plans, and inte
   );
   t.after(() => rm(runRoot, { recursive: true, force: true }));
   const dataRoot = path.join(runRoot, "scale-fixture");
+  const compiledServer = await buildPeoplePerformanceServer({
+    repositoryRoot,
+    runRoot
+  });
   const fixture = await createPeopleScalePerformanceFixture({
     dataRoot,
     repositoryRoot,
     profile: TEST_PROFILE,
     initializeDatabase: (root) =>
-      initializeIsolatedForgeDatabase(root, repositoryRoot)
+      initializeIsolatedForgeDatabase(root, repositoryRoot, compiledServer)
   });
   assert.deepEqual(fixture.counts, {
     people: TEST_PROFILE.scale.people,
@@ -775,6 +843,7 @@ test("small scale fixtures exercise production claims, restarts, plans, and inte
   const protocol = await runPeopleScalePerformanceProtocol({
     repositoryRoot,
     dataRoot,
+    compiledServer,
     runRoot,
     profile: TEST_PROFILE,
     budgets: await loadBudgets(null)
@@ -815,6 +884,7 @@ test("small scale fixtures exercise production claims, restarts, plans, and inte
   const apiProtocol = await runPeopleApiProtocol({
     repositoryRoot,
     dataRoot,
+    compiledServer,
     profile: TEST_PROFILE,
     budgets: await loadBudgets(null)
   });

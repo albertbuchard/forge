@@ -1,5 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readFileSync,
+  readSync,
+  readdirSync
+} from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getDatabase, runInTransaction } from "../db.js";
@@ -1176,9 +1183,20 @@ function readBuiltInCourseManifest(catalogDir: string) {
     );
   }
   for (const entry of entries) {
-    const fileSha256 = createHash("sha256")
-      .update(readFileSync(path.join(catalogDir, entry.file)))
-      .digest("hex");
+    const filePath = path.join(catalogDir, entry.file);
+    const file = openSync(filePath, "r");
+    const buffer = Buffer.allocUnsafe(64 * 1024);
+    const digest = createHash("sha256");
+    try {
+      let bytesRead = 0;
+      do {
+        bytesRead = readSync(file, buffer, 0, buffer.length, null);
+        if (bytesRead > 0) digest.update(buffer.subarray(0, bytesRead));
+      } while (bytesRead > 0);
+    } finally {
+      closeSync(file);
+    }
+    const fileSha256 = digest.digest("hex");
     if (fileSha256 !== entry.fileSha256) {
       throw new Error(
         `Built-in course ${entry.file} does not match its manifest SHA-256.`

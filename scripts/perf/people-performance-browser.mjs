@@ -44,6 +44,100 @@ function pixel7ContextOptions() {
   };
 }
 
+export function parsePrivateOperatorSessionCookie(cookieHeader) {
+  const match = /^forge_session=([^;]+)$/u.exec(cookieHeader ?? "");
+  if (!match) {
+    throw new Error(
+      "The People performance server returned an invalid private operator session."
+    );
+  }
+  return match[1];
+}
+
+export function isExactPrivateOperatorSessionPayload(status, body) {
+  const session = body?.session;
+  return (
+    status === 200 &&
+    body !== null &&
+    typeof body === "object" &&
+    !Array.isArray(body) &&
+    Object.keys(body).join(",") === "session" &&
+    session !== null &&
+    typeof session === "object" &&
+    !Array.isArray(session) &&
+    Object.keys(session).sort().join(",") ===
+      "actorLabel,expiresAt,id,localOwner,principalKind,profile" &&
+    typeof session.id === "string" &&
+    session.id.length > 0 &&
+    session.actorLabel === "Local Operator" &&
+    session.principalKind === "operator_session" &&
+    session.localOwner === true &&
+    session.profile === "operator" &&
+    typeof session.expiresAt === "string" &&
+    Number.isFinite(Date.parse(session.expiresAt))
+  );
+}
+
+async function installPrivateOperatorSessionCookie(context, server) {
+  const value = parsePrivateOperatorSessionCookie(
+    server.getOperatorSessionCookie()
+  );
+  const origin = new URL(server.origin);
+  await context.addCookies([
+    {
+      name: "forge_session",
+      value,
+      domain: origin.hostname,
+      path: "/api",
+      httpOnly: true,
+      secure: false,
+      sameSite: "Strict"
+    }
+  ]);
+}
+
+async function navigateWithPrivateOperatorAdmission(page, targetUrl, options) {
+  const applicationOrigin = new URL(targetUrl).origin;
+  const admissionResponse = page.waitForResponse(
+    (response) => {
+      const responseUrl = new URL(response.url());
+      return (
+        responseUrl.origin === applicationOrigin &&
+        responseUrl.pathname === "/api/v1/auth/operator-session" &&
+        response.request().method() === "GET"
+      );
+    },
+    { timeout: 30_000 }
+  );
+  const [navigationResponse, response] = await Promise.all([
+    page.goto(targetUrl, options),
+    admissionResponse
+  ]);
+  let body = null;
+  try {
+    body = await response.json();
+  } catch {
+    // The bounded error below deliberately excludes response data and secrets.
+  }
+  if (!isExactPrivateOperatorSessionPayload(response.status(), body)) {
+    throw new Error(
+      `The People performance browser did not receive exact operator authority (status ${response.status()}).`
+    );
+  }
+  return navigationResponse;
+}
+
+async function launchPrivateOperatorContext(profilePath, options, server) {
+  const context = await chromium.launchPersistentContext(profilePath, options);
+  try {
+    await installPrivateOperatorSessionCookie(context, server);
+    return context;
+  } catch (error) {
+    await context.close();
+    throw error;
+  }
+}
+
 async function installFirstUsefulContentProbe(context) {
   await context.addInitScript((selector) => {
     globalThis.__forgePeopleFirstUsefulContentMs = null;
@@ -74,7 +168,7 @@ async function installFirstUsefulContentProbe(context) {
 }
 
 async function measureFirstUsefulContent(page, peopleUrl) {
-  const response = await page.goto(peopleUrl, {
+  const response = await navigateWithPrivateOperatorAdmission(page, peopleUrl, {
     waitUntil: "domcontentloaded",
     timeout: 60_000
   });
@@ -103,7 +197,12 @@ async function measureFirstUsefulContent(page, peopleUrl) {
   });
 }
 
-async function startWebStack({ repositoryRoot, dataRoot, buildDir }) {
+async function startWebStack({
+  repositoryRoot,
+  dataRoot,
+  buildDir,
+  compiledServer
+}) {
   const preview = await startPeoplePerformancePreview({
     repositoryRoot,
     buildDir
@@ -112,6 +211,7 @@ async function startWebStack({ repositoryRoot, dataRoot, buildDir }) {
     const server = await startPeoplePerformanceServer({
       repositoryRoot,
       dataRoot,
+      compiledServer,
       webOrigin: preview.origin
     });
     return {
@@ -134,6 +234,7 @@ async function runColdSamples({
   repositoryRoot,
   dataRoot,
   buildDir,
+  compiledServer,
   profileRoot,
   sampleCount
 }) {
@@ -145,12 +246,19 @@ async function runColdSamples({
       `cold-${String(index + 1).padStart(2, "0")}`
     );
     await mkdir(profilePath, { recursive: true });
-    const stack = await startWebStack({ repositoryRoot, dataRoot, buildDir });
-    const context = await chromium.launchPersistentContext(
-      profilePath,
-      desktopContextOptions()
-    );
+    const stack = await startWebStack({
+      repositoryRoot,
+      dataRoot,
+      buildDir,
+      compiledServer
+    });
+    let context = null;
     try {
+      context = await launchPrivateOperatorContext(
+        profilePath,
+        desktopContextOptions(),
+        stack.server
+      );
       browserVersion ??= context.browser()?.version() ?? "unknown";
       await installFirstUsefulContentProbe(context);
       const page = context.pages()[0] ?? (await context.newPage());
@@ -163,7 +271,7 @@ async function runColdSamples({
         ...navigation
       });
     } finally {
-      await context.close();
+      await context?.close();
       await stack.stop();
     }
   }
@@ -174,21 +282,31 @@ async function runWarmSamples({
   repositoryRoot,
   dataRoot,
   buildDir,
+  compiledServer,
   profileRoot,
   sampleCount
 }) {
   const profilePath = path.join(profileRoot, "warm");
   await mkdir(profilePath, { recursive: true });
-  const stack = await startWebStack({ repositoryRoot, dataRoot, buildDir });
-  const context = await chromium.launchPersistentContext(
-    profilePath,
-    desktopContextOptions()
-  );
+  const stack = await startWebStack({
+    repositoryRoot,
+    dataRoot,
+    buildDir,
+    compiledServer
+  });
+  let context = null;
   const samples = [];
   try {
+    context = await launchPrivateOperatorContext(
+      profilePath,
+      desktopContextOptions(),
+      stack.server
+    );
     await installFirstUsefulContentProbe(context);
     const page = context.pages()[0] ?? (await context.newPage());
-    await page.goto(stack.peopleUrl, { waitUntil: "domcontentloaded" });
+    await navigateWithPrivateOperatorAdmission(page, stack.peopleUrl, {
+      waitUntil: "domcontentloaded"
+    });
     await page
       .locator(FIRST_USEFUL_SELECTOR)
       .first()
@@ -204,7 +322,7 @@ async function runWarmSamples({
     }
     return { samples, profilePath };
   } finally {
-    await context.close();
+    await context?.close();
     await stack.stop();
   }
 }
@@ -254,24 +372,37 @@ async function runMemoryRetention({
   repositoryRoot,
   dataRoot,
   buildDir,
+  compiledServer,
   profileRoot,
   profile,
   budgets
 }) {
   const profilePath = path.join(profileRoot, "memory");
   await mkdir(profilePath, { recursive: true });
-  const stack = await startWebStack({ repositoryRoot, dataRoot, buildDir });
-  const context = await chromium.launchPersistentContext(profilePath, {
-    ...desktopContextOptions(),
-    args: ["--js-flags=--expose-gc"]
+  const stack = await startWebStack({
+    repositoryRoot,
+    dataRoot,
+    buildDir,
+    compiledServer
   });
+  let context = null;
   const points = [];
   try {
+    context = await launchPrivateOperatorContext(
+      profilePath,
+      {
+        ...desktopContextOptions(),
+        args: ["--js-flags=--expose-gc"]
+      },
+      stack.server
+    );
     const page = context.pages()[0] ?? (await context.newPage());
     const cdp = await context.newCDPSession(page);
     await cdp.send("Performance.enable");
     await cdp.send("HeapProfiler.enable");
-    await page.goto(stack.peopleUrl, { waitUntil: "domcontentloaded" });
+    await navigateWithPrivateOperatorAdmission(page, stack.peopleUrl, {
+      waitUntil: "domcontentloaded"
+    });
     await page
       .locator(FIRST_USEFUL_SELECTOR)
       .first()
@@ -393,7 +524,7 @@ async function runMemoryRetention({
       checks
     };
   } finally {
-    await context.close();
+    await context?.close();
     await stack.stop();
   }
 }
@@ -423,7 +554,9 @@ async function preloadAllPeople(page, peopleUrl, expectedPeople) {
   };
   page.on("response", onResponse);
   try {
-    await page.goto(peopleUrl, { waitUntil: "domcontentloaded" });
+    await navigateWithPrivateOperatorAdmission(page, peopleUrl, {
+      waitUntil: "domcontentloaded"
+    });
     const scroll = page.locator(SCROLL_SELECTOR);
     await scroll.waitFor({ state: "visible" });
     let stagnantIterations = 0;
@@ -800,6 +933,7 @@ async function measureScrollDevice({
   name,
   contextOptions,
   profilePath,
+  server,
   peopleUrl,
   expectedPeople,
   runCount,
@@ -807,11 +941,13 @@ async function measureScrollDevice({
   budgets
 }) {
   await mkdir(profilePath, { recursive: true });
-  const context = await chromium.launchPersistentContext(
-    profilePath,
-    contextOptions
-  );
+  let context = null;
   try {
+    context = await launchPrivateOperatorContext(
+      profilePath,
+      contextOptions,
+      server
+    );
     const page = context.pages()[0] ?? (await context.newPage());
     const preload = await preloadAllPeople(page, peopleUrl, expectedPeople);
     const cdp = await context.newCDPSession(page);
@@ -912,7 +1048,7 @@ async function measureScrollDevice({
       checks
     };
   } finally {
-    await context.close();
+    await context?.close();
   }
 }
 
@@ -920,16 +1056,23 @@ async function runScrollSuite({
   repositoryRoot,
   dataRoot,
   buildDir,
+  compiledServer,
   profileRoot,
   profile,
   budgets
 }) {
-  const stack = await startWebStack({ repositoryRoot, dataRoot, buildDir });
+  const stack = await startWebStack({
+    repositoryRoot,
+    dataRoot,
+    buildDir,
+    compiledServer
+  });
   try {
     const desktop = await measureScrollDevice({
       name: "desktop",
       contextOptions: desktopContextOptions(),
       profilePath: path.join(profileRoot, "scroll-desktop"),
+      server: stack.server,
       peopleUrl: stack.peopleUrl,
       expectedPeople: profile.fixture.people,
       runCount: profile.scroll.runsPerDevice,
@@ -940,6 +1083,7 @@ async function runScrollSuite({
       name: "pixel_7",
       contextOptions: pixel7ContextOptions(),
       profilePath: path.join(profileRoot, "scroll-pixel-7"),
+      server: stack.server,
       peopleUrl: stack.peopleUrl,
       expectedPeople: profile.fixture.people,
       runCount: profile.scroll.runsPerDevice,
@@ -962,6 +1106,7 @@ export async function runPeopleBrowserPerformanceSuite({
   repositoryRoot,
   dataRoot,
   buildDir,
+  compiledServer,
   runRoot,
   profile,
   budgets
@@ -973,6 +1118,7 @@ export async function runPeopleBrowserPerformanceSuite({
     repositoryRoot,
     dataRoot,
     buildDir,
+    compiledServer,
     profileRoot,
     sampleCount: profile.browser.coldSamples
   });
@@ -980,6 +1126,7 @@ export async function runPeopleBrowserPerformanceSuite({
     repositoryRoot,
     dataRoot,
     buildDir,
+    compiledServer,
     profileRoot,
     sampleCount: profile.browser.warmSamples
   });
@@ -1017,6 +1164,7 @@ export async function runPeopleBrowserPerformanceSuite({
     repositoryRoot,
     dataRoot,
     buildDir,
+    compiledServer,
     profileRoot,
     profile,
     budgets
@@ -1025,6 +1173,7 @@ export async function runPeopleBrowserPerformanceSuite({
     repositoryRoot,
     dataRoot,
     buildDir,
+    compiledServer,
     profileRoot,
     profile,
     budgets
@@ -1042,7 +1191,7 @@ export async function runPeopleBrowserPerformanceSuite({
     profileRoot,
     firstUsefulContent: {
       methodology: {
-        cold: "fresh Chromium process, persistent-profile directory, API server, and Vite preview process per sample",
+        cold: "fresh Chromium process, persistent-profile directory, API server, and Vite preview process per sample; timing includes the application's first authenticated operator-session admission",
         warm: "same Chromium profile and server with primed HTTP/module cache",
         endpoint: "/forge/people",
         usefulContent: "first visible nonempty virtualized Person row"
