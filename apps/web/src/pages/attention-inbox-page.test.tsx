@@ -21,12 +21,14 @@ const {
   getAttentionInboxMock,
   snoozeAttentionInboxItemMock,
   dismissAttentionInboxItemMock,
-  restoreAttentionInboxItemMock
+  restoreAttentionInboxItemMock,
+  undoMutationReceiptMock
 } = vi.hoisted(() => ({
   getAttentionInboxMock: vi.fn(),
   snoozeAttentionInboxItemMock: vi.fn(),
   dismissAttentionInboxItemMock: vi.fn(),
-  restoreAttentionInboxItemMock: vi.fn()
+  restoreAttentionInboxItemMock: vi.fn(),
+  undoMutationReceiptMock: vi.fn()
 }));
 
 vi.mock("@/components/shell/app-shell", () => ({
@@ -55,11 +57,29 @@ vi.mock("@/components/shell/page-hero", () => ({
 }));
 
 vi.mock("@/lib/api", () => ({
+  createMutationReceiptUndoKey: () => "undo_attention_test",
   getAttentionInbox: getAttentionInboxMock,
   snoozeAttentionInboxItem: snoozeAttentionInboxItemMock,
   dismissAttentionInboxItem: dismissAttentionInboxItemMock,
-  restoreAttentionInboxItem: restoreAttentionInboxItemMock
+  restoreAttentionInboxItem: restoreAttentionInboxItemMock,
+  undoMutationReceipt: undoMutationReceiptMock
 }));
+
+const mutationReceipt = {
+  id: "mrc_attention",
+  operation: "attention_state" as const,
+  targetType: "attention_item",
+  targetId: "attn:insight:ins_1",
+  targetLabel: "Review the recent pattern",
+  ownerUserId: "user_operator",
+  summary: "Dismissed Review the recent pattern.",
+  status: "available" as const,
+  reversible: true,
+  explanation: "Undo is available until the time shown.",
+  expiresAt: "2099-07-09T10:10:00.000Z",
+  createdAt: "2099-07-09T10:00:00.000Z",
+  undoneAt: null
+};
 
 const items: AttentionInboxItem[] = [
   {
@@ -180,9 +200,18 @@ beforeEach(() => {
     ({ state = "active" }: { state?: AttentionInboxState }) =>
       Promise.resolve(payload(state))
   );
-  snoozeAttentionInboxItemMock.mockResolvedValue({ attentionState: {} });
-  dismissAttentionInboxItemMock.mockResolvedValue({ attentionState: {} });
-  restoreAttentionInboxItemMock.mockResolvedValue({ attentionState: {} });
+  snoozeAttentionInboxItemMock.mockResolvedValue({
+    attentionState: {},
+    mutationReceipt
+  });
+  dismissAttentionInboxItemMock.mockResolvedValue({
+    attentionState: {},
+    mutationReceipt
+  });
+  restoreAttentionInboxItemMock.mockResolvedValue({
+    attentionState: {},
+    mutationReceipt
+  });
 });
 
 afterEach(() => {
@@ -256,6 +285,11 @@ describe("AttentionInboxPage", () => {
         "attn:insight:ins_1"
       );
     });
+    expect(
+      screen.getByRole("button", {
+        name: "Undo: Dismissed Review the recent pattern."
+      })
+    ).toBeVisible();
   });
 
   it("loads state tabs and restores a snoozed record", async () => {

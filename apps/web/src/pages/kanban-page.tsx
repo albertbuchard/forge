@@ -8,6 +8,7 @@ import {
   KanbanSummaryBox
 } from "@/components/workbench-boxes/kanban/kanban-boxes";
 import { ExecutionBoard } from "@/components/execution-board";
+import { MutationReceiptBanner } from "@/components/mutation-receipt-banner";
 import { ProjectDialog } from "@/components/project-dialog";
 import { ProjectManagementSectionNav } from "@/components/projects/project-management-section-nav";
 import {
@@ -34,6 +35,7 @@ import { useI18n } from "@/lib/i18n";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { getSingleSelectedUserId } from "@/lib/user-ownership";
 import type { UserSummary } from "@/lib/types";
+import type { MutationReceipt } from "@/lib/mutation-receipts";
 import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 
 const ENTITY_FILTER_PREFIX = {
@@ -187,6 +189,8 @@ export function KanbanPage() {
     secondTitle: "",
     remainingRatio: 0.5
   });
+  const [mutationReceipt, setMutationReceipt] =
+    useState<MutationReceipt | null>(null);
 
   const entityFilterOptions = useMemo<EntityLinkOption[]>(
     () => [
@@ -523,12 +527,18 @@ export function KanbanPage() {
     }: {
       taskId: string;
       patch: Parameters<typeof patchTask>[1];
-    }) => shell.patchTask(taskId, patch),
-    onSuccess: invalidateBoard
+    }) => patchTask(taskId, patch),
+    onSuccess: async (result) => {
+      if (result.mutationReceipt) setMutationReceipt(result.mutationReceipt);
+      await invalidateBoard();
+    }
   });
   const deleteTaskMutation = useMutation({
     mutationFn: (taskId: string) => deleteTask(taskId),
-    onSuccess: invalidateBoard
+    onSuccess: async (result) => {
+      setMutationReceipt(result.mutationReceipt);
+      await invalidateBoard();
+    }
   });
   const workAdjustmentMutation = useMutation({
     mutationFn: createWorkAdjustment,
@@ -631,6 +641,12 @@ export function KanbanPage() {
             Start work
           </Button>
         }
+      />
+
+      <MutationReceiptBanner
+        receipt={mutationReceipt}
+        onReceiptChange={setMutationReceipt}
+        onUndone={invalidateBoard}
       />
 
       <KanbanSummaryBox>
@@ -794,7 +810,14 @@ export function KanbanPage() {
             notesSummaryByEntity={shell.snapshot.dashboard.notesSummaryByEntity}
             selectedTaskId={selectedTaskId}
             onMove={async (taskId, nextStatus) => {
-              await shell.patchTaskStatus(taskId, nextStatus);
+              if (nextStatus === "done") {
+                await shell.patchTaskStatus(taskId, nextStatus);
+                return;
+              }
+              await updateTaskMutation.mutateAsync({
+                taskId,
+                patch: { status: nextStatus }
+              });
             }}
             onMoveProject={async (projectId, nextStatus) => {
               await shell.patchProject(projectId, {

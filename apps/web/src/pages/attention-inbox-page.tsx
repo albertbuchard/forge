@@ -20,6 +20,7 @@ import {
 import { Link } from "react-router-dom";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
+import { MutationReceiptBanner } from "@/components/mutation-receipt-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,6 +43,7 @@ import type {
   AttentionInboxSource,
   AttentionInboxState
 } from "@/lib/types";
+import type { MutationReceipt } from "@/lib/mutation-receipts";
 import { cn, formatDate, formatDateTime } from "@/lib/utils";
 
 const PAGE_SIZE = 25;
@@ -252,6 +254,8 @@ export function AttentionInboxPage() {
   const [state, setState] = useState<AttentionInboxState>("active");
   const [offset, setOffset] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [mutationReceipt, setMutationReceipt] =
+    useState<MutationReceipt | null>(null);
   const [snoozeMenu, setSnoozeMenu] = useState<{
     item: AttentionInboxItem;
     position: { x: number; y: number };
@@ -289,17 +293,26 @@ export function AttentionInboxPage() {
   const snoozeMutation = useMutation({
     mutationFn: ({ itemId, until }: { itemId: string; until: string }) =>
       snoozeAttentionInboxItem(itemId, { until }),
-    onSuccess: invalidateQueue,
+    onSuccess: async (result) => {
+      setMutationReceipt(result.mutationReceipt);
+      await invalidateQueue();
+    },
     onError: reportActionError
   });
   const dismissMutation = useMutation({
     mutationFn: (itemId: string) => dismissAttentionInboxItem(itemId),
-    onSuccess: invalidateQueue,
+    onSuccess: async (result) => {
+      setMutationReceipt(result.mutationReceipt);
+      await invalidateQueue();
+    },
     onError: reportActionError
   });
   const restoreMutation = useMutation({
     mutationFn: (itemId: string) => restoreAttentionInboxItem(itemId),
-    onSuccess: invalidateQueue,
+    onSuccess: async (result) => {
+      setMutationReceipt(result.mutationReceipt);
+      await invalidateQueue();
+    },
     onError: reportActionError
   });
   const pendingItemId =
@@ -373,6 +386,12 @@ export function AttentionInboxPage() {
             Refresh
           </Button>
         }
+      />
+
+      <MutationReceiptBanner
+        receipt={mutationReceipt}
+        onReceiptChange={setMutationReceipt}
+        onUndone={invalidateQueue}
       />
 
       <section

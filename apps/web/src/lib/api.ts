@@ -267,6 +267,11 @@ import {
 import { publishUiDiagnosticLog } from "./diagnostics";
 import { resolveForgePath } from "./runtime-paths";
 import { normalizeForgeSnapshot } from "./snapshot-normalizer";
+import type {
+  MutationReceipt,
+  MutationReceiptList,
+  MutationReceiptUndoResult
+} from "./mutation-receipts";
 
 function normalizeCalendarEventPlace(event: CalendarEvent): CalendarEvent {
   const fallbackLocation =
@@ -6164,11 +6169,43 @@ export function getAttentionInbox(
   return request<AttentionInboxPayload>(`/api/v1/attention-inbox${suffix}`);
 }
 
+export function getMutationReceipts(
+  options: { userIds?: string[]; limit?: number } = {}
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, options.userIds ?? []);
+  if (typeof options.limit === "number") {
+    search.set("limit", String(options.limit));
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<MutationReceiptList>(`/api/v1/mutation-receipts${suffix}`);
+}
+
+export function createMutationReceiptUndoKey() {
+  return `undo_${globalThis.crypto.randomUUID()}`;
+}
+
+export function undoMutationReceipt(
+  receiptId: string,
+  idempotencyKey = createMutationReceiptUndoKey()
+) {
+  return request<MutationReceiptUndoResult>(
+    `/api/v1/mutation-receipts/${encodeURIComponent(receiptId)}/undo`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey }
+    }
+  );
+}
+
 export function snoozeAttentionInboxItem(
   itemId: string,
   input: { until: string; note?: string }
 ) {
-  return request<{ attentionState: AttentionInboxStateRecord }>(
+  return request<{
+    attentionState: AttentionInboxStateRecord;
+    mutationReceipt: MutationReceipt;
+  }>(
     `/api/v1/attention-inbox/${encodeURIComponent(itemId)}/snooze`,
     {
       method: "POST",
@@ -6178,7 +6215,10 @@ export function snoozeAttentionInboxItem(
 }
 
 export function dismissAttentionInboxItem(itemId: string, note = "") {
-  return request<{ attentionState: AttentionInboxStateRecord }>(
+  return request<{
+    attentionState: AttentionInboxStateRecord;
+    mutationReceipt: MutationReceipt;
+  }>(
     `/api/v1/attention-inbox/${encodeURIComponent(itemId)}/dismiss`,
     {
       method: "POST",
@@ -6188,7 +6228,10 @@ export function dismissAttentionInboxItem(itemId: string, note = "") {
 }
 
 export function restoreAttentionInboxItem(itemId: string) {
-  return request<{ attentionState: AttentionInboxStateRecord }>(
+  return request<{
+    attentionState: AttentionInboxStateRecord;
+    mutationReceipt: MutationReceipt;
+  }>(
     `/api/v1/attention-inbox/${encodeURIComponent(itemId)}/restore`,
     { method: "POST" }
   );
@@ -6437,7 +6480,9 @@ export function updateEntities(input: {
   }>;
   atomic?: boolean;
 }) {
-  return request<{ results: Array<Record<string, unknown>> }>(
+  return request<{
+    results: Array<Record<string, unknown> & { mutationReceipt?: MutationReceipt | null }>;
+  }>(
     "/api/v1/entities/update",
     {
       method: "POST",
@@ -6456,7 +6501,9 @@ export function deleteEntities(input: {
   }>;
   atomic?: boolean;
 }) {
-  return request<{ results: Array<Record<string, unknown>> }>(
+  return request<{
+    results: Array<Record<string, unknown> & { mutationReceipt?: MutationReceipt | null }>;
+  }>(
     "/api/v1/entities/delete",
     {
       method: "POST",
@@ -6821,7 +6868,9 @@ export function patchTask(
     completedTodayWorkSeconds?: number;
   }
 ) {
-  return request<{ task: unknown }>(`/api/v1/tasks/${taskId}`, {
+  return request<{ task: unknown; mutationReceipt: MutationReceipt | null }>(
+    `/api/v1/tasks/${taskId}`,
+    {
     method: "PATCH",
     body: JSON.stringify({
       ...patch,
@@ -6835,7 +6884,8 @@ export function patchTask(
           ? undefined
           : patch.plannedDurationSeconds
     })
-  });
+    }
+  );
 }
 
 export function patchWorkItem(
@@ -6877,9 +6927,12 @@ export function splitTask(taskId: string, input: TaskSplitInput) {
 }
 
 export function deleteTask(taskId: string) {
-  return request<{ task: unknown }>(`/api/v1/tasks/${taskId}`, {
+  return request<{ task: unknown; mutationReceipt: MutationReceipt }>(
+    `/api/v1/tasks/${taskId}`,
+    {
     method: "DELETE"
-  });
+    }
+  );
 }
 
 export function uncompleteTask(taskId: string) {

@@ -12,18 +12,45 @@ import { I18nProvider } from "@/lib/i18n";
 import { KanbanPage } from "./kanban-page";
 import type { ForgeSnapshot, Task, UserSummary } from "@/lib/types";
 
-const { splitTaskMock, useForgeShellMock } = vi.hoisted(() => ({
+const {
+  splitTaskMock,
+  patchTaskMock,
+  deleteTaskMock,
+  undoMutationReceiptMock,
+  useForgeShellMock
+} = vi.hoisted(() => ({
   splitTaskMock: vi.fn(),
+  patchTaskMock: vi.fn(),
+  deleteTaskMock: vi.fn(),
+  undoMutationReceiptMock: vi.fn(),
   useForgeShellMock: vi.fn()
 }));
 
 vi.mock("@/lib/api", () => ({
+  createMutationReceiptUndoKey: () => "undo_kanban_test",
   createWorkAdjustment: vi.fn(),
-  deleteTask: vi.fn(),
-  patchTask: vi.fn(),
+  deleteTask: deleteTaskMock,
+  patchTask: patchTaskMock,
   splitTask: splitTaskMock,
-  uncompleteTask: vi.fn()
+  uncompleteTask: vi.fn(),
+  undoMutationReceipt: undoMutationReceiptMock
 }));
+
+const mutationReceipt = {
+  id: "mrc_kanban",
+  operation: "task_update" as const,
+  targetType: "task",
+  targetId: "task_1",
+  targetLabel: "Rename me updated",
+  ownerUserId: "user_operator",
+  summary: "Updated Rename me updated.",
+  status: "available" as const,
+  reversible: true,
+  explanation: "Undo is available until the time shown.",
+  expiresAt: "2099-04-11T12:10:00.000Z",
+  createdAt: "2099-04-11T12:00:00.000Z",
+  undoneAt: null
+};
 
 vi.mock("@/components/shell/app-shell", () => ({
   useForgeShell: useForgeShellMock
@@ -33,11 +60,13 @@ vi.mock("@/components/execution-board", () => ({
   ExecutionBoard: ({
     tasks,
     onEditTask,
-    onSplitTask
+    onSplitTask,
+    onMove
   }: {
     tasks: Task[];
     onEditTask?: (taskId: string) => void;
     onSplitTask?: (taskId: string) => void;
+    onMove?: (taskId: string, status: Task["status"]) => Promise<void>;
   }) => (
     <div>
       <div>Execution board {tasks.length}</div>
@@ -47,6 +76,12 @@ vi.mock("@/components/execution-board", () => ({
       </button>
       <button type="button" onClick={() => onSplitTask?.(tasks[0]!.id)}>
         Open split modal
+      </button>
+      <button
+        type="button"
+        onClick={() => void onMove?.(tasks[0]!.id, "focus")}
+      >
+        Move first task to focus
       </button>
     </div>
   )
@@ -109,7 +144,8 @@ function createTask({
   goalId,
   projectId,
   tagIds,
-  user
+  user,
+  status = "focus"
 }: {
   id: string;
   title: string;
@@ -117,13 +153,14 @@ function createTask({
   projectId: string;
   tagIds: string[];
   user: UserSummary;
+  status?: Task["status"];
 }): Task {
   return {
     id,
     title,
     description: `${title} description`,
     level: "task",
-    status: "focus",
+    status,
     priority: "high",
     owner: user.displayName,
     goalId,
@@ -478,6 +515,8 @@ describe("KanbanPage split flow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     splitTaskMock.mockResolvedValue({ parent: {}, children: [] });
+    patchTaskMock.mockResolvedValue({ task: {}, mutationReceipt });
+    deleteTaskMock.mockResolvedValue({ task: {}, mutationReceipt });
   });
 
   afterEach(() => {
@@ -521,7 +560,7 @@ describe("KanbanPage split flow", () => {
     });
   });
 
-  it("patches the task through the shell and refreshes the live board after save", async () => {
+  it("patches the task, shows its Undo receipt, and refreshes the live board", async () => {
     const shell = renderKanban([
       createTask({
         id: "task_1",
@@ -537,11 +576,43 @@ describe("KanbanPage split flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save task" }));
 
     await waitFor(() => {
-      expect(shell.patchTask).toHaveBeenCalledWith("task_1", {
+      expect(patchTaskMock).toHaveBeenCalledWith("task_1", {
         title: "Rename me updated"
       });
       expect(shell.refresh).toHaveBeenCalled();
     });
+    expect(
+      screen.getByRole("button", {
+        name: "Undo: Updated Rename me updated."
+      })
+    ).toBeVisible();
+  });
+
+  it("shows the Undo receipt after moving a board card", async () => {
+    const shell = renderKanban([
+      createTask({
+        id: "task_1",
+        title: "Move me",
+        goalId: "goal_1",
+        projectId: "project_1",
+        tagIds: ["tag_focus"],
+        user: humanUser,
+        status: "backlog"
+      })
+    ]);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Move first task to focus" })
+    );
+
+    await waitFor(() => {
+      expect(patchTaskMock).toHaveBeenCalledWith("task_1", {
+        status: "focus"
+      });
+      expect(shell.refresh).toHaveBeenCalled();
+    });
+    expect(screen.getByRole("button", { name: /Undo:/ })).toBeVisible();
+    expect(shell.patchTaskStatus).not.toHaveBeenCalled();
   });
 
   it("filters kanban tasks through compact entity chips", async () => {

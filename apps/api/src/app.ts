@@ -444,6 +444,18 @@ import {
   updateEntities
 } from "./services/entity-crud.js";
 import {
+  beginMutationReceiptUndo,
+  completeMutationReceiptUndo,
+  createMutationReceipt,
+  getMutationReceiptRecord,
+  listMutationReceipts,
+  markMutationReceiptConflict,
+  mutationReceiptValuesMatch,
+  type MutationReceipt,
+  type MutationReceiptExpected,
+  type MutationReceiptInverse
+} from "./services/mutation-receipts.js";
+import {
   artifactEnrichmentRequestSchema,
   artifactEncryptRequestSchema,
   artifactHistoryQuerySchema,
@@ -12852,6 +12864,139 @@ export async function buildServer(
       projectIds: context.token?.scopePolicy.projectIds ?? [],
       tagIds: context.token?.scopePolicy.tagIds ?? []
     }) as const;
+  const mutationReceiptActorKeyFor = (
+    context: ReturnType<typeof authenticateRequest>
+  ) => (context.token ? `token:${context.token.id}` : "operator");
+  const mutationReceiptAllowedOwnerIdsFor = (
+    context: ReturnType<typeof authenticateRequest>
+  ) => {
+    const userIds = context.token?.scopePolicy.userIds ?? [];
+    return userIds.length > 0 ? userIds : undefined;
+  };
+  const mutationReceiptOwnerFor = (
+    entityType: string,
+    entityId: string,
+    entity?: Record<string, unknown> | null
+  ) =>
+    getEntityOwnerId(entityType, entityId) ??
+    (typeof entity?.userId === "string" ? entity.userId : null) ??
+    (typeof entity?.ownerUserId === "string" ? entity.ownerUserId : null);
+  const mutationReceiptTargetLabel = (
+    entityType: string,
+    entityId: string,
+    entity?: Record<string, unknown> | null
+  ) => {
+    for (const key of ["title", "name", "label"]) {
+      if (typeof entity?.[key] === "string" && entity[key].trim()) {
+        return entity[key].trim();
+      }
+    }
+    return `${entityType.replaceAll("_", " ")} ${entityId}`;
+  };
+  const pickMutationReceiptFields = (
+    entity: Record<string, unknown>,
+    requested: Record<string, unknown>
+  ) =>
+    Object.fromEntries(
+      Object.keys(requested)
+        .filter((key) => Object.prototype.hasOwnProperty.call(entity, key))
+        .map((key) => [key, entity[key]])
+    );
+  const attachMutationReceipt = <T extends Record<string, unknown>>(
+    value: T,
+    receipt: MutationReceipt | null
+  ) => ({ ...value, mutationReceipt: receipt });
+  const updateTaskWithMutationReceipt = (
+    taskId: string,
+    input: z.infer<typeof updateTaskSchema>,
+    auth: ReturnType<typeof authenticateRequest>
+  ) => {
+    const before = getTaskForAuth(taskId, auth);
+    if (!before) return null;
+    const ownerUserId = mutationReceiptOwnerFor(
+      "task",
+      taskId,
+      before as unknown as Record<string, unknown>
+    );
+    return runInTransaction(() => {
+      const task = updateTask(taskId, input, toActivityContext(auth));
+      if (!task) return null;
+      assertTaskResultScope(task, auth);
+      const requested = input as unknown as Record<string, unknown>;
+      const beforeFields = pickMutationReceiptFields(
+        before as unknown as Record<string, unknown>,
+        requested
+      );
+      const afterFields = pickMutationReceiptFields(
+        task as unknown as Record<string, unknown>,
+        requested
+      );
+      const changed = !mutationReceiptValuesMatch(beforeFields, afterFields);
+      const mutationReceipt = changed
+        ? createMutationReceipt({
+            actorKey: mutationReceiptActorKeyFor(auth),
+            ownerUserId,
+            operation: "task_update",
+            targetType: "task",
+            targetId: taskId,
+            targetLabel: task.title,
+            summary:
+              before.status !== task.status
+                ? `Moved ${task.title} from ${before.status.replaceAll("_", " ")} to ${task.status.replaceAll("_", " ")}.`
+                : `Updated ${task.title}.`,
+            inverse: {
+              kind: "task_update",
+              taskId,
+              patch: beforeFields
+            },
+            expected: { kind: "task_fields", fields: afterFields }
+          })
+        : null;
+      return { task, mutationReceipt };
+    });
+  };
+  const deleteTaskWithMutationReceipt = (
+    taskId: string,
+    options: z.infer<typeof entityDeleteQuerySchema>,
+    auth: ReturnType<typeof authenticateRequest>
+  ) => {
+    const before = getTaskForAuth(taskId, auth);
+    if (!before) return null;
+    const ownerUserId = mutationReceiptOwnerFor(
+      "task",
+      taskId,
+      before as unknown as Record<string, unknown>
+    );
+    return runInTransaction(() => {
+      const task = deleteEntity(
+        "task",
+        taskId,
+        options,
+        toActivityContext(auth)
+      );
+      if (!task) return null;
+      const reversible = options.mode !== "hard";
+      const mutationReceipt = createMutationReceipt({
+        actorKey: mutationReceiptActorKeyFor(auth),
+        ownerUserId,
+        operation: reversible
+          ? "entity_soft_delete"
+          : "entity_hard_delete",
+        targetType: "task",
+        targetId: taskId,
+        targetLabel: before.title,
+        summary: `Deleted ${before.title}.`,
+        inverse: reversible
+          ? { kind: "entity_restore", entityType: "task", entityId: taskId }
+          : null,
+        expected: reversible ? { kind: "entity_deleted" } : null,
+        terminalExplanation: reversible
+          ? null
+          : "This task was permanently deleted and cannot be restored."
+      });
+      return { task, mutationReceipt };
+    });
+  };
   const applyBatchCalendarEntityEffects = async (
     results: Array<{
       ok: boolean;
@@ -20861,6 +21006,237 @@ export async function buildServer(
       includeOperationalSignals: !auth.token
     };
   };
+  app.get("/api/v1/mutation-receipts", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read"],
+      { route: "/api/v1/mutation-receipts" }
+    );
+    const rawQuery = (request.query ?? {}) as Record<string, unknown>;
+    const limit = z.coerce.number().int().min(1).max(50).default(20).parse(
+      rawQuery.limit
+    );
+    return listMutationReceipts({
+      actorKey: mutationReceiptActorKeyFor(auth),
+      ownerUserIds: resolveEffectiveUserIdsForReads(rawQuery, auth),
+      limit
+    });
+  });
+  app.post(
+    "/api/v1/mutation-receipts/:id/undo",
+    async (request, reply) => {
+      const auth = requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        { route: "/api/v1/mutation-receipts/:id/undo" }
+      );
+      const { id } = request.params as { id: string };
+      const actorKey = mutationReceiptActorKeyFor(auth);
+      const idempotencyKey = parseIdempotencyKey(
+        request.headers as Record<string, unknown>
+      );
+      if (!idempotencyKey) {
+        throw new HttpError(
+          400,
+          "mutation_receipt_idempotency_required",
+          "Undo requires an Idempotency-Key header."
+        );
+      }
+      const started = beginMutationReceiptUndo({
+        actorKey,
+        receiptId: id,
+        idempotencyKey,
+        allowedOwnerUserIds: mutationReceiptAllowedOwnerIdsFor(auth)
+      });
+      if (started.replayed) {
+        reply.header("Idempotency-Replayed", "true");
+        return {
+          receipt: started.record.view,
+          replayed: true,
+          result: started.record.undoResult ?? {}
+        };
+      }
+
+      try {
+        return runInTransaction(() => {
+          const currentAttempt = beginMutationReceiptUndo({
+            actorKey,
+            receiptId: id,
+            idempotencyKey,
+            allowedOwnerUserIds: mutationReceiptAllowedOwnerIdsFor(auth)
+          });
+          const inverse = currentAttempt.record.inverse;
+          const expected = currentAttempt.record.expected;
+          if (!inverse || !expected) {
+            throw new HttpError(
+              409,
+              "mutation_receipt_not_reversible",
+              currentAttempt.record.view.explanation
+            );
+          }
+
+          let result: Record<string, unknown>;
+          if (
+            inverse.kind === "entity_update" &&
+            expected.kind === "entity_fields"
+          ) {
+            const entityType = crudEntityTypeSchema.parse(inverse.entityType);
+            const current = getEntityById(entityType, inverse.entityId);
+            if (!current || !mutationReceiptValuesMatch(current, expected.fields)) {
+              throw new HttpError(
+                409,
+                "mutation_receipt_target_changed",
+                "This record changed after the receipt was created. Forge left the newer data unchanged."
+              );
+            }
+            const undone = updateEntities(
+              {
+                atomic: true,
+                operations: [
+                  {
+                    entityType,
+                    id: inverse.entityId,
+                    patch: inverse.patch
+                  }
+                ]
+              },
+              toActivityContext(auth)
+            ).results[0];
+            if (!undone?.ok) {
+              throw new HttpError(
+                409,
+                "mutation_receipt_target_changed",
+                undone?.error?.message ??
+                  "This record can no longer be safely restored."
+              );
+            }
+            result = { entity: undone.entity };
+          } else if (
+            inverse.kind === "entity_restore" &&
+            expected.kind === "entity_deleted"
+          ) {
+            const entityType = crudEntityTypeSchema.parse(inverse.entityType);
+            if (
+              getEntityById(entityType, inverse.entityId) ||
+              !getDeletedEntityRecord(entityType, inverse.entityId)
+            ) {
+              throw new HttpError(
+                409,
+                "mutation_receipt_target_changed",
+                "This record is no longer in the Bin. Forge left the current data unchanged."
+              );
+            }
+            const undone = restoreEntities(
+              {
+                atomic: true,
+                operations: [{ entityType, id: inverse.entityId }]
+              },
+              toActivityContext(auth)
+            ).results[0];
+            if (!undone?.ok) {
+              throw new HttpError(
+                409,
+                "mutation_receipt_target_changed",
+                undone?.error?.message ??
+                  "This record can no longer be safely restored."
+              );
+            }
+            result = { entity: undone.entity };
+          } else if (
+            inverse.kind === "task_update" &&
+            expected.kind === "task_fields"
+          ) {
+            const current = getTaskForAuth(inverse.taskId, auth);
+            if (
+              !current ||
+              !mutationReceiptValuesMatch(
+                current as unknown as Record<string, unknown>,
+                expected.fields
+              )
+            ) {
+              throw new HttpError(
+                409,
+                "mutation_receipt_target_changed",
+                "This task changed after the receipt was created. Forge left the newer task unchanged."
+              );
+            }
+            const task = updateTask(
+              inverse.taskId,
+              inverse.patch as never,
+              toActivityContext(auth)
+            );
+            if (!task) {
+              throw new HttpError(
+                409,
+                "mutation_receipt_target_changed",
+                "This task can no longer be safely restored."
+              );
+            }
+            assertTaskResultScope(task, auth);
+            result = { task };
+          } else if (
+            inverse.kind === "attention_state" &&
+            expected.kind === "attention_state"
+          ) {
+            const item = getAttentionInboxItem(inverse.itemId, {
+              actorKey,
+              ...attentionScopeFor(auth)
+            });
+            if (
+              !item ||
+              item.state !== expected.state ||
+              item.snoozedUntil !== expected.snoozedUntil ||
+              item.sourceUpdatedAt !== expected.sourceUpdatedAt
+            ) {
+              throw new HttpError(
+                409,
+                "mutation_receipt_target_changed",
+                "This Attention item changed after the receipt was created. Forge left the newer state unchanged."
+              );
+            }
+            result = {
+              attentionState: transitionAttentionInboxState({
+                actorKey,
+                item,
+                state: inverse.state,
+                snoozedUntil: inverse.snoozedUntil,
+                note: inverse.note
+              })
+            };
+          } else {
+            throw new HttpError(
+              409,
+              "mutation_receipt_contract_conflict",
+              "This change receipt no longer matches its Undo operation."
+            );
+          }
+
+          const completed = completeMutationReceiptUndo({
+            actorKey,
+            receiptId: id,
+            idempotencyKey,
+            result
+          });
+          return { receipt: completed.view, replayed: false, result };
+        });
+      } catch (error) {
+        if (
+          error instanceof HttpError &&
+          error.code === "mutation_receipt_target_changed"
+        ) {
+          const receipt = markMutationReceiptConflict({
+            actorKey,
+            receiptId: id,
+            explanation: error.message
+          });
+          throw new HttpError(error.statusCode, error.code, error.message, {
+            receipt
+          });
+        }
+        throw error;
+      }
+    }
+  );
   app.get("/api/v1/attention-inbox", async (request) => {
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
@@ -20915,15 +21291,44 @@ export async function buildServer(
         "This attention item cannot be snoozed in its current state."
       );
     }
-    return {
-      attentionState: transitionAttentionInboxState({
+    return runInTransaction(() => {
+      const attentionState = transitionAttentionInboxState({
         actorKey,
         item,
         state: "snoozed",
         snoozedUntil: input.until,
         note: input.note
-      })
-    };
+      });
+      const mutationReceipt = createMutationReceipt({
+        actorKey,
+        ownerUserId: item.target.entityType && item.target.entityId
+          ? mutationReceiptOwnerFor(
+              item.target.entityType,
+              item.target.entityId
+            )
+          : null,
+        operation: "attention_state",
+        targetType: "attention_item",
+        targetId: item.id,
+        targetLabel: item.title,
+        summary: `Snoozed ${item.title}.`,
+        inverse: {
+          kind: "attention_state",
+          itemId: item.id,
+          state: item.state,
+          snoozedUntil: item.snoozedUntil,
+          note: "",
+          sourceUpdatedAt: item.sourceUpdatedAt
+        },
+        expected: {
+          kind: "attention_state",
+          state: attentionState.state,
+          snoozedUntil: attentionState.snoozedUntil,
+          sourceUpdatedAt: attentionState.sourceUpdatedAt
+        }
+      });
+      return { attentionState, mutationReceipt };
+    });
   });
   app.post("/api/v1/attention-inbox/:id/dismiss", async (request) => {
     const auth = requireScopedAccess(
@@ -20952,14 +21357,43 @@ export async function buildServer(
         "This attention item cannot be dismissed."
       );
     }
-    return {
-      attentionState: transitionAttentionInboxState({
+    return runInTransaction(() => {
+      const attentionState = transitionAttentionInboxState({
         actorKey,
         item,
         state: "dismissed",
         note: input.note
-      })
-    };
+      });
+      const mutationReceipt = createMutationReceipt({
+        actorKey,
+        ownerUserId: item.target.entityType && item.target.entityId
+          ? mutationReceiptOwnerFor(
+              item.target.entityType,
+              item.target.entityId
+            )
+          : null,
+        operation: "attention_state",
+        targetType: "attention_item",
+        targetId: item.id,
+        targetLabel: item.title,
+        summary: `Dismissed ${item.title}.`,
+        inverse: {
+          kind: "attention_state",
+          itemId: item.id,
+          state: item.state,
+          snoozedUntil: item.snoozedUntil,
+          note: "",
+          sourceUpdatedAt: item.sourceUpdatedAt
+        },
+        expected: {
+          kind: "attention_state",
+          state: attentionState.state,
+          snoozedUntil: attentionState.snoozedUntil,
+          sourceUpdatedAt: attentionState.sourceUpdatedAt
+        }
+      });
+      return { attentionState, mutationReceipt };
+    });
   });
   app.post("/api/v1/attention-inbox/:id/restore", async (request) => {
     const auth = requireScopedAccess(
@@ -20987,13 +21421,42 @@ export async function buildServer(
         "This attention item is already active."
       );
     }
-    return {
-      attentionState: transitionAttentionInboxState({
+    return runInTransaction(() => {
+      const attentionState = transitionAttentionInboxState({
         actorKey,
         item,
         state: "active"
-      })
-    };
+      });
+      const mutationReceipt = createMutationReceipt({
+        actorKey,
+        ownerUserId: item.target.entityType && item.target.entityId
+          ? mutationReceiptOwnerFor(
+              item.target.entityType,
+              item.target.entityId
+            )
+          : null,
+        operation: "attention_state",
+        targetType: "attention_item",
+        targetId: item.id,
+        targetLabel: item.title,
+        summary: `Restored ${item.title} to Active.`,
+        inverse: {
+          kind: "attention_state",
+          itemId: item.id,
+          state: item.state,
+          snoozedUntil: item.snoozedUntil,
+          note: "",
+          sourceUpdatedAt: item.sourceUpdatedAt
+        },
+        expected: {
+          kind: "attention_state",
+          state: attentionState.state,
+          snoozedUntil: attentionState.snoozedUntil,
+          sourceUpdatedAt: attentionState.sourceUpdatedAt
+        }
+      });
+      return { attentionState, mutationReceipt };
+    });
   });
   const entityNavigationActorKeyFor = (
     auth: ReturnType<typeof authenticateRequest>
@@ -24177,24 +24640,14 @@ export async function buildServer(
       { route: "/api/v1/tasks/:id" }
     );
     const { id } = request.params as { id: string };
-    if (!getTaskForAuth(id, auth)) {
-      reply.code(404);
-      return { error: "Task not found" };
-    }
     const input = updateTaskSchema.parse(request.body ?? {});
     requireTaskCloseoutNoteMutationAccess(auth, input, "task");
-    const task = runInTransaction(() => {
-      const updated = updateTask(id, input, toActivityContext(auth));
-      if (updated) {
-        assertTaskResultScope(updated, auth);
-      }
-      return updated;
-    });
-    if (!task) {
+    const result = updateTaskWithMutationReceipt(id, input, auth);
+    if (!result) {
       reply.code(404);
       return { error: "Task not found" };
     }
-    return { task };
+    return result;
   });
   app.patch("/api/v1/work-items/:id", async (request, reply) => {
     const auth = requireScopedAccess(
@@ -24203,24 +24656,14 @@ export async function buildServer(
       { route: "/api/v1/work-items/:id" }
     );
     const { id } = request.params as { id: string };
-    if (!getTaskForAuth(id, auth)) {
-      reply.code(404);
-      return { error: "Work item not found" };
-    }
     const input = updateTaskSchema.parse(request.body ?? {});
     requireTaskCloseoutNoteMutationAccess(auth, input, "task");
-    const workItem = runInTransaction(() => {
-      const updated = updateTask(id, input, toActivityContext(auth));
-      if (updated) {
-        assertTaskResultScope(updated, auth);
-      }
-      return updated;
-    });
-    if (!workItem) {
+    const result = updateTaskWithMutationReceipt(id, input, auth);
+    if (!result) {
       reply.code(404);
       return { error: "Work item not found" };
     }
-    return { workItem };
+    return { workItem: result.task, mutationReceipt: result.mutationReceipt };
   });
   app.post("/api/v1/tasks/:id/split", async (request, reply) => {
     const auth = requireScopedAccess(
@@ -24258,17 +24701,16 @@ export async function buildServer(
       { route: "/api/v1/tasks/:id" }
     );
     const { id } = request.params as { id: string };
-    const task = deleteEntity(
-      "task",
+    const result = deleteTaskWithMutationReceipt(
       id,
       entityDeleteQuerySchema.parse(request.query ?? {}),
-      toActivityContext(auth)
+      auth
     );
-    if (!task) {
+    if (!result) {
       reply.code(404);
       return { error: "Task not found" };
     }
-    return { task };
+    return result;
   });
   app.delete("/api/v1/work-items/:id", async (request, reply) => {
     const auth = requireScopedAccess(
@@ -24277,17 +24719,16 @@ export async function buildServer(
       { route: "/api/v1/work-items/:id" }
     );
     const { id } = request.params as { id: string };
-    const workItem = deleteEntity(
-      "task",
+    const result = deleteTaskWithMutationReceipt(
       id,
       entityDeleteQuerySchema.parse(request.query ?? {}),
-      toActivityContext(auth)
+      auth
     );
-    if (!workItem) {
+    if (!result) {
       reply.code(404);
       return { error: "Work item not found" };
     }
-    return { workItem };
+    return { workItem: result.task, mutationReceipt: result.mutationReceipt };
   });
   app.post("/api/v1/operator/log-work", async (request, reply) => {
     const auth = requireRewardMutationAccess(
@@ -24618,7 +25059,70 @@ export async function buildServer(
     requirePsycheNoteBatchMutationAccess(auth, input.operations);
     requirePsycheVocabularyBatchMutationAccess(auth, input.operations);
     requirePreferenceCatalogBatchLinkAccess(input.operations, auth);
-    const result = updateEntities(input, toActivityContext(auth));
+    const result = runInTransaction(() => {
+      const before = input.operations.map((operation) =>
+        getEntityById(operation.entityType, operation.id)
+      );
+      const updated = updateEntities(input, toActivityContext(auth));
+      updated.results = updated.results.map((operationResult, index) => {
+        const operation = input.operations[index];
+        const previous = before[index];
+        if (!operationResult.ok || !operation || !previous) {
+          return operationResult;
+        }
+        const current = (operationResult.entity ?? {}) as Record<
+          string,
+          unknown
+        >;
+        const beforeFields = pickMutationReceiptFields(
+          previous,
+          operation.patch
+        );
+        const afterFields = pickMutationReceiptFields(current, operation.patch);
+        const changed = !mutationReceiptValuesMatch(beforeFields, afterFields);
+        const hasRemoteCalendarProjection =
+          operation.entityType === "calendar_event";
+        const mutationReceipt = changed
+          ? createMutationReceipt({
+              actorKey: mutationReceiptActorKeyFor(auth),
+              ownerUserId: mutationReceiptOwnerFor(
+                operation.entityType,
+                operation.id,
+                current
+              ),
+              operation: "entity_update",
+              targetType: operation.entityType,
+              targetId: operation.id,
+              targetLabel: mutationReceiptTargetLabel(
+                operation.entityType,
+                operation.id,
+                current
+              ),
+              summary: `Updated ${mutationReceiptTargetLabel(
+                operation.entityType,
+                operation.id,
+                current
+              )}.`,
+              inverse: hasRemoteCalendarProjection
+                ? null
+                : {
+                    kind: "entity_update",
+                    entityType: operation.entityType,
+                    entityId: operation.id,
+                    patch: beforeFields
+                  },
+              expected: hasRemoteCalendarProjection
+                ? null
+                : { kind: "entity_fields", fields: afterFields },
+              terminalExplanation: hasRemoteCalendarProjection
+                ? "This calendar event may already be projected to a remote calendar, so Forge cannot safely undo the edit. Edit the event again instead."
+                : null
+            })
+          : null;
+        return attachMutationReceipt(operationResult, mutationReceipt);
+      });
+      return updated;
+    });
     await applyBatchCalendarEntityEffects(result.results, auth, "update");
     return redactPreferenceBatchPayload(result, auth);
   });
@@ -24632,7 +25136,67 @@ export async function buildServer(
     requirePeopleBatchMutationAccess(auth, input.operations);
     requirePsycheNoteBatchMutationAccess(auth, input.operations);
     requirePsycheVocabularyBatchMutationAccess(auth, input.operations);
-    const result = deleteEntities(input, toActivityContext(auth));
+    const capabilityByEntityType = new Map(
+      getCrudEntityCapabilityMatrix().map((entry) => [entry.entityType, entry])
+    );
+    const result = runInTransaction(() => {
+      const before = input.operations.map((operation) => {
+        const entity =
+          getEntityById(operation.entityType, operation.id) ??
+          getDeletedEntityRecord(operation.entityType, operation.id)?.snapshot;
+        return {
+          entity,
+          ownerUserId: entity
+            ? mutationReceiptOwnerFor(
+                operation.entityType,
+                operation.id,
+                entity
+              )
+            : null
+        };
+      });
+      const deleted = deleteEntities(input, toActivityContext(auth));
+      deleted.results = deleted.results.map((operationResult, index) => {
+        const operation = input.operations[index];
+        const previous = before[index];
+        if (!operationResult.ok || !operation || !previous?.entity) {
+          return operationResult;
+        }
+        const isHardDelete =
+          operation.mode === "hard" ||
+          capabilityByEntityType.get(operation.entityType)?.deleteMode ===
+            "immediate";
+        const label = mutationReceiptTargetLabel(
+          operation.entityType,
+          operation.id,
+          previous.entity
+        );
+        const mutationReceipt = createMutationReceipt({
+          actorKey: mutationReceiptActorKeyFor(auth),
+          ownerUserId: previous.ownerUserId,
+          operation: isHardDelete
+            ? "entity_hard_delete"
+            : "entity_soft_delete",
+          targetType: operation.entityType,
+          targetId: operation.id,
+          targetLabel: label,
+          summary: `Deleted ${label}.`,
+          inverse: isHardDelete
+            ? null
+            : {
+                kind: "entity_restore",
+                entityType: operation.entityType,
+                entityId: operation.id
+              },
+          expected: isHardDelete ? null : { kind: "entity_deleted" },
+          terminalExplanation: isHardDelete
+            ? `This ${operation.entityType.replaceAll("_", " ")} was permanently deleted and cannot be restored.`
+            : null
+        });
+        return attachMutationReceipt(operationResult, mutationReceipt);
+      });
+      return deleted;
+    });
     await applyBatchCalendarEntityEffects(result.results, auth, "delete");
     return redactPreferenceBatchPayload(result, auth);
   });

@@ -227,6 +227,11 @@ const API_TAGS = [
       "A bounded, deduplicated queue of existing Forge records that need review or a decision."
   },
   {
+    name: "Mutation Receipts",
+    description:
+      "Owner-scoped recent-change receipts with bounded, idempotent Undo and truthful terminal states."
+  },
+  {
     name: "Navigation",
     description:
       "Canonical cross-surface pins and actor-scoped recently viewed Forge records."
@@ -457,6 +462,9 @@ function resolveTagsForPath(path: string) {
   }
   if (path.startsWith("/api/v1/attention-inbox")) {
     return ["Attention"];
+  }
+  if (path.startsWith("/api/v1/mutation-receipts")) {
+    return ["Mutation Receipts"];
   }
   if (path.startsWith("/api/v1/entity-navigation")) {
     return ["Navigation"];
@@ -4854,6 +4862,59 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const mutationReceipt = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "operation",
+      "targetType",
+      "targetId",
+      "targetLabel",
+      "ownerUserId",
+      "summary",
+      "status",
+      "reversible",
+      "explanation",
+      "expiresAt",
+      "createdAt",
+      "undoneAt"
+    ],
+    properties: {
+      id: { type: "string", pattern: "^mrc_[a-z0-9]+$" },
+      operation: {
+        type: "string",
+        enum: [
+          "entity_update",
+          "entity_soft_delete",
+          "entity_hard_delete",
+          "task_update",
+          "attention_state"
+        ]
+      },
+      targetType: { type: "string" },
+      targetId: { type: "string" },
+      targetLabel: { type: "string" },
+      ownerUserId: nullable({ type: "string" }),
+      summary: { type: "string" },
+      status: {
+        type: "string",
+        enum: [
+          "available",
+          "undone",
+          "expired",
+          "conflicted",
+          "not_reversible"
+        ]
+      },
+      reversible: { type: "boolean" },
+      explanation: { type: "string" },
+      expiresAt: nullable({ type: "string", format: "date-time" }),
+      createdAt: { type: "string", format: "date-time" },
+      undoneAt: nullable({ type: "string", format: "date-time" })
+    }
+  };
+
   const entityNavigationItem = {
     type: "object",
     additionalProperties: false,
@@ -6915,6 +6976,9 @@ export function buildOpenApiDocument() {
           "Downstream calendar projection outcome, present only for successful calendar-event mutations that request projection work.",
         $ref: "#/components/schemas/CalendarProjectionResult"
       },
+      mutationReceipt: nullable({
+        $ref: "#/components/schemas/MutationReceipt"
+      }),
       error: { $ref: "#/components/schemas/BatchEntityOperationError" }
     },
     oneOf: [
@@ -11869,6 +11933,7 @@ export function buildOpenApiDocument() {
         AttentionInboxSummary: attentionInboxSummary,
         AttentionInboxPayload: attentionInboxPayload,
         AttentionInboxStateRecord: attentionInboxStateRecord,
+        MutationReceipt: mutationReceipt,
         EntityNavigationItem: entityNavigationItem,
         EntityNavigationPayload: entityNavigationPayload,
         EntityNavigationPinInput: entityNavigationPinInput,
@@ -20136,7 +20201,7 @@ export function buildOpenApiDocument() {
         patch: {
           summary: "Update a task",
           description:
-            "The current task must be in scope; moving the resulting task outside token user, project, or tag scope returns 403 and rolls back.",
+            "The current task must be in scope; moving the resulting task outside token user, project, or tag scope returns 403 and rolls back. A changed task returns a ten-minute mutation receipt whose Undo is concurrency checked.",
           security: [{ operatorSession: [] }, { bearerAuth: [] }],
           requestBody: {
             required: true,
@@ -20150,9 +20215,12 @@ export function buildOpenApiDocument() {
             "200": jsonResponse(
               {
                 type: "object",
-                required: ["task"],
+                required: ["task", "mutationReceipt"],
                 properties: {
-                  task: { $ref: "#/components/schemas/Task" }
+                  task: { $ref: "#/components/schemas/Task" },
+                  mutationReceipt: nullable({
+                    $ref: "#/components/schemas/MutationReceipt"
+                  })
                 }
               },
               "Updated task"
@@ -20166,14 +20234,30 @@ export function buildOpenApiDocument() {
         },
         delete: {
           summary: "Delete a task",
+          description:
+            "Soft delete is the default and returns a ten-minute Undo receipt. mode=hard returns a terminal receipt that explains why the permanent deletion cannot be undone.",
           security: [{ operatorSession: [] }, { bearerAuth: [] }],
+          parameters: [
+            {
+              name: "mode",
+              in: "query",
+              schema: {
+                type: "string",
+                enum: ["soft", "hard"],
+                default: "soft"
+              }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
-                required: ["task"],
+                required: ["task", "mutationReceipt"],
                 properties: {
-                  task: { $ref: "#/components/schemas/Task" }
+                  task: { $ref: "#/components/schemas/Task" },
+                  mutationReceipt: {
+                    $ref: "#/components/schemas/MutationReceipt"
+                  }
                 }
               },
               "Deleted task"
@@ -21246,6 +21330,71 @@ export function buildOpenApiDocument() {
           }
         }
       },
+      "/api/v1/mutation-receipts": {
+        get: {
+          summary: "List recent change receipts for the current principal",
+          description:
+            "Requires read scope. Receipts are isolated to the current operator or token principal and can be narrowed by owner. Results are newest first and capped at 50. Expired, conflicted, already-undone, and irreversible changes remain truthful terminal records without an active Undo control.",
+          parameters: [
+            repeatedStringQueryParameter("userIds"),
+            integerQueryParameter("limit", 1, 50)
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["receipts", "limit"],
+                properties: {
+                  receipts: arrayOf({
+                    $ref: "#/components/schemas/MutationReceipt"
+                  }),
+                  limit: { type: "integer", minimum: 1, maximum: 50 }
+                }
+              },
+              "Bounded mutation receipt list"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/mutation-receipts/{id}/undo": {
+        post: {
+          summary: "Undo one recent reversible change",
+          description:
+            "Requires write scope and an Idempotency-Key header. Forge applies the inverse only before expiry and only while the target still matches the exact post-change state. A replay with the same key returns the stored result. Expired, conflicted, irreversible, foreign-principal, and out-of-owner-scope receipts never mutate data.",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            },
+            {
+              name: "Idempotency-Key",
+              in: "header",
+              required: true,
+              schema: { type: "string", minLength: 1, maxLength: 128 }
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["receipt", "replayed", "result"],
+                properties: {
+                  receipt: { $ref: "#/components/schemas/MutationReceipt" },
+                  replayed: { type: "boolean" },
+                  result: { type: "object", additionalProperties: true }
+                }
+              },
+              "Applied or idempotently replayed Undo"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
       "/api/v1/attention-inbox": {
         get: {
           summary: "Read the current actor's bounded attention queue",
@@ -21342,10 +21491,13 @@ export function buildOpenApiDocument() {
               {
                 type: "object",
                 additionalProperties: false,
-                required: ["attentionState"],
+                required: ["attentionState", "mutationReceipt"],
                 properties: {
                   attentionState: {
                     $ref: "#/components/schemas/AttentionInboxStateRecord"
+                  },
+                  mutationReceipt: {
+                    $ref: "#/components/schemas/MutationReceipt"
                   }
                 }
               },
@@ -21388,10 +21540,13 @@ export function buildOpenApiDocument() {
               {
                 type: "object",
                 additionalProperties: false,
-                required: ["attentionState"],
+                required: ["attentionState", "mutationReceipt"],
                 properties: {
                   attentionState: {
                     $ref: "#/components/schemas/AttentionInboxStateRecord"
+                  },
+                  mutationReceipt: {
+                    $ref: "#/components/schemas/MutationReceipt"
                   }
                 }
               },
@@ -21420,10 +21575,13 @@ export function buildOpenApiDocument() {
               {
                 type: "object",
                 additionalProperties: false,
-                required: ["attentionState"],
+                required: ["attentionState", "mutationReceipt"],
                 properties: {
                   attentionState: {
                     $ref: "#/components/schemas/AttentionInboxStateRecord"
+                  },
+                  mutationReceipt: {
+                    $ref: "#/components/schemas/MutationReceipt"
                   }
                 }
               },
@@ -22439,7 +22597,7 @@ export function buildOpenApiDocument() {
           summary:
             "Update multiple Forge entities in one ordered batch request",
           description:
-            "Updates are owner scoped. Agent tokens require base write. Updating event_type or emotion_definition additionally requires psyche.write when Psyche authentication is enabled. Updating a Psyche-linked note, or adding a Psyche link to a note, requires psyche.note.",
+            "Updates are owner scoped. Each changed successful result includes a ten-minute, concurrency-checked mutationReceipt; a no-op returns mutationReceipt=null. Agent tokens require base write. Updating event_type or emotion_definition additionally requires psyche.write when Psyche authentication is enabled. Updating a Psyche-linked note, or adding a Psyche link to a note, requires psyche.note.",
           requestBody: {
             required: true,
             content: {
@@ -22472,7 +22630,7 @@ export function buildOpenApiDocument() {
           summary:
             "Delete multiple Forge entities in one ordered batch request. Soft delete is the default.",
           description:
-            "Agent tokens require base write. Deleting event_type or emotion_definition additionally requires psyche.write when Psyche authentication is enabled. Deleting a Psyche-linked note requires psyche.note.",
+            "Every successful result includes mutationReceipt. Soft deletion returns a ten-minute Undo receipt; hard or immediate deletion returns a terminal receipt with no false Undo. Agent tokens require base write. Deleting event_type or emotion_definition additionally requires psyche.write when Psyche authentication is enabled. Deleting a Psyche-linked note requires psyche.note.",
           requestBody: {
             required: true,
             content: {

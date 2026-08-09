@@ -22618,6 +22618,16 @@
             "description": "Downstream calendar projection outcome, present only for successful calendar-event mutations that request projection work.",
             "$ref": "#/components/schemas/CalendarProjectionResult"
           },
+          "mutationReceipt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MutationReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "error": {
             "$ref": "#/components/schemas/BatchEntityOperationError"
           }
@@ -38680,6 +38690,105 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "MutationReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "operation",
+          "targetType",
+          "targetId",
+          "targetLabel",
+          "ownerUserId",
+          "summary",
+          "status",
+          "reversible",
+          "explanation",
+          "expiresAt",
+          "createdAt",
+          "undoneAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^mrc_[a-z0-9]+$"
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "entity_update",
+              "entity_soft_delete",
+              "entity_hard_delete",
+              "task_update",
+              "attention_state"
+            ]
+          },
+          "targetType": {
+            "type": "string"
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetLabel": {
+            "type": "string"
+          },
+          "ownerUserId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "undone",
+              "expired",
+              "conflicted",
+              "not_reversible"
+            ]
+          },
+          "reversible": {
+            "type": "boolean"
+          },
+          "explanation": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "undoneAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -61298,7 +61407,7 @@
       },
       "patch": {
         "summary": "Update a task",
-        "description": "The current task must be in scope; moving the resulting task outside token user, project, or tag scope returns 403 and rolls back.",
+        "description": "The current task must be in scope; moving the resulting task outside token user, project, or tag scope returns 403 and rolls back. A changed task returns a ten-minute mutation receipt whose Undo is concurrency checked.",
         "security": [
           {
             "operatorSession": []
@@ -61325,11 +61434,22 @@
                 "schema": {
                   "type": "object",
                   "required": [
-                    "task"
+                    "task",
+                    "mutationReceipt"
                   ],
                   "properties": {
                     "task": {
                       "$ref": "#/components/schemas/Task"
+                    },
+                    "mutationReceipt": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/MutationReceipt"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   }
                 }
@@ -61359,12 +61479,27 @@
       },
       "delete": {
         "summary": "Delete a task",
+        "description": "Soft delete is the default and returns a ten-minute Undo receipt. mode=hard returns a terminal receipt that explains why the permanent deletion cannot be undone.",
         "security": [
           {
             "operatorSession": []
           },
           {
             "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "mode",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "soft",
+                "hard"
+              ],
+              "default": "soft"
+            }
           }
         ],
         "responses": {
@@ -61375,11 +61510,15 @@
                 "schema": {
                   "type": "object",
                   "required": [
-                    "task"
+                    "task",
+                    "mutationReceipt"
                   ],
                   "properties": {
                     "task": {
                       "$ref": "#/components/schemas/Task"
+                    },
+                    "mutationReceipt": {
+                      "$ref": "#/components/schemas/MutationReceipt"
                     }
                   }
                 }
@@ -63257,6 +63396,137 @@
         "operationId": "postinsights_id_feedback"
       }
     },
+    "/api/v1/mutation-receipts": {
+      "get": {
+        "summary": "List recent change receipts for the current principal",
+        "description": "Requires read scope. Receipts are isolated to the current operator or token principal and can be narrowed by owner. Results are newest first and capped at 50. Expired, conflicted, already-undone, and irreversible changes remain truthful terminal records without an active Undo control.",
+        "parameters": [
+          {
+            "name": "userIds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded mutation receipt list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "receipts",
+                    "limit"
+                  ],
+                  "properties": {
+                    "receipts": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MutationReceipt"
+                      }
+                    },
+                    "limit": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 50
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Mutation Receipts"
+        ],
+        "operationId": "getmutation_receipts"
+      }
+    },
+    "/api/v1/mutation-receipts/{id}/undo": {
+      "post": {
+        "summary": "Undo one recent reversible change",
+        "description": "Requires write scope and an Idempotency-Key header. Forge applies the inverse only before expiry and only while the target still matches the exact post-change state. A replay with the same key returns the stored result. Expired, conflicted, irreversible, foreign-principal, and out-of-owner-scope receipts never mutate data.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Applied or idempotently replayed Undo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "receipt",
+                    "replayed",
+                    "result"
+                  ],
+                  "properties": {
+                    "receipt": {
+                      "$ref": "#/components/schemas/MutationReceipt"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Mutation Receipts"
+        ],
+        "operationId": "postmutation_receipts_id_undo"
+      }
+    },
     "/api/v1/attention-inbox": {
       "get": {
         "summary": "Read the current actor's bounded attention queue",
@@ -63387,11 +63657,15 @@
                   "type": "object",
                   "additionalProperties": false,
                   "required": [
-                    "attentionState"
+                    "attentionState",
+                    "mutationReceipt"
                   ],
                   "properties": {
                     "attentionState": {
                       "$ref": "#/components/schemas/AttentionInboxStateRecord"
+                    },
+                    "mutationReceipt": {
+                      "$ref": "#/components/schemas/MutationReceipt"
                     }
                   }
                 }
@@ -63450,11 +63724,15 @@
                   "type": "object",
                   "additionalProperties": false,
                   "required": [
-                    "attentionState"
+                    "attentionState",
+                    "mutationReceipt"
                   ],
                   "properties": {
                     "attentionState": {
                       "$ref": "#/components/schemas/AttentionInboxStateRecord"
+                    },
+                    "mutationReceipt": {
+                      "$ref": "#/components/schemas/MutationReceipt"
                     }
                   }
                 }
@@ -63495,11 +63773,15 @@
                   "type": "object",
                   "additionalProperties": false,
                   "required": [
-                    "attentionState"
+                    "attentionState",
+                    "mutationReceipt"
                   ],
                   "properties": {
                     "attentionState": {
                       "$ref": "#/components/schemas/AttentionInboxStateRecord"
+                    },
+                    "mutationReceipt": {
+                      "$ref": "#/components/schemas/MutationReceipt"
                     }
                   }
                 }
@@ -65193,7 +65475,7 @@
     "/api/v1/entities/update": {
       "post": {
         "summary": "Update multiple Forge entities in one ordered batch request",
-        "description": "Updates are owner scoped. Agent tokens require base write. Updating event_type or emotion_definition additionally requires psyche.write when Psyche authentication is enabled. Updating a Psyche-linked note, or adding a Psyche link to a note, requires psyche.note.",
+        "description": "Updates are owner scoped. Each changed successful result includes a ten-minute, concurrency-checked mutationReceipt; a no-op returns mutationReceipt=null. Agent tokens require base write. Updating event_type or emotion_definition additionally requires psyche.write when Psyche authentication is enabled. Updating a Psyche-linked note, or adding a Psyche link to a note, requires psyche.note.",
         "requestBody": {
           "required": true,
           "content": {
@@ -65239,7 +65521,7 @@
     "/api/v1/entities/delete": {
       "post": {
         "summary": "Delete multiple Forge entities in one ordered batch request. Soft delete is the default.",
-        "description": "Agent tokens require base write. Deleting event_type or emotion_definition additionally requires psyche.write when Psyche authentication is enabled. Deleting a Psyche-linked note requires psyche.note.",
+        "description": "Every successful result includes mutationReceipt. Soft deletion returns a ten-minute Undo receipt; hard or immediate deletion returns a terminal receipt with no false Undo. Agent tokens require base write. Deleting event_type or emotion_definition additionally requires psyche.write when Psyche authentication is enabled. Deleting a Psyche-linked note requires psyche.note.",
         "requestBody": {
           "required": true,
           "content": {
@@ -65452,6 +65734,10 @@
     {
       "name": "Attention",
       "description": "A bounded, deduplicated queue of existing Forge records that need review or a decision."
+    },
+    {
+      "name": "Mutation Receipts",
+      "description": "Owner-scoped recent-change receipts with bounded, idempotent Undo and truthful terminal states."
     },
     {
       "name": "Navigation",

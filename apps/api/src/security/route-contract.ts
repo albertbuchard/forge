@@ -137,6 +137,8 @@ const LEGACY_SCOPE_COMPATIBILITY = new Map<string, readonly string[]>([
   ["POST /api/v1/life-events/import-ticket", ["write"]],
   ["GET /api/v1/attention-inbox", ["read"]],
   ["POST /api/v1/attention-inbox/:id/snooze", ["write"]],
+  ["GET /api/v1/mutation-receipts", ["read"]],
+  ["POST /api/v1/mutation-receipts/:id/undo", ["write"]],
   ["GET /api/v1/entity-navigation", ["read"]],
   ["POST /api/v1/entity-navigation/touch", ["write"]],
   ["POST /api/v1/habits", ["write"]],
