@@ -26,6 +26,18 @@ function digest(bytes, algorithm, encoding) {
   return createHash(algorithm).update(bytes).digest(encoding);
 }
 
+function parseCliFailure(stderr, expectedCode) {
+  for (const line of stderr.split(/\r?\n/u)) {
+    try {
+      const candidate = JSON.parse(line);
+      if (candidate?.code === expectedCode) return candidate;
+    } catch {
+      // Node may emit runtime warnings before or after the machine-readable line.
+    }
+  }
+  return null;
+}
+
 test("pinned prior artifact verification rejects missing, wrong, and tampered bytes", () => {
   const bytes = Buffer.from("deterministic-prior-release-fixture", "utf8");
   const expected = {
@@ -140,6 +152,20 @@ test("harness rejects a protected caller output before creating fixtures", async
   );
 });
 
+test("CLI failure parsing ignores runtime warnings around the JSON line", () => {
+  const payload = {
+    status: "failed",
+    code: "argument_value_missing",
+    evidenceRoot: null
+  };
+  const stderr = [
+    "(node:123) ExperimentalWarning: SQLite is an experimental feature",
+    JSON.stringify(payload),
+    "(Use `node --trace-warnings ...` to show where the warning was created)"
+  ].join("\n");
+  assert.deepEqual(parseCliFailure(stderr, "argument_value_missing"), payload);
+});
+
 test("CLI flags fail closed when their value is missing", () => {
   for (const option of ["--mode", "--evidence-root", "--output"]) {
     const result = spawnSync(
@@ -154,7 +180,8 @@ test("CLI flags fail closed when their value is missing", () => {
       { cwd: defaultRepoRoot, encoding: "utf8" }
     );
     assert.equal(result.status, 1);
-    const failure = JSON.parse(result.stderr.trim().split("\n").at(-1));
+    const failure = parseCliFailure(result.stderr, "argument_value_missing");
+    assert.ok(failure, result.stderr);
     assert.equal(failure.code, "argument_value_missing");
     assert.equal(failure.evidenceRoot, null);
   }
