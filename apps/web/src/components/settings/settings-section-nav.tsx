@@ -150,12 +150,14 @@ export function SettingsSectionNav({ className }: { className?: string }) {
       return undefined;
     }
 
-    pendingSettingsRouteFocus = null;
     const focusTimer = window.setTimeout(() => {
       if (focusRequest.target === "mobile-trigger") {
         mobileTriggerRef.current?.focus();
       } else {
         desktopLinkRefs.current[focusRequest.pathname]?.focus();
+      }
+      if (pendingSettingsRouteFocus === focusRequest) {
+        pendingSettingsRouteFocus = null;
       }
     }, 0);
     return () => window.clearTimeout(focusTimer);
@@ -447,7 +449,7 @@ export function SettingsSectionNav({ className }: { className?: string }) {
                       <button
                         type="button"
                         aria-label="Close settings sections"
-                        className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                        className="inline-flex size-11 shrink-0 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                         onClick={() => setMobileOpen(false)}
                       >
                         <X className="size-4" aria-hidden="true" />
