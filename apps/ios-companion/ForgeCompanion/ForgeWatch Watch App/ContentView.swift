@@ -634,26 +634,8 @@ private struct WorkSurface: View {
         if let work {
             let tasks = flattenedWorkTasks(work)
             let count = max(1, tasks.count + (work.currentRun == nil ? 0 : 1))
-            SurfaceCarousel(selection: $selection, count: count) {
-                let runOffset = work.currentRun == nil ? 0 : 1
-                if let current = work.currentRun {
-                    RunCard(run: current, onCommandTap: onCommandTap, onCommand: onCommand)
-                        .tag(0)
-                }
-                if tasks.isEmpty, work.currentRun == nil {
-                    EmptySurfaceCard(
-                        title: "No open tasks",
-                        message: "Forge has no current watch-sized work. Refresh when you expect a task to appear.",
-                        actionTitle: "Refresh work",
-                        systemImage: "arrow.clockwise",
-                        action: onRefresh
-                    )
-                    .tag(0)
-                }
-                ForEach(Array(tasks.enumerated()), id: \.element.id) { index, task in
-                    TaskCard(task: task, onCommandTap: onCommandTap, onCommand: onCommand)
-                        .tag(index + runOffset)
-                }
+            IndexedSurfaceCarousel(selection: $selection, count: count) { index in
+                workPage(work: work, tasks: tasks, index: index)
             }
         } else {
             EmptySurfaceCard(
@@ -663,6 +645,35 @@ private struct WorkSurface: View {
                 systemImage: "arrow.clockwise",
                 action: onRefresh
             )
+        }
+    }
+
+    @ViewBuilder
+    private func workPage(
+        work: ForgeWatchWorkSnapshot,
+        tasks: [ForgeWatchTaskSummary],
+        index: Int
+    ) -> some View {
+        let runOffset = work.currentRun == nil ? 0 : 1
+        if let current = work.currentRun, index == 0 {
+            RunCard(run: current, onCommandTap: onCommandTap, onCommand: onCommand)
+        } else if tasks.isEmpty {
+            EmptySurfaceCard(
+                title: "No open tasks",
+                message: "Forge has no current watch-sized work. Refresh when you expect a task to appear.",
+                actionTitle: "Refresh work",
+                systemImage: "arrow.clockwise",
+                action: onRefresh
+            )
+        } else {
+            let taskIndex = index - runOffset
+            if tasks.indices.contains(taskIndex) {
+                TaskCard(
+                    task: tasks[taskIndex],
+                    onCommandTap: onCommandTap,
+                    onCommand: onCommand
+                )
+            }
         }
     }
 }
@@ -816,8 +827,9 @@ private struct HabitSurface: View {
                 action: onRefresh
             )
         } else {
-            SurfaceCarousel(selection: $selection, count: habits.count) {
-                ForEach(Array(habits.enumerated()), id: \.element.id) { index, habit in
+            IndexedSurfaceCarousel(selection: $selection, count: habits.count) { index in
+                if habits.indices.contains(index) {
+                    let habit = habits[index]
                     Button {
                         onHabitTap(habit)
                     } label: {
@@ -842,7 +854,6 @@ private struct HabitSurface: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    .tag(index)
                 }
             }
         }
@@ -1567,7 +1578,10 @@ private struct PsycheSurface: View {
     var body: some View {
         let questions = questionCards
         let hasRecent = psyche?.recentReports?.isEmpty == false
-        SurfaceCarousel(selection: $selection, count: max(1, questions.count + (hasRecent ? 1 : 0))) {
+        IndexedSurfaceCarousel(
+            selection: $selection,
+            count: max(1, questions.count + (hasRecent ? 1 : 0))
+        ) { index in
             if questions.isEmpty {
                 EmptySurfaceCard(
                     title: "Psyche not loaded",
@@ -1578,9 +1592,8 @@ private struct PsycheSurface: View {
                         onCapture("mark_moment", nil, .empty, ["surface": "psyche"])
                     }
                 )
-                .tag(0)
-            }
-            ForEach(Array(questions.enumerated()), id: \.element.id) { index, question in
+            } else if questions.indices.contains(index) {
+                let question = questions[index]
                 PsycheQuestionCard(question: question) { option in
                     var payload = option.payload
                     payload["questionId"] = question.id
@@ -1588,11 +1601,8 @@ private struct PsycheSurface: View {
                     payload["surface"] = "psyche"
                     onCapture(question.eventType, question.id, .empty, payload)
                 }
-                .tag(index)
-            }
-            if hasRecent {
+            } else if hasRecent, index == questions.count {
                 PsycheRecentReportCard(reports: psyche?.recentReports ?? [])
-                    .tag(questions.count)
             }
         }
     }

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -24,6 +25,7 @@ import {
   deriveReleaseE2ePort,
   discoverPackedSurfaceArchives,
   initializeReleaseTestRoot,
+  materializeReleaseEntry,
   releaseGroupOrder,
   releasePlanEntries,
   stageHermesPackageSource,
@@ -311,6 +313,27 @@ test("native admission is unsigned, credential-free, and covers iPhone and watch
   );
   assert.equal(step("ios-unsigned-archive-admission").internal, true);
 
+  const watchMeasurement = step("watch-usability-measurement");
+  assert.deepEqual(watchMeasurement.environment, {
+    FORGE_WATCH_MEASURE_DERIVED_DATA: "{artifactRoot}/watch-measure-derived",
+    FORGE_WATCH_MEASURE_OUTPUT_DIR: "{artifactRoot}/watch-usability",
+    FORGE_WATCH_MEASURE_REQUIRE_EXTERNAL_ROOT: "1"
+  });
+  const materializedWatchMeasurement = materializeReleaseEntry(
+    watchMeasurement,
+    {
+      artifactRoot: "/private/tmp/forge-release-artifacts",
+      repoRoot: "/private/tmp/forge-release-repository"
+    }
+  );
+  assert.deepEqual(materializedWatchMeasurement.environment, {
+    FORGE_WATCH_MEASURE_DERIVED_DATA:
+      "/private/tmp/forge-release-artifacts/watch-measure-derived",
+    FORGE_WATCH_MEASURE_OUTPUT_DIR:
+      "/private/tmp/forge-release-artifacts/watch-usability",
+    FORGE_WATCH_MEASURE_REQUIRE_EXTERNAL_ROOT: "1"
+  });
+
   const nativeCommands = plan
     .flatMap((entry) => [entry.executable ?? "", ...entry.args])
     .join(" ");
@@ -323,6 +346,76 @@ test("native admission is unsigned, credential-free, and covers iPhone and watch
     /FORGE_IOS_(?:BUILD_CERTIFICATE|P12|PROFILE)/
   );
 });
+
+test(
+  "watch screenshot admission requires the requested title and rejects loading or duplicate frames",
+  { skip: process.platform !== "darwin" },
+  () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "forge-watch-verifier-"));
+    const repositoryGuardRoot = path.join(
+      process.cwd(),
+      "apps/ios-companion",
+      `.watch-release-path-guard-${process.pid}`
+    );
+    const binary = path.join(root, "verify-watch-screenshot");
+    try {
+      execFileSync(
+        "xcrun",
+        [
+          "swiftc",
+          path.join(
+            process.cwd(),
+            "apps/ios-companion/scripts/verify-watch-screenshot.swift"
+          ),
+          "-o",
+          binary
+        ],
+        { stdio: "pipe" }
+      );
+      assert.match(
+        execFileSync(binary, ["--self-test"], { encoding: "utf8" }),
+        /self-test passed/
+      );
+      assert.equal(existsSync(repositoryGuardRoot), false);
+      assert.throws(
+        () =>
+          execFileSync(
+            "bash",
+            [
+              path.join(
+                process.cwd(),
+                "apps/ios-companion/scripts/measure-forge-watch-usability.sh"
+              )
+            ],
+            {
+              env: {
+                ...process.env,
+                FORGE_WATCH_MEASURE_DERIVED_DATA: path.join(
+                  repositoryGuardRoot,
+                  "derived"
+                ),
+                FORGE_WATCH_MEASURE_OUTPUT_DIR: path.join(
+                  repositoryGuardRoot,
+                  "evidence"
+                ),
+                FORGE_WATCH_MEASURE_REQUIRE_EXTERNAL_ROOT: "1"
+              },
+              stdio: "pipe"
+            }
+          ),
+        (error) =>
+          error instanceof Error &&
+          String(error.stderr).includes(
+            "Release watch evidence must stay outside the public repository"
+          )
+      );
+      assert.equal(existsSync(repositoryGuardRoot), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(repositoryGuardRoot, { recursive: true, force: true });
+    }
+  }
+);
 
 test("unsigned archive admission requires every native bundle and rejects signing payloads", () => {
   const createArchive = (label) => {

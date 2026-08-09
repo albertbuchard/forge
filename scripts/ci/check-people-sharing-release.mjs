@@ -482,6 +482,12 @@ const groups = Object.freeze({
       { id: "ios-unsigned-archive-admission" }
     ),
     command("watch usability measurement", "npm", ["run", "measure:watchos"], {
+      environment: {
+        FORGE_WATCH_MEASURE_DERIVED_DATA:
+          "{artifactRoot}/watch-measure-derived",
+        FORGE_WATCH_MEASURE_OUTPUT_DIR: "{artifactRoot}/watch-usability",
+        FORGE_WATCH_MEASURE_REQUIRE_EXTERNAL_ROOT: "1"
+      },
       id: "watch-usability-measurement"
     })
   ],
@@ -858,9 +864,7 @@ function sha256(value) {
 }
 
 export function deriveReleaseE2ePort(dataRoot) {
-  const digest = createHash("sha256")
-    .update(path.resolve(dataRoot))
-    .digest();
+  const digest = createHash("sha256").update(path.resolve(dataRoot)).digest();
   return 40_000 + (digest.readUInt16BE(0) % 20_000);
 }
 
@@ -1128,15 +1132,22 @@ function contractTimestamp() {
   return payload.generatedAt;
 }
 
-function materialize(entry, context) {
+export function materializeReleaseEntry(entry, context) {
+  const resolveArtifactRoot = (value) =>
+    typeof value === "string"
+      ? value.replaceAll("{artifactRoot}", context.artifactRoot)
+      : value;
   return {
     ...entry,
     cwd: path.resolve(context.repoRoot, entry.cwd ?? "."),
-    args: entry.args.map((argument) =>
-      argument.replaceAll("{artifactRoot}", context.artifactRoot)
-    ),
+    args: entry.args.map(resolveArtifactRoot),
     environment: {
-      ...(entry.environment ?? {}),
+      ...Object.fromEntries(
+        Object.entries(entry.environment ?? {}).map(([key, value]) => [
+          key,
+          resolveArtifactRoot(value)
+        ])
+      ),
       ...(entry.generatedContracts
         ? { FORGE_DOCS_GENERATED_AT: contractTimestamp() }
         : {})
@@ -1145,7 +1156,7 @@ function materialize(entry, context) {
 }
 
 function runEntry(entry, context) {
-  const resolved = materialize(entry, context);
+  const resolved = materializeReleaseEntry(entry, context);
   process.stdout.write(`\n==> ${resolved.label}\n`);
   if (resolved.run) {
     resolved.run(context);
@@ -1179,7 +1190,8 @@ export function releasePlanEntries(selectedGroups = releaseGroupOrder) {
       group,
       id: entry.id,
       internal: typeof entry.run === "function",
-      label: entry.label
+      label: entry.label,
+      environment: { ...(entry.environment ?? {}) }
     }))
   );
 }
