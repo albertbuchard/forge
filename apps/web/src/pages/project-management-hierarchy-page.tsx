@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Search, X } from "lucide-react";
 import { Tree, type TreeApi } from "react-arborist";
@@ -106,6 +106,148 @@ const DEFAULT_STATUS_FILTERS = [
 ] as const;
 
 type HierarchyStateFilter = (typeof DEFAULT_STATUS_FILTERS)[number];
+
+export const HIERARCHY_OPEN_STATE_STORAGE_KEY =
+  "forge:project-hierarchy:open-state:v1";
+const MAX_PERSISTED_HIERARCHY_NODES = 5_000;
+const MAX_PERSISTED_HIERARCHY_CHARACTERS = 256_000;
+const MAX_PERSISTED_HIERARCHY_ID_CHARACTERS = 256;
+
+export type HierarchyOpenState = Record<string, boolean>;
+
+function boundHierarchyOpenState(
+  entries: Array<[string, unknown]>
+): HierarchyOpenState {
+  const bounded: HierarchyOpenState = {};
+  let serializedCharacters = 2;
+  let entryCount = 0;
+
+  for (const [id, open] of entries) {
+    if (
+      id.length === 0 ||
+      id.length > MAX_PERSISTED_HIERARCHY_ID_CHARACTERS ||
+      typeof open !== "boolean"
+    ) {
+      continue;
+    }
+    const entryCharacters =
+      (entryCount === 0 ? 0 : 1) +
+      JSON.stringify(id).length +
+      1 +
+      (open ? 4 : 5);
+    if (
+      entryCount >= MAX_PERSISTED_HIERARCHY_NODES ||
+      serializedCharacters + entryCharacters >
+        MAX_PERSISTED_HIERARCHY_CHARACTERS
+    ) {
+      break;
+    }
+    bounded[id] = open;
+    entryCount += 1;
+    serializedCharacters += entryCharacters;
+  }
+
+  return bounded;
+}
+
+export function parseHierarchyOpenState(
+  raw: string | null
+): HierarchyOpenState {
+  if (!raw || raw.length > MAX_PERSISTED_HIERARCHY_CHARACTERS) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+
+    return boundHierarchyOpenState(Object.entries(parsed));
+  } catch {
+    return {};
+  }
+}
+
+export function serializeHierarchyOpenState(
+  openState: HierarchyOpenState
+): string {
+  return JSON.stringify(boundHierarchyOpenState(Object.entries(openState)));
+}
+
+function readPersistedHierarchyOpenState(): HierarchyOpenState {
+  if (typeof window === "undefined") {
+    return {};
+  }
+  try {
+    return parseHierarchyOpenState(
+      window.localStorage.getItem(HIERARCHY_OPEN_STATE_STORAGE_KEY)
+    );
+  } catch {
+    return {};
+  }
+}
+
+function writePersistedHierarchyOpenState(openState: HierarchyOpenState) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(
+      HIERARCHY_OPEN_STATE_STORAGE_KEY,
+      serializeHierarchyOpenState(openState)
+    );
+  } catch {
+    // Storage can be unavailable or full. The in-memory tree remains usable.
+  }
+}
+
+export function useHierarchyOpenStatePersistence(treeRef: {
+  readonly current: { openState: HierarchyOpenState } | null;
+}) {
+  const [initialOpenState] = useState(readPersistedHierarchyOpenState);
+  const pendingOpenStateRef = useRef<HierarchyOpenState | null>(null);
+  const openStateTimerRef = useRef<number | null>(null);
+
+  const flushOpenState = useCallback(() => {
+    const pendingOpenState = pendingOpenStateRef.current;
+    if (!pendingOpenState) {
+      return;
+    }
+    writePersistedHierarchyOpenState(pendingOpenState);
+    pendingOpenStateRef.current = null;
+  }, []);
+
+  const scheduleOpenStatePersistence = useCallback(() => {
+    const nextOpenState = treeRef.current?.openState;
+    if (!nextOpenState) {
+      return;
+    }
+    pendingOpenStateRef.current = { ...nextOpenState };
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (openStateTimerRef.current !== null) {
+      window.clearTimeout(openStateTimerRef.current);
+    }
+    openStateTimerRef.current = window.setTimeout(() => {
+      openStateTimerRef.current = null;
+      flushOpenState();
+    }, 50);
+  }, [flushOpenState, treeRef]);
+
+  useEffect(
+    () => () => {
+      if (typeof window !== "undefined" && openStateTimerRef.current !== null) {
+        window.clearTimeout(openStateTimerRef.current);
+      }
+      flushOpenState();
+    },
+    [flushOpenState]
+  );
+
+  return { initialOpenState, scheduleOpenStatePersistence };
+}
 
 function normalize(text: string) {
   return text.trim().toLowerCase();
@@ -233,10 +375,38 @@ export function buildHierarchyTree(options: {
 }): HierarchyNode[] {
   const { goals, strategies, projects, workItems, tagNameById } = options;
   const workItemsByParentId = new Map<string, WorkItem[]>();
+  const workItemsByProjectId = new Map<string, WorkItem[]>();
   const issuesByProjectId = new Map<string, WorkItem[]>();
   const rootWorkItemsByProjectId = new Map<string, WorkItem[]>();
+  const projectsByGoalId = new Map<string, ProjectSummary[]>();
+  const strategiesByGoalId = new Map<string, Strategy[]>();
+  const strategiesByProjectId = new Map<string, Strategy[]>();
+
+  for (const project of projects) {
+    const current = projectsByGoalId.get(project.goalId) ?? [];
+    current.push(project);
+    projectsByGoalId.set(project.goalId, current);
+  }
+
+  for (const strategy of strategies) {
+    for (const goalId of strategy.targetGoalIds) {
+      const current = strategiesByGoalId.get(goalId) ?? [];
+      current.push(strategy);
+      strategiesByGoalId.set(goalId, current);
+    }
+    for (const projectId of strategy.targetProjectIds) {
+      const current = strategiesByProjectId.get(projectId) ?? [];
+      current.push(strategy);
+      strategiesByProjectId.set(projectId, current);
+    }
+  }
 
   for (const item of workItems) {
+    if (item.projectId) {
+      const projectItems = workItemsByProjectId.get(item.projectId) ?? [];
+      projectItems.push(item);
+      workItemsByProjectId.set(item.projectId, projectItems);
+    }
     if (item.parentWorkItemId) {
       const current = workItemsByParentId.get(item.parentWorkItemId) ?? [];
       current.push(item);
@@ -253,9 +423,7 @@ export function buildHierarchyTree(options: {
   }
 
   const buildProjectNode = (project: ProjectSummary): HierarchyNode => {
-    const lowerStrategies = strategies.filter((strategy) =>
-      strategy.targetProjectIds.includes(project.id)
-    );
+    const lowerStrategies = strategiesByProjectId.get(project.id) ?? [];
     const renderedWorkItemIds = new Set<string>();
     const mapProjectWorkItem = (
       item: WorkItem,
@@ -320,11 +488,8 @@ export function buildHierarchyTree(options: {
     ]
       .map((item) => mapProjectWorkItem(item))
       .filter((node): node is HierarchyNode => node !== null);
-    const fallbackWorkItemNodes = workItems
-      .filter(
-        (item) =>
-          item.projectId === project.id && !renderedWorkItemIds.has(item.id)
-      )
+    const fallbackWorkItemNodes = (workItemsByProjectId.get(project.id) ?? [])
+      .filter((item) => !renderedWorkItemIds.has(item.id))
       .map((item) => mapProjectWorkItem(item))
       .filter((node): node is HierarchyNode => node !== null);
 
@@ -404,11 +569,10 @@ export function buildHierarchyTree(options: {
   };
 
   return goals.map((goal) => {
-    const goalProjects = projects.filter(
-      (project) => project.goalId === goal.id
-    );
-    const goalStrategies = strategies.filter((strategy) =>
-      strategy.targetGoalIds.includes(goal.id)
+    const goalProjects = projectsByGoalId.get(goal.id) ?? [];
+    const goalStrategies = strategiesByGoalId.get(goal.id) ?? [];
+    const goalStrategyIds = new Set(
+      goalStrategies.map((strategy) => strategy.id)
     );
     const projectByStrategyId = new Map<string, ProjectSummary[]>(
       goalStrategies.map((strategy) => [strategy.id, []])
@@ -416,9 +580,9 @@ export function buildHierarchyTree(options: {
     const explicitlyNestedProjectIds = new Set<string>();
 
     for (const project of goalProjects) {
-      const firstMatchingStrategy = goalStrategies.find((strategy) =>
-        strategy.targetProjectIds.includes(project.id)
-      );
+      const firstMatchingStrategy = (
+        strategiesByProjectId.get(project.id) ?? []
+      ).find((strategy) => goalStrategyIds.has(strategy.id));
       if (!firstMatchingStrategy) {
         continue;
       }
@@ -615,6 +779,64 @@ function statusBadgeClass(statusLabel: string | null) {
     default:
       return "bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]";
   }
+}
+
+export type HierarchyToggleNode = {
+  data: { label: string };
+  isLeaf: boolean;
+  isOpen: boolean;
+  toggle: () => void;
+};
+
+export function HierarchyToggleButton({ node }: { node: HierarchyToggleNode }) {
+  return (
+    <button
+      type="button"
+      className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+      onClick={() => node.toggle()}
+      disabled={node.isLeaf}
+      aria-label={
+        node.isOpen
+          ? `Collapse ${node.data.label}`
+          : `Expand ${node.data.label}`
+      }
+    >
+      {node.isLeaf ? (
+        <span className="size-2 rounded-full bg-[var(--ui-ink-muted)]" />
+      ) : node.isOpen ? (
+        <ChevronDown className="size-4" />
+      ) : (
+        <ChevronRight className="size-4" />
+      )}
+    </button>
+  );
+}
+
+export function HierarchyOpenLink({
+  href,
+  label,
+  mobile = false
+}: {
+  href: string | null;
+  label: string;
+  mobile?: boolean;
+}) {
+  if (!href) {
+    return null;
+  }
+
+  return (
+    <Link
+      to={href}
+      aria-label={`Open ${label}`}
+      className={cn(
+        "min-h-11 min-w-11 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-medium)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]",
+        mobile ? "inline-flex lg:hidden" : "hidden lg:inline-flex"
+      )}
+    >
+      Open
+    </Link>
+  );
 }
 
 function renderHierarchyClauseBadge(kind: HierarchySearchClauseKind) {
@@ -850,6 +1072,8 @@ function HierarchySearchBar({
 export function ProjectManagementHierarchyPage() {
   const shell = useForgeShell();
   const treeRef = useRef<TreeApi<HierarchyNode> | null>(null);
+  const { initialOpenState, scheduleOpenStatePersistence } =
+    useHierarchyOpenStatePersistence(treeRef);
   const [query, setQuery] = useState("");
   const [searchClauses, setSearchClauses] = useState<HierarchySearchClause[]>(
     []
@@ -1275,10 +1499,12 @@ export function ProjectManagementHierarchyPage() {
               data={filteredTree}
               width="100%"
               height={760}
-              rowHeight={64}
+              rowHeight={76}
               overscanCount={10}
               childrenAccessor={(node) => node.children ?? null}
               openByDefault
+              initialOpenState={initialOpenState}
+              onToggle={scheduleOpenStatePersistence}
               paddingTop={8}
               paddingBottom={8}
               disableDrag
@@ -1310,25 +1536,7 @@ export function ProjectManagementHierarchyPage() {
                       }}
                     >
                       <div className="flex min-w-0 items-center gap-3">
-                        <button
-                          type="button"
-                          className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
-                          onClick={() => node.toggle()}
-                          disabled={node.isLeaf}
-                          aria-label={
-                            node.isOpen
-                              ? `Collapse ${node.data.label}`
-                              : `Expand ${node.data.label}`
-                          }
-                        >
-                          {node.isLeaf ? (
-                            <span className="size-2 rounded-full bg-[var(--ui-ink-muted)]" />
-                          ) : node.isOpen ? (
-                            <ChevronDown className="size-4" />
-                          ) : (
-                            <ChevronRight className="size-4" />
-                          )}
-                        </button>
+                        <HierarchyToggleButton node={node} />
 
                         <span
                           className={cn(
@@ -1369,6 +1577,12 @@ export function ProjectManagementHierarchyPage() {
                         </div>
                       </div>
 
+                      <HierarchyOpenLink
+                        href={node.data.href}
+                        label={node.data.label}
+                        mobile
+                      />
+
                       <div className="hidden lg:flex justify-end">
                         <Badge
                           className={statusBadgeClass(node.data.statusLabel)}
@@ -1407,12 +1621,10 @@ export function ProjectManagementHierarchyPage() {
                           </div>
                         </div>
                         {node.data.href ? (
-                          <Link
-                            to={node.data.href}
-                            className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-medium)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
-                          >
-                            Open
-                          </Link>
+                          <HierarchyOpenLink
+                            href={node.data.href}
+                            label={node.data.label}
+                          />
                         ) : (
                           <span className="w-[3.75rem]" />
                         )}

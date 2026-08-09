@@ -121,4 +121,48 @@ describe("buildHierarchyTree", () => {
       mismatchedChild.id
     );
   });
+
+  it("builds a dense hierarchy deterministically without repeated global scans", () => {
+    const denseProjects = Array.from({ length: 800 }, (_, projectIndex) => ({
+      ...project,
+      id: `project_dense_${projectIndex}`,
+      title: `Dense project ${projectIndex}`,
+      totalTasks: 25
+    })) as ProjectSummary[];
+    const denseWorkItems = denseProjects.flatMap((denseProject) =>
+      Array.from({ length: 25 }, (_, itemIndex) =>
+        workItem(
+          `${denseProject.id}_task_${itemIndex}`,
+          null,
+          "task",
+          denseProject
+        )
+      )
+    );
+
+    const startedAt = performance.now();
+    const firstTree = buildHierarchyTree({
+      goals: [goal],
+      strategies: [],
+      projects: denseProjects,
+      workItems: denseWorkItems,
+      tagNameById: new Map()
+    });
+    const elapsedMs = performance.now() - startedAt;
+    const firstIds = flattenIds(firstTree);
+    const secondIds = flattenIds(
+      buildHierarchyTree({
+        goals: [goal],
+        strategies: [],
+        projects: denseProjects,
+        workItems: denseWorkItems,
+        tagNameById: new Map()
+      })
+    );
+
+    expect(firstIds).toHaveLength(20_801);
+    expect(new Set(firstIds).size).toBe(firstIds.length);
+    expect(secondIds).toEqual(firstIds);
+    expect(elapsedMs).toBeLessThan(750);
+  });
 });
