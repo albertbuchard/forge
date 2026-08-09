@@ -29,7 +29,7 @@ type DiagnosticLogRow = {
   created_at: string;
 };
 
-const MAX_LOG_ENTRIES = 5_000;
+export const DIAGNOSTIC_LOG_MAX_ENTRIES = 5_000;
 export const DIAGNOSTIC_LOG_RETENTION_DAYS = 14;
 export const DIAGNOSTIC_LOG_RETENTION_SWEEP_INTERVAL_MS = 15 * 60 * 1000;
 const MAX_STRING_LENGTH = 4_000;
@@ -44,6 +44,14 @@ let nextRetentionSweepAt = 0;
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function redactDiagnosticText(value: string) {
+  return redactSecretValues(value).value;
+}
+
+function redactNullableDiagnosticText(value: string | null) {
+  return value === null ? null : redactDiagnosticText(value);
 }
 
 function sanitizeDiagnosticValue(value: unknown, depth = 0): unknown {
@@ -217,47 +225,63 @@ function mapRow(
   options: { compactDetails?: boolean } = {}
 ): DiagnosticLogEntry {
   const parsedDetails = JSON.parse(row.details_json) as Record<string, unknown>;
+  const redactedDetails = redactSecretValues(parsedDetails, {
+    maximumDepth: LIST_MAX_DEPTH,
+    maximumArrayItems: LIST_MAX_ARRAY_ITEMS,
+    maximumObjectKeys: LIST_MAX_OBJECT_KEYS
+  }).value;
   return diagnosticLogEntrySchema.parse({
     id: row.id,
     level: row.level,
     source: row.source,
-    scope: row.scope,
-    eventKey: row.event_key,
-    message: row.message,
-    route: row.route,
-    functionName: row.function_name,
-    requestId: row.request_id,
-    entityType: row.entity_type,
-    entityId: row.entity_id,
-    jobId: row.job_id,
+    scope: redactDiagnosticText(row.scope),
+    eventKey: redactDiagnosticText(row.event_key),
+    message: redactDiagnosticText(row.message),
+    route: redactNullableDiagnosticText(row.route),
+    functionName: redactNullableDiagnosticText(row.function_name),
+    requestId: redactNullableDiagnosticText(row.request_id),
+    entityType: redactNullableDiagnosticText(row.entity_type),
+    entityId: redactNullableDiagnosticText(row.entity_id),
+    jobId: redactNullableDiagnosticText(row.job_id),
     details: options.compactDetails
-      ? compactDiagnosticDetails(parsedDetails)
-      : parsedDetails,
+      ? compactDiagnosticDetails(redactedDetails)
+      : redactedDetails,
     createdAt: row.created_at
   });
 }
 
-function pruneDiagnosticLogs() {
+function pruneExpiredDiagnosticLogs() {
   const expiredBefore = new Date(
     Date.now() - DIAGNOSTIC_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1_000
   ).toISOString();
-  const expiredResult = getDatabase()
+  const result = getDatabase()
     .prepare(
       `DELETE FROM diagnostic_logs
        WHERE created_at < ?`
     )
     .run(expiredBefore) as { changes?: number };
-  const overflowResult = getDatabase().prepare(
-    `DELETE FROM diagnostic_logs
+
+  return result.changes ?? 0;
+}
+
+function pruneDiagnosticLogOverflow() {
+  const result = getDatabase()
+    .prepare(
+      `DELETE FROM diagnostic_logs
      WHERE id IN (
        SELECT id
        FROM diagnostic_logs
-       ORDER BY created_at DESC
+       ORDER BY created_at DESC, id DESC
        LIMIT -1 OFFSET ?
      )`
-  ).run(MAX_LOG_ENTRIES) as { changes?: number };
+    )
+    .run(DIAGNOSTIC_LOG_MAX_ENTRIES) as { changes?: number };
 
-  return (expiredResult.changes ?? 0) + (overflowResult.changes ?? 0);
+  return result.changes ?? 0;
+}
+
+function pruneDiagnosticLogs() {
+  return pruneExpiredDiagnosticLogs() + pruneDiagnosticLogOverflow();
 }
 
 function checkpointDiagnosticLogStore() {
@@ -294,15 +318,15 @@ export function recordDiagnosticLog(
     id: `diag_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
     level: parsed.level,
     source: parsed.source ?? "server",
-    scope: parsed.scope,
-    eventKey: parsed.eventKey,
-    message: redactSecretValues(parsed.message).value,
-    route: parsed.route ?? null,
-    functionName: parsed.functionName ?? null,
-    requestId: parsed.requestId ?? null,
-    entityType: parsed.entityType ?? null,
-    entityId: parsed.entityId ?? null,
-    jobId: parsed.jobId ?? null,
+    scope: redactDiagnosticText(parsed.scope),
+    eventKey: redactDiagnosticText(parsed.eventKey),
+    message: redactDiagnosticText(parsed.message),
+    route: redactNullableDiagnosticText(parsed.route ?? null),
+    functionName: redactNullableDiagnosticText(parsed.functionName ?? null),
+    requestId: redactNullableDiagnosticText(parsed.requestId ?? null),
+    entityType: redactNullableDiagnosticText(parsed.entityType ?? null),
+    entityId: redactNullableDiagnosticText(parsed.entityId ?? null),
+    jobId: redactNullableDiagnosticText(parsed.jobId ?? null),
     details: sanitizeDetails(parsed.details),
     createdAt: now.toISOString()
   });
@@ -329,7 +353,13 @@ export function recordDiagnosticLog(
     entry.createdAt
   );
 
-  enforceDiagnosticLogRetention({ now });
+  const retentionSweep = enforceDiagnosticLogRetention({ now });
+  if (!retentionSweep.ran) {
+    const prunedCount = pruneDiagnosticLogOverflow();
+    if (prunedCount > 0) {
+      checkpointDiagnosticLogStore();
+    }
+  }
   return entry;
 }
 
@@ -337,6 +367,10 @@ export function listDiagnosticLogs(
   filters: DiagnosticLogListQuery = {}
 ): {
   logs: DiagnosticLogEntry[];
+  retention: {
+    days: number;
+    maximumEntries: number;
+  };
   nextCursor: {
     beforeCreatedAt: string;
     beforeId: string;
@@ -410,6 +444,10 @@ export function listDiagnosticLogs(
   const tail = rows.at(-1) ?? null;
   return {
     logs,
+    retention: {
+      days: DIAGNOSTIC_LOG_RETENTION_DAYS,
+      maximumEntries: DIAGNOSTIC_LOG_MAX_ENTRIES
+    },
     nextCursor:
       rows.length >= limit && tail
         ? {

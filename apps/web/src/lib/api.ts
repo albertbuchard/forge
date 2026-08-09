@@ -6642,9 +6642,11 @@ export function listDiagnosticLogs(
   if (input.beforeId) {
     search.set("beforeId", input.beforeId);
   }
-  return request<import("./types").DiagnosticLogListPayload>(
-    `/api/v1/diagnostics/logs?${search.toString()}`
-  );
+  return request<
+    import("./types").DiagnosticLogListPayload & {
+      retention: { days: number; maximumEntries: number };
+    }
+  >(`/api/v1/diagnostics/logs?${search.toString()}`);
 }
 
 export function createGoal(input: GoalMutationInput) {

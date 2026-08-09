@@ -91,6 +91,14 @@ describe("SettingsLogsPage", () => {
       configurable: true,
       value: vi.fn()
     });
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:diagnostic-download")
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn()
+    });
   });
 
   afterEach(cleanup);
@@ -262,5 +270,166 @@ describe("SettingsLogsPage", () => {
     expect(screen.getByText("Filters")).toBeInTheDocument();
     expect(searchInput).toHaveFocus();
     expect(searchInput).toHaveValue("proxy");
+  });
+
+  it("downloads only the matching loaded redacted logs and explains retention", async () => {
+    const createdBlobs: Blob[] = [];
+    vi.mocked(URL.createObjectURL).mockImplementation((blob) => {
+      createdBlobs.push(blob as Blob);
+      return "blob:diagnostic-download";
+    });
+    const anchorClick = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    listDiagnosticLogsMock.mockResolvedValue({
+      logs: [
+        {
+          id: "diag_safe",
+          level: "error",
+          source: "server",
+          scope: "provider",
+          eventKey: "request_failed",
+          message: "Provider failed with authorization=[redacted]",
+          route: "/api/v1/models/test",
+          functionName: null,
+          requestId: "request_safe",
+          entityType: null,
+          entityId: null,
+          jobId: null,
+          details: { apiKey: "[redacted]" },
+          createdAt: "2026-08-09T12:00:00.000Z"
+        },
+        {
+          id: "diag_excluded",
+          level: "info",
+          source: "server",
+          scope: "provider",
+          eventKey: "request_finished",
+          message: "Excluded forge-export-secret-7291",
+          route: "/api/v1/models/test",
+          functionName: null,
+          requestId: "request_excluded",
+          entityType: null,
+          entityId: null,
+          jobId: null,
+          details: { sentinel: "forge-export-secret-7291" },
+          createdAt: "2026-08-09T11:59:00.000Z"
+        }
+      ],
+      retention: { days: 14, maximumEntries: 5_000 },
+      nextCursor: {
+        beforeCreatedAt: "2026-08-09T12:00:00.000Z",
+        beforeId: "diag_safe"
+      }
+    });
+
+    renderWithProviders("/settings/logs?level=error&level=warning");
+
+    expect(
+      await screen.findByText(/keeps logs for up to 14 days or 5,000 entries/i)
+    ).toBeInTheDocument();
+    const download = screen.getByRole("button", {
+      name: "Download loaded matches"
+    });
+    expect(download).toHaveClass("min-h-11");
+    fireEvent.click(download);
+
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(anchorClick).toHaveBeenCalledTimes(1);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(
+      "blob:diagnostic-download"
+    );
+    expect(createdBlobs).toHaveLength(1);
+    const exportedText = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => resolve(String(reader.result));
+      reader.readAsText(createdBlobs[0]!);
+    });
+    const exported = JSON.parse(exportedText) as {
+      schemaVersion: number;
+      scope: string;
+      complete: boolean;
+      retention: { days: number; maximumEntries: number };
+      logs: Array<{ id: string; message: string }>;
+    };
+    expect(exported).toMatchObject({
+      schemaVersion: 1,
+      scope: "currently_loaded_matching_logs",
+      complete: false,
+      retention: { days: 14, maximumEntries: 5_000 }
+    });
+    expect(exported.logs).toEqual([
+      expect.objectContaining({
+        id: "diag_safe",
+        message: "Provider failed with authorization=[redacted]"
+      })
+    ]);
+    expect(JSON.stringify(exported)).not.toContain("forge-export-secret-7291");
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Download 1 started with 1 matching loaded log."
+    );
+    fireEvent.click(download);
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Download 2 started with 1 matching loaded log."
+    );
+    expect(
+      screen.getByText(/only the matching entries currently loaded/i)
+    ).toHaveTextContent("Secret-like values are redacted");
+  });
+
+  it("blocks downloads while broader filter results are replacing placeholder rows", async () => {
+    let resolveBroadResults:
+      | ((value: { logs: []; retention: null; nextCursor: null }) => void)
+      | undefined;
+    listDiagnosticLogsMock
+      .mockResolvedValueOnce({
+        logs: [
+          {
+            id: "diag_narrow",
+            level: "error",
+            source: "server",
+            scope: "provider",
+            eventKey: "request_failed",
+            message: "Needle failure",
+            route: null,
+            functionName: null,
+            requestId: null,
+            entityType: null,
+            entityId: null,
+            jobId: null,
+            details: {},
+            createdAt: "2026-08-09T12:00:00.000Z"
+          }
+        ],
+        retention: { days: 14, maximumEntries: 5_000 },
+        nextCursor: null
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveBroadResults = resolve;
+          })
+      );
+
+    renderWithProviders("/settings/logs?search=needle");
+
+    const download = await screen.findByRole("button", {
+      name: "Download loaded matches"
+    });
+    expect(download).toBeEnabled();
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Search message or details" }),
+      { target: { value: "" } }
+    );
+    await waitFor(() =>
+      expect(listDiagnosticLogsMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ search: undefined, limit: 60 })
+      )
+    );
+    expect(download).toBeDisabled();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+
+    resolveBroadResults?.({ logs: [], retention: null, nextCursor: null });
   });
 });

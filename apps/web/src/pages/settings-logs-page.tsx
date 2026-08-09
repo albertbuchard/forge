@@ -9,7 +9,7 @@ import {
 import { createPortal } from "react-dom";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Search, X } from "lucide-react";
+import { Download, Search, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { PageHero } from "@/components/shell/page-hero";
@@ -94,6 +94,37 @@ function formatTimestamp(value: string) {
     dateStyle: "medium",
     timeStyle: "medium"
   }).format(new Date(value));
+}
+
+function downloadLoadedDiagnosticLogs(input: {
+  logs: DiagnosticLogEntry[];
+  complete: boolean;
+  retention: { days: number; maximumEntries: number } | null;
+}) {
+  const exportedAt = new Date().toISOString();
+  const blob = new Blob(
+    [
+      JSON.stringify(
+        {
+          schemaVersion: 1,
+          exportedAt,
+          scope: "currently_loaded_matching_logs",
+          complete: input.complete,
+          retention: input.retention,
+          logs: input.logs
+        },
+        null,
+        2
+      )
+    ],
+    { type: "application/json" }
+  );
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `forge-diagnostic-logs-${exportedAt.slice(0, 10)}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function levelTone(level: DiagnosticLogLevel) {
@@ -291,7 +322,7 @@ function CompactFilterMultiSelect({
                 {option.badge}
                 <button
                   type="button"
-                  className={`rounded-full p-0.5 transition hover:text-[var(--ui-ink-strong)] ${logFaintClass}`}
+                  className={`inline-flex size-11 items-center justify-center rounded-full transition hover:text-[var(--ui-ink-strong)] ${logFaintClass}`}
                   onClick={() => removeOption(option.id)}
                   aria-label={`Remove ${option.label}`}
                 >
@@ -350,7 +381,7 @@ function CompactFilterMultiSelect({
               }
             }}
             placeholder={placeholder}
-            className="min-w-0 flex-1 bg-transparent text-sm text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-faint)] focus:outline-none"
+            className="min-h-6 min-w-0 flex-1 bg-transparent text-sm text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-faint)] focus:outline-none"
           />
         </div>
 
@@ -371,7 +402,7 @@ function CompactFilterMultiSelect({
                       role="option"
                       aria-selected={false}
                       className={cn(
-                        "flex w-full items-start justify-between gap-3 rounded-[16px] px-3 py-2 text-left transition",
+                        "flex min-h-11 w-full items-start justify-between gap-3 rounded-[16px] px-3 py-2 text-left transition",
                         index === highlightedIndex
                           ? "bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
                           : "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
@@ -538,7 +569,9 @@ const DiagnosticLogRowCard = memo(function DiagnosticLogRowCard({
             setDetailsOpen((event.currentTarget as HTMLDetailsElement).open)
           }
         >
-          <summary className={`cursor-pointer text-sm ${logBodyClass}`}>
+          <summary
+            className={`flex min-h-11 cursor-pointer items-center text-sm ${logBodyClass}`}
+          >
             View structured details
           </summary>
           {detailsOpen ? (
@@ -580,6 +613,10 @@ export function SettingsLogsPage() {
     };
   }, [searchParams]);
   const [searchInput, setSearchInput] = useState(filters.search);
+  const [downloadAnnouncement, setDownloadAnnouncement] = useState<{
+    sequence: number;
+    count: number;
+  } | null>(null);
   const searchParamsRef = useRef(searchParams);
   const committedSearchRef = useRef(filters.search);
   searchParamsRef.current = searchParams;
@@ -692,6 +729,7 @@ export function SettingsLogsPage() {
     () => logsQuery.data?.pages.flatMap((page) => page.logs) ?? [],
     [logsQuery.data]
   );
+  const retentionPolicy = logsQuery.data?.pages[0]?.retention ?? null;
   const normalizedSearch = normalize(searchInput);
   const scrollParentRef = useRef<HTMLDivElement | null>(null);
 
@@ -850,6 +888,22 @@ export function SettingsLogsPage() {
   const retryOlderLogs = () => {
     void logsQuery.fetchNextPage();
   };
+  const downloadIsCurrent =
+    !logsQuery.isPlaceholderData && !logsQuery.isFetching;
+  const downloadLoadedLogs = () => {
+    if (filteredLogs.length === 0 || !downloadIsCurrent) {
+      return;
+    }
+    downloadLoadedDiagnosticLogs({
+      logs: filteredLogs,
+      complete: !logsQuery.hasNextPage,
+      retention: retentionPolicy
+    });
+    setDownloadAnnouncement((current) => ({
+      sequence: (current?.sequence ?? 0) + 1,
+      count: filteredLogs.length
+    }));
+  };
 
   const activeFilterCount =
     filters.levels.length +
@@ -922,9 +976,19 @@ export function SettingsLogsPage() {
           <div>
             <div className={logEyebrowClass}>Filters</div>
             <div className={`mt-2 max-w-3xl text-sm leading-6 ${logBodyClass}`}>
-              Use token filters with OR-style badge selections for levels,
-              sources, routes, jobs, scopes, and linked entities. Search still
-              matches the message body and structured details.
+              Filter by level, source, route, job, scope, or linked entity.
+              Search matches messages and structured details.
+            </div>
+            <div
+              id="diagnostic-download-scope"
+              className={`mt-2 max-w-3xl text-xs leading-5 ${logFaintClass}`}
+            >
+              A download contains only the matching entries currently loaded in
+              this browser. Secret-like values are redacted before display or
+              download.
+              {retentionPolicy
+                ? ` Forge keeps logs for up to ${retentionPolicy.days} days or ${retentionPolicy.maximumEntries.toLocaleString()} entries, whichever limit is reached first.`
+                : " Forge automatically removes older entries."}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -934,13 +998,30 @@ export function SettingsLogsPage() {
               </span>
             ) : null}
             {activeFilterCount > 0 ? (
-              <Button variant="ghost" size="sm" onClick={clearFilters}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="min-h-11"
+                onClick={clearFilters}
+              >
                 Clear {activeFilterCount}
               </Button>
             ) : null}
             <Button
               variant="secondary"
               size="sm"
+              className="min-h-11"
+              aria-describedby="diagnostic-download-scope"
+              disabled={filteredLogs.length === 0 || !downloadIsCurrent}
+              onClick={downloadLoadedLogs}
+            >
+              <Download className="size-4" />
+              Download loaded matches
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="min-h-11"
               onClick={() => void logsQuery.refetch()}
               pending={logsQuery.isRefetching && !logsQuery.isFetchingNextPage}
               pendingLabel="Refreshing"
@@ -948,6 +1029,17 @@ export function SettingsLogsPage() {
               Refresh
             </Button>
           </div>
+        </div>
+
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className={`text-sm ${logBodyClass}`}
+        >
+          {downloadAnnouncement
+            ? `Download ${downloadAnnouncement.sequence} started with ${downloadAnnouncement.count} matching loaded log${downloadAnnouncement.count === 1 ? "" : "s"}.`
+            : ""}
         </div>
 
         <label className="grid gap-2">
@@ -970,6 +1062,7 @@ export function SettingsLogsPage() {
               type="button"
               variant="ghost"
               size="sm"
+              className="min-h-11"
               onClick={() => void logsQuery.refetch()}
             >
               Retry search
@@ -1076,7 +1169,12 @@ export function SettingsLogsPage() {
                     className="flex flex-wrap items-center justify-center gap-2"
                   >
                     <span>Older logs could not be loaded.</span>
-                    <Button variant="ghost" size="sm" onClick={retryOlderLogs}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="min-h-11"
+                      onClick={retryOlderLogs}
+                    >
                       Retry older logs
                     </Button>
                   </div>
