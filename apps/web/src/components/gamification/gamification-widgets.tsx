@@ -1,5 +1,11 @@
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useCallback, useRef, useState, type ImgHTMLAttributes } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ImgHTMLAttributes
+} from "react";
 import {
   Download,
   Flame,
@@ -187,6 +193,31 @@ function formatCompactNumber(value: number) {
   }).format(value);
 }
 
+function useLiveReducedMotionPreference() {
+  const [reduceMotion, setReduceMotion] = useState(() =>
+    typeof window === "undefined" || typeof window.matchMedia !== "function"
+      ? false
+      : window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") {
+      return;
+    }
+    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const syncPreference = () => setReduceMotion(preference.matches);
+    syncPreference();
+    if (typeof preference.addEventListener === "function") {
+      preference.addEventListener("change", syncPreference);
+      return () => preference.removeEventListener("change", syncPreference);
+    }
+    preference.addListener(syncPreference);
+    return () => preference.removeListener(syncPreference);
+  }, []);
+
+  return reduceMotion;
+}
+
 export function getGamificationNoticeMotion(
   reduceMotion: boolean | null,
   kind: "celebration" | "xp"
@@ -218,12 +249,13 @@ export function getGamificationNoticeMotion(
 export function getGamificationFailureAlertMotion(
   reduceMotion: boolean | null
 ) {
+  const duration = reduceMotion ? 0 : 0.16;
   return {
     initial: reduceMotion ? (false as const) : { opacity: 0, y: 8 },
-    animate: { opacity: 1, y: 0 },
+    animate: { opacity: 1, y: 0, transition: { duration } },
     exit: {
       opacity: 0,
-      transition: { duration: reduceMotion ? 0 : 0.16 }
+      transition: { duration }
     }
   };
 }
@@ -729,7 +761,7 @@ export function GamificationCelebrationLayer({
   celebrations: GamificationCelebration[];
   onSeen: (celebrationId: string) => Promise<void> | void;
 }) {
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useLiveReducedMotionPreference();
   const gamificationTheme = useGamificationTheme();
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(
     () => new Set()
@@ -823,6 +855,8 @@ export function GamificationCelebrationLayer({
         <motion.div
           key={celebration.id}
           {...celebrationMotion}
+          data-motion-duration={celebrationMotion.transition.duration}
+          data-motion-mode={reduceMotion ? "reduced" : "full"}
           className={cn(
             "pointer-events-auto fixed z-50 px-4",
             isMajor
@@ -844,7 +878,7 @@ export function GamificationCelebrationLayer({
               type="button"
               aria-label={`Dismiss ${celebration.kind} celebration`}
               onClick={() => void dismissCelebration(celebration)}
-              className="absolute right-2 top-2 grid size-9 place-items-center rounded-full text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+              className="absolute right-2 top-2 grid size-11 place-items-center rounded-full text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
             >
               <X className="size-4" />
             </button>
@@ -889,6 +923,8 @@ export function GamificationCelebrationLayer({
         <motion.div
           key={`xp-${xpNotice.totalXp}`}
           {...xpMotion}
+          data-motion-duration={xpMotion.transition.duration}
+          data-motion-mode={reduceMotion ? "reduced" : "full"}
           className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex justify-center px-4 lg:bottom-6"
         >
           <div
@@ -920,6 +956,8 @@ export function GamificationCelebrationLayer({
         <motion.div
           key={`celebration-ack-${failedAcknowledgement.celebration.id}`}
           {...failureAlertMotion}
+          data-motion-duration={failureAlertMotion.animate.transition.duration}
+          data-motion-mode={reduceMotion ? "reduced" : "full"}
           className="pointer-events-auto fixed inset-x-4 bottom-24 z-[51] mx-auto max-w-[28rem] rounded-[18px] border border-[color-mix(in_srgb,var(--warning)_32%,var(--ui-border-subtle)_68%)] bg-[var(--surface-glass)] p-3 shadow-[var(--ui-shadow-floating)] backdrop-blur-xl lg:bottom-6"
           role="alert"
         >

@@ -45,6 +45,54 @@ const newerUnlock = {
   unlocked: true
 };
 
+function installReducedMotionPreference(
+  initial: boolean,
+  listenerApi: "modern" | "legacy" = "modern"
+) {
+  let matches = initial;
+  const listeners = new Set<(event: MediaQueryListEvent) => void>();
+  const preference = {
+    get matches() {
+      return matches;
+    },
+    media: "(prefers-reduced-motion: reduce)",
+    onchange: null,
+    addEventListener:
+      listenerApi === "modern"
+        ? (type: string, listener: (event: MediaQueryListEvent) => void) => {
+            if (type === "change") {
+              listeners.add(listener);
+            }
+          }
+        : undefined,
+    removeEventListener:
+      listenerApi === "modern"
+        ? (type: string, listener: (event: MediaQueryListEvent) => void) => {
+            if (type === "change") {
+              listeners.delete(listener);
+            }
+          }
+        : undefined,
+    addListener: (listener: (event: MediaQueryListEvent) => void) =>
+      listeners.add(listener),
+    removeListener: (listener: (event: MediaQueryListEvent) => void) =>
+      listeners.delete(listener),
+    dispatchEvent: () => true
+  } as unknown as MediaQueryList;
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn(() => preference)
+  );
+  return {
+    set(next: boolean) {
+      matches = next;
+      const event = { matches, media: preference.media } as MediaQueryListEvent;
+      listeners.forEach((listener) => listener(event));
+    },
+    listenerCount: () => listeners.size
+  };
+}
+
 const metrics = {
   scope: { label: "Operator" },
   profile: {
@@ -77,6 +125,7 @@ describe("GamificationOverviewWidget", () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   beforeEach(() => {
@@ -292,8 +341,138 @@ describe("GamificationOverviewWidget", () => {
       getGamificationFailureAlertMotion(true).exit.transition.duration
     ).toBe(0);
     expect(
+      getGamificationFailureAlertMotion(true).animate.transition.duration
+    ).toBe(0);
+    expect(
       getGamificationFailureAlertMotion(false).exit.transition.duration
     ).toBeGreaterThan(0);
+  });
+
+  it("responds immediately when reduced motion changes while notices are open", async () => {
+    const reducedMotion = installReducedMotionPreference(false);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } }
+    });
+    const onSeen = vi
+      .fn()
+      .mockRejectedValue(new Error("Acknowledgement unavailable"));
+    const celebration = {
+      id: "celebration_motion_change",
+      userId: "user_1",
+      kind: "trophy" as const,
+      itemId: "trophy_1",
+      title: "The First Heat",
+      summary: "A truthful milestone from completed Forge work.",
+      assetKey: "item-trophy-xp-levels-the-first-heat",
+      metadata: {},
+      createdAt: "2026-07-11T10:00:00.000Z",
+      seenAt: null
+    };
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <GamificationThemeProvider initialTheme="dark-fantasy">
+          <GamificationCelebrationLayer
+            xpNotice={null}
+            celebrations={[celebration]}
+            onSeen={onSeen}
+          />
+        </GamificationThemeProvider>
+      </QueryClientProvider>
+    );
+
+    const celebrationNotice = view.getByRole("status").parentElement;
+    expect(celebrationNotice).toHaveAttribute("data-motion-mode", "full");
+    expect(celebrationNotice).toHaveAttribute("data-motion-duration", "0.28");
+    expect(
+      view.getByRole("button", { name: "Dismiss trophy celebration" })
+    ).toHaveClass("size-11");
+
+    act(() => reducedMotion.set(true));
+    await waitFor(() =>
+      expect(celebrationNotice).toHaveAttribute("data-motion-mode", "reduced")
+    );
+    expect(celebrationNotice).toHaveAttribute("data-motion-duration", "0");
+
+    view.rerender(
+      <QueryClientProvider client={queryClient}>
+        <GamificationThemeProvider initialTheme="dark-fantasy">
+          <GamificationCelebrationLayer
+            xpNotice={{ deltaXp: 12, totalXp: 5_012 }}
+            celebrations={[]}
+            onSeen={onSeen}
+          />
+        </GamificationThemeProvider>
+      </QueryClientProvider>
+    );
+    const xpNotice = view.getByText(/XP \+12/u).closest("[data-motion-mode]");
+    expect(xpNotice).toHaveAttribute("data-motion-mode", "reduced");
+    expect(xpNotice).toHaveAttribute("data-motion-duration", "0");
+
+    act(() => reducedMotion.set(false));
+    await waitFor(() =>
+      expect(xpNotice).toHaveAttribute("data-motion-mode", "full")
+    );
+    expect(xpNotice).toHaveAttribute("data-motion-duration", "0.2");
+
+    view.rerender(
+      <QueryClientProvider client={queryClient}>
+        <GamificationThemeProvider initialTheme="dark-fantasy">
+          <GamificationCelebrationLayer
+            xpNotice={null}
+            celebrations={[
+              {
+                ...celebration,
+                id: "celebration_motion_failure",
+                title: "The Second Heat"
+              }
+            ]}
+            onSeen={onSeen}
+          />
+        </GamificationThemeProvider>
+      </QueryClientProvider>
+    );
+    const secondCelebration = view
+      .getByText("The Second Heat")
+      .closest('[role="status"]');
+    fireEvent.click(
+      secondCelebration?.querySelector("button") as HTMLButtonElement
+    );
+    const failureNotice = await view.findByRole("alert");
+    expect(failureNotice).toHaveAttribute("data-motion-mode", "full");
+    expect(failureNotice).toHaveAttribute("data-motion-duration", "0.16");
+
+    act(() => reducedMotion.set(true));
+    await waitFor(() =>
+      expect(failureNotice).toHaveAttribute("data-motion-mode", "reduced")
+    );
+    expect(failureNotice).toHaveAttribute("data-motion-duration", "0");
+  });
+
+  it("uses and cleans up the legacy WebKit reduced-motion listener", () => {
+    const reducedMotion = installReducedMotionPreference(false, "legacy");
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } }
+    });
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <GamificationThemeProvider initialTheme="dark-fantasy">
+          <GamificationCelebrationLayer
+            xpNotice={{ deltaXp: 4, totalXp: 40 }}
+            celebrations={[]}
+            onSeen={vi.fn()}
+          />
+        </GamificationThemeProvider>
+      </QueryClientProvider>
+    );
+
+    expect(reducedMotion.listenerCount()).toBe(1);
+    act(() => reducedMotion.set(true));
+    expect(
+      view.getByText(/XP \+4/u).closest("[data-motion-mode]")
+    ).toHaveAttribute("data-motion-mode", "reduced");
+
+    view.unmount();
+    expect(reducedMotion.listenerCount()).toBe(0);
   });
 
   it("announces celebrations, preserves them, and allows dismissal", async () => {
