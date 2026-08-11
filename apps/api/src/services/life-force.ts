@@ -4106,21 +4106,39 @@ export function updateLifeForceTemplate(
   weekday: number,
   input: LifeForceTemplateUpdateInput
 ) {
+  if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
+    throw new HttpError(
+      400,
+      "life_force_weekday_invalid",
+      "A Life Force weekday must be an integer from 0 through 6."
+    );
+  }
   const parsed = lifeForceTemplateUpdateSchema.parse(input);
-  ensureWeekdayTemplates(userId);
   const normalized = normalizeCurveToBudget(
     [...parsed.points].sort(
       (left, right) => left.minuteOfDay - right.minuteOfDay
     ),
     LIFE_FORCE_BASELINE_DAILY_AP
   );
-  getDatabase()
-    .prepare(
-      `UPDATE life_force_weekday_templates
-       SET points_json = ?, updated_at = ?
-       WHERE user_id = ? AND weekday = ?`
-    )
-    .run(JSON.stringify(normalized), nowIso(), userId, weekday);
+  runInTransaction(() => {
+    ensureWeekdayTemplates(userId);
+    getDatabase()
+      .prepare(
+        `UPDATE life_force_weekday_templates
+         SET points_json = ?, updated_at = ?
+         WHERE user_id = ? AND weekday = ?`
+      )
+      .run(JSON.stringify(normalized), nowIso(), userId, weekday);
+    const today = new Date();
+    if (weekday === today.getUTCDay()) {
+      getDatabase()
+        .prepare(
+          `DELETE FROM life_force_day_snapshots
+           WHERE user_id = ? AND date_key = ?`
+        )
+        .run(userId, toDateKey(today));
+    }
+  });
   return normalized;
 }
 

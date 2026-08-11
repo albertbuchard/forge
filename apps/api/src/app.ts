@@ -10193,6 +10193,34 @@ function resolveLifeForceMutationUserId(
   return effectiveUserId;
 }
 
+const LIFE_FORCE_WEEKDAYS = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday"
+] as const;
+
+function resolveLifeForceWeekday(value: string) {
+  const normalized = value.trim().toLowerCase();
+  const namedWeekday = LIFE_FORCE_WEEKDAYS.indexOf(
+    normalized as (typeof LIFE_FORCE_WEEKDAYS)[number]
+  );
+  if (namedWeekday >= 0) {
+    return namedWeekday;
+  }
+  if (/^[0-6]$/.test(normalized)) {
+    return Number(normalized);
+  }
+  throw new HttpError(
+    400,
+    "life_force_weekday_invalid",
+    "Choose one weekday from Sunday through Saturday or its numeric value from 0 through 6."
+  );
+}
+
 function requireNutritionRecordOwner(
   actualUserId: string | null | undefined,
   expectedUserId: string
@@ -15176,13 +15204,16 @@ export async function buildServer(
       ["write"],
       { route: "/api/v1/life-force/templates/:weekday" }
     );
-    const weekday = Number((request.params as { weekday: string }).weekday);
+    const weekday = resolveLifeForceWeekday(
+      (request.params as { weekday: string }).weekday
+    );
     return {
       weekday,
       points: updateLifeForceTemplate(
-        resolveLifeForceUser(
-          resolveScopedUserIds(request.query as Record<string, unknown>)
-        ).id,
+        resolveLifeForceMutationUserId(
+          request.query as Record<string, unknown>,
+          auth
+        ),
         weekday,
         lifeForceTemplateUpdateSchema.parse(request.body ?? {})
       ),

@@ -2337,7 +2337,7 @@
                     <p class="story-expanded-outcome">As a user, I can define weekday energy templates that reflect recurring capacity patterns.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Life Force <code>weekdayTemplate</code>.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>guided curve editing and dedicated weekday writes pass focused UI and full server tests; finish all-weekday, time-zone, and reset cases.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>guided curve editing remains dedicated, and every named weekday in the agent contract now maps to its stored Sunday-through-Saturday template instead of returning a false success. Numeric weekdays are restricted to 0 through 6, writes enforce one authorized owner, and editing today&#039;s UTC curve atomically invalidates its stale snapshot before the next overview rebuild. Complete local-time-zone interpretation and a deliberate persisted-default reset before promotion.</dd></div>
                     </dl>
                   </div>
                 </details>

@@ -15252,6 +15252,68 @@ export function buildOpenApiDocument() {
       "/api/v1/life-force/templates/{weekday}": {
         put: {
           summary: "Replace one weekday life-force curve template",
+          description:
+            "Replaces exactly one authorized user's recurring weekday curve. The weekday accepts a lowercase English name from sunday through saturday or a numeric string from 0 through 6. Updating the current UTC weekday invalidates today's derived snapshot so the next overview read uses the new curve.",
+          parameters: [
+            {
+              name: "weekday",
+              in: "path",
+              required: true,
+              schema: {
+                type: "string",
+                enum: [
+                  "0",
+                  "1",
+                  "2",
+                  "3",
+                  "4",
+                  "5",
+                  "6",
+                  "sunday",
+                  "monday",
+                  "tuesday",
+                  "wednesday",
+                  "thursday",
+                  "friday",
+                  "saturday"
+                ]
+              }
+            },
+            stringQueryParameter("userId"),
+            repeatedStringQueryParameter("userIds")
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["points"],
+                  properties: {
+                    points: {
+                      type: "array",
+                      minItems: 2,
+                      items: {
+                        type: "object",
+                        additionalProperties: false,
+                        required: ["minuteOfDay", "rateApPerHour"],
+                        properties: {
+                          minuteOfDay: {
+                            type: "integer",
+                            minimum: 0,
+                            maximum: 1440
+                          },
+                          rateApPerHour: { type: "number", minimum: 0 },
+                          locked: { type: "boolean" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
