@@ -1632,7 +1632,7 @@
                     <p class="story-expanded-outcome">As a user, I can compare two items and record a pairwise judgment with strength and context.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>preference_judgment</code> action route.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>card, button, and keyboard submissions share an immediate per-pair lock that remains active through the mutation, preventing duplicate judgments under mixed rapid input. Complete pair validity, ties, undo, failure retry, and server idempotency matrices.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>card, button, and keyboard submissions share an immediate per-pair lock. Each judgment now receives one stable idempotency key before submission; an ambiguous failure retains the exact pair, outcome, strength, and key behind a 44-pixel retry action, so server replay records it at most once. Ties and skips remain explicit. Complete undo and retained live desktop and phone promotion evidence.</dd></div>
                     </dl>
                   </div>
                 </details>
