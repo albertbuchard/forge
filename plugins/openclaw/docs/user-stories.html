@@ -44,10 +44,10 @@
 
         <section class="story-metrics" aria-label="Story totals">
           <a class="story-metric metric-all" href="./user-stories.html" data-metric-scope="all"><strong>203</strong><span>All stories</span></a>
-          <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>189</strong><span>Current product</span></a>
-          <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>14</strong><span>Planned</span></a>
+          <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>190</strong><span>Current product</span></a>
+          <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>13</strong><span>Planned</span></a>
           <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>14</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>145</strong><span>In review</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>146</strong><span>In review</span></a>
           <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>30</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
@@ -130,7 +130,7 @@
             <details class="story-family" data-family-group="SYS">
               <summary>
                 <span class="family-title"><span class="family-code">SYS</span>Global shell and navigation</span>
-                <span class="family-counts"><span data-family-visible>22</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 19 current · 3 planned</span></span>
+                <span class="family-counts"><span data-family-visible>22</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 20 current · 2 planned</span></span>
               </summary>
               <div class="story-list">
 
@@ -419,6 +419,21 @@
                   </div>
                 </details>
 
+                <details class="story-card" id="story-sys-21" data-story-id="SYS-21" data-lifecycle="current" data-readiness="In review" data-family="SYS">
+                  <summary class="story-summary">
+                    <span class="story-id">SYS-21</span>
+                    <span class="story-summary-outcome">As a user, I can queue supported web changes while temporarily offline and later see whether each change was accepted, conflicted, or needs my decision.</span>
+                    <span class="story-state state-in-review">In review</span>
+                  </summary>
+                  <div class="story-expanded">
+                    <p class="story-expanded-outcome">As a user, I can queue supported web changes while temporarily offline and later see whether each change was accepted, conflicted, or needs my decision.</p>
+                    <dl class="story-details">
+                      <div><dt>Where it lives</dt><dd>Web shell, mutation outbox, idempotency keys, conflict receipts.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>task moves among Backlog, Focus, Ongoing, and Blocked use a session-bound IndexedDB outbox with stable idempotency keys, expected-revision conflict checks, bounded replay receipts, and explicit discard or apply-against-current decisions. Done moves and unsupported writes remain truthfully online-only. Focused reconnect, duplicate, stale, multi-session, capacity, retention, TypeScript, build, and OpenAPI checks pass; complete live desktop, phone, keyboard, and accessibility verification.</dd></div>
+                    </dl>
+                  </div>
+                </details>
+
                 <details class="story-card" id="story-sys-20" data-story-id="SYS-20" data-lifecycle="planned" data-readiness="planned" data-family="SYS">
                   <summary class="story-summary">
                     <span class="story-id">SYS-20</span>
@@ -430,21 +445,6 @@
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>General entity links, Knowledge Graph, suggestion and explanation contract.</dd></div>
                       <div><dt>First evidence needed</dt><dd>establish precision and false-positive thresholds, privacy boundaries, permission filtering, and a no-write-until-confirmed test matrix.</dd></div>
-                    </dl>
-                  </div>
-                </details>
-
-                <details class="story-card" id="story-sys-21" data-story-id="SYS-21" data-lifecycle="planned" data-readiness="planned" data-family="SYS">
-                  <summary class="story-summary">
-                    <span class="story-id">SYS-21</span>
-                    <span class="story-summary-outcome">As a user, I can queue supported web changes while temporarily offline and later see whether each change was accepted, conflicted, or needs my decision.</span>
-                    <span class="story-state state-planned">Planned</span>
-                  </summary>
-                  <div class="story-expanded">
-                    <p class="story-expanded-outcome">As a user, I can queue supported web changes while temporarily offline and later see whether each change was accepted, conflicted, or needs my decision.</p>
-                    <dl class="story-details">
-                      <div><dt>Where it lives</dt><dd>Web shell, mutation outbox, idempotency keys, conflict receipts.</dd></div>
-                      <div><dt>First evidence needed</dt><dd>audit mutation idempotency and conflict behavior, define an explicit supported-action list, and test reconnect, duplicate, stale, and multi-device cases.</dd></div>
                     </dl>
                   </div>
                 </details>
