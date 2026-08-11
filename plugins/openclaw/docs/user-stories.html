@@ -543,7 +543,7 @@
                     <p class="story-expanded-outcome">As a user, I can inspect a chronological audit trail of meaningful entity, task, agent, and sync activity.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>activity-index</code>, activity/event APIs.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>empty and 100-event live states, source attribution, correction hiding, and a 44-frame full-list mobile traversal pass; complete filter/redaction checks.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>empty and 100-event live states, source attribution, correction hiding, and a 44-frame full-list mobile traversal pass remain available. Selected-owner scope is applied in SQL before the result limit, so newer out-of-scope rows cannot hide an older permitted event and invalid out-of-scope payloads are never mapped. Credential-shaped title, description, actor, and metadata values are redacted at read time while the stored audit evidence remains unchanged. Focused source, entity, date, correction, owner, and secret-pattern filters pass; Activity-owned checkbox, title, open, remove, and recovery controls meet the 44 px target. Complete live filter-comprehension and assistive-technology verification.</dd></div>
                     </dl>
                   </div>
                 </details>
