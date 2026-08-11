@@ -3522,7 +3522,7 @@ export async function encryptExistingArtifact(
     });
     runInTransaction(() => {
       registerArtifactBlob(encryptedBlob);
-      getDatabase()
+      const encryptionUpdate = getDatabase()
         .prepare(
           `UPDATE artifacts
          SET storage_key = ?, storage_path = ?, stored_content_sha256 = ?,
@@ -3530,7 +3530,11 @@ export async function encryptExistingArtifact(
              content_encryption_json = ?, encrypted_at = ?,
              encrypted_by_actor = ?, encrypted_source = ?,
              content_password_hint = ?, scan_results_json = ?, updated_at = ?
-         WHERE id = ?`
+         WHERE id = ?
+           AND content_protection_mode = 'plaintext'
+           AND storage_key = ?
+           AND stored_content_sha256 = ?
+           AND stored_byte_size = ?`
         )
         .run(
           encryptedBlob.storageKey,
@@ -3545,8 +3549,46 @@ export async function encryptExistingArtifact(
           parsed.passwordHint,
           JSON.stringify(encryptedArtifactScanResults),
           encryptedAt,
-          id
+          id,
+          artifact.storageKey,
+          artifact.storedContentSha256,
+          artifact.storedByteSize
         );
+      if (encryptionUpdate.changes !== 1) {
+        const current = getDatabase()
+          .prepare(
+            `SELECT content_protection_mode, storage_key,
+                    stored_content_sha256, stored_byte_size
+             FROM artifacts
+             WHERE id = ?`
+          )
+          .get(id) as
+          | {
+              content_protection_mode: ArtifactContentProtectionMode;
+              storage_key: string;
+              stored_content_sha256: string;
+              stored_byte_size: number;
+            }
+          | undefined;
+        if (current?.content_protection_mode === "password_encrypted") {
+          throw new HttpError(
+            409,
+            "artifact_already_encrypted",
+            "This artifact was encrypted by another request. Refresh its metadata before continuing.",
+            { artifactId: id }
+          );
+        }
+        throw new HttpError(
+          409,
+          "artifact_encryption_conflict",
+          "The artifact bytes changed while encryption was in progress. No encryption change was applied; refresh the artifact before retrying.",
+          {
+            artifactId: id,
+            currentContentProtectionMode:
+              current?.content_protection_mode ?? null
+          }
+        );
+      }
       if (latestVersion) {
         getDatabase()
           .prepare(
