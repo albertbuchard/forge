@@ -643,6 +643,82 @@ test("preference signal model respects context scope, provenance, conflicts, and
   }
 });
 
+test("preference item deletion rolls back when model recomputation fails", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-pref-delete-recompute-")
+  );
+  configureDatabase({ dataRoot: rootDir, seedDemoData: true });
+  try {
+    await initializeDatabase();
+    const base = refreshPreferenceWorkspace({
+      userId: "user_operator",
+      domain: "projects"
+    });
+    const target = createPreferenceItem(
+      itemInput("projects", "Atomic deletion target")
+    );
+    const peer = createPreferenceItem(
+      itemInput("projects", "Atomic deletion peer")
+    );
+    const judgment = submitPairwiseJudgment({
+      userId: "user_operator",
+      domain: "projects",
+      contextId: base.selectedContext.id,
+      leftItemId: target.id,
+      rightItemId: peer.id,
+      outcome: "left",
+      strength: 1,
+      reasonTags: []
+    });
+    const signal = submitAbsoluteSignal({
+      userId: "user_operator",
+      domain: "projects",
+      contextId: base.selectedContext.id,
+      itemId: target.id,
+      signalType: "favorite",
+      strength: 1
+    });
+    const readDeletionState = () =>
+      getDatabase()
+        .prepare(
+          `SELECT
+             (SELECT COUNT(*) FROM preference_items WHERE id = ?) AS items,
+             (SELECT COUNT(*) FROM pairwise_judgments WHERE id = ?) AS judgments,
+             (SELECT COUNT(*) FROM absolute_signals WHERE id = ?) AS signals,
+             (SELECT COUNT(*) FROM preference_item_scores WHERE item_id = ?) AS scores`
+        )
+        .get(target.id, judgment.id, signal.id, target.id) as {
+        items: number;
+        judgments: number;
+        signals: number;
+        scores: number;
+      };
+    const beforeDelete = readDeletionState();
+    getDatabase().exec(
+      `CREATE TRIGGER preference_score_recompute_failure
+       BEFORE INSERT ON preference_item_scores
+       BEGIN
+         SELECT RAISE(ABORT, 'blocked preference model recomputation');
+       END`
+    );
+
+    assert.throws(
+      () => deletePreferenceItem(target.id),
+      /blocked preference model recomputation/
+    );
+
+    const preserved = readDeletionState();
+    assert.deepEqual(
+      { ...preserved },
+      { ...beforeDelete },
+      "a failed model refresh must preserve the item and every deletion effect"
+    );
+  } finally {
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test(
   "concurrent identical preference signals converge on one row",
   { timeout: 30_000 },

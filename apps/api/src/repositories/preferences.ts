@@ -4832,11 +4832,11 @@ export function deletePreferenceItem(itemId: string): PreferenceItem {
     getDatabase()
       .prepare(`DELETE FROM preference_items WHERE id = ?`)
       .run(itemId);
+    const profile = getPreferenceProfileById(current.profileId);
+    if (profile) {
+      recomputeAffectedContexts(profile, null);
+    }
   });
-  const profile = getPreferenceProfileById(current.profileId);
-  if (profile) {
-    recomputeAffectedContexts(profile, null);
-  }
   return current;
 }
 
