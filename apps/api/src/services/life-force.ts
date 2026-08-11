@@ -71,6 +71,19 @@ type SnapshotRow = {
   updated_at: string;
 };
 
+export type PersistedLifeForceSummary = {
+  userId: string;
+  dateKey: string;
+  dailyBudgetAp: number;
+  spentTodayAp: number;
+  remainingAp: number;
+  readinessMultiplier: number;
+  sleepRecoveryMultiplier: number;
+  fatigueDebtCarry: number;
+  updatedAt: string;
+  provenance: ReturnType<typeof buildDerivedDataProvenance>;
+};
+
 type ApLedgerRow = {
   id: string;
   user_id: string;
@@ -3338,6 +3351,133 @@ export function resolveLifeForceUser(userIds?: string[]) {
   return getDefaultUser();
 }
 
+/**
+ * Reads the last persisted Life Force state without materializing defaults or
+ * synchronizing derived ledgers. Read-only consumers must prefer this helper
+ * when the request contract forbids storage side effects.
+ */
+export function readPersistedLifeForceSummary(input: {
+  userId: string;
+  dateKey: string;
+  now?: Date;
+}): PersistedLifeForceSummary | null {
+  const database = getDatabase();
+  const profile = database
+    .prepare(
+      `SELECT readiness_multiplier, updated_at
+       FROM life_force_profiles
+       WHERE user_id = ?`
+    )
+    .get(input.userId) as
+    | { readiness_multiplier: number; updated_at: string }
+    | undefined;
+  const snapshot = database
+    .prepare(
+      `SELECT id, user_id, date_key, daily_budget_ap,
+              sleep_recovery_multiplier, readiness_multiplier,
+              fatigue_debt_carry, points_json, created_at, updated_at
+       FROM life_force_day_snapshots
+       WHERE user_id = ? AND date_key = ?`
+    )
+    .get(input.userId, input.dateKey) as SnapshotRow | undefined;
+
+  if (!profile || !snapshot) {
+    return null;
+  }
+
+  const aggregate = database
+    .prepare(
+      `SELECT COALESCE(SUM(total_ap), 0) AS spent_ap,
+              MAX(COALESCE(ends_at, created_at)) AS observed_at
+       FROM ap_ledger_events
+       WHERE user_id = ? AND date_key = ?`
+    )
+    .get(input.userId, input.dateKey) as {
+    spent_ap: number;
+    observed_at: string | null;
+  };
+  const evidenceRows = database
+    .prepare(
+      `SELECT id, entity_type, entity_id, ends_at, created_at
+       FROM ap_ledger_events
+       WHERE user_id = ? AND date_key = ?
+       ORDER BY COALESCE(ends_at, created_at) DESC, id ASC
+       LIMIT 3`
+    )
+    .all(input.userId, input.dateKey) as Array<{
+    id: string;
+    entity_type: string;
+    entity_id: string;
+    ends_at: string | null;
+    created_at: string;
+  }>;
+  const now = input.now ?? new Date();
+  const generatedAt = now.toISOString();
+  const observedAt = latestObservedAt([
+    aggregate.observed_at,
+    snapshot.updated_at,
+    profile.updated_at
+  ]);
+  const spentTodayAp = Number(aggregate.spent_ap.toFixed(2));
+  const dailyBudgetAp = Number(snapshot.daily_budget_ap.toFixed(2));
+
+  return {
+    userId: input.userId,
+    dateKey: input.dateKey,
+    dailyBudgetAp,
+    spentTodayAp,
+    remainingAp: Number((dailyBudgetAp - spentTodayAp).toFixed(2)),
+    readinessMultiplier: snapshot.readiness_multiplier,
+    sleepRecoveryMultiplier: snapshot.sleep_recovery_multiplier,
+    fatigueDebtCarry: snapshot.fatigue_debt_carry,
+    updatedAt: snapshot.updated_at,
+    provenance: buildDerivedDataProvenance({
+      generatedAt,
+      observedAt,
+      staleAfterSeconds: 30 * 60,
+      sourceSummary: "Persisted Life Force snapshot and Action Point ledger",
+      completeness: aggregate.observed_at ? "complete" : "partial",
+      completenessReason: aggregate.observed_at
+        ? "A stored same-day snapshot and persisted Action Point observations are available."
+        : "A stored same-day snapshot is available, but it has no persisted Action Point observation.",
+      confidence: {
+        level: aggregate.observed_at ? "medium" : "low",
+        reason: aggregate.observed_at
+          ? "The quantities come from the stored daily snapshot and persisted ledger; no new forecast was generated."
+          : "The stored budget is available, but no persisted same-day activity supports a current spent amount."
+      },
+      sources: [
+        {
+          id: `life-force-day:${snapshot.id}`,
+          label: "Persisted Life Force day",
+          kind: "derived",
+          observedAt: snapshot.updated_at,
+          detailRoute: "/life-force"
+        },
+        {
+          id: `life-force-profile:${input.userId}`,
+          label: "Persisted Life Force profile",
+          kind: "record",
+          observedAt: profile.updated_at,
+          detailRoute: "/life-force"
+        }
+      ],
+      evidence: [
+        {
+          label: "Daily Life Force snapshot",
+          reference: `life_force_day_snapshot:${snapshot.id}`,
+          observedAt: snapshot.updated_at
+        },
+        ...evidenceRows.map((row) => ({
+          label: `${row.entity_type}:${row.entity_id}`,
+          reference: `ap_ledger_event:${row.id}`,
+          observedAt: row.ends_at ?? row.created_at
+        }))
+      ]
+    })
+  };
+}
+
 export function buildLifeForcePayload(
   now = new Date(),
   userIds?: string[]
@@ -3750,16 +3890,14 @@ export function buildLifeForcePayload(
       sourceSummary:
         "Stored work, recovery, habit, workout, and movement signals",
       completeness: hasObservedEvidence ? "complete" : "unknown",
-      completenessReason:
-        hasObservedEvidence
-          ? "Forge evaluated every available input configured for the current user scope."
-          : "No persisted work, recovery, habit, workout, or movement observation is available.",
+      completenessReason: hasObservedEvidence
+        ? "Forge evaluated every available input configured for the current user scope."
+        : "No persisted work, recovery, habit, workout, or movement observation is available.",
       confidence: {
         level: hasObservedEvidence ? "medium" : "unknown",
-        reason:
-          hasObservedEvidence
-            ? "Current drain is grounded in stored evidence; forecasts remain model estimates."
-            : "Forge can compute the configured baseline, but no observed input supports a current derived state."
+        reason: hasObservedEvidence
+          ? "Current drain is grounded in stored evidence; forecasts remain model estimates."
+          : "Forge can compute the configured baseline, but no observed input supports a current derived state."
       },
       sources: [
         {

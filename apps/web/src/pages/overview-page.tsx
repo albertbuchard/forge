@@ -1042,12 +1042,12 @@ export function OverviewPage() {
             <DestinationLink
               showDetail
               destination={{
-                label: "Today’s direction",
-                href: "/today",
+                label: "Daily briefing",
+                href: "/today#daily-briefing",
                 detail:
                   snapshot.today.directive.task?.title ??
                   snapshot.today.directive.sessionLabel ??
-                  "Review today’s work"
+                  "Review sourced work, schedule, capacity, and recent activity"
               }}
             />
             {recentActivity[0] ? (

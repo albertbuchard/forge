@@ -159,6 +159,7 @@ import type {
   TaskRunReleaseInput,
   TaskRunHeartbeatInput,
   TodayPriorityDecision,
+  DailyBriefing,
   UpdateRewardRuleInput,
   UserDirectoryPayload,
   UserSummary,
@@ -1587,6 +1588,16 @@ export function getTodayPriorityDecision(input: {
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ decision: TodayPriorityDecision }>(
     `/api/v1/today/priority${suffix}`
+  );
+}
+
+export function getDailyBriefing(input: { userId: string; timeZone?: string }) {
+  const search = new URLSearchParams({ userId: input.userId });
+  if (input.timeZone?.trim()) {
+    search.set("timeZone", input.timeZone.trim());
+  }
+  return request<{ briefing: DailyBriefing }>(
+    `/api/v1/daily-briefing?${search.toString()}`
   );
 }
 

@@ -15,6 +15,7 @@ These files are durable Forge references for setup, architecture, and current op
 - [People and peer sharing](./people-and-peer-sharing.md)
 - [Gamification and XP](./gamification.md)
 - [Today priority](./today-priority.md)
+- [Daily briefing](./daily-briefing.md)
 - [Artifact Store](./artifact-store.md)
 - [Life Events](./life-events.md)
 - [Workbench](./workbench.md)

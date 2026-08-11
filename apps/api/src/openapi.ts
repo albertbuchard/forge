@@ -5924,6 +5924,109 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const dailyBriefingStatement = {
+    type: "object",
+    additionalProperties: false,
+    required: ["id", "text", "href", "observedAt", "freshness", "provenance"],
+    properties: {
+      id: { type: "string", minLength: 1, maxLength: 120 },
+      text: { type: "string", minLength: 1, maxLength: 500 },
+      href: nullable({ type: "string", minLength: 1, maxLength: 500 }),
+      observedAt: nullable({ type: "string", format: "date-time" }),
+      freshness: {
+        type: "string",
+        enum: ["fresh", "stale", "future", "missing"]
+      },
+      provenance: { $ref: "#/components/schemas/DerivedDataProvenance" }
+    }
+  };
+
+  const dailyBriefingSection = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "key",
+      "label",
+      "status",
+      "statements",
+      "omissionReason",
+      "inspectedCount",
+      "availableCount"
+    ],
+    properties: {
+      key: {
+        type: "string",
+        enum: ["work", "schedule", "capacity", "recent_activity"]
+      },
+      label: { type: "string", minLength: 1, maxLength: 120 },
+      status: {
+        type: "string",
+        enum: [
+          "ready",
+          "empty",
+          "partial",
+          "stale",
+          "future",
+          "conflict",
+          "omitted"
+        ]
+      },
+      statements: {
+        type: "array",
+        maxItems: 3,
+        items: { $ref: "#/components/schemas/DailyBriefingStatement" }
+      },
+      omissionReason: nullable({
+        type: "string",
+        minLength: 1,
+        maxLength: 500
+      }),
+      inspectedCount: { type: "integer", minimum: 0 },
+      availableCount: { type: "integer", minimum: 0 }
+    }
+  };
+
+  const dailyBriefing = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "contractVersion",
+      "generatedAt",
+      "dateKey",
+      "timeZone",
+      "ownerUserId",
+      "status",
+      "headline",
+      "sections"
+    ],
+    properties: {
+      contractVersion: { type: "integer", enum: [1] },
+      generatedAt: { type: "string", format: "date-time" },
+      dateKey: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+      timeZone: {
+        type: "string",
+        minLength: 1,
+        maxLength: 100,
+        description:
+          "Validated IANA timezone used for local-day calendar and capacity boundaries."
+      },
+      ownerUserId: { type: "string", minLength: 1, maxLength: 240 },
+      status: {
+        type: "string",
+        enum: ["ready", "partial", "conflict", "empty"]
+      },
+      headline: { type: "string", minLength: 1, maxLength: 500 },
+      sections: {
+        type: "array",
+        minItems: 4,
+        maxItems: 4,
+        description:
+          "Exactly four ordered lanes: work, schedule, capacity, and recent activity. The complete JSON response is capped at 64 KiB.",
+        items: { $ref: "#/components/schemas/DailyBriefingSection" }
+      }
+    }
+  };
+
   const operatorContextPayload = {
     type: "object",
     additionalProperties: false,
@@ -12129,6 +12232,9 @@ export function buildOpenApiDocument() {
         TodayPriorityEvidence: todayPriorityEvidence,
         TodayRankedCandidate: todayRankedCandidate,
         TodayPriorityDecision: todayPriorityDecision,
+        DailyBriefingStatement: dailyBriefingStatement,
+        DailyBriefingSection: dailyBriefingSection,
+        DailyBriefing: dailyBriefing,
         WikiSearchInput: wikiSearchInput,
         WikiSearchResult: wikiSearchResult,
         WikiSearchResponse: wikiSearchResponse,
@@ -16217,6 +16323,49 @@ export function buildOpenApiDocument() {
             "400": { $ref: "#/components/responses/Error" },
             "401": { $ref: "#/components/responses/Error" },
             "403": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/daily-briefing": {
+        get: {
+          summary:
+            "Read one owner's deterministic, permission-first daily briefing",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
+          description:
+            "Returns a read-only briefing from authorized current work, today's calendar, an existing same-day Life Force snapshot, and recent recorded activity. Sources are owner-filtered before bounded ranking or limiting. Every statement carries source, freshness, and evidence provenance; unavailable or stale lanes state why they were omitted. The endpoint does not create, synchronize, or update records, does not invent recommendations, and does not make medical or causal claims. At most 101 tasks, 21 active runs, 41 calendar records, and 13 activity records are inspected; the response is capped at 64 KiB.",
+          parameters: [
+            {
+              name: "userId",
+              in: "query",
+              required: true,
+              schema: { type: "string", minLength: 1, maxLength: 240 },
+              description:
+                "Exactly one authorized owner whose briefing may be read."
+            },
+            {
+              name: "timeZone",
+              in: "query",
+              schema: { type: "string", minLength: 1, maxLength: 100 },
+              description:
+                "Optional IANA timezone; defaults to the server's configured Forge timezone."
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["briefing"],
+                properties: {
+                  briefing: { $ref: "#/components/schemas/DailyBriefing" }
+                }
+              },
+              "Owner-scoped deterministic daily briefing"
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" }
           }
         }
       },

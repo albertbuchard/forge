@@ -1820,6 +1820,51 @@ export interface TodayPriorityDecision {
   isLoading: boolean;
 }
 
+export type DailyBriefingSectionKey =
+  | "work"
+  | "schedule"
+  | "capacity"
+  | "recent_activity";
+
+export type DailyBriefingSectionStatus =
+  | "ready"
+  | "empty"
+  | "partial"
+  | "stale"
+  | "future"
+  | "conflict"
+  | "omitted";
+
+export interface DailyBriefingStatement {
+  id: string;
+  text: string;
+  href: string | null;
+  observedAt: string | null;
+  freshness: "fresh" | "stale" | "future" | "missing";
+  provenance: DerivedDataProvenance;
+}
+
+export interface DailyBriefingSection {
+  key: DailyBriefingSectionKey;
+  label: string;
+  status: DailyBriefingSectionStatus;
+  statements: DailyBriefingStatement[];
+  omissionReason: string | null;
+  inspectedCount: number;
+  availableCount: number;
+}
+
+export interface DailyBriefing {
+  contractVersion: 1;
+  generatedAt: string;
+  dateKey: string;
+  timeZone: string;
+  ownerUserId: string;
+  status: "ready" | "partial" | "empty" | "conflict";
+  headline: string;
+  sections: DailyBriefingSection[];
+}
+
 export interface CalendarOverviewPayload {
   generatedAt: string;
   providers: Array<{

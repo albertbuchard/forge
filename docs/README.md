@@ -140,6 +140,7 @@ manual adapter setup, data-location guidance, screenshots, and contributor check
 - [People and peer sharing](./reference/people-and-peer-sharing.md): Person records, typed questions, agent scopes, and human-only consent controls.
 - [Gamification and XP](./reference/gamification.md): reward rules, scoped XP reads, timezone behavior, idempotency, and optional art packs.
 - [Today priority](./reference/today-priority.md): one bounded decision for next work, active-run conflicts, task timeboxes, and capacity states.
+- [Daily briefing](./reference/daily-briefing.md): owner-scoped work, schedule, persisted capacity, and recent activity with statement-level sources, freshness, and omission reasons.
 - [Artifact Store](./reference/artifact-store.md): trusted file storage, metadata, safety scans, generic entity links, and human-only downloads.
 - [KarpaWiki browse and search](./reference/karpawiki.md): durable wiki documents, ranked retrieval, pagination, and access rules.
 - [Life Events](./reference/life-events.md): chronological life-event records, calendar reconciliation, ticket import, and agent route rules.

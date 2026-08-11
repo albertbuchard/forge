@@ -330,6 +330,9 @@ describe("OverviewPage", () => {
       "href",
       "#forge-map"
     );
+    expect(
+      screen.getByRole("link", { name: /Daily briefing/i })
+    ).toHaveAttribute("href", "/today#daily-briefing");
   });
 
   it("maps every supported production destination and excludes non-entities", () => {

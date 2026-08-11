@@ -524,6 +524,8 @@ import {
 } from "./services/data-management.js";
 import { getWeeklyReviewPayload } from "./services/reviews.js";
 import { buildTodayPriorityDecision } from "./services/today-priority.js";
+import { dailyBriefingQuerySchema } from "./daily-briefing-types.js";
+import { readDailyBriefing } from "./services/daily-briefing.js";
 import { finalizeWeeklyReviewClosure } from "./repositories/weekly-reviews.js";
 import {
   createTaskRunWatchdog,
@@ -3351,6 +3353,8 @@ type OnboardingEntityClassification =
   | "read_model_only_surface";
 
 const AGENT_ONBOARDING_READ_MODEL_ROUTES = {
+  dailyBriefing: "/api/v1/daily-briefing",
+  daily_briefing: "/api/v1/daily-briefing",
   todayPriority: "/api/v1/today/priority",
   today_priority: "/api/v1/today/priority",
   sleepOverview: "/api/v1/health/sleep",
@@ -14824,6 +14828,48 @@ export async function buildServer(
         snapshotGeneratedAt: context.meta.generatedAt,
         now,
         timeZone: query.timeZone ?? getRuntimeTimeZone()
+      })
+    };
+  });
+  app.get("/api/v1/daily-briefing", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/daily-briefing" }
+    );
+    const rawQuery = request.query as Record<string, unknown>;
+    const query = dailyBriefingQuerySchema.parse(rawQuery);
+    const tokenUserIds = auth.token?.scopePolicy.userIds ?? [];
+    if (
+      (tokenUserIds.length > 0 && !tokenUserIds.includes(query.userId)) ||
+      !getUserById(query.userId)
+    ) {
+      throw new HttpError(
+        404,
+        "daily_briefing_scope_unavailable",
+        "Daily briefing scope is unavailable."
+      );
+    }
+    const effectiveUserIds = resolveEffectiveUserIdsForReads(
+      { userId: query.userId },
+      auth
+    );
+    if (!effectiveUserIds?.includes(query.userId)) {
+      throw new HttpError(
+        404,
+        "daily_briefing_scope_unavailable",
+        "Daily briefing scope is unavailable."
+      );
+    }
+    const readScope = resolveEffectiveReadScope({ userId: query.userId }, auth);
+    return {
+      briefing: readDailyBriefing({
+        ownerUserId: query.userId,
+        timeZone: query.timeZone ?? getRuntimeTimeZone(),
+        scope: {
+          projectIds: readScope.projectIds,
+          tagIds: readScope.tagIds
+        }
       })
     };
   });

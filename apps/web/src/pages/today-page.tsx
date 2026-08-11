@@ -12,6 +12,7 @@ import {
   WeatherWidget
 } from "@/components/customization/utility-widgets";
 import { DailyRunway } from "@/components/daily-runway";
+import { DailyBriefingPanel } from "@/components/daily-briefing";
 import { LifeForceTodayCard } from "@/components/life-force/life-force-workspace";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { useForgeShell } from "@/components/shell/app-shell";
@@ -100,6 +101,8 @@ export function TodayPage() {
   const selectedUserIds = Array.isArray(shell.selectedUserIds)
     ? shell.selectedUserIds
     : [];
+  const briefingOwnerUserId =
+    selectedUserIds.length === 1 ? selectedUserIds[0]! : null;
   const priorityTimeZone = useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     []
@@ -224,76 +227,83 @@ export function TodayPage() {
     },
     {
       id: "priority",
-      title: "Next useful work",
+      title: "Daily briefing",
       description:
-        "One deterministic recommendation with urgency, schedule, capacity, and active-context evidence.",
+        "A sourced daily briefing followed by the deterministic next-work decision.",
       defaultWidth: 12,
-      defaultHeight: 4,
+      defaultHeight: 8,
       minWidth: 6,
       removable: false,
       defaultTitleVisible: false,
       defaultDescriptionVisible: false,
-      render: () =>
-        priorityQuery.isLoading && !todayDecision ? (
-          <section
-            aria-labelledby="today-priority-loading-title"
-            aria-busy="true"
-            className={`${todayInnerPanelClass} grid min-h-44 place-items-center px-4 py-8 text-center`}
-          >
-            <div>
-              <h2
-                id="today-priority-loading-title"
-                className="text-base font-semibold text-[var(--ui-ink-strong)]"
-              >
-                Loading next useful work
-              </h2>
-              <p className={`mt-2 text-sm ${todaySoftTextClass}`}>
-                Forge is checking active work, timing, and capacity.
-              </p>
-            </div>
-          </section>
-        ) : priorityQuery.isError || !todayDecision ? (
-          <section
-            aria-labelledby="today-priority-error-title"
-            className={`${todayInnerPanelClass} grid min-h-44 place-items-center px-4 py-8 text-center`}
-          >
-            <div>
-              <h2
-                id="today-priority-error-title"
-                className="text-base font-semibold text-[var(--ui-ink-strong)]"
-              >
-                Next useful work is unavailable
-              </h2>
-              <p role="alert" className={`mt-2 text-sm ${todaySoftTextClass}`}>
-                The server could not build a current decision. No fallback
-                ranking has been applied.
-              </p>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                pending={priorityQuery.isFetching}
-                pendingLabel="Retrying"
-                className="mt-4"
-                onClick={() => void priorityQuery.refetch()}
-              >
-                <RefreshCcw className="size-3.5" />
-                Retry decision
-              </Button>
-            </div>
-          </section>
-        ) : (
-          <TodayPriorityPanel
-            decision={todayDecision}
-            onStartTask={startTodayTask}
-            refreshing={Boolean(
-              priorityQuery.isFetching ||
-              calendarQuery.isFetching ||
-              lifeForceQuery.isFetching
-            )}
-            onRefresh={refreshTodayEvidence}
-          />
-        )
+      render: () => (
+        <div className="grid min-w-0 gap-4">
+          <DailyBriefingPanel ownerUserId={briefingOwnerUserId} />
+          {priorityQuery.isLoading && !todayDecision ? (
+            <section
+              aria-labelledby="today-priority-loading-title"
+              aria-busy="true"
+              className={`${todayInnerPanelClass} grid min-h-44 place-items-center px-4 py-8 text-center`}
+            >
+              <div>
+                <h2
+                  id="today-priority-loading-title"
+                  className="text-base font-semibold text-[var(--ui-ink-strong)]"
+                >
+                  Loading next useful work
+                </h2>
+                <p className={`mt-2 text-sm ${todaySoftTextClass}`}>
+                  Forge is checking active work, timing, and capacity.
+                </p>
+              </div>
+            </section>
+          ) : priorityQuery.isError || !todayDecision ? (
+            <section
+              aria-labelledby="today-priority-error-title"
+              className={`${todayInnerPanelClass} grid min-h-44 place-items-center px-4 py-8 text-center`}
+            >
+              <div>
+                <h2
+                  id="today-priority-error-title"
+                  className="text-base font-semibold text-[var(--ui-ink-strong)]"
+                >
+                  Next useful work is unavailable
+                </h2>
+                <p
+                  role="alert"
+                  className={`mt-2 text-sm ${todaySoftTextClass}`}
+                >
+                  The server could not build a current decision. No fallback
+                  ranking has been applied.
+                </p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  pending={priorityQuery.isFetching}
+                  pendingLabel="Retrying"
+                  className="mt-4"
+                  onClick={() => void priorityQuery.refetch()}
+                >
+                  <RefreshCcw className="size-3.5" />
+                  Retry decision
+                </Button>
+              </div>
+            </section>
+          ) : (
+            <TodayPriorityPanel
+              decision={todayDecision}
+              onStartTask={startTodayTask}
+              refreshing={Boolean(
+                priorityQuery.isFetching ||
+                calendarQuery.isFetching ||
+                lifeForceQuery.isFetching
+              )}
+              onRefresh={refreshTodayEvidence}
+            />
+          )}
+        </div>
+      )
     },
     {
       id: "life-force",
