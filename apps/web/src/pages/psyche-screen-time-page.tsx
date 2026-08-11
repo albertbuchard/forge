@@ -22,6 +22,7 @@ import {
   getScreenTimeMonth,
   getScreenTimeSettings
 } from "@/lib/api";
+import type { ScreenTimeSettingsPayload } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type ScreenTimeView = "day" | "month" | "all_time";
@@ -88,6 +89,71 @@ function weekdayLabel(weekday: number) {
   return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][weekday] ?? "Day";
 }
 
+function localDateKey(date = new Date()) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0")
+  ].join("-");
+}
+
+function captureNotice(settings: ScreenTimeSettingsPayload) {
+  if (settings.authorizationStatus === "denied") {
+    return {
+      title: "Screen Time access is denied",
+      detail:
+        "Previously synced history remains visible, but Forge will not receive new captures until permission is granted on the companion device."
+    };
+  }
+  if (
+    settings.authorizationStatus === "unavailable" ||
+    settings.captureState === "unavailable"
+  ) {
+    return {
+      title: "Screen Time capture is unavailable",
+      detail:
+        "This companion cannot provide new Screen Time snapshots. Any previously synced history remains visible."
+    };
+  }
+  if (
+    settings.authorizationStatus === "not_determined" ||
+    settings.captureState === "needs_authorization"
+  ) {
+    return {
+      title: "Screen Time permission is needed",
+      detail:
+        "Grant Screen Time access on the companion device before Forge can receive a device-activity snapshot."
+    };
+  }
+  if (!settings.syncEnabled || settings.captureState === "sync_paused") {
+    return {
+      title: "Screen Time sync is paused",
+      detail:
+        "Existing history remains visible, but this page will not receive new snapshots while sync is paused."
+    };
+  }
+  if (settings.captureFreshness === "empty") {
+    return {
+      title: "Waiting for the first Screen Time snapshot",
+      detail:
+        settings.captureState === "capturing" ||
+        settings.captureState === "waiting_for_snapshot"
+          ? "Permission is available and the companion is preparing its first device-activity snapshot."
+          : "Permission is available, but no device-activity snapshot has been synced yet."
+    };
+  }
+  if (settings.captureFreshness === "stale") {
+    return {
+      title: "Screen Time capture is stale",
+      detail:
+        settings.captureAgeHours !== null
+          ? `The latest snapshot is ${settings.captureAgeHours.toFixed(1)} hours old. Treat these patterns as historical until the companion syncs again.`
+          : "The latest stored snapshot is no longer fresh. Treat these patterns as historical until the companion syncs again."
+    };
+  }
+  return null;
+}
+
 function captureRangeLabel(
   startedAt: string | null,
   endedAt: string | null,
@@ -140,13 +206,24 @@ export function PsycheScreenTimePage() {
     queryKey: ["forge-screen-time-settings"],
     queryFn: () => getScreenTimeSettings().then((response) => response.settings)
   });
+  const selectedDateKey =
+    settingsQuery.data?.lastCapturedDayKey ?? localDateKey();
+  const selectedMonthKey = selectedDateKey.slice(0, 7);
   const dayQuery = useQuery({
-    queryKey: ["forge-screen-time-day"],
-    queryFn: () => getScreenTimeDay().then((response) => response.screenTime)
+    queryKey: ["forge-screen-time-day", selectedDateKey],
+    queryFn: () =>
+      getScreenTimeDay({ date: selectedDateKey }).then(
+        (response) => response.screenTime
+      ),
+    enabled: settingsQuery.isSuccess
   });
   const monthQuery = useQuery({
-    queryKey: ["forge-screen-time-month"],
-    queryFn: () => getScreenTimeMonth().then((response) => response.screenTime)
+    queryKey: ["forge-screen-time-month", selectedMonthKey],
+    queryFn: () =>
+      getScreenTimeMonth({ month: selectedMonthKey }).then(
+        (response) => response.screenTime
+      ),
+    enabled: settingsQuery.isSuccess
   });
   const allTimeQuery = useQuery({
     queryKey: ["forge-screen-time-all-time"],
@@ -200,6 +277,14 @@ export function PsycheScreenTimePage() {
     typeof settings.metadata.snapshot_source === "string"
       ? settings.metadata.snapshot_source.replaceAll("_", " ")
       : "device activity report";
+  const notice = captureNotice(settings);
+  const hasDayData =
+    day.hourlySegments.length > 0 ||
+    day.summary.totalActivitySeconds > 0 ||
+    day.summary.pickupCount > 0 ||
+    day.summary.notificationCount > 0;
+  const hasMonthData = month.days.length > 0 || month.totals.activeDays > 0;
+  const hasAllTimeData = allTime.summary.dayCount > 0;
 
   return (
     <div className="space-y-5">
@@ -230,6 +315,17 @@ export function PsycheScreenTimePage() {
 
       <PsycheSectionNav />
 
+      {notice ? (
+        <Card className={panelClass} role="status">
+          <div className="text-base font-medium text-[var(--ui-ink-strong)]">
+            {notice.title}
+          </div>
+          <div className={cn("mt-2 max-w-3xl text-sm", mutedTextClass)}>
+            {notice.detail}
+          </div>
+        </Card>
+      ) : null}
+
       <Card className={panelClass}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -259,31 +355,38 @@ export function PsycheScreenTimePage() {
         </div>
 
         <div className="mt-5 grid gap-3 md:grid-cols-3">
-          <Card className={subCardClass}>
-            <div className={smallLabelClass}>Today on screen</div>
-            <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
-              {durationLabel(day.summary.totalActivitySeconds)}
-            </div>
-            <div className={cn("mt-2 text-sm", mutedTextClass)}>
-              Across {day.summary.activeHourCount} active hours.
-            </div>
-          </Card>
-          <Card className={subCardClass}>
-            <div className={smallLabelClass}>Pickups today</div>
-            <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
-              {day.summary.pickupCount}
-            </div>
-            <div className={cn("mt-2 text-sm", mutedTextClass)}>
-              First pickup{" "}
-              {day.summary.firstPickupAt
-                ? new Date(day.summary.firstPickupAt).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit"
-                  })
-                : "not captured"}
-              .
-            </div>
-          </Card>
+          {hasDayData ? (
+            <>
+              <Card className={subCardClass}>
+                <div className={smallLabelClass}>Captured day on screen</div>
+                <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+                  {durationLabel(day.summary.totalActivitySeconds)}
+                </div>
+                <div className={cn("mt-2 text-sm", mutedTextClass)}>
+                  {day.date} · {day.summary.activeHourCount} active hours.
+                </div>
+              </Card>
+              <Card className={subCardClass}>
+                <div className={smallLabelClass}>Pickups on captured day</div>
+                <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+                  {day.summary.pickupCount}
+                </div>
+                <div className={cn("mt-2 text-sm", mutedTextClass)}>
+                  First pickup{" "}
+                  {day.summary.firstPickupAt
+                    ? new Date(day.summary.firstPickupAt).toLocaleTimeString(
+                        [],
+                        {
+                          hour: "2-digit",
+                          minute: "2-digit"
+                        }
+                      )
+                    : "not captured"}
+                  .
+                </div>
+              </Card>
+            </>
+          ) : null}
           <Card className={subCardClass}>
             <div className={smallLabelClass}>Capture health</div>
             <div className="mt-3 text-lg text-[var(--ui-ink-strong)]">
@@ -330,7 +433,19 @@ export function PsycheScreenTimePage() {
         </Card>
       </Card>
 
-      {view === "day" ? (
+      {view === "day" && !hasDayData ? (
+        <Card className={panelClass}>
+          <div className="text-base font-medium text-[var(--ui-ink-strong)]">
+            No Screen Time snapshot for {day.date}
+          </div>
+          <div className={cn("mt-2 max-w-3xl text-sm", mutedTextClass)}>
+            No hourly Screen Time data was synced for this device calendar day.
+            Zero activity is not assumed.
+          </div>
+        </Card>
+      ) : null}
+
+      {view === "day" && hasDayData ? (
         <section className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
           <Card className={panelClass}>
             <div className={labelClass}>Hourly rhythm</div>
@@ -384,47 +499,70 @@ export function PsycheScreenTimePage() {
             <Card className={roomyCardClass}>
               <div className={labelClass}>Top apps</div>
               <div className="mt-4 space-y-3">
-                {day.topApps.slice(0, 6).map((app) => (
-                  <div
-                    key={app.id}
-                    className="flex items-center justify-between gap-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-[var(--ui-ink-strong)]">
-                        {app.displayName || app.bundleIdentifier}
+                {day.topApps.length > 0 ? (
+                  day.topApps.slice(0, 6).map((app) => (
+                    <div
+                      key={app.id}
+                      className="flex items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-[var(--ui-ink-strong)]">
+                          {app.displayName || app.bundleIdentifier}
+                        </div>
+                        <div className="truncate text-xs text-[var(--ui-ink-faint)]">
+                          {app.categoryLabel || app.bundleIdentifier}
+                        </div>
                       </div>
-                      <div className="truncate text-xs text-[var(--ui-ink-faint)]">
-                        {app.categoryLabel || app.bundleIdentifier}
+                      <div className="text-sm text-[var(--ui-ink-soft)]">
+                        {durationLabel(app.totalActivitySeconds)}
                       </div>
                     </div>
-                    <div className="text-sm text-[var(--ui-ink-soft)]">
-                      {durationLabel(app.totalActivitySeconds)}
-                    </div>
+                  ))
+                ) : (
+                  <div className={cn("text-sm", mutedTextClass)}>
+                    App-level detail was not included in this snapshot.
                   </div>
-                ))}
+                )}
               </div>
             </Card>
 
             <Card className={roomyCardClass}>
               <div className={labelClass}>Top categories</div>
               <div className="mt-4 flex flex-wrap gap-2">
-                {day.topCategories.slice(0, 8).map((category) => (
-                  <Badge
-                    key={category.id}
-                    tone="default"
-                    className={badgeClass}
-                  >
-                    {category.categoryLabel} ·{" "}
-                    {durationLabel(category.totalActivitySeconds)}
-                  </Badge>
-                ))}
+                {day.topCategories.length > 0 ? (
+                  day.topCategories.slice(0, 8).map((category) => (
+                    <Badge
+                      key={category.id}
+                      tone="default"
+                      className={badgeClass}
+                    >
+                      {category.categoryLabel} ·{" "}
+                      {durationLabel(category.totalActivitySeconds)}
+                    </Badge>
+                  ))
+                ) : (
+                  <div className={cn("text-sm", mutedTextClass)}>
+                    Category detail was not included in this snapshot.
+                  </div>
+                )}
               </div>
             </Card>
           </div>
         </section>
       ) : null}
 
-      {view === "month" ? (
+      {view === "month" && !hasMonthData ? (
+        <Card className={panelClass}>
+          <div className="text-base font-medium text-[var(--ui-ink-strong)]">
+            No monthly Screen Time history for {month.month}
+          </div>
+          <div className={cn("mt-2 text-sm", mutedTextClass)}>
+            No captured days were synced for this device calendar month.
+          </div>
+        </Card>
+      ) : null}
+
+      {view === "month" && hasMonthData ? (
         <section className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
           <Card className={panelClass}>
             <div className={labelClass}>Monthly drift</div>
@@ -486,7 +624,19 @@ export function PsycheScreenTimePage() {
         </section>
       ) : null}
 
-      {view === "all_time" ? (
+      {view === "all_time" && !hasAllTimeData ? (
+        <Card className={panelClass}>
+          <div className="text-base font-medium text-[var(--ui-ink-strong)]">
+            No Screen Time history yet
+          </div>
+          <div className={cn("mt-2 text-sm", mutedTextClass)}>
+            Forge will show longer-term patterns after the first companion
+            snapshot is synced.
+          </div>
+        </Card>
+      ) : null}
+
+      {view === "all_time" && hasAllTimeData ? (
         <section className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
           <Card className={panelClass}>
             <div className={labelClass}>Weekday pattern</div>

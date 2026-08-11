@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -46,7 +52,9 @@ vi.mock("@/components/psyche/psyche-section-nav", () => ({
 }));
 
 vi.mock("recharts", () => ({
-  ResponsiveContainer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  ResponsiveContainer: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
   AreaChart: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   Area: () => <div>Area</div>,
   CartesianGrid: () => null,
@@ -124,13 +132,7 @@ describe("PsycheScreenTimePage", () => {
             notificationCount: 0
           }
         ],
-        topCategories: [
-          {
-            id: "productivity",
-            categoryLabel: "Productivity",
-            totalActivitySeconds: 1800
-          }
-        ]
+        topCategories: []
       }
     });
     getScreenTimeMonthMock.mockResolvedValue({
@@ -170,8 +172,19 @@ describe("PsycheScreenTimePage", () => {
     expect(screen.getByText("fresh")).toBeInTheDocument();
     expect(screen.getByText(/Updated 2.5h ago/i)).toBeInTheDocument();
     expect(screen.getByText(/Hourly model/i)).toBeInTheDocument();
-    expect(screen.getByText(/device activity report extension/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/device activity report extension/i)
+    ).toBeInTheDocument();
     expect(screen.getAllByText("Safari").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText("Category detail was not included in this snapshot.")
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(getScreenTimeDayMock).toHaveBeenCalledWith({
+        date: "2026-04-05"
+      })
+    );
+    expect(getScreenTimeMonthMock).toHaveBeenCalledWith({ month: "2026-04" });
   });
 
   it("switches between month and all-time summaries", async () => {
@@ -251,6 +264,10 @@ describe("PsycheScreenTimePage", () => {
 
     renderPage();
 
+    expect(
+      await screen.findByText("Screen Time capture is stale")
+    ).toBeInTheDocument();
+
     fireEvent.click(await screen.findByRole("button", { name: "month" }));
     expect(await screen.findByText("Month summary")).toBeInTheDocument();
     expect(screen.getByText("Active days")).toBeInTheDocument();
@@ -259,5 +276,91 @@ describe("PsycheScreenTimePage", () => {
     expect(await screen.findByText("Lifetime summary")).toBeInTheDocument();
     expect(screen.getByText(/Days captured/i)).toBeInTheDocument();
     expect(screen.getByText(/Social/i)).toBeInTheDocument();
+  });
+
+  it("does not present a denied empty snapshot as zero device use", async () => {
+    getScreenTimeSettingsMock.mockResolvedValue({
+      settings: {
+        userId: "user_operator",
+        trackingEnabled: false,
+        syncEnabled: true,
+        authorizationStatus: "denied",
+        captureState: "needs_authorization",
+        lastCapturedDayKey: null,
+        lastCaptureStartedAt: null,
+        lastCaptureEndedAt: null,
+        captureFreshness: "empty",
+        captureAgeHours: null,
+        capturedDayCount: 0,
+        capturedHourCount: 0,
+        captureWindowDays: 0,
+        metadata: {},
+        createdAt: "2026-04-05T09:00:00.000Z",
+        updatedAt: "2026-04-05T09:00:00.000Z"
+      }
+    });
+    getScreenTimeDayMock.mockImplementation(
+      async ({ date }: { date: string }) => ({
+        screenTime: {
+          date,
+          settings: {},
+          summary: {
+            totalActivitySeconds: 0,
+            pickupCount: 0,
+            notificationCount: 0,
+            firstPickupAt: null,
+            longestActivitySeconds: 0,
+            activeHourCount: 0,
+            averageHourlyActivitySeconds: 0
+          },
+          hourlySegments: [],
+          topApps: [],
+          topCategories: []
+        }
+      })
+    );
+    getScreenTimeMonthMock.mockImplementation(
+      async ({ month }: { month: string }) => ({
+        screenTime: {
+          month,
+          days: [],
+          totals: {
+            totalActivitySeconds: 0,
+            pickupCount: 0,
+            notificationCount: 0,
+            activeDays: 0
+          },
+          topApps: [],
+          topCategories: []
+        }
+      })
+    );
+    getScreenTimeAllTimeMock.mockResolvedValue({
+      screenTime: {
+        summary: {
+          dayCount: 0,
+          totalActivitySeconds: 0,
+          totalPickups: 0,
+          totalNotifications: 0,
+          averageDailyActivitySeconds: 0,
+          averageDailyPickups: 0
+        },
+        weekdayPattern: [],
+        topApps: [],
+        topCategories: []
+      }
+    });
+
+    renderPage();
+
+    expect(
+      await screen.findByText("Screen Time access is denied")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Zero activity is not assumed/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Captured day on screen")
+    ).not.toBeInTheDocument();
   });
 });
