@@ -107,6 +107,22 @@ export function MovementTimelineDetailCard({
                 {segment.overrideCount === 1 ? "" : "es"}
               </Badge>
             ) : null}
+            {!sleepOverlay ? (
+              <Badge
+                className={
+                  segment.evidenceConfidence.level === "low" ||
+                  segment.evidenceConfidence.level === "unknown"
+                    ? warningBadgeClassName
+                    : segment.evidenceConfidence.level === "medium"
+                      ? infoBadgeClassName
+                      : accentBadgeClassName
+                }
+              >
+                {segment.evidenceConfidence.level === "unknown"
+                  ? "Unknown confidence"
+                  : `${segment.evidenceConfidence.level[0]!.toUpperCase()}${segment.evidenceConfidence.level.slice(1)} confidence`}
+              </Badge>
+            ) : null}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -154,6 +170,14 @@ export function MovementTimelineDetailCard({
             {formatDateTime(segment.endedAt)}
           </div>
         </div>
+        {!sleepOverlay ? (
+          <div className={detailMetricClassName}>
+            <div className={detailEyebrowClassName}>Evidence confidence</div>
+            <div className={`mt-2 ${detailTextClassName}`}>
+              {segment.evidenceConfidence.reason}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">

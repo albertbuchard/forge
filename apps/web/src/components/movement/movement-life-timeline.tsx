@@ -1271,6 +1271,22 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                                   <Badge tone="meta">
                                     {formatDurationLabel(segment.durationSeconds)}
                                   </Badge>
+                                  <Badge
+                                    className={
+                                      segment.evidenceConfidence.level === "low" ||
+                                      segment.evidenceConfidence.level === "unknown"
+                                        ? timelineWarningBadgeClassName
+                                        : segment.evidenceConfidence.level === "medium"
+                                          ? timelineInfoBadgeClassName
+                                          : "bg-[var(--ui-accent-soft)] text-[var(--primary)]"
+                                    }
+                                    title={segment.evidenceConfidence.reason}
+                                    aria-label={`${segment.evidenceConfidence.level} confidence: ${segment.evidenceConfidence.reason}`}
+                                  >
+                                    {segment.evidenceConfidence.level === "unknown"
+                                      ? "Unknown confidence"
+                                      : `${segment.evidenceConfidence.level[0]!.toUpperCase()}${segment.evidenceConfidence.level.slice(1)} confidence`}
+                                  </Badge>
                                   {segment.origin === "continued_stay" ? (
                                     <Badge className={timelineInfoBadgeClassName}>
                                       Continued stay

@@ -3320,6 +3320,7 @@ export interface MovementDayData {
     rawTripIds: string[];
     rawPointCount: number;
     hasLegacyCorrections: boolean;
+    evidenceConfidence: MovementEvidenceConfidence;
   }>;
   stays: MovementStayRecord[];
   trips: MovementTripRecord[];
@@ -3488,6 +3489,17 @@ export interface MovementBoxDetailData {
 
 export type MovementTimelineLaneSide = "left" | "right";
 
+export interface MovementEvidenceConfidence {
+  level: "high" | "medium" | "low" | "unknown";
+  basis:
+    | "recorded_samples"
+    | "recorded_points"
+    | "user_authored"
+    | "inferred"
+    | "missing";
+  reason: string;
+}
+
 export interface MovementTimelineSegmentBase {
   id: string;
   boxId: string;
@@ -3526,6 +3538,7 @@ export interface MovementTimelineSegmentBase {
   rawTripIds: string[];
   rawPointCount: number;
   hasLegacyCorrections: boolean;
+  evidenceConfidence: MovementEvidenceConfidence;
 }
 
 export interface MovementTimelineStaySegment extends MovementTimelineSegmentBase {

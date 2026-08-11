@@ -48,6 +48,14 @@ function makeSegment(
     rawTripIds: [],
     rawPointCount: 0,
     hasLegacyCorrections: false,
+    evidenceConfidence: {
+      level: kind === "missing" ? "unknown" : "medium",
+      basis: kind === "missing" ? "missing" : "recorded_samples",
+      reason:
+        kind === "missing"
+          ? "No trustworthy movement evidence covers this interval."
+          : "Fixture movement evidence."
+    },
     stay: null,
     trip: null
   };

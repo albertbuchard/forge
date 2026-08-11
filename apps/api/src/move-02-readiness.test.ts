@@ -6,7 +6,137 @@ import test from "node:test";
 
 import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase } from "./db.js";
-import { createMovementPlace, ingestMovementSync } from "./movement.js";
+import {
+  createMovementPlace,
+  ingestMovementSync,
+  resolveMovementEvidenceConfidence
+} from "./movement.js";
+
+test("MOVE-02 explains confidence from recorded, inferred, user-authored, and missing evidence", () => {
+  assert.deepEqual(
+    resolveMovementEvidenceConfidence({
+      kind: "stay",
+      sourceKind: "automatic",
+      origin: "recorded",
+      stay: { sampleCount: 6, radiusMeters: 40 }
+    }),
+    {
+      level: "high",
+      basis: "recorded_samples",
+      reason: "6 recorded samples within a 40 m stay radius."
+    }
+  );
+  assert.equal(
+    resolveMovementEvidenceConfidence({
+      kind: "stay",
+      sourceKind: "automatic",
+      origin: "recorded",
+      stay: { sampleCount: 2, radiusMeters: 180 }
+    }).level,
+    "medium"
+  );
+  assert.equal(
+    resolveMovementEvidenceConfidence({
+      kind: "stay",
+      sourceKind: "automatic",
+      origin: "recorded",
+      stay: { sampleCount: 1, radiusMeters: 400 }
+    }).level,
+    "low"
+  );
+  assert.deepEqual(
+    resolveMovementEvidenceConfidence({
+      kind: "trip",
+      sourceKind: "automatic",
+      origin: "recorded",
+      trip: {
+        points: [8, 12, 18, 22].map((accuracyMeters) => ({ accuracyMeters }))
+      }
+    }),
+    {
+      level: "high",
+      basis: "recorded_points",
+      reason: "4 recorded location points with 15 m median reported accuracy."
+    }
+  );
+  assert.equal(
+    resolveMovementEvidenceConfidence({
+      kind: "trip",
+      sourceKind: "automatic",
+      origin: "recorded",
+      trip: { points: [{ accuracyMeters: 40 }, { accuracyMeters: 60 }] }
+    }).level,
+    "medium"
+  );
+  assert.equal(
+    resolveMovementEvidenceConfidence({
+      kind: "trip",
+      sourceKind: "automatic",
+      origin: "recorded",
+      trip: { points: [{ accuracyMeters: null }] }
+    }).level,
+    "low"
+  );
+  assert.equal(
+    resolveMovementEvidenceConfidence({
+      kind: "trip",
+      sourceKind: "automatic",
+      origin: "recorded",
+      trip: { points: [] }
+    }).level,
+    "unknown"
+  );
+  assert.deepEqual(
+    [
+      resolveMovementEvidenceConfidence({
+        kind: "stay",
+        sourceKind: "automatic",
+        origin: "continued_stay"
+      }),
+      resolveMovementEvidenceConfidence({
+        kind: "trip",
+        sourceKind: "automatic",
+        origin: "repaired_gap"
+      }),
+      resolveMovementEvidenceConfidence({
+        kind: "missing",
+        sourceKind: "automatic",
+        origin: "missing"
+      }),
+      resolveMovementEvidenceConfidence({
+        kind: "stay",
+        sourceKind: "user_defined",
+        origin: "user_defined"
+      })
+    ].map(({ level, basis }) => ({ level, basis })),
+    [
+      { level: "medium", basis: "inferred" },
+      { level: "low", basis: "inferred" },
+      { level: "unknown", basis: "missing" },
+      { level: "high", basis: "user_authored" }
+    ]
+  );
+  assert.match(
+    resolveMovementEvidenceConfidence({
+      kind: "stay",
+      sourceKind: "user_defined",
+      origin: "user_defined"
+    }).reason,
+    /not independently verified by movement sensors/i
+  );
+  assert.equal(
+    resolveMovementEvidenceConfidence({
+      kind: "trip",
+      sourceKind: "automatic",
+      origin: "recorded",
+      isInvalid: true,
+      trip: {
+        points: [5, 5, 5, 5].map((accuracyMeters) => ({ accuracyMeters }))
+      }
+    }).level,
+    "low"
+  );
+});
 
 test("MOVE-02 respects the configured place radius while preserving explicit source identity", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-move-02-"));

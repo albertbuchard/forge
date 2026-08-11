@@ -143,6 +143,12 @@ function buildSleepOverlaySegment(
     rawTripIds: [],
     rawPointCount: 0,
     hasLegacyCorrections: false,
+    evidenceConfidence: {
+      level: "unknown",
+      basis: "inferred",
+      reason:
+        "This visual sleep overlay comes from a separate sleep record, not movement evidence."
+    },
     stay: null,
     trip: null
   };

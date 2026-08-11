@@ -1219,6 +1219,15 @@ export function MovementPage() {
                           >
                             {segment.kind === "missing" ? "gap" : segment.kind}
                           </Badge>
+                          <Badge
+                            tone="meta"
+                            title={segment.evidenceConfidence.reason}
+                            aria-label={`${segment.evidenceConfidence.level} confidence: ${segment.evidenceConfidence.reason}`}
+                          >
+                            {segment.evidenceConfidence.level === "unknown"
+                              ? "unknown confidence"
+                              : `${segment.evidenceConfidence.level} confidence`}
+                          </Badge>
                           <span className="text-[11px] text-[var(--ui-ink-muted)]">
                             {durationLabel(segment.durationSeconds)}
                           </span>

@@ -147,6 +147,11 @@ test("MOVE-02 uses DST-aware local-day boundaries and interval overlap", async (
               | "complete"
               | "unavailable_at_day_boundary";
             rawTripIds: string[];
+            evidenceConfidence: {
+              level: "high" | "medium" | "low" | "unknown";
+              basis: string;
+              reason: string;
+            };
           }>;
           provenance: { completeness: string; statusDetail: string };
         };
@@ -174,7 +179,8 @@ test("MOVE-02 uses DST-aware local-day boundaries and interval overlap", async (
         (segment) =>
           segment.startedAt >= spring.startAt &&
           segment.endedAt <= spring.endAt &&
-          segment.durationSeconds > 0
+          segment.durationSeconds > 0 &&
+          segment.evidenceConfidence.reason.length > 0
       )
     );
     assert.ok(movement.summary.totalDistanceMeters < 1_300);

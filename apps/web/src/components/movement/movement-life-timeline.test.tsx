@@ -107,6 +107,12 @@ function createSegment(
     rawTripIds: [],
     rawPointCount: 0,
     hasLegacyCorrections: false,
+    evidenceConfidence: {
+      level: "medium",
+      basis: "inferred",
+      reason:
+        "Forge inferred a continued stay from a short gap beside stationary evidence at the same place."
+    },
     stay: null,
     trip: null
   };
@@ -409,6 +415,11 @@ describe("MovementLifeTimeline", () => {
             subtitle: "Unlinked stay",
             placeLabel: null,
             rawStayIds: ["stay_home"],
+            evidenceConfidence: {
+              level: "medium",
+              basis: "recorded_samples",
+              reason: "3 recorded samples within a 120 m stay radius."
+            },
             stay: {
               id: "stay_home",
               externalUid: "stay_home",
@@ -453,6 +464,10 @@ describe("MovementLifeTimeline", () => {
     await openFirstTimelineRow();
     expect(
       await screen.findByRole("button", { name: /Label location/i })
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Medium confidence")).toBeInTheDocument();
+    expect(
+      screen.getByText("3 recorded samples within a 120 m stay radius.")
     ).toBeInTheDocument();
     screen.getByRole("button", { name: "Details" }).click();
 

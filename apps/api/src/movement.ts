@@ -2223,6 +2223,136 @@ function hasInvalidMovementRecord(metadata: Record<string, unknown>) {
   );
 }
 
+export type MovementEvidenceConfidence = {
+  level: "high" | "medium" | "low" | "unknown";
+  basis:
+    | "recorded_samples"
+    | "recorded_points"
+    | "user_authored"
+    | "inferred"
+    | "missing";
+  reason: string;
+};
+
+export function resolveMovementEvidenceConfidence(input: {
+  kind: "stay" | "trip" | "missing";
+  sourceKind: "automatic" | "user_defined";
+  origin:
+    | "recorded"
+    | "continued_stay"
+    | "repaired_gap"
+    | "missing"
+    | "user_defined"
+    | "user_invalidated";
+  isInvalid?: boolean;
+  stay?: { sampleCount: number; radiusMeters: number } | null;
+  trip?: { points: Array<{ accuracyMeters: number | null }> } | null;
+}): MovementEvidenceConfidence {
+  if (input.isInvalid) {
+    return {
+      level: "low",
+      basis: input.kind === "trip" ? "recorded_points" : "recorded_samples",
+      reason:
+        "Forge detected conflicting or invalid raw movement evidence for this interval."
+    };
+  }
+  if (input.sourceKind === "user_defined") {
+    return {
+      level: "high",
+      basis: "user_authored",
+      reason:
+        input.kind === "missing"
+          ? "A user explicitly marked this interval as lacking trustworthy movement evidence; Forge does not infer what happened."
+          : "A user explicitly authored this interval; its timing and label were not independently verified by movement sensors."
+    };
+  }
+  if (input.kind === "missing" || input.origin === "missing") {
+    return {
+      level: "unknown",
+      basis: "missing",
+      reason: "No trustworthy movement evidence covers this interval."
+    };
+  }
+  if (input.origin === "continued_stay") {
+    return {
+      level: "medium",
+      basis: "inferred",
+      reason:
+        "Forge inferred a continued stay from a short gap beside stationary evidence at the same place."
+    };
+  }
+  if (input.origin === "repaired_gap") {
+    return {
+      level: "low",
+      basis: "inferred",
+      reason:
+        "Forge inferred this interval from neighboring movement boxes; no raw stay or trip directly records it."
+    };
+  }
+  if (input.kind === "stay" && input.stay) {
+    const sampleCount = Math.max(0, Math.floor(input.stay.sampleCount));
+    const radiusMeters = Math.max(0, input.stay.radiusMeters);
+    const reason = `${sampleCount} recorded sample${sampleCount === 1 ? "" : "s"} within a ${Math.round(radiusMeters)} m stay radius.`;
+    if (sampleCount >= 4 && radiusMeters <= 100) {
+      return { level: "high", basis: "recorded_samples", reason };
+    }
+    if (sampleCount >= 2 && radiusMeters <= 250) {
+      return { level: "medium", basis: "recorded_samples", reason };
+    }
+    return { level: "low", basis: "recorded_samples", reason };
+  }
+  if (input.kind === "trip" && input.trip) {
+    const pointCount = input.trip.points.length;
+    const accuracyMeters = input.trip.points
+      .map((point) => point.accuracyMeters)
+      .filter(
+        (value): value is number =>
+          typeof value === "number" && Number.isFinite(value) && value >= 0
+      )
+      .sort((left, right) => left - right);
+    if (pointCount === 0) {
+      return {
+        level: "unknown",
+        basis: "recorded_points",
+        reason:
+          "The trip has aggregate timing or distance but no point-level locations to assess."
+      };
+    }
+    const middle = Math.floor(accuracyMeters.length / 2);
+    const medianAccuracyMeters =
+      accuracyMeters.length === 0
+        ? null
+        : accuracyMeters.length % 2 === 0
+          ? (accuracyMeters[middle - 1]! + accuracyMeters[middle]!) / 2
+          : accuracyMeters[middle]!;
+    const reason =
+      medianAccuracyMeters === null
+        ? `${pointCount} recorded location point${pointCount === 1 ? "" : "s"}, but none reports measurement accuracy.`
+        : `${pointCount} recorded location point${pointCount === 1 ? "" : "s"} with ${Math.round(medianAccuracyMeters)} m median reported accuracy.`;
+    if (
+      pointCount >= 4 &&
+      accuracyMeters.length >= 3 &&
+      medianAccuracyMeters !== null &&
+      medianAccuracyMeters <= 25
+    ) {
+      return { level: "high", basis: "recorded_points", reason };
+    }
+    if (
+      pointCount >= 2 &&
+      medianAccuracyMeters !== null &&
+      medianAccuracyMeters <= 75
+    ) {
+      return { level: "medium", basis: "recorded_points", reason };
+    }
+    return { level: "low", basis: "recorded_points", reason };
+  }
+  return {
+    level: "unknown",
+    basis: input.kind === "trip" ? "recorded_points" : "recorded_samples",
+    reason: "Forge cannot inspect the raw evidence behind this recorded interval."
+  };
+}
+
 function reconcileMovementOverlapValidation(userId: string) {
   const stayRows = listMovementStayRows([userId]);
   const tripRows = listMovementTripRows([userId]);
@@ -4974,6 +5104,17 @@ function buildProjectedMovementTimelineSegments(userIds: string[]) {
     const rawTrip =
       segment.rawTripIds.length > 0 ? tripPayloadById.get(segment.rawTripIds[0]!) ?? null : null;
     const syncSource = String(segment.metadata.syncSource ?? segment.sourceKind);
+    const isInvalid = hasInvalidMovementRecord(
+      rawStay?.metadata ?? rawTrip?.metadata ?? {}
+    );
+    const evidenceConfidence = resolveMovementEvidenceConfidence({
+      kind: segment.kind,
+      sourceKind: segment.sourceKind,
+      origin: segment.origin,
+      isInvalid,
+      stay: rawStay,
+      trip: rawTrip
+    });
     if (segment.kind === "missing") {
       const laneSide = previousStayLane ?? nextStayLane ?? "left";
       return {
@@ -5008,12 +5149,12 @@ function buildProjectedMovementTimelineSegments(userIds: string[]) {
         rawTripIds: segment.rawTripIds,
         rawPointCount: segment.rawPointCount,
         hasLegacyCorrections: segment.hasLegacyCorrections,
+        evidenceConfidence,
         stay: null,
         trip: null
       };
     }
     if (segment.kind === "stay" && rawStay && segment.sourceKind === "automatic" && segment.origin === "recorded") {
-      const invalid = hasInvalidMovementRecord(rawStay.metadata);
       const laneSide = stayLaneById.get(segment.id) ?? "left";
       return {
         id: segment.id,
@@ -5036,7 +5177,7 @@ function buildProjectedMovementTimelineSegments(userIds: string[]) {
         subtitle: segment.subtitle,
         placeLabel: segment.placeLabel,
         tags: segment.tags,
-        isInvalid: invalid,
+        isInvalid,
         syncSource,
         cursor: encodeMovementTimelineCursor(cursor),
         overrideCount: segment.overrideCount,
@@ -5047,6 +5188,7 @@ function buildProjectedMovementTimelineSegments(userIds: string[]) {
         rawTripIds: segment.rawTripIds,
         rawPointCount: segment.rawPointCount,
         hasLegacyCorrections: segment.hasLegacyCorrections,
+        evidenceConfidence,
         stay: rawStay,
         trip: null
       };
@@ -5085,6 +5227,7 @@ function buildProjectedMovementTimelineSegments(userIds: string[]) {
         rawTripIds: segment.rawTripIds,
         rawPointCount: segment.rawPointCount,
         hasLegacyCorrections: segment.hasLegacyCorrections,
+        evidenceConfidence,
         stay: null,
         trip: null
       };
@@ -5123,11 +5266,11 @@ function buildProjectedMovementTimelineSegments(userIds: string[]) {
         rawTripIds: segment.rawTripIds,
         rawPointCount: segment.rawPointCount,
         hasLegacyCorrections: segment.hasLegacyCorrections,
+        evidenceConfidence,
         stay: null,
         trip: null
       };
     }
-    const invalid = hasInvalidMovementRecord(rawTrip.metadata);
     const laneSide = nextStayLane ?? previousStayLane ?? "left";
     return {
       id: segment.id,
@@ -5150,7 +5293,7 @@ function buildProjectedMovementTimelineSegments(userIds: string[]) {
       subtitle: segment.subtitle,
       placeLabel: segment.placeLabel,
       tags: segment.tags,
-      isInvalid: invalid,
+      isInvalid,
       syncSource,
       cursor: encodeMovementTimelineCursor(cursor),
       overrideCount: segment.overrideCount,
@@ -5161,6 +5304,7 @@ function buildProjectedMovementTimelineSegments(userIds: string[]) {
       rawTripIds: segment.rawTripIds,
       rawPointCount: segment.rawPointCount,
       hasLegacyCorrections: segment.hasLegacyCorrections,
+      evidenceConfidence,
       stay: null,
       trip: rawTrip
     };
@@ -6245,6 +6389,16 @@ export function getMovementDayDetail(input: {
       rawStay?.estimatedScreenTimeSeconds ?? rawTrip?.estimatedScreenTimeSeconds ?? 0;
     const pickupCount = rawStay?.pickupCount ?? rawTrip?.pickupCount ?? 0;
     const noteCount = rawStay?.note ? 1 : rawTrip?.note ? 1 : 0;
+    const evidenceConfidence = resolveMovementEvidenceConfidence({
+      kind: segment.kind,
+      sourceKind: segment.sourceKind,
+      origin: segment.origin,
+      isInvalid: hasInvalidMovementRecord(
+        rawStay?.metadata ?? rawTrip?.metadata ?? {}
+      ),
+      stay: rawStay,
+      trip: rawTrip
+    });
     const visibleStartedAt = new Date(
       Math.max(Date.parse(segment.startedAt), Date.parse(dayStart))
     ).toISOString();
@@ -6299,7 +6453,8 @@ export function getMovementDayDetail(input: {
       rawStayIds: segment.rawStayIds,
       rawTripIds: segment.rawTripIds,
       rawPointCount: segment.rawPointCount,
-      hasLegacyCorrections: segment.hasLegacyCorrections
+      hasLegacyCorrections: segment.hasLegacyCorrections,
+      evidenceConfidence
     };
   });
   const selectionAggregate = computeSelectionAggregate({
