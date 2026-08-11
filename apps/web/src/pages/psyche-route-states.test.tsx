@@ -60,7 +60,8 @@ vi.mock("@/components/psyche/psyche-graph", () => ({
 }));
 
 vi.mock("@/components/psyche/reflect-flow-dialog", () => ({
-  ReflectFlowDialog: () => null
+  ReflectFlowDialog: ({ open }: { open: boolean }) =>
+    open ? <div role="dialog" aria-label="Reflective entry dialog" /> : null
 }));
 
 afterEach(() => {
@@ -267,6 +268,7 @@ describe("psyche route states", () => {
             beliefs: [],
             patterns: [],
             modes: [],
+            flashcards: [],
             schemaPressure: [],
             committedActions: [],
             generatedAt: "2026-05-14T00:00:00.000Z",
@@ -293,6 +295,119 @@ describe("psyche route states", () => {
       )
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Devrage metric")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Start with a private reflection" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /These tools support self-observation; they do not provide a diagnosis/i
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Open Values: 0 stored" })
+    ).toHaveAttribute("href", "/psyche/values");
+    expect(
+      screen.getByRole("link", { name: "Open Questionnaires: 0 available" })
+    ).toHaveAttribute("href", "/psyche/questionnaires");
+
+    fireEvent.click(screen.getByRole("button", { name: "Start a reflection" }));
+    expect(
+      screen.getByRole("dialog", { name: "Reflective entry dialog" })
+    ).toBeInTheDocument();
+  });
+
+  it("summarizes dense reflective records and links to recent context", () => {
+    useForgeShellMock.mockReturnValue({
+      snapshot: createSnapshot(),
+      selectedUserIds: []
+    });
+    useQueryMock.mockImplementation(
+      ({ queryKey }: { queryKey: readonly unknown[] }) => {
+        if (queryKey[0] === "forge-psyche-overview") {
+          return createQueryResult({
+            data: {
+              overview: {
+                domain: { title: "Reflective field" },
+                values: [{ id: "value_1" }, { id: "value_2" }],
+                reports: [
+                  {
+                    id: "report_recent",
+                    title: "Recent return-path review"
+                  }
+                ],
+                behaviors: [{ id: "behavior_1" }],
+                beliefs: [{ id: "belief_1" }],
+                patterns: [
+                  {
+                    id: "pattern_1",
+                    preferredResponse: "Pause before replying",
+                    targetBehavior: "Choose the response deliberately"
+                  }
+                ],
+                modes: [{ id: "mode_1" }],
+                flashcards: [{ id: "flashcard_1" }],
+                schemaPressure: [],
+                committedActions: [],
+                generatedAt: "2026-05-14T00:00:00.000Z",
+                devrageMetric: emptyDevrageMetric,
+                openInsights: 3,
+                openNotes: 2
+              }
+            }
+          });
+        }
+        if (queryKey[0] === "forge-psyche-questionnaires-hub") {
+          return createQueryResult({
+            data: {
+              instruments: [
+                {
+                  id: "instrument_1",
+                  title: "Weekly reflection",
+                  latestRunId: "run_recent",
+                  latestRunAt: "2026-05-13T18:00:00.000Z"
+                },
+                {
+                  id: "instrument_2",
+                  title: "Values check-in",
+                  latestRunId: null,
+                  latestRunAt: null
+                }
+              ]
+            }
+          });
+        }
+        return createQueryResult();
+      }
+    );
+
+    renderWithProviders(<PsychePage />, ["/psyche"]);
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Your reflective records and recent context"
+      })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Open Values: 2 stored" })
+    ).toHaveAttribute("href", "/psyche/values");
+    expect(
+      screen.getByRole("link", { name: "Open Patterns: 1 stored" })
+    ).toHaveAttribute("href", "/psyche/patterns");
+    expect(
+      screen.getByRole("link", { name: "Open Questionnaires: 2 available" })
+    ).toHaveAttribute("href", "/psyche/questionnaires");
+    expect(
+      screen.getByRole("link", {
+        name: "Latest report: Recent return-path review"
+      })
+    ).toHaveAttribute("href", "/psyche/reports/report_recent");
+    expect(
+      screen.getByRole("link", {
+        name: "Latest questionnaire: Weekly reflection"
+      })
+    ).toHaveAttribute("href", "/psyche/questionnaire-runs/run_recent");
+    expect(screen.getByText("3 linked insights")).toBeInTheDocument();
+    expect(screen.getByText("2 linked notes")).toBeInTheDocument();
   });
 
   it("shows a loading state for the values route", () => {
