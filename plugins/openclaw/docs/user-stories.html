@@ -2238,7 +2238,7 @@
                     <p class="story-expanded-outcome">As a user, I can inspect stays, trips, gaps, and known places with clear source and confidence.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Movement timeline, places, box/trip detail.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>timeline detail remains explicit, the data-only invalid-box read is lazy, and 29 live places default to eight plus an intentional expansion. Finish low-confidence, hidden-location, and timezone fixtures.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>timeline detail remains explicit, the data-only invalid-box read is lazy, and 29 live places default to eight plus an intentional expansion. Known-place inference now respects the exact configured radius instead of silently widening every smaller boundary to 100 m; an explicit companion source identity still wins when coordinates drift. Finish low-confidence, hidden-location, and timezone fixtures.</dd></div>
                     </dl>
                   </div>
                 </details>

@@ -2076,7 +2076,7 @@ function resolvePlaceForCoordinates(
       latitude: row.latitude,
       longitude: row.longitude
     });
-    if (distance <= Math.max(100, row.radius_meters)) {
+    if (distance <= row.radius_meters) {
       if (!best || distance < best.distance) {
         best = { row, distance };
       }
