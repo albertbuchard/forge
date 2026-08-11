@@ -3761,6 +3761,7 @@ export async function rescanArtifact(id: string, context: ArtifactContext) {
       { artifactId: id }
     );
   }
+  const scanStartRow = getArtifactRow(id)!;
   const buffer = await readVerifiedStoredBlob({
     storageKey: artifact.storageKey,
     expectedStoredByteSize: artifact.storedByteSize,
@@ -3777,13 +3778,28 @@ export async function rescanArtifact(id: string, context: ArtifactContext) {
     });
     const updatedAt = nowIso();
     runInTransaction(() => {
-      getDatabase()
+      const update = getDatabase()
         .prepare(
           `UPDATE artifacts
          SET detected_extension = ?, detected_mime_type = ?, format_family = ?,
              artifact_state = ?, danger_score = ?, danger_level = ?,
              scan_results_json = ?, updated_at = ?
-         WHERE id = ?`
+         WHERE id = ?
+           AND storage_key = ?
+           AND stored_content_sha256 = ?
+           AND stored_byte_size = ?
+           AND content_protection_mode = ?
+           AND artifact_state = ?
+           AND download_policy = ?
+           AND danger_score = ?
+           AND danger_level = ?
+           AND scan_results_json = ?
+           AND NOT EXISTS (
+             SELECT 1
+             FROM deleted_entities
+             WHERE deleted_entities.entity_type = 'artifact'
+               AND deleted_entities.entity_id = artifacts.id
+           )`
         )
         .run(
           scan.detectedExtension,
@@ -3794,8 +3810,25 @@ export async function rescanArtifact(id: string, context: ArtifactContext) {
           scan.dangerLevel,
           JSON.stringify(artifactScanResultsForResponse(scan.scanResults)),
           updatedAt,
-          id
+          id,
+          scanStartRow.storage_key,
+          scanStartRow.stored_content_sha256,
+          scanStartRow.stored_byte_size,
+          scanStartRow.content_protection_mode,
+          scanStartRow.artifact_state,
+          scanStartRow.download_policy,
+          scanStartRow.danger_score,
+          scanStartRow.danger_level,
+          scanStartRow.scan_results_json
         );
+      if (update.changes === 0) {
+        throw new HttpError(
+          409,
+          "artifact_scan_conflict",
+          "Artifact safety or storage state changed while the scan was running. Review the current artifact and request another scan.",
+          { artifactId: id }
+        );
+      }
       recordArtifactAudit(id, "artifact.scanned", context, {
         dangerScore: scan.dangerScore,
         dangerLevel: scan.dangerLevel
