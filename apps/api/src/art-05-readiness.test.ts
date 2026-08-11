@@ -122,6 +122,46 @@ test("ART-05 classifies malformed, macro, unsafe-archive, and unsupported files"
   assert.ok(findingCodes(unsupported).has("unsupported_extension"));
   assert.equal(unsupported.dangerLevel, "blocked");
   assert.equal(unsupported.artifactState, "blocked");
+
+  const malformedYaml = scanArtifactBytes({
+    buffer: Buffer.from("root:\n  child: value\n bad-indent: nope", "utf8"),
+    originalFileName: "malformed.yaml",
+    declaredMimeType: "application/yaml"
+  });
+  assert.ok(findingCodes(malformedYaml).has("yaml_parse_error"));
+  assert.equal(malformedYaml.dangerLevel, "low");
+  assert.equal(malformedYaml.artifactState, "active");
+
+  const duplicateYamlKey = scanArtifactBytes({
+    buffer: Buffer.from("same: one\nsame: two", "utf8"),
+    originalFileName: "duplicate.yml",
+    declaredMimeType: "application/yaml"
+  });
+  assert.ok(findingCodes(duplicateYamlKey).has("yaml_parse_error"));
+  assert.equal(duplicateYamlKey.dangerLevel, "low");
+  assert.equal(duplicateYamlKey.artifactState, "active");
+
+  for (const extension of ["yaml", "yml"] as const) {
+    const validYaml = scanArtifactBytes({
+      buffer: Buffer.from(
+        "root:\n  child: value\nitems:\n  - one\n  - two",
+        "utf8"
+      ),
+      originalFileName: `valid.${extension}`,
+      declaredMimeType: "application/yaml"
+    });
+    assert.equal(findingCodes(validYaml).has("yaml_parse_error"), false);
+    assert.ok(findingCodes(validYaml).has("static_scan_clean"));
+
+    const validLargeYaml = scanArtifactBytes({
+      buffer: Buffer.from(`quoted: "${"a".repeat(85_000)}"`, "utf8"),
+      originalFileName: `valid-large.${extension}`,
+      declaredMimeType: "application/yaml"
+    });
+    assert.equal(findingCodes(validLargeYaml).has("yaml_parse_error"), false);
+    assert.ok(findingCodes(validLargeYaml).has("yaml_validation_incomplete"));
+    assert.equal(validLargeYaml.artifactState, "active");
+  }
 });
 
 test("ART-05 preserves the previous scan result when rescan integrity fails", async () => {

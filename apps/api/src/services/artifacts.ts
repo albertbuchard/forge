@@ -13,6 +13,7 @@ import { hostname } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import AdmZip from "adm-zip";
+import { parseDocument as parseYamlDocument } from "yaml";
 import { z } from "zod";
 import { getDatabase, resolveDataDir, runInTransaction } from "../db.js";
 import { HttpError } from "../errors.js";
@@ -1681,7 +1682,8 @@ function scanDelimitedText(text: string, findings: ArtifactScanFinding[]) {
 function scanStructuredText(
   extension: string,
   text: string,
-  findings: ArtifactScanFinding[]
+  findings: ArtifactScanFinding[],
+  textIsComplete: boolean
 ) {
   if (extension === "json") {
     try {
@@ -1692,6 +1694,32 @@ function scanStructuredText(
         "low",
         "json_parse_error",
         "The JSON file did not parse as valid JSON."
+      );
+    }
+  }
+  if (extension === "yaml" || extension === "yml") {
+    if (!textIsComplete) {
+      addFinding(
+        findings,
+        "info",
+        "yaml_validation_incomplete",
+        "The YAML file exceeds the bounded static syntax-validation sample, so Forge did not classify the unseen remainder as valid or malformed."
+      );
+      return;
+    }
+    let yamlIsValid = false;
+    try {
+      yamlIsValid =
+        parseYamlDocument(text, { uniqueKeys: true }).errors.length === 0;
+    } catch {
+      yamlIsValid = false;
+    }
+    if (!yamlIsValid) {
+      addFinding(
+        findings,
+        "low",
+        "yaml_parse_error",
+        "The YAML file did not parse as valid YAML with unique mapping keys."
       );
     }
   }
@@ -1767,7 +1795,12 @@ export function scanArtifactBytes(input: {
   } else if (formatFamily === "text" || formatFamily === "structured_text") {
     extractedTextSample = safeUtf8(input.buffer);
     scanDelimitedText(extractedTextSample, findings);
-    scanStructuredText(detectedExtension, extractedTextSample, findings);
+    scanStructuredText(
+      detectedExtension,
+      extractedTextSample,
+      findings,
+      input.buffer.byteLength <= MAX_TEXT_EXTRACTION_CHARS
+    );
   }
 
   if (findings.length === 0) {
