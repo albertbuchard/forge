@@ -2436,7 +2436,7 @@
                     <p class="story-expanded-outcome">As a user, I can inspect run history, one run, its node list, and a node result without loading unbounded execution data.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Workbench run history/detail/node reads.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>paged summaries retain bounded primary output compatibility while excluding full traces, and exact run/node reads remain separate. Finish the redaction, missing-node, and old-version matrix.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>paged summaries exclude full traces; exact run/node reads are separate and bounded; compound camelCase, snake-case, header, token, secret, cookie, password, and signing-key forms are redacted; and missing-run versus missing-node responses are truthful. Finish the old-version compatibility matrix and live desktop/phone inspection.</dd></div>
                     </dl>
                   </div>
                 </details>

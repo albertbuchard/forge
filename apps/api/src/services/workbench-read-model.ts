@@ -1,8 +1,44 @@
 import type { AiConnectorRun, AiConnectorRunResult } from "../types.js";
 
-const SENSITIVE_KEY_PATTERN =
-  /^(?:api[_-]?key|authorization|cookie|credential|password|passphrase|private[_-]?key|secret|token)$/i;
 const MAX_REDACTED_PATHS = 50;
+
+const SENSITIVE_NORMALIZED_KEYS = new Set([
+  "accesstoken",
+  "apikey",
+  "authorization",
+  "authorizationheader",
+  "bearertoken",
+  "clientsecret",
+  "cookie",
+  "credential",
+  "idtoken",
+  "password",
+  "passwordhash",
+  "passphrase",
+  "privatekey",
+  "refreshtoken",
+  "secret",
+  "sessiontoken",
+  "setcookie",
+  "signingkey",
+  "token",
+  "xapikey"
+]);
+
+function isSensitiveKey(key: string) {
+  const normalized = key
+    .normalize("NFKC")
+    .replace(/[^a-z0-9]/gi, "")
+    .toLowerCase();
+  return (
+    SENSITIVE_NORMALIZED_KEYS.has(normalized) ||
+    /(?:token|secret|password|passphrase|credential|privatekey|signingkey|encryptionkey|apikey|cookie|authorization)$/.test(
+      normalized
+    ) ||
+    normalized === "accesskeyid" ||
+    normalized === "secretaccesskey"
+  );
+}
 
 type ReadLimits = {
   maxArrayItems: number;
@@ -87,7 +123,7 @@ function sanitizeValue(
     return Object.fromEntries(
       entries.slice(0, limits.maxObjectKeys).map(([key, entry]) => {
         const entryPath = `${path}.${key}`;
-        if (SENSITIVE_KEY_PATTERN.test(key)) {
+        if (isSensitiveKey(key)) {
           if (state.redactedPaths.length < MAX_REDACTED_PATHS) {
             state.redactedPaths.push(entryPath);
           }

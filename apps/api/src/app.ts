@@ -24716,6 +24716,11 @@ export async function buildServer(
           reply.code(404);
           return { error: `${noun} not found` };
         }
+        const run = getAiConnectorRunDetail(connector.id, params.runId);
+        if (!run) {
+          reply.code(404);
+          return { error: `${noun} run not found` };
+        }
         const detail = getAiConnectorRunNodeResult(
           connector.id,
           params.runId,
