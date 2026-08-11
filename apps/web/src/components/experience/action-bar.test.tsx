@@ -9,9 +9,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ActionBar } from "@/components/experience/action-bar";
+import {
+  ActionBar,
+  mapLocalSearchResultsToActionBarItems
+} from "@/components/experience/action-bar";
 import type { ForgeCreateAction } from "@/components/create-menu";
-import type { ForgeSnapshot } from "@/lib/types";
+import type { ForgeSnapshot, LocalSearchResult } from "@/lib/types";
 
 const {
   createSavedViewMock,
@@ -19,7 +22,7 @@ const {
   getEntityNavigationMock,
   getSavedViewsMock,
   pinEntityNavigationMock,
-  searchEntitiesMock,
+  searchLocalRecordsMock,
   touchEntityNavigationMock,
   unpinEntityNavigationMock
 } = vi.hoisted(() => ({
@@ -28,7 +31,7 @@ const {
   getEntityNavigationMock: vi.fn(),
   getSavedViewsMock: vi.fn(),
   pinEntityNavigationMock: vi.fn(),
-  searchEntitiesMock: vi.fn(),
+  searchLocalRecordsMock: vi.fn(),
   touchEntityNavigationMock: vi.fn(),
   unpinEntityNavigationMock: vi.fn()
 }));
@@ -39,7 +42,7 @@ vi.mock("@/lib/api", () => ({
   getEntityNavigation: getEntityNavigationMock,
   getSavedViews: getSavedViewsMock,
   pinEntityNavigation: pinEntityNavigationMock,
-  searchEntities: searchEntitiesMock,
+  searchLocalRecords: searchLocalRecordsMock,
   touchEntityNavigation: touchEntityNavigationMock,
   unpinEntityNavigation: unpinEntityNavigationMock
 }));
@@ -132,7 +135,19 @@ function renderActionBar({
 describe("ActionBar", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    searchEntitiesMock.mockResolvedValue({ results: [] });
+    searchLocalRecordsMock.mockResolvedValue({
+      query: "",
+      retrievalMode: "local_lexical_structural",
+      results: [],
+      coverage: {
+        eligibleEntityTypes: [],
+        indexedDocuments: 0,
+        indexedRelationships: 0,
+        deletionTombstonesApplied: 0,
+        scopeTombstonesApplied: 0,
+        truncated: false
+      }
+    });
     getSavedViewsMock.mockResolvedValue({ savedViews: [] });
     createSavedViewMock.mockImplementation((input) =>
       Promise.resolve({
@@ -196,6 +211,53 @@ describe("ActionBar", () => {
     HTMLElement.prototype.scrollIntoView = vi.fn();
   });
 
+  it("applies a full local-search response within 50 ms", () => {
+    const results: LocalSearchResult[] = Array.from(
+      { length: 12 },
+      (_, index) => ({
+        entityType: "task",
+        entityId: `task-performance-${index}`,
+        entityKind: "task",
+        title: `Performance task ${index}`,
+        detail: "A bounded local-search result with exact evidence.",
+        category: "Task",
+        sourceHref: `/tasks/task-performance-${index}`,
+        graphHref: `/knowledge-graph?focus=task%3Atask-performance-${index}`,
+        score: 12 - index,
+        evidence: [
+          {
+            kind: "text",
+            label: "Title",
+            field: "title",
+            excerpt: `Performance task ${index}`,
+            matchedTerms: ["performance", "task"]
+          }
+        ]
+      })
+    );
+    for (let index = 0; index < 5; index += 1) {
+      mapLocalSearchResultsToActionBarItems(results);
+    }
+    const samples: number[] = [];
+    for (let index = 0; index < 40; index += 1) {
+      const startedAt = performance.now();
+      const items = mapLocalSearchResultsToActionBarItems(results);
+      samples.push(performance.now() - startedAt);
+      expect(items).toHaveLength(12);
+    }
+    samples.sort((left, right) => left - right);
+    const p95 = samples[Math.ceil(samples.length * 0.95) - 1]!;
+    if (process.env.FORGE_PERF_DIAGNOSTICS === "1") {
+      console.info(
+        `KNOW-09 Action Bar apply p95=${p95.toFixed(3)}ms; measured=${samples.length}; warmups=5; threshold=50ms`
+      );
+    }
+    expect(
+      p95,
+      `Action Bar apply p95 was ${p95.toFixed(3)} ms`
+    ).toBeLessThanOrEqual(50);
+  });
+
   afterEach(() => {
     cleanup();
   });
@@ -247,11 +309,7 @@ describe("ActionBar", () => {
       const triggerRef = useRef<HTMLButtonElement | null>(null);
       return (
         <>
-          <button
-            ref={triggerRef}
-            type="button"
-            onClick={() => setOpen(true)}
-          >
+          <button ref={triggerRef} type="button" onClick={() => setOpen(true)}>
             Open Action Bar
           </button>
           <ActionBar
@@ -319,22 +377,39 @@ describe("ActionBar", () => {
   });
 
   it("lets the shell route tracker handle exact Knowledge Graph routes", async () => {
-    searchEntitiesMock.mockResolvedValue({
+    searchLocalRecordsMock.mockResolvedValue({
       results: [
         {
-          matches: [
+          entityType: "insight",
+          entityId: "insight-1",
+          entityKind: "insight",
+          title: "A useful signal",
+          detail: "Review this signal.",
+          category: "Insight",
+          sourceHref: "/knowledge-graph?focus=insight%3Ainsight-1",
+          graphHref: "/knowledge-graph?focus=insight%3Ainsight-1",
+          score: 12,
+          evidence: [
             {
-              entityType: "insight",
-              id: "insight-1",
-              entity: {
-                id: "insight-1",
-                title: "A useful signal",
-                summary: "Review this signal."
-              }
+              kind: "text",
+              label: "Title",
+              field: "title",
+              excerpt: "A useful signal",
+              matchedTerms: ["useful", "signal"]
             }
           ]
         }
-      ]
+      ],
+      query: "useful signal",
+      retrievalMode: "local_lexical_structural",
+      coverage: {
+        eligibleEntityTypes: ["insight"],
+        indexedDocuments: 1,
+        indexedRelationships: 0,
+        deletionTombstonesApplied: 0,
+        scopeTombstonesApplied: 0,
+        truncated: false
+      }
     });
     renderActionBar();
 
@@ -342,6 +417,11 @@ describe("ActionBar", () => {
       screen.getAllByPlaceholderText(/search anything in forge/i)[0]!,
       { target: { value: "useful signal" } }
     );
+    expect(await screen.findByText(/Matched Title:/)).toBeVisible();
+    const graphAction = screen.getByRole("button", {
+      name: "Open A useful signal in Knowledge Graph"
+    });
+    expect(graphAction).toHaveClass("size-11");
     fireEvent.click(await screen.findByText("A useful signal"));
 
     await waitFor(() =>
@@ -350,32 +430,31 @@ describe("ActionBar", () => {
   });
 
   it("applies free-text and badge filters conjunctively", async () => {
-    searchEntitiesMock.mockResolvedValue({
+    searchLocalRecordsMock.mockResolvedValue({
       results: [
         {
-          matches: [
-            {
-              entityType: "note",
-              id: "wiki_mickael",
-              entity: {
-                id: "wiki_mickael",
-                kind: "wiki",
-                title: "Mickael Atlas",
-                slug: "mickael-atlas"
-              }
-            },
-            {
-              entityType: "note",
-              id: "note_mickael",
-              entity: {
-                id: "note_mickael",
-                kind: "evidence",
-                title: "Mickael scratchpad"
-              }
-            }
-          ]
+          entityType: "note",
+          entityId: "wiki_mickael",
+          entityKind: "wiki_page",
+          title: "Mickael Atlas",
+          detail: "Open the wiki page.",
+          category: "Wiki page",
+          sourceHref: "/wiki/page/mickael-atlas",
+          graphHref: "/knowledge-graph?focus=note%3Awiki_mickael",
+          score: 10,
+          evidence: []
         }
-      ]
+      ],
+      query: "Mickael",
+      retrievalMode: "local_lexical_structural",
+      coverage: {
+        eligibleEntityTypes: ["note"],
+        indexedDocuments: 1,
+        indexedRelationships: 0,
+        deletionTombstonesApplied: 0,
+        scopeTombstonesApplied: 0,
+        truncated: false
+      }
     });
 
     renderActionBar();
@@ -396,35 +475,55 @@ describe("ActionBar", () => {
 
     expect(await screen.findByText("Mickael Atlas")).toBeInTheDocument();
     expect(screen.queryByText("Mickael scratchpad")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(searchLocalRecordsMock).toHaveBeenLastCalledWith({
+        query: "Mickael",
+        entityTypes: ["note"],
+        entityKinds: ["wiki_page"],
+        userIds: undefined,
+        limit: 12
+      })
+    );
   });
 
   it("keeps OR semantics when multiple entity-type badges are selected", async () => {
-    searchEntitiesMock.mockResolvedValue({
+    searchLocalRecordsMock.mockResolvedValue({
       results: [
         {
-          matches: [
-            {
-              entityType: "note",
-              id: "wiki_mickael",
-              entity: {
-                id: "wiki_mickael",
-                kind: "wiki",
-                title: "Mickael Atlas",
-                slug: "mickael-atlas"
-              }
-            },
-            {
-              entityType: "note",
-              id: "note_mickael",
-              entity: {
-                id: "note_mickael",
-                kind: "evidence",
-                title: "Mickael scratchpad"
-              }
-            }
-          ]
+          entityType: "note",
+          entityId: "wiki_mickael",
+          entityKind: "wiki_page",
+          title: "Mickael Atlas",
+          detail: "Open the wiki page.",
+          category: "Wiki page",
+          sourceHref: "/wiki/page/mickael-atlas",
+          graphHref: "/knowledge-graph?focus=note%3Awiki_mickael",
+          score: 10,
+          evidence: []
+        },
+        {
+          entityType: "note",
+          entityId: "note_mickael",
+          entityKind: "note",
+          title: "Mickael scratchpad",
+          detail: "Open the note.",
+          category: "Note",
+          sourceHref: "/notes?focus=note_mickael",
+          graphHref: "/knowledge-graph?focus=note%3Anote_mickael",
+          score: 9,
+          evidence: []
         }
-      ]
+      ],
+      query: "Mickael",
+      retrievalMode: "local_lexical_structural",
+      coverage: {
+        eligibleEntityTypes: ["note"],
+        indexedDocuments: 2,
+        indexedRelationships: 0,
+        deletionTombstonesApplied: 0,
+        scopeTombstonesApplied: 0,
+        truncated: false
+      }
     });
 
     renderActionBar();
@@ -452,6 +551,33 @@ describe("ActionBar", () => {
 
     expect(await screen.findByText("Mickael Atlas")).toBeInTheDocument();
     expect(await screen.findByText("Mickael scratchpad")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(searchLocalRecordsMock).toHaveBeenLastCalledWith({
+        query: "Mickael",
+        entityTypes: ["note"],
+        entityKinds: ["note", "wiki_page"],
+        userIds: undefined,
+        limit: 12
+      })
+    );
+  });
+
+  it("reports a local search failure even when route matches remain", async () => {
+    searchLocalRecordsMock.mockRejectedValue(
+      new Error("Local search is unavailable")
+    );
+    renderActionBar();
+
+    fireEvent.change(
+      screen.getAllByPlaceholderText(/search anything in forge/i)[0]!,
+      { target: { value: "recovery evidence" } }
+    );
+
+    const alert = await screen.findByText(
+      /Forge could not search your local records/i
+    );
+    expect(alert).toHaveAttribute("role", "alert");
+    expect(alert).toBeVisible();
   });
 
   it("removes the last badge when backspace is pressed on an empty filter input", async () => {

@@ -176,6 +176,8 @@ import type {
   WorkoutSessionDetailPayload,
   XpMetricsPayload,
   CrudEntityType,
+  LocalSearchEntityKind,
+  LocalSearchResponse,
   DeleteMode
 } from "./types";
 import type {
@@ -6510,6 +6512,33 @@ export function searchEntities(input: {
       method: "POST",
       body: JSON.stringify(input)
     }
+  );
+}
+
+export function searchLocalRecords(input: {
+  query?: string;
+  entityTypes?: CrudEntityType[];
+  entityKinds?: LocalSearchEntityKind[];
+  userIds?: string[];
+  limit?: number;
+}) {
+  const params = new URLSearchParams();
+  const query = input.query?.replace(/\s+/g, " ").trim();
+  if (query) params.set("q", query);
+  for (const entityType of input.entityTypes ?? []) {
+    params.append("entityType", entityType);
+  }
+  for (const entityKind of input.entityKinds ?? []) {
+    params.append("entityKind", entityKind);
+  }
+  for (const userId of input.userIds ?? []) {
+    params.append("userIds", userId);
+  }
+  if (input.limit !== undefined) {
+    params.set("limit", String(input.limit));
+  }
+  return request<LocalSearchResponse>(
+    `/api/v1/local-search?${params.toString()}`
   );
 }
 

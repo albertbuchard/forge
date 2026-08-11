@@ -112,6 +112,72 @@ export type CrudEntityType =
   | "questionnaire_instrument"
   | "sleep_session"
   | "workout_session";
+export type LocalSearchEntityKind =
+  | "goal"
+  | "project"
+  | "task"
+  | "strategy"
+  | "habit"
+  | "tag"
+  | "note"
+  | "person"
+  | "wiki_page"
+  | "insight"
+  | "calendar_event"
+  | "work_block"
+  | "timebox"
+  | "artifact"
+  | "value"
+  | "pattern"
+  | "behavior"
+  | "belief"
+  | "mode"
+  | "mode_session"
+  | "flashcard"
+  | "report"
+  | "event_type"
+  | "emotion";
+export type LocalSearchEvidence =
+  | {
+      kind: "text";
+      label: string;
+      field: string;
+      excerpt: string;
+      matchedTerms: string[];
+    }
+  | {
+      kind: "relationship";
+      label: string;
+      excerpt: string;
+      relationKind: string;
+      relatedEntityType: CrudEntityType;
+      relatedEntityId: string;
+    };
+export interface LocalSearchResult {
+  entityType: CrudEntityType;
+  entityId: string;
+  entityKind: LocalSearchEntityKind | null;
+  title: string;
+  detail: string;
+  category: string;
+  sourceHref: string;
+  graphHref: string | null;
+  score: number;
+  evidence: LocalSearchEvidence[];
+}
+export interface LocalSearchResponse {
+  query: string;
+  retrievalMode: "local_lexical_structural";
+  results: LocalSearchResult[];
+  coverage: {
+    eligibleEntityTypes: CrudEntityType[];
+    indexedDocuments: number;
+    indexedRelationships: number;
+    deletionTombstonesApplied: number;
+    scopeTombstonesApplied: number;
+    truncated: false;
+  };
+}
 export type RewardableEntityType =
   | "system"
   | "goal"

@@ -13228,6 +13228,359 @@
           }
         }
       },
+      "LocalSearchTextEvidence": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "label",
+          "field",
+          "excerpt",
+          "matchedTerms"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string",
+            "maxLength": 180
+          },
+          "matchedTerms": {
+            "type": "array",
+            "maxItems": 20,
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "LocalSearchRelationshipEvidence": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "label",
+          "excerpt",
+          "relationKind",
+          "relatedEntityType",
+          "relatedEntityId"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "relationship"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string",
+            "maxLength": 180
+          },
+          "relationKind": {
+            "type": "string"
+          },
+          "relatedEntityType": {
+            "type": "string",
+            "enum": [
+              "goal",
+              "project",
+              "task",
+              "strategy",
+              "habit",
+              "tag",
+              "note",
+              "person",
+              "insight",
+              "calendar_event",
+              "work_block_template",
+              "task_timebox",
+              "life_event",
+              "artifact",
+              "psyche_value",
+              "behavior_pattern",
+              "behavior",
+              "belief_entry",
+              "mode_profile",
+              "mode_guide_session",
+              "flashcard",
+              "event_type",
+              "emotion_definition",
+              "trigger_report",
+              "preference_catalog",
+              "preference_catalog_item",
+              "preference_context",
+              "preference_item",
+              "questionnaire_instrument",
+              "sleep_session",
+              "workout_session"
+            ]
+          },
+          "relatedEntityId": {
+            "type": "string"
+          }
+        }
+      },
+      "LocalSearchResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "entityType",
+          "entityId",
+          "entityKind",
+          "title",
+          "detail",
+          "category",
+          "sourceHref",
+          "graphHref",
+          "score",
+          "evidence"
+        ],
+        "properties": {
+          "entityType": {
+            "type": "string",
+            "enum": [
+              "goal",
+              "project",
+              "task",
+              "strategy",
+              "habit",
+              "tag",
+              "note",
+              "person",
+              "insight",
+              "calendar_event",
+              "work_block_template",
+              "task_timebox",
+              "life_event",
+              "artifact",
+              "psyche_value",
+              "behavior_pattern",
+              "behavior",
+              "belief_entry",
+              "mode_profile",
+              "mode_guide_session",
+              "flashcard",
+              "event_type",
+              "emotion_definition",
+              "trigger_report",
+              "preference_catalog",
+              "preference_catalog_item",
+              "preference_context",
+              "preference_item",
+              "questionnaire_instrument",
+              "sleep_session",
+              "workout_session"
+            ]
+          },
+          "entityId": {
+            "type": "string"
+          },
+          "entityKind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "goal",
+                  "project",
+                  "task",
+                  "strategy",
+                  "habit",
+                  "tag",
+                  "note",
+                  "person",
+                  "wiki_page",
+                  "insight",
+                  "calendar_event",
+                  "work_block",
+                  "timebox",
+                  "artifact",
+                  "value",
+                  "pattern",
+                  "behavior",
+                  "belief",
+                  "mode",
+                  "mode_session",
+                  "flashcard",
+                  "report",
+                  "event_type",
+                  "emotion"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "detail": {
+            "type": "string",
+            "maxLength": 220
+          },
+          "category": {
+            "type": "string"
+          },
+          "sourceHref": {
+            "type": "string"
+          },
+          "graphHref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "score": {
+            "type": "number",
+            "minimum": 0
+          },
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/LocalSearchTextEvidence"
+                },
+                {
+                  "$ref": "#/components/schemas/LocalSearchRelationshipEvidence"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "LocalSearchCoverage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "eligibleEntityTypes",
+          "indexedDocuments",
+          "indexedRelationships",
+          "deletionTombstonesApplied",
+          "scopeTombstonesApplied",
+          "truncated"
+        ],
+        "properties": {
+          "eligibleEntityTypes": {
+            "type": "array",
+            "minItems": 31,
+            "maxItems": 31,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "goal",
+                "project",
+                "task",
+                "strategy",
+                "habit",
+                "tag",
+                "note",
+                "person",
+                "insight",
+                "calendar_event",
+                "work_block_template",
+                "task_timebox",
+                "life_event",
+                "artifact",
+                "psyche_value",
+                "behavior_pattern",
+                "behavior",
+                "belief_entry",
+                "mode_profile",
+                "mode_guide_session",
+                "flashcard",
+                "event_type",
+                "emotion_definition",
+                "trigger_report",
+                "preference_catalog",
+                "preference_catalog_item",
+                "preference_context",
+                "preference_item",
+                "questionnaire_instrument",
+                "sleep_session",
+                "workout_session"
+              ]
+            }
+          },
+          "indexedDocuments": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3000
+          },
+          "indexedRelationships": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "deletionTombstonesApplied": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "scopeTombstonesApplied": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "truncated": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          }
+        }
+      },
+      "LocalSearchResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "query",
+          "retrievalMode",
+          "results",
+          "coverage"
+        ],
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "retrievalMode": {
+            "type": "string",
+            "enum": [
+              "local_lexical_structural"
+            ]
+          },
+          "results": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "$ref": "#/components/schemas/LocalSearchResult"
+            }
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/LocalSearchCoverage"
+          }
+        }
+      },
       "UserSummary": {
         "type": "object",
         "additionalProperties": false,
@@ -46511,6 +46864,208 @@
         "operationId": "getcomparisons"
       }
     },
+    "/api/v1/local-search": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Search authorized local Forge records",
+        "description": "Requires a trusted local operator session before Forge parses the query or validates a selected person. Search covers all 31 eligible Forge record families through a transient permission-filtered index. It uses bounded local word matching and one-hop relationships from the released Knowledge Graph; it does not use embeddings or claim general semantic understanding. Every result includes an exact source route and up to three text or relationship evidence references. Deleted records and records outside the selected people scope are removed before tokenization. Before indexing, Forge refuses more than 750 source records, 3 MiB of authorized indexable record text, or 750 authorized relationships rather than using unbounded memory. It never caches source content in a derived database table.",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Search text. Either text or at least one record-family filter is required.",
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "default": ""
+            }
+          },
+          {
+            "name": "entityType",
+            "in": "query",
+            "required": false,
+            "style": "form",
+            "explode": true,
+            "description": "Repeat to keep results within one or more Forge CRUD record families.",
+            "schema": {
+              "type": "array",
+              "maxItems": 31,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "goal",
+                  "project",
+                  "task",
+                  "strategy",
+                  "habit",
+                  "tag",
+                  "note",
+                  "person",
+                  "insight",
+                  "calendar_event",
+                  "work_block_template",
+                  "task_timebox",
+                  "life_event",
+                  "artifact",
+                  "psyche_value",
+                  "behavior_pattern",
+                  "behavior",
+                  "belief_entry",
+                  "mode_profile",
+                  "mode_guide_session",
+                  "flashcard",
+                  "event_type",
+                  "emotion_definition",
+                  "trigger_report",
+                  "preference_catalog",
+                  "preference_catalog_item",
+                  "preference_context",
+                  "preference_item",
+                  "questionnaire_instrument",
+                  "sleep_session",
+                  "workout_session"
+                ]
+              }
+            }
+          },
+          {
+            "name": "entityKind",
+            "in": "query",
+            "required": false,
+            "style": "form",
+            "explode": true,
+            "description": "Repeat to keep released Knowledge Graph results within one or more visible kinds, including Note versus Wiki page.",
+            "schema": {
+              "type": "array",
+              "maxItems": 24,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "goal",
+                  "project",
+                  "task",
+                  "strategy",
+                  "habit",
+                  "tag",
+                  "note",
+                  "person",
+                  "wiki_page",
+                  "insight",
+                  "calendar_event",
+                  "work_block",
+                  "timebox",
+                  "artifact",
+                  "value",
+                  "pattern",
+                  "behavior",
+                  "belief",
+                  "mode",
+                  "mode_session",
+                  "flashcard",
+                  "report",
+                  "event_type",
+                  "emotion"
+                ]
+              }
+            }
+          },
+          {
+            "name": "userIds",
+            "in": "query",
+            "required": false,
+            "style": "form",
+            "explode": true,
+            "description": "Repeat to select authorized Forge people. Any unknown person makes the whole request unavailable instead of widening scope.",
+            "schema": {
+              "type": "array",
+              "maxItems": 100,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 12
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ranked authorized records with exact evidence and source routes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalSearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed or oversized query, or a request with neither search text nor a record-family filter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "description": "Agent tokens and other non-operator principals cannot use local search.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Generic unavailable response for any unknown selected person.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request exceeds the transient local-search envelope of 750 source records, 3 MiB of authorized indexable record text, or 750 authorized relationships. Forge refuses the search before indexing records.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getlocal_search"
+      }
+    },
     "/api/v1/artifacts": {
       "get": {
         "summary": "List artifact metadata",
@@ -64905,6 +65460,10 @@
     {
       "name": "Saved Views",
       "description": "Named, user-owned Action Bar query, filter, and people-scope combinations."
+    },
+    {
+      "name": "Search",
+      "description": "Permission-first local lexical and released-relationship search across eligible Forge record families."
     },
     {
       "name": "Entity Batch",

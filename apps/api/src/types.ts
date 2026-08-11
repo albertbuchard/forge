@@ -3466,6 +3466,84 @@ export const actionBarFilterIdSchema = z.enum([
   "trigger_report"
 ]);
 
+export const localSearchEntityKindSchema = z.enum([
+  "goal",
+  "project",
+  "task",
+  "strategy",
+  "habit",
+  "tag",
+  "note",
+  "person",
+  "wiki_page",
+  "insight",
+  "calendar_event",
+  "work_block",
+  "timebox",
+  "artifact",
+  "value",
+  "pattern",
+  "behavior",
+  "belief",
+  "mode",
+  "mode_session",
+  "flashcard",
+  "report",
+  "event_type",
+  "emotion"
+]);
+
+function readRepeatedLocalSearchQueryValues(value: unknown) {
+  const values = Array.isArray(value)
+    ? value
+    : value === undefined
+      ? []
+      : [value];
+  return values
+    .flatMap((entry) => (typeof entry === "string" ? entry.split(",") : []))
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+export const localSearchQuerySchema = z
+  .object({
+    q: z.string().trim().max(200).default(""),
+    entityType: z.preprocess(
+      readRepeatedLocalSearchQueryValues,
+      z.array(crudEntityTypeSchema).max(crudEntityTypeSchema.options.length)
+    ),
+    entityKind: z.preprocess(
+      readRepeatedLocalSearchQueryValues,
+      z
+        .array(localSearchEntityKindSchema)
+        .max(localSearchEntityKindSchema.options.length)
+    ),
+    userIds: z.preprocess(
+      readRepeatedLocalSearchQueryValues,
+      z.array(nonEmptyTrimmedString).max(100)
+    ),
+    limit: z.coerce.number().int().positive().max(20).default(12)
+  })
+  .transform((value) => ({
+    ...value,
+    entityType: Array.from(new Set(value.entityType)),
+    entityKind: Array.from(new Set(value.entityKind)),
+    userIds: Array.from(new Set(value.userIds))
+  }))
+  .superRefine((value, context) => {
+    if (
+      value.q.length === 0 &&
+      value.entityType.length === 0 &&
+      value.entityKind.length === 0
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["q"],
+        message: "Enter search text or choose at least one record family."
+      });
+    }
+  });
+
 export const currentSavedViewSchemaVersion = 1;
 export const savedViewScopeModeSchema = z.enum(["all", "selected"]);
 export const savedViewCompatibilitySchema = z.enum(["ready", "unsupported"]);
@@ -5987,6 +6065,8 @@ export type EntityNavigationPayload = z.infer<
   typeof entityNavigationPayloadSchema
 >;
 export type ActionBarFilterId = z.infer<typeof actionBarFilterIdSchema>;
+export type LocalSearchEntityKind = z.infer<typeof localSearchEntityKindSchema>;
+export type LocalSearchQuery = z.infer<typeof localSearchQuerySchema>;
 export type SavedView = z.infer<typeof savedViewSchema>;
 export type SavedViewCreateInput = z.infer<typeof savedViewCreateSchema>;
 export type AgentAction = z.infer<typeof agentActionSchema>;

@@ -271,6 +271,14 @@ import {
   buildKnowledgeGraphFocus
 } from "./services/knowledge-graph.js";
 import {
+  assertLocalSearchCapacity,
+  buildGraphLocalSearchDocuments,
+  listLocalSearchDeletionTombstones,
+  listLocalSearchScopeTombstones,
+  listSupplementalLocalSearchDocuments,
+  searchLocalDocuments
+} from "./services/local-search.js";
+import {
   comparisonScopeUnavailable,
   getComparison,
   listComparisonCatalog,
@@ -592,6 +600,7 @@ import {
   entityNavigationPinInputSchema,
   entityNavigationQuerySchema,
   entityNavigationTouchInputSchema,
+  localSearchQuerySchema,
   savedViewCreateSchema,
   savedViewListQuerySchema,
   defaultAgentBootstrapPolicy,
@@ -14795,6 +14804,48 @@ export async function buildServer(
         }
       )
     };
+  });
+  app.get("/api/v1/local-search", async (request) => {
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/local-search" }
+    );
+    const query = localSearchQuerySchema.parse(request.query ?? {});
+    const users = listUsers();
+    const validUserIds = new Set(users.map((user) => user.id));
+    if (query.userIds.some((userId) => !validUserIds.has(userId))) {
+      throw new HttpError(
+        404,
+        "local_search_scope_unavailable",
+        "The selected people are unavailable."
+      );
+    }
+    const userIds = query.userIds.length > 0 ? query.userIds : undefined;
+
+    assertLocalSearchCapacity();
+    const deletionTombstones = listLocalSearchDeletionTombstones();
+    const scopeTombstones = listLocalSearchScopeTombstones(userIds);
+    const graph = buildKnowledgeGraph(
+      userIds,
+      {},
+      {
+        includePeople: true,
+        noteScope: noteReadScopeForAuth(auth, userIds)
+      }
+    );
+    return searchLocalDocuments({
+      query: query.q,
+      documents: [
+        ...buildGraphLocalSearchDocuments(graph.nodes),
+        ...listSupplementalLocalSearchDocuments(userIds)
+      ],
+      edges: graph.edges,
+      deletionTombstones,
+      scopeTombstones,
+      entityTypes: query.entityType,
+      entityKinds: query.entityKind,
+      limit: query.limit
+    });
   });
   app.get("/api/v1/health/overview", async (request) => ({
     overview: getCompanionOverview(

@@ -57,29 +57,34 @@ import {
   getEntityNavigation,
   getSavedViews,
   pinEntityNavigation,
-  searchEntities,
+  searchLocalRecords,
   touchEntityNavigation,
   unpinEntityNavigation
 } from "@/lib/api";
 import {
   ACTION_BAR_FILTER_TOKENS,
-  actionBarEntityTypeLabel,
   actionBarEntityTypeToKind,
   buildActionBarCreateActionMatches,
-  buildActionBarHref,
-  buildActionBarSearchText,
   createActionMatchesActionBarFilters,
-  entityMatchesActionBarFilters,
   getActionBarEntityTypesForFilters,
-  inferActionBarDetail,
-  inferActionBarTitle,
   normalizeActionBarQuery,
   resolveEntityNavigationTargetFromLocation,
   scoreActionBarMatch
 } from "@/lib/action-bar";
-import { getEntityVisual, type EntityKind } from "@/lib/entity-visuals";
+import {
+  getEntityVisual,
+  isEntityKind,
+  type EntityKind
+} from "@/lib/entity-visuals";
 import { useI18n } from "@/lib/i18n";
-import type { CrudEntityType, ForgeSnapshot, SavedView } from "@/lib/types";
+import type {
+  CrudEntityType,
+  ForgeSnapshot,
+  LocalSearchEvidence,
+  LocalSearchEntityKind,
+  LocalSearchResult,
+  SavedView
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type ActionBarProps = {
@@ -117,25 +122,14 @@ type ActionBarItem = {
   entityId?: string;
   pinId?: string | null;
   availability?: "available" | "deleted" | "missing";
+  graphHref?: string | null;
+  evidence?: LocalSearchEvidence[];
 };
 
 function sameStringIds(left: string[], right: string[]) {
   return (
     left.length === right.length &&
     left.every((value, index) => value === right[index])
-  );
-}
-
-const SEARCHABLE_ACTION_BAR_ENTITY_TYPES = new Set<CrudEntityType>(
-  getActionBarEntityTypesForFilters([])
-);
-
-function isSearchableActionBarEntityType(
-  value: unknown
-): value is CrudEntityType {
-  return (
-    typeof value === "string" &&
-    SEARCHABLE_ACTION_BAR_ENTITY_TYPES.has(value as CrudEntityType)
   );
 }
 
@@ -210,6 +204,63 @@ function getAuxiliaryVisual(
           "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)]"
       };
   }
+}
+
+export function mapLocalSearchResultsToActionBarItems(
+  results: LocalSearchResult[],
+  pinned: Array<{
+    entityType: CrudEntityType;
+    entityId: string;
+    pinId: string | null;
+  }> = []
+) {
+  return results.map((result): ActionBarItem => {
+    const kind =
+      result.entityKind && isEntityKind(result.entityKind)
+        ? result.entityKind
+        : undefined;
+    let auxiliaryVisual = getAuxiliaryVisual("search");
+    if (result.entityKind === "wiki_page") {
+      auxiliaryVisual = getAuxiliaryVisual("wiki");
+    } else if (result.entityType === "note") {
+      auxiliaryVisual = getAuxiliaryVisual("note");
+    } else if (result.entityType === "insight") {
+      auxiliaryVisual = getAuxiliaryVisual("insight");
+    } else if (
+      result.entityType === "calendar_event" ||
+      result.entityType === "task_timebox" ||
+      result.entityType === "work_block_template"
+    ) {
+      auxiliaryVisual = getAuxiliaryVisual("calendar");
+    }
+
+    return {
+      id: `${result.entityType}-${result.entityId}`,
+      title: result.title,
+      detail: result.detail,
+      href: result.sourceHref,
+      graphHref: result.graphHref,
+      category: result.category,
+      section: "results",
+      searchText:
+        `${result.title} ${result.detail} ${result.category}`.toLowerCase(),
+      score: result.score,
+      kind,
+      icon: auxiliaryVisual.icon,
+      tileClassName: auxiliaryVisual.tileClassName,
+      badgeClassName: auxiliaryVisual.badgeClassName,
+      entityType: result.entityType,
+      entityId: result.entityId,
+      pinId:
+        pinned.find(
+          (pin) =>
+            pin.entityType === result.entityType &&
+            pin.entityId === result.entityId
+        )?.pinId ?? null,
+      availability: "available",
+      evidence: result.evidence
+    };
+  });
 }
 
 function ActionBarLeadingTile({ item }: { item: ActionBarItem }) {
@@ -689,11 +740,7 @@ export function ActionBar({
             href: route.to,
             category: routeCategory,
             section: "routes" as const,
-            searchText: buildRouteItemSearchText(
-              title,
-              detail,
-              routeCategory
-            ),
+            searchText: buildRouteItemSearchText(title, detail, routeCategory),
             score: 0,
             ...getAuxiliaryVisual("route", route.icon)
           };
@@ -774,142 +821,25 @@ export function ActionBar({
     ],
     enabled: open && (normalizedQuery.length > 0 || selectedFilters.length > 0),
     queryFn: async () => {
-      const entityTypes = getActionBarEntityTypesForFilters(selectedFilters);
-      const response = await searchEntities({
-        searches: entityTypes.map((entityType) => ({
-          entityTypes: [entityType],
-          query: deferredQuery.trim() || undefined,
-          userIds: selectedUserIds.length > 0 ? selectedUserIds : undefined,
-          limit: entityType === "note" ? 6 : 4,
-          clientRef: entityType
-        }))
+      const response = await searchLocalRecords({
+        query: deferredQuery,
+        entityTypes:
+          selectedFilters.length > 0
+            ? getActionBarEntityTypesForFilters(selectedFilters)
+            : undefined,
+        entityKinds:
+          selectedFilters.length > 0
+            ? selectedFilters.map(
+                (filter) => filter.kind as LocalSearchEntityKind
+              )
+            : undefined,
+        userIds: selectedUserIds.length > 0 ? selectedUserIds : undefined,
+        limit: 12
       });
-
-      const deduped = new Map<string, ActionBarItem>();
-
-      for (const result of response.results) {
-        const matches = Array.isArray(
-          (result as { matches?: unknown[] }).matches
-        )
-          ? ((result as { matches: unknown[] }).matches ?? [])
-          : [];
-
-        for (const match of matches) {
-          if (!match || typeof match !== "object") {
-            continue;
-          }
-
-          const candidate = match as {
-            entityType?: unknown;
-            id?: unknown;
-            entity?: unknown;
-          };
-
-          if (
-            !isSearchableActionBarEntityType(candidate.entityType) ||
-            typeof candidate.id !== "string" ||
-            !candidate.entity ||
-            typeof candidate.entity !== "object"
-          ) {
-            continue;
-          }
-
-          const entity = candidate.entity as Record<string, unknown>;
-          if (
-            !entityMatchesActionBarFilters(
-              candidate.entityType,
-              entity,
-              selectedFilters
-            )
-          ) {
-            continue;
-          }
-
-          const href = buildActionBarHref(
-            candidate.entityType,
-            candidate.id,
-            entity
-          );
-          if (!href) {
-            continue;
-          }
-
-          const title = inferActionBarTitle(candidate.entityType, entity);
-          const detail = inferActionBarDetail(candidate.entityType, entity);
-          const category = actionBarEntityTypeLabel(
-            candidate.entityType,
-            entity
-          );
-          const searchText = buildActionBarSearchText(
-            candidate.entityType,
-            entity
-          );
-          const kind =
-            actionBarEntityTypeToKind(candidate.entityType, entity) ??
-            undefined;
-          const score =
-            normalizedQuery.length > 0
-              ? scoreActionBarMatch(deferredQuery, title, searchText)
-              : 0;
-
-          let auxiliaryVisual = getAuxiliaryVisual("search");
-          if (candidate.entityType === "note") {
-            auxiliaryVisual = getAuxiliaryVisual(
-              entity.kind === "wiki" ? "wiki" : "note"
-            );
-          } else if (candidate.entityType === "insight") {
-            auxiliaryVisual = getAuxiliaryVisual("insight");
-          } else if (
-            candidate.entityType === "calendar_event" ||
-            candidate.entityType === "task_timebox" ||
-            candidate.entityType === "work_block_template"
-          ) {
-            auxiliaryVisual = getAuxiliaryVisual("calendar");
-          }
-
-          const item: ActionBarItem = {
-            id: `${candidate.entityType}-${candidate.id}`,
-            title,
-            detail,
-            href,
-            category,
-            section: "results",
-            searchText,
-            score,
-            kind,
-            icon: auxiliaryVisual.icon,
-            tileClassName: auxiliaryVisual.tileClassName,
-            badgeClassName: auxiliaryVisual.badgeClassName,
-            entityType: candidate.entityType,
-            entityId: candidate.id,
-            pinId:
-              entityNavigationQuery.data?.pinned.find(
-                (pin) =>
-                  pin.entityType === candidate.entityType &&
-                  pin.entityId === candidate.id
-              )?.pinId ?? null,
-            availability: "available"
-          };
-
-          const previous = deduped.get(item.id);
-          if (
-            !previous ||
-            item.score > previous.score ||
-            (item.score === previous.score && item.title < previous.title)
-          ) {
-            deduped.set(item.id, item);
-          }
-        }
-      }
-
-      return Array.from(deduped.values())
-        .sort((left, right) => {
-          if (right.score !== left.score) {
-            return right.score - left.score;
-          }
-          return left.title.localeCompare(right.title);
-        })
-        .slice(0, 12);
+      return mapLocalSearchResultsToActionBarItems(
+        response.results,
+        entityNavigationQuery.data?.pinned
+      );
     }
   });
 
@@ -1121,7 +1051,7 @@ export function ActionBar({
                     type="button"
                     aria-label={`${t("common.actions.close")} ${t("common.actionBar.title")}`}
                     title={t("common.actions.close")}
-                    className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--primary)_45%,transparent)]"
+                    className="inline-flex size-11 shrink-0 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--primary)_45%,transparent)]"
                   >
                     <X className="size-4" />
                   </button>
@@ -1172,10 +1102,15 @@ export function ActionBar({
                   <LoaderCircle className="size-4 shrink-0 animate-spin text-[var(--ui-ink-faint)]" />
                 ) : null}
               </div>
-              <div className="mt-2 hidden pl-8 text-[13px] leading-6 text-[var(--ui-ink-soft)] sm:block">
-                {normalizedQuery
-                  ? t("common.actionBar.activeHint")
-                  : t("common.actionBar.idleHint")}
+              <div className="mt-2 pl-8 text-[13px] leading-5 text-[var(--ui-ink-soft)] sm:leading-6">
+                <p>
+                  Search your Forge records and see the exact words and
+                  relationships behind every result.
+                </p>
+                <p className="hidden text-[var(--ui-ink-faint)] sm:block">
+                  Search uses local words and released Forge relationships. It
+                  does not use embeddings or infer a hidden meaning.
+                </p>
               </div>
 
               <div className="mt-3 border-t border-[var(--ui-border-subtle)] pt-3 sm:mt-4 sm:pt-4">
@@ -1325,13 +1260,23 @@ export function ActionBar({
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
+            {entitySearchQuery.isError ? (
+              <p
+                className="mb-3 rounded-[18px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--danger)]"
+                role="alert"
+              >
+                Forge could not search your local records. Try again.
+              </p>
+            ) : null}
             {visibleItems.length === 0 ? (
               <div className="rounded-[24px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-8 text-center text-sm text-[var(--ui-ink-soft)]">
                 {entitySearchQuery.isFetching
                   ? t("common.actionBar.searching")
-                  : selectedFilters.length > 0
-                    ? t("common.actionBar.noResultsWithFilters")
-                    : t("common.actionBar.noResults")}
+                  : entitySearchQuery.isError
+                    ? "No search results are available until Forge can retry."
+                    : selectedFilters.length > 0
+                      ? t("common.actionBar.noResultsWithFilters")
+                      : t("common.actionBar.noResults")}
               </div>
             ) : (
               <div className="grid gap-2">
@@ -1339,6 +1284,7 @@ export function ActionBar({
                   const previousSection =
                     visibleItems[index - 1]?.section ?? null;
                   const showSectionLabel = previousSection !== item.section;
+                  const primaryEvidence = item.evidence?.[0] ?? null;
 
                   return (
                     <div key={item.id}>
@@ -1385,6 +1331,17 @@ export function ActionBar({
                             <div className="mt-1 line-clamp-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
                               {item.detail}
                             </div>
+                            {primaryEvidence ? (
+                              <div className="mt-1.5 line-clamp-2 text-xs leading-5 text-[var(--ui-ink-medium)]">
+                                <span className="font-medium">
+                                  {primaryEvidence.kind === "text"
+                                    ? `Matched ${primaryEvidence.label}`
+                                    : `Related by ${primaryEvidence.label}`}
+                                  :
+                                </span>{" "}
+                                “{primaryEvidence.excerpt}”
+                              </div>
+                            ) : null}
                           </div>
                           <ArrowRight
                             className={cn(
@@ -1395,25 +1352,47 @@ export function ActionBar({
                             )}
                           />
                         </button>
-                        {item.entityType && item.entityId ? (
-                          <button
-                            type="button"
-                            className="m-2 inline-flex size-11 shrink-0 items-center justify-center self-start rounded-full text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] disabled:opacity-50"
-                            aria-label={
-                              item.pinId
-                                ? `Unpin ${item.title}`
-                                : `Pin ${item.title}`
-                            }
-                            title={item.pinId ? "Unpin" : "Pin"}
-                            disabled={pinMutation.isPending}
-                            onClick={() => pinMutation.mutate(item)}
-                          >
-                            {item.pinId ? (
-                              <PinOff className="size-4" />
-                            ) : (
-                              <Pin className="size-4" />
-                            )}
-                          </button>
+                        {item.graphHref ||
+                        (item.entityType && item.entityId) ? (
+                          <div className="m-2 flex shrink-0 flex-col gap-1 self-start">
+                            {item.graphHref ? (
+                              <button
+                                type="button"
+                                className="inline-flex size-11 items-center justify-center rounded-full text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--primary)_45%,transparent)]"
+                                aria-label={`Open ${item.title} in Knowledge Graph`}
+                                title="Open in Knowledge Graph"
+                                onClick={() => {
+                                  onOpenChange(false);
+                                  navigate(item.graphHref!);
+                                }}
+                              >
+                                <Network
+                                  className="size-4"
+                                  aria-hidden="true"
+                                />
+                              </button>
+                            ) : null}
+                            {item.entityType && item.entityId ? (
+                              <button
+                                type="button"
+                                className="inline-flex size-11 items-center justify-center rounded-full text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--primary)_45%,transparent)]"
+                                aria-label={
+                                  item.pinId
+                                    ? `Unpin ${item.title}`
+                                    : `Pin ${item.title}`
+                                }
+                                title={item.pinId ? "Unpin" : "Pin"}
+                                disabled={pinMutation.isPending}
+                                onClick={() => pinMutation.mutate(item)}
+                              >
+                                {item.pinId ? (
+                                  <PinOff className="size-4" />
+                                ) : (
+                                  <Pin className="size-4" />
+                                )}
+                              </button>
+                            ) : null}
+                          </div>
                         ) : null}
                       </div>
                     </div>

@@ -4,7 +4,11 @@ import {
 } from "./peer-openapi.js";
 import { buildCourseOpenApiPaths } from "./course-openapi.js";
 import { buildSecurityPairingOpenApiPaths } from "./security-pairing-openapi.js";
-import { TASK_CLOSEOUT_LIMITS } from "./types.js";
+import {
+  TASK_CLOSEOUT_LIMITS,
+  crudEntityTypeSchema,
+  localSearchEntityKindSchema
+} from "./types.js";
 
 function arrayOf(items: Record<string, unknown>) {
   return {
@@ -233,6 +237,11 @@ const API_TAGS = [
       "Named, user-owned Action Bar query, filter, and people-scope combinations."
   },
   {
+    name: "Search",
+    description:
+      "Permission-first local lexical and released-relationship search across eligible Forge record families."
+  },
+  {
     name: "Entity Batch",
     description:
       "Batch create, update, delete, restore, and search operations across entity types."
@@ -454,6 +463,9 @@ function resolveTagsForPath(path: string) {
   }
   if (path.startsWith("/api/v1/saved-views")) {
     return ["Saved Views"];
+  }
+  if (path.startsWith("/api/v1/local-search")) {
+    return ["Search"];
   }
   if (
     path.startsWith("/api/v1/agents") ||
@@ -821,6 +833,139 @@ export function buildOpenApiDocument() {
         items: { $ref: "#/components/schemas/ComparisonLane" }
       },
       totals: { $ref: "#/components/schemas/ComparisonTotals" }
+    }
+  };
+  const localSearchTextEvidence = {
+    type: "object",
+    additionalProperties: false,
+    required: ["kind", "label", "field", "excerpt", "matchedTerms"],
+    properties: {
+      kind: { type: "string", enum: ["text"] },
+      label: { type: "string" },
+      field: { type: "string" },
+      excerpt: { type: "string", maxLength: 180 },
+      matchedTerms: {
+        type: "array",
+        maxItems: 20,
+        uniqueItems: true,
+        items: { type: "string" }
+      }
+    }
+  };
+  const localSearchRelationshipEvidence = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "kind",
+      "label",
+      "excerpt",
+      "relationKind",
+      "relatedEntityType",
+      "relatedEntityId"
+    ],
+    properties: {
+      kind: { type: "string", enum: ["relationship"] },
+      label: { type: "string" },
+      excerpt: { type: "string", maxLength: 180 },
+      relationKind: { type: "string" },
+      relatedEntityType: {
+        type: "string",
+        enum: [...crudEntityTypeSchema.options]
+      },
+      relatedEntityId: { type: "string" }
+    }
+  };
+  const localSearchResult = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "entityType",
+      "entityId",
+      "entityKind",
+      "title",
+      "detail",
+      "category",
+      "sourceHref",
+      "graphHref",
+      "score",
+      "evidence"
+    ],
+    properties: {
+      entityType: {
+        type: "string",
+        enum: [...crudEntityTypeSchema.options]
+      },
+      entityId: { type: "string" },
+      entityKind: nullable({
+        type: "string",
+        enum: [...localSearchEntityKindSchema.options]
+      }),
+      title: { type: "string", maxLength: 120 },
+      detail: { type: "string", maxLength: 220 },
+      category: { type: "string" },
+      sourceHref: { type: "string" },
+      graphHref: nullable({ type: "string" }),
+      score: { type: "number", minimum: 0 },
+      evidence: {
+        type: "array",
+        minItems: 1,
+        maxItems: 3,
+        items: {
+          oneOf: [
+            { $ref: "#/components/schemas/LocalSearchTextEvidence" },
+            {
+              $ref: "#/components/schemas/LocalSearchRelationshipEvidence"
+            }
+          ]
+        }
+      }
+    }
+  };
+  const localSearchCoverage = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "eligibleEntityTypes",
+      "indexedDocuments",
+      "indexedRelationships",
+      "deletionTombstonesApplied",
+      "scopeTombstonesApplied",
+      "truncated"
+    ],
+    properties: {
+      eligibleEntityTypes: {
+        type: "array",
+        minItems: crudEntityTypeSchema.options.length,
+        maxItems: crudEntityTypeSchema.options.length,
+        uniqueItems: true,
+        items: {
+          type: "string",
+          enum: [...crudEntityTypeSchema.options]
+        }
+      },
+      indexedDocuments: { type: "integer", minimum: 0, maximum: 3000 },
+      indexedRelationships: { type: "integer", minimum: 0 },
+      deletionTombstonesApplied: { type: "integer", minimum: 0 },
+      scopeTombstonesApplied: { type: "integer", minimum: 0 },
+      truncated: { type: "boolean", enum: [false] }
+    }
+  };
+  const localSearchResponse = {
+    type: "object",
+    additionalProperties: false,
+    required: ["query", "retrievalMode", "results", "coverage"],
+    properties: {
+      query: { type: "string", maxLength: 200 },
+      retrievalMode: {
+        type: "string",
+        enum: ["local_lexical_structural"]
+      },
+      results: {
+        type: "array",
+        maxItems: 20,
+        items: { $ref: "#/components/schemas/LocalSearchResult" }
+      },
+      coverage: { $ref: "#/components/schemas/LocalSearchCoverage" }
     }
   };
   const preferenceErrorResponses = (
@@ -11470,6 +11615,11 @@ export function buildOpenApiDocument() {
         ComparisonLane: comparisonLane,
         ComparisonTotals: comparisonTotals,
         ComparisonResponse: comparisonResponse,
+        LocalSearchTextEvidence: localSearchTextEvidence,
+        LocalSearchRelationshipEvidence: localSearchRelationshipEvidence,
+        LocalSearchResult: localSearchResult,
+        LocalSearchCoverage: localSearchCoverage,
+        LocalSearchResponse: localSearchResponse,
         UserSummary: userSummary,
         Tag: tag,
         Goal: goal,
@@ -11911,6 +12061,130 @@ export function buildOpenApiDocument() {
             "404": {
               description:
                 "Generic unavailable response for an unknown or token-disallowed user scope.",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/local-search": {
+        get: {
+          tags: ["Search"],
+          summary: "Search authorized local Forge records",
+          description:
+            "Requires a trusted local operator session before Forge parses the query or validates a selected person. Search covers all 31 eligible Forge record families through a transient permission-filtered index. It uses bounded local word matching and one-hop relationships from the released Knowledge Graph; it does not use embeddings or claim general semantic understanding. Every result includes an exact source route and up to three text or relationship evidence references. Deleted records and records outside the selected people scope are removed before tokenization. Before indexing, Forge refuses more than 750 source records, 3 MiB of authorized indexable record text, or 750 authorized relationships rather than using unbounded memory. It never caches source content in a derived database table.",
+          security: [{ operatorSession: [] }],
+          parameters: [
+            {
+              name: "q",
+              in: "query",
+              required: false,
+              description:
+                "Search text. Either text or at least one record-family filter is required.",
+              schema: { type: "string", maxLength: 200, default: "" }
+            },
+            {
+              name: "entityType",
+              in: "query",
+              required: false,
+              style: "form",
+              explode: true,
+              description:
+                "Repeat to keep results within one or more Forge CRUD record families.",
+              schema: {
+                type: "array",
+                maxItems: crudEntityTypeSchema.options.length,
+                uniqueItems: true,
+                items: {
+                  type: "string",
+                  enum: [...crudEntityTypeSchema.options]
+                }
+              }
+            },
+            {
+              name: "entityKind",
+              in: "query",
+              required: false,
+              style: "form",
+              explode: true,
+              description:
+                "Repeat to keep released Knowledge Graph results within one or more visible kinds, including Note versus Wiki page.",
+              schema: {
+                type: "array",
+                maxItems: localSearchEntityKindSchema.options.length,
+                uniqueItems: true,
+                items: {
+                  type: "string",
+                  enum: [...localSearchEntityKindSchema.options]
+                }
+              }
+            },
+            {
+              name: "userIds",
+              in: "query",
+              required: false,
+              style: "form",
+              explode: true,
+              description:
+                "Repeat to select authorized Forge people. Any unknown person makes the whole request unavailable instead of widening scope.",
+              schema: {
+                type: "array",
+                maxItems: 100,
+                uniqueItems: true,
+                items: { type: "string", minLength: 1 }
+              }
+            },
+            {
+              name: "limit",
+              in: "query",
+              required: false,
+              schema: {
+                type: "integer",
+                minimum: 1,
+                maximum: 20,
+                default: 12
+              }
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              { $ref: "#/components/schemas/LocalSearchResponse" },
+              "Ranked authorized records with exact evidence and source routes"
+            ),
+            "400": {
+              description:
+                "Malformed or oversized query, or a request with neither search text nor a record-family filter.",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" }
+                }
+              }
+            },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": {
+              description:
+                "Agent tokens and other non-operator principals cannot use local search.",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" }
+                }
+              }
+            },
+            "404": {
+              description:
+                "Generic unavailable response for any unknown selected person.",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" }
+                }
+              }
+            },
+            "413": {
+              description:
+                "The request exceeds the transient local-search envelope of 750 source records, 3 MiB of authorized indexable record text, or 750 authorized relationships. Forge refuses the search before indexing records.",
               content: {
                 "application/json": {
                   schema: { $ref: "#/components/schemas/ErrorResponse" }
