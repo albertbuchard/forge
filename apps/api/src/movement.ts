@@ -472,11 +472,39 @@ export const movementUserBoxPatchSchema =
       }
     }
   });
-export const movementUserBoxPreflightSchema = movementUserBoxSchemaBase.extend({
-  excludeBoxId: z.string().trim().min(1).nullable().optional(),
-  rangeStart: z.string().datetime().nullable().optional(),
-  rangeEnd: z.string().datetime().nullable().optional()
-});
+export const movementUserBoxPreflightSchema = movementUserBoxSchemaBase
+  .extend({
+    excludeBoxId: z.string().trim().min(1).nullable().optional(),
+    rangeStart: z.string().datetime().nullable().optional(),
+    rangeEnd: z.string().datetime().nullable().optional()
+  })
+  .superRefine((value, ctx) => {
+    if (Date.parse(value.endedAt) <= Date.parse(value.startedAt)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["endedAt"],
+        message: "Movement preflight must end after it starts."
+      });
+    }
+    if (Boolean(value.rangeStart) !== Boolean(value.rangeEnd)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: value.rangeStart ? ["rangeEnd"] : ["rangeStart"],
+        message: "Movement preflight visibility requires both range boundaries."
+      });
+    }
+    if (
+      value.rangeStart &&
+      value.rangeEnd &&
+      Date.parse(value.rangeEnd) <= Date.parse(value.rangeStart)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["rangeEnd"],
+        message: "Movement preflight visibility must end after it starts."
+      });
+    }
+  });
 export const movementAutomaticBoxInvalidateSchema = z.object({
   startedAt: z.string().datetime().optional(),
   endedAt: z.string().datetime().optional(),
@@ -3227,13 +3255,105 @@ export function listMovementPlaces(userIds?: string[]) {
   return listMovementPlaceRows(userIds).map(mapMovementPlace);
 }
 
+function movementPlaceIdentityKeys(input: {
+  label: string;
+  aliases: string[];
+}) {
+  return new Set(
+    [input.label, ...input.aliases]
+      .map((value) => slugifyMovementTag(value))
+      .filter((value) => value.length > 0)
+  );
+}
+
+function findPossibleMovementPlaceDuplicates(input: {
+  userId: string;
+  source: string;
+  externalUid: string;
+  label: string;
+  aliases: string[];
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+  excludePlaceId?: string;
+}) {
+  const candidateKeys = movementPlaceIdentityKeys(input);
+  return listMovementPlaceRows([input.userId]).flatMap((row) => {
+    if (row.id === input.excludePlaceId) {
+      return [];
+    }
+    if (
+      input.externalUid.length > 0 &&
+      row.source === input.source &&
+      row.external_uid === input.externalUid
+    ) {
+      return [];
+    }
+    const existingKeys = movementPlaceIdentityKeys({
+      label: row.label,
+      aliases: safeJsonParse<string[]>(row.aliases_json, [])
+    });
+    if (![...candidateKeys].some((key) => existingKeys.has(key))) {
+      return [];
+    }
+    const distanceMeters = haversineDistanceMeters(
+      { latitude: input.latitude, longitude: input.longitude },
+      { latitude: row.latitude, longitude: row.longitude }
+    );
+    if (distanceMeters > input.radiusMeters + row.radius_meters) {
+      return [];
+    }
+    return [
+      {
+        id: row.id,
+        label: row.label,
+        distanceMeters: round(distanceMeters, 1),
+        radiusMeters: row.radius_meters
+      }
+    ];
+  });
+}
+
+function assertNoPossibleMovementPlaceDuplicate(input: {
+  userId: string;
+  source: string;
+  place: z.infer<typeof movementPlaceInputSchema>;
+  excludePlaceId?: string;
+}) {
+  const candidates = findPossibleMovementPlaceDuplicates({
+    userId: input.userId,
+    source: input.source,
+    externalUid: input.place.externalUid.trim(),
+    label: input.place.label,
+    aliases: input.place.aliases,
+    latitude: input.place.latitude,
+    longitude: input.place.longitude,
+    radiusMeters: input.place.radiusMeters,
+    excludePlaceId: input.excludePlaceId
+  });
+  if (candidates.length > 0) {
+    throw new HttpError(
+      409,
+      "movement_place_possible_duplicate",
+      "A known place with the same label or alias already has an overlapping radius. Update that place or use a distinct label.",
+      { candidates }
+    );
+  }
+}
+
 export function createMovementPlace(
   input: z.input<typeof movementPlaceMutationSchema>,
   context: ActivityContext
 ) {
   const parsed = movementPlaceMutationSchema.parse(input);
+  const userId = parsed.userId ?? getDefaultUser().id;
+  assertNoPossibleMovementPlaceDuplicate({
+    userId,
+    source: parsed.source,
+    place: parsed
+  });
   const place = upsertMovementPlaceInternal({
-    userId: parsed.userId ?? getDefaultUser().id,
+    userId,
     source: parsed.source,
     place: parsed
   });
@@ -3273,6 +3393,42 @@ export function updateMovementPlace(
     return undefined;
   }
   const parsed = movementPlacePatchSchema.parse(patch);
+  const candidatePlace = movementPlaceInputSchema.parse({
+    externalUid: parsed.externalUid ?? existing.external_uid,
+    label: parsed.label ?? existing.label,
+    aliases:
+      parsed.aliases ?? safeJsonParse<string[]>(existing.aliases_json, []),
+    latitude: parsed.latitude ?? existing.latitude,
+    longitude: parsed.longitude ?? existing.longitude,
+    radiusMeters: parsed.radiusMeters ?? existing.radius_meters,
+    categoryTags:
+      parsed.categoryTags ??
+      safeJsonParse<string[]>(existing.category_tags_json, []),
+    visibility: parsed.visibility ?? existing.visibility,
+    wikiNoteId:
+      parsed.wikiNoteId === undefined ? existing.wiki_note_id : parsed.wikiNoteId,
+    linkedEntities:
+      parsed.linkedEntities ??
+      safeJsonParse<Array<z.infer<typeof linkedEntitySchema>>>(
+        existing.linked_entities_json,
+        []
+      ),
+    linkedPeople:
+      parsed.linkedPeople ??
+      safeJsonParse<Array<z.infer<typeof linkedPersonSchema>>>(
+        existing.linked_people_json,
+        []
+      ),
+    metadata:
+      parsed.metadata ??
+      safeJsonParse<Record<string, unknown>>(existing.metadata_json, {})
+  });
+  assertNoPossibleMovementPlaceDuplicate({
+    userId: existing.user_id,
+    source: existing.source,
+    place: candidatePlace,
+    excludePlaceId: placeId
+  });
   const place = upsertMovementPlaceInternal({
     userId: existing.user_id,
     source: existing.source,
@@ -3280,7 +3436,8 @@ export function updateMovementPlace(
     place: {
       externalUid: parsed.externalUid ?? existing.external_uid,
       label: parsed.label ?? existing.label,
-      aliases: parsed.aliases ?? safeJsonParse<string[]>(existing.aliases_json, []),
+      aliases:
+        parsed.aliases ?? safeJsonParse<string[]>(existing.aliases_json, []),
       latitude: parsed.latitude ?? existing.latitude,
       longitude: parsed.longitude ?? existing.longitude,
       radiusMeters: parsed.radiusMeters ?? existing.radius_meters,
@@ -3290,9 +3447,13 @@ export function updateMovementPlace(
           existing.category_tags_json,
           []
         ),
-      visibility: parsed.visibility ?? (existing.visibility as "personal" | "shared"),
+      visibility:
+        parsed.visibility ??
+        (existing.visibility as "personal" | "shared"),
       wikiNoteId:
-        parsed.wikiNoteId === undefined ? existing.wiki_note_id : parsed.wikiNoteId,
+        parsed.wikiNoteId === undefined
+          ? existing.wiki_note_id
+          : parsed.wikiNoteId,
       linkedEntities:
         parsed.linkedEntities ??
         safeJsonParse<Array<z.infer<typeof linkedEntitySchema>>>(
