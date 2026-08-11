@@ -362,6 +362,13 @@ export function getDatabase(): DatabaseSync {
         .normalize("NFKC")
         .toLowerCase()
     );
+    db.function("forge_tag_key", { deterministic: true }, (value: unknown) =>
+      String(value ?? "")
+        .normalize("NFKC")
+        .trim()
+        .replace(/\s+/gu, " ")
+        .toLowerCase()
+    );
     db.exec("PRAGMA foreign_keys = ON;");
     db.exec("PRAGMA busy_timeout = 5000;");
     db.exec("PRAGMA synchronous = FULL;");
