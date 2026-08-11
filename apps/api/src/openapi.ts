@@ -1122,7 +1122,9 @@ export function buildOpenApiDocument() {
       shown: { type: "integer", minimum: 0, maximum: 20 },
       limit: { type: "integer", minimum: 1, maximum: 20 },
       generatedAt: { type: "string", format: "date-time" },
-      generation: { $ref: "#/components/schemas/RelationshipProposalGeneration" }
+      generation: {
+        $ref: "#/components/schemas/RelationshipProposalGeneration"
+      }
     }
   };
   const relationshipProposalOwnerInput = {
@@ -1145,13 +1147,7 @@ export function buildOpenApiDocument() {
   const relationshipProposalDecision = {
     type: "object",
     additionalProperties: false,
-    required: [
-      "status",
-      "proposalId",
-      "revision",
-      "linkCreated",
-      "replayed"
-    ],
+    required: ["status", "proposalId", "revision", "linkCreated", "replayed"],
     properties: {
       status: { type: "string", enum: ["accepted", "rejected"] },
       proposalId: { type: "string", minLength: 1 },
@@ -4941,11 +4937,13 @@ export function buildOpenApiDocument() {
       },
       sourceRef: {
         type: "string",
-        description: "Stable, typed reference to the authoritative source record."
+        description:
+          "Stable, typed reference to the authoritative source record."
       },
       resolutionCondition: {
         type: "string",
-        description: "Plain-language evidence condition Forge must confirm before issuing a receipt."
+        description:
+          "Plain-language evidence condition Forge must confirm before issuing a receipt."
       }
     }
   };
@@ -5146,11 +5144,25 @@ export function buildOpenApiDocument() {
       },
       kind: {
         type: "string",
-        enum: ["decision", "review", "blocked_work", "overdue_work", "sync_problem", "runtime_problem"]
+        enum: [
+          "decision",
+          "review",
+          "blocked_work",
+          "overdue_work",
+          "sync_problem",
+          "runtime_problem"
+        ]
       },
       actionKey: {
         type: "string",
-        enum: ["review_decision", "review_insight", "resolve_blocker", "review_due_work", "recover_companion_sync", "reconnect_runtime"]
+        enum: [
+          "review_decision",
+          "review_insight",
+          "resolve_blocker",
+          "review_due_work",
+          "recover_companion_sync",
+          "reconnect_runtime"
+        ]
       },
       sourceRef: { type: "string" },
       sourceUpdatedAt: { type: "string", format: "date-time" },
@@ -5196,11 +5208,25 @@ export function buildOpenApiDocument() {
       },
       kind: {
         type: "string",
-        enum: ["decision", "review", "blocked_work", "overdue_work", "sync_problem", "runtime_problem"]
+        enum: [
+          "decision",
+          "review",
+          "blocked_work",
+          "overdue_work",
+          "sync_problem",
+          "runtime_problem"
+        ]
       },
       actionKey: {
         type: "string",
-        enum: ["review_decision", "review_insight", "resolve_blocker", "review_due_work", "recover_companion_sync", "reconnect_runtime"]
+        enum: [
+          "review_decision",
+          "review_insight",
+          "resolve_blocker",
+          "review_due_work",
+          "recover_companion_sync",
+          "reconnect_runtime"
+        ]
       },
       sourceRef: { type: "string" },
       sourceUpdatedAt: { type: "string", format: "date-time" },
@@ -5237,7 +5263,9 @@ export function buildOpenApiDocument() {
         enum: ["resolved", "still_open", "stale", "deleted", "denied"]
       },
       explanation: { type: "string" },
-      receipt: nullable({ $ref: "#/components/schemas/AttentionResolutionReceipt" })
+      receipt: nullable({
+        $ref: "#/components/schemas/AttentionResolutionReceipt"
+      })
     }
   };
 
@@ -5246,8 +5274,12 @@ export function buildOpenApiDocument() {
     additionalProperties: false,
     required: ["results", "receipts"],
     properties: {
-      results: arrayOf({ $ref: "#/components/schemas/AttentionResolutionCheckResult" }),
-      receipts: arrayOf({ $ref: "#/components/schemas/AttentionResolutionReceipt" })
+      results: arrayOf({
+        $ref: "#/components/schemas/AttentionResolutionCheckResult"
+      }),
+      receipts: arrayOf({
+        $ref: "#/components/schemas/AttentionResolutionReceipt"
+      })
     }
   };
 
@@ -5256,7 +5288,9 @@ export function buildOpenApiDocument() {
     additionalProperties: false,
     required: ["receipts", "total", "limit", "retention"],
     properties: {
-      receipts: arrayOf({ $ref: "#/components/schemas/AttentionResolutionReceipt" }),
+      receipts: arrayOf({
+        $ref: "#/components/schemas/AttentionResolutionReceipt"
+      }),
       total: { type: "integer", minimum: 0, maximum: 5000 },
       limit: { type: "integer", minimum: 1, maximum: 100 },
       retention: {
@@ -5308,13 +5342,7 @@ export function buildOpenApiDocument() {
       summary: { type: "string" },
       status: {
         type: "string",
-        enum: [
-          "available",
-          "undone",
-          "expired",
-          "conflicted",
-          "not_reversible"
-        ]
+        enum: ["available", "undone", "expired", "conflicted", "not_reversible"]
       },
       reversible: { type: "boolean" },
       explanation: { type: "string" },
@@ -11752,6 +11780,7 @@ export function buildOpenApiDocument() {
 
   const artifactEnrichmentInput = {
     type: "object",
+    additionalProperties: false,
     properties: {
       llmProfileId: { type: "string" },
       fillMissingOnly: { type: "boolean", default: true },
@@ -11759,6 +11788,21 @@ export function buildOpenApiDocument() {
         type: "string",
         description:
           "Optional transient key for the selected LLM provider. It is not persisted by Forge."
+      }
+    }
+  };
+
+  const artifactEnrichmentApplyInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["proposalId"],
+    properties: {
+      proposalId: {
+        type: "string",
+        minLength: 1,
+        maxLength: 128,
+        description:
+          "Exact current proposal identifier returned by the enrichment request after human review."
       }
     }
   };
@@ -12503,6 +12547,7 @@ export function buildOpenApiDocument() {
         ArtifactMetadataPatchInput: artifactMetadataPatchInput,
         ArtifactTrustPatchInput: artifactTrustPatchInput,
         ArtifactEnrichmentInput: artifactEnrichmentInput,
+        ArtifactEnrichmentApplyInput: artifactEnrichmentApplyInput,
         ArtifactVersion: artifactVersion,
         ArtifactAuditEvent: artifactAuditEvent,
         ArtifactVersionPage: artifactVersionPage,
@@ -13433,9 +13478,9 @@ export function buildOpenApiDocument() {
           }
         ],
         post: {
-          summary: "Use a configured LLM to fill missing artifact metadata",
+          summary: "Generate an LLM artifact-metadata proposal",
           description:
-            "LLM enrichment receives safe metadata, scan findings, and a transient in-memory static text sample when plaintext storage permits rescanning. The underlying byte buffer is zeroed after use, and the sample is never persisted or returned. Enrichment may propose title, short description, description, tags, and a danger score, but Forge never lowers the deterministic scanner danger score.",
+            "LLM enrichment receives safe metadata, scan findings, and a transient in-memory static text sample when plaintext storage permits rescanning. Artifact content is treated as untrusted data, the underlying byte buffer is zeroed after use, and long verbatim text spans are rejected from persisted output. The bounded proposal may contain title, short description, description, keywords, link suggestions, and danger interpretation, but this route does not apply any proposed metadata. A human operator must review and apply the exact current proposal through the separate apply route, and Forge never lowers the deterministic scanner danger score.",
           requestBody: {
             required: false,
             content: {
@@ -13453,7 +13498,45 @@ export function buildOpenApiDocument() {
                   artifact: { $ref: "#/components/schemas/Artifact" }
                 }
               },
-              "Enriched artifact"
+              "Artifact with a reviewable enrichment proposal"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/artifacts/{id}/enrich/apply": {
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" }
+          }
+        ],
+        post: {
+          summary: "Apply an exact current enrichment proposal after review",
+          description:
+            "Human operator only. Applies the exact current proposal atomically after review. If metadata, stored content identity, protection or trust state, safety evidence, deletion state, or the current proposal changed after generation, Forge returns a stable conflict and applies nothing. Agent tokens cannot call this route.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ArtifactEnrichmentApplyInput"
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["artifact"],
+                properties: {
+                  artifact: { $ref: "#/components/schemas/Artifact" }
+                }
+              },
+              "Artifact with the reviewed enrichment proposal applied"
             ),
             default: { $ref: "#/components/responses/Error" }
           }
@@ -22405,7 +22488,8 @@ export function buildOpenApiDocument() {
               in: "path",
               required: true,
               schema: { type: "string" },
-              description: "URL-encoded AttentionInboxItem.id from the current queue."
+              description:
+                "URL-encoded AttentionInboxItem.id from the current queue."
             },
             {
               name: "Idempotency-Key",
@@ -22417,7 +22501,8 @@ export function buildOpenApiDocument() {
               name: "userId",
               in: "query",
               schema: { type: "string" },
-              description: "Optional operator user scope, resolved by the same policy as GET /api/v1/attention-inbox."
+              description:
+                "Optional operator user scope, resolved by the same policy as GET /api/v1/attention-inbox."
             },
             {
               name: "userIds",
@@ -22425,7 +22510,8 @@ export function buildOpenApiDocument() {
               schema: arrayOf({ type: "string" }),
               style: "form",
               explode: true,
-              description: "Optional repeated operator user scope; it can narrow but never widen the source read."
+              description:
+                "Optional repeated operator user scope; it can narrow but never widen the source read."
             }
           ],
           requestBody: {
@@ -22439,7 +22525,14 @@ export function buildOpenApiDocument() {
                   properties: {
                     actionKey: {
                       type: "string",
-                      enum: ["review_decision", "review_insight", "resolve_blocker", "review_due_work", "recover_companion_sync", "reconnect_runtime"]
+                      enum: [
+                        "review_decision",
+                        "review_insight",
+                        "resolve_blocker",
+                        "review_due_work",
+                        "recover_companion_sync",
+                        "reconnect_runtime"
+                      ]
                     },
                     sourceUpdatedAt: { type: "string", format: "date-time" }
                   }
@@ -22473,7 +22566,8 @@ export function buildOpenApiDocument() {
               name: "userId",
               in: "query",
               schema: { type: "string" },
-              description: "Optional operator user scope, resolved by the same policy as the Attention queue."
+              description:
+                "Optional operator user scope, resolved by the same policy as the Attention queue."
             },
             {
               name: "userIds",
@@ -22481,7 +22575,8 @@ export function buildOpenApiDocument() {
               schema: arrayOf({ type: "string" }),
               style: "form",
               explode: true,
-              description: "Optional repeated operator user scope; changed scope changes the idempotency fingerprint."
+              description:
+                "Optional repeated operator user scope; changed scope changes the idempotency fingerprint."
             }
           ],
           requestBody: {
@@ -22521,7 +22616,8 @@ export function buildOpenApiDocument() {
               name: "userId",
               in: "query",
               schema: { type: "string" },
-              description: "Optional operator user scope, resolved by the same policy as the Attention queue."
+              description:
+                "Optional operator user scope, resolved by the same policy as the Attention queue."
             },
             {
               name: "userIds",

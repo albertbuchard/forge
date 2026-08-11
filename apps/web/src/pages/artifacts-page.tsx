@@ -44,6 +44,7 @@ import { Input } from "@/components/ui/input";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  applyArtifactEnrichment,
   deleteEntities,
   downloadArtifact,
   downloadArtifactWithPassword,
@@ -106,6 +107,43 @@ const ARTIFACT_SEARCH_DEBOUNCE_MS = 200;
 const MAX_ARTIFACT_UPLOAD_QUEUE_FILES = 25;
 const MAX_ARTIFACT_UPLOAD_BYTES = 100 * 1024 * 1024;
 const ARTIFACT_UPLOAD_CONCURRENCY = 2;
+
+type ArtifactEnrichmentProposalView = {
+  status: "proposed";
+  proposalId: string;
+  provider: string;
+  model: string;
+  generatedAt: string;
+  fillMissingOnly: boolean;
+  baseFingerprint: string;
+  output: Record<string, unknown>;
+};
+
+function readArtifactEnrichmentProposal(
+  artifact: Artifact | null
+): ArtifactEnrichmentProposalView | null {
+  const value = artifact?.enrichmentResults;
+  if (
+    !value ||
+    value.status !== "proposed" ||
+    typeof value.proposalId !== "string" ||
+    typeof value.provider !== "string" ||
+    typeof value.model !== "string" ||
+    typeof value.generatedAt !== "string" ||
+    typeof value.fillMissingOnly !== "boolean" ||
+    typeof value.baseFingerprint !== "string" ||
+    !value.output ||
+    typeof value.output !== "object" ||
+    Array.isArray(value.output)
+  ) {
+    return null;
+  }
+  return value as ArtifactEnrichmentProposalView;
+}
+
+function proposedText(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
 
 function formatBytes(value: number) {
   if (!Number.isFinite(value) || value <= 0) {
@@ -667,6 +705,107 @@ function ArtifactMetadataField({
   );
 }
 
+function ArtifactEnrichmentProposalReview({
+  artifact,
+  proposal
+}: {
+  artifact: Artifact;
+  proposal: ArtifactEnrichmentProposalView;
+}) {
+  const fields = [
+    ["Title", artifact.title, proposedText(proposal.output.title)],
+    [
+      "Short description",
+      artifact.shortDescription || "Not recorded",
+      proposedText(proposal.output.shortDescription)
+    ],
+    [
+      "Full description",
+      artifact.description || "Not recorded",
+      proposedText(proposal.output.description)
+    ]
+  ] as const;
+  const keywords = Array.isArray(proposal.output.keywords)
+    ? proposal.output.keywords.filter(
+        (entry): entry is string => typeof entry === "string"
+      )
+    : [];
+  const dangerReasons = Array.isArray(proposal.output.dangerReasons)
+    ? proposal.output.dangerReasons.filter(
+        (entry): entry is string => typeof entry === "string"
+      )
+    : [];
+  const suggestedLinkCount = Array.isArray(proposal.output.suggestedForgeLinks)
+    ? proposal.output.suggestedForgeLinks.length
+    : 0;
+
+  return (
+    <div className="grid gap-4">
+      <p className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-muted)]">
+        This is model-generated metadata, not a fact. File content was treated
+        as untrusted data. Nothing below changes the artifact until you choose
+        Apply proposal.
+      </p>
+      <div className="grid gap-3">
+        {fields.map(([label, current, proposed]) => (
+          <div
+            key={label}
+            className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4"
+          >
+            <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+              {label}
+            </div>
+            <p className="mt-2 break-words text-sm font-medium text-[var(--ui-ink-strong)]">
+              {proposed ?? "No change proposed"}
+            </p>
+            <p className="mt-2 break-words text-xs leading-5 text-[var(--ui-ink-muted)]">
+              Current: {current}
+            </p>
+          </div>
+        ))}
+      </div>
+      <dl className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4">
+        <ArtifactMetadataField
+          label="Document type"
+          value={proposedText(proposal.output.documentType) ?? "Not proposed"}
+        />
+        <ArtifactMetadataField
+          label="Keywords"
+          value={keywords.length > 0 ? keywords.join(", ") : "None proposed"}
+        />
+        <ArtifactMetadataField
+          label="Safety interpretation"
+          value={proposedText(proposal.output.safetySummary) ?? "Not proposed"}
+        />
+        <ArtifactMetadataField
+          label="Danger reasons"
+          value={
+            dangerReasons.length > 0
+              ? dangerReasons.join(" · ")
+              : "None proposed"
+          }
+        />
+        <ArtifactMetadataField
+          label="Danger score"
+          value={`${artifact.dangerScore} current · ${
+            typeof proposal.output.dangerScore === "number"
+              ? proposal.output.dangerScore
+              : artifact.dangerScore
+          } proposed · deterministic score can never be lowered`}
+        />
+        <ArtifactMetadataField
+          label="Relationship suggestions"
+          value={`${suggestedLinkCount} suggestion${suggestedLinkCount === 1 ? "" : "s"}; relationships are not applied by this action`}
+        />
+        <ArtifactMetadataField
+          label="Model provenance"
+          value={`${proposal.provider} · ${proposal.model} · ${formatDateTime(proposal.generatedAt)}`}
+        />
+      </dl>
+    </div>
+  );
+}
+
 export function ArtifactsPage() {
   const { artifactId } = useParams();
   const navigate = useNavigate();
@@ -692,6 +831,8 @@ export function ArtifactsPage() {
   const [downloadPasswordDialogOpen, setDownloadPasswordDialogOpen] =
     useState(false);
   const [encryptDialogOpen, setEncryptDialogOpen] = useState(false);
+  const [enrichmentReviewArtifact, setEnrichmentReviewArtifact] =
+    useState<Artifact | null>(null);
   const [uploadFlowValue, setUploadFlowValue] =
     useState<ArtifactUploadFlowValue>(EMPTY_UPLOAD_FLOW_VALUE);
   const uploadAbortControllersRef = useRef(new Map<string, AbortController>());
@@ -727,6 +868,9 @@ export function ArtifactsPage() {
     null
   );
   const [trustDialogError, setTrustDialogError] = useState<string | null>(null);
+  const [enrichmentReviewError, setEnrichmentReviewError] = useState<
+    string | null
+  >(null);
   const [uploadedArtifactToOpenId, setUploadedArtifactToOpenId] = useState<
     string | null
   >(null);
@@ -868,8 +1012,20 @@ export function ArtifactsPage() {
       setLinksDialogOpen(false);
       setMetadataDialogOpen(false);
       setTrustDialogOpen(false);
+      setEnrichmentReviewArtifact(null);
+      setEnrichmentReviewError(null);
     }
   }, [selectedArtifact]);
+
+  useEffect(() => {
+    if (
+      enrichmentReviewArtifact &&
+      enrichmentReviewArtifact.id !== selectedArtifact?.id
+    ) {
+      setEnrichmentReviewArtifact(null);
+      setEnrichmentReviewError(null);
+    }
+  }, [enrichmentReviewArtifact, selectedArtifact?.id]);
 
   useEffect(() => {
     if (!uploadDialogOpen && uploadedArtifactToOpenId) {
@@ -1154,9 +1310,31 @@ export function ArtifactsPage() {
   });
 
   const enrichMutation = useMutation({
-    mutationFn: () =>
-      enrichArtifact(selectedArtifact!.id, { fillMissingOnly: true }),
-    onSuccess: invalidateArtifacts
+    mutationFn: ({ artifactId }: { artifactId: string }) =>
+      enrichArtifact(artifactId, { fillMissingOnly: true }),
+    onSuccess: async ({ artifact }) => {
+      if (readArtifactEnrichmentProposal(artifact)) {
+        setEnrichmentReviewArtifact(artifact);
+        setEnrichmentReviewError(null);
+      }
+      await invalidateArtifacts();
+    }
+  });
+
+  const applyEnrichmentMutation = useMutation({
+    mutationFn: ({
+      artifactId,
+      proposalId
+    }: {
+      artifactId: string;
+      proposalId: string;
+    }) => applyArtifactEnrichment(artifactId, { proposalId }),
+    onSuccess: async () => {
+      setEnrichmentReviewArtifact(null);
+      setEnrichmentReviewError(null);
+      await invalidateArtifacts();
+    },
+    onError: (error) => setEnrichmentReviewError(readErrorMessage(error))
   });
 
   const linksMutation = useMutation({
@@ -1275,8 +1453,8 @@ export function ArtifactsPage() {
       : null;
   const selectedScanPending = Boolean(
     selectedArtifact &&
-      scanMutation.isPending &&
-      scanMutation.variables?.artifactId === selectedArtifact.id
+    scanMutation.isPending &&
+    scanMutation.variables?.artifactId === selectedArtifact.id
   );
   const selectedArtifactHasScanEvidence = Boolean(
     selectedArtifact && isScanResult(selectedArtifact.scanResults)
@@ -1299,6 +1477,11 @@ export function ArtifactsPage() {
   const enrichmentStatus = selectedArtifact?.enrichmentResults as
     | { status?: unknown; reason?: unknown; error?: unknown }
     | undefined;
+  const currentEnrichmentProposal =
+    readArtifactEnrichmentProposal(selectedArtifact);
+  const enrichmentReviewProposal = readArtifactEnrichmentProposal(
+    enrichmentReviewArtifact
+  );
 
   const uploadResultByItemId = useMemo(
     () => new Map(uploadResults.map((result) => [result.itemId, result])),
@@ -2801,11 +2984,15 @@ export function ArtifactsPage() {
                     <Button
                       variant="secondary"
                       type="button"
-                      onClick={() => enrichMutation.mutate()}
+                      onClick={() =>
+                        enrichMutation.mutate({
+                          artifactId: selectedArtifact.id
+                        })
+                      }
                       pending={enrichMutation.isPending}
                     >
                       <Sparkles className="size-4" />
-                      Enrich
+                      Propose metadata
                     </Button>
                     <Button
                       variant="secondary"
@@ -2876,17 +3063,33 @@ export function ArtifactsPage() {
                   </p>
                 ) : null}
                 {typeof enrichmentStatus?.status === "string" ? (
-                  <p
-                    className="text-sm text-[var(--ui-ink-muted)]"
-                    role="status"
-                  >
-                    Enrichment: {titleCase(enrichmentStatus.status)}
-                    {typeof enrichmentStatus.reason === "string"
-                      ? ` · ${enrichmentStatus.reason}`
-                      : typeof enrichmentStatus.error === "string"
-                        ? ` · ${enrichmentStatus.error}`
-                        : ""}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <p
+                      className="text-sm text-[var(--ui-ink-muted)]"
+                      role="status"
+                    >
+                      Enrichment: {titleCase(enrichmentStatus.status)}
+                      {typeof enrichmentStatus.reason === "string"
+                        ? ` · ${enrichmentStatus.reason}`
+                        : typeof enrichmentStatus.error === "string"
+                          ? ` · ${enrichmentStatus.error}`
+                          : currentEnrichmentProposal
+                            ? " · No metadata changes until you review and apply this proposal."
+                            : ""}
+                    </p>
+                    {currentEnrichmentProposal ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          setEnrichmentReviewArtifact(selectedArtifact);
+                          setEnrichmentReviewError(null);
+                        }}
+                      >
+                        Review proposal
+                      </Button>
+                    ) : null}
+                  </div>
                 ) : null}
 
                 <div className="grid gap-3 md:grid-cols-5">
@@ -2926,7 +3129,8 @@ export function ArtifactsPage() {
                     className="rounded-[18px] border border-[color-mix(in_srgb,var(--warning)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-warning-soft)] px-3 py-2 text-sm text-[var(--warning)]"
                     role="alert"
                   >
-                    Latest scan failed. {selectedArtifactHasScanEvidence
+                    Latest scan failed.{" "}
+                    {selectedArtifactHasScanEvidence
                       ? "Existing scan evidence remains available."
                       : "No prior static scan evidence is available."}{" "}
                     {readErrorMessage(selectedScanError)}
@@ -3424,6 +3628,47 @@ export function ArtifactsPage() {
         }}
         onSubmit={submitUploadFlow}
       />
+      {enrichmentReviewArtifact && enrichmentReviewProposal ? (
+        <QuestionFlowDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setEnrichmentReviewArtifact(null);
+              setEnrichmentReviewError(null);
+            }
+          }}
+          eyebrow="Artifact Store"
+          title="Review proposed metadata"
+          description="Compare the model proposal with the current artifact before applying any metadata change."
+          value={{}}
+          onChange={() => undefined}
+          steps={[
+            {
+              id: "review",
+              eyebrow: "Human review",
+              title: "Review every proposed field",
+              description:
+                "Apply only if this bounded proposal accurately describes the file and its safety evidence.",
+              render: () => (
+                <ArtifactEnrichmentProposalReview
+                  artifact={enrichmentReviewArtifact}
+                  proposal={enrichmentReviewProposal}
+                />
+              )
+            }
+          ]}
+          pending={applyEnrichmentMutation.isPending}
+          pendingLabel="Applying reviewed proposal"
+          submitLabel="Apply proposal"
+          error={enrichmentReviewError}
+          onSubmit={async () => {
+            await applyEnrichmentMutation.mutateAsync({
+              artifactId: enrichmentReviewArtifact.id,
+              proposalId: enrichmentReviewProposal.proposalId
+            });
+          }}
+        />
+      ) : null}
       <QuestionFlowDialog
         open={metadataDialogOpen}
         onOpenChange={(open) => {

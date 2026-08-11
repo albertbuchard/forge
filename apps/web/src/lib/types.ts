@@ -497,6 +497,10 @@ export interface ArtifactEnrichmentInput {
   explicitApiKey?: string;
 }
 
+export interface ArtifactEnrichmentApplyInput {
+  proposalId: string;
+}
+
 export type UserKind = "human" | "bot";
 
 export interface UserSummary {

@@ -11,9 +11,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ArtifactsPage } from "./artifacts-page";
 import {
+  applyArtifactEnrichment,
   deleteEntities,
   downloadArtifact,
   downloadArtifactWithPassword,
+  enrichArtifact,
   getArtifact,
   listArtifactAuditEvents,
   listArtifactVersions,
@@ -196,6 +198,7 @@ vi.mock("@/lib/api", () => ({
   })),
   encryptArtifact: vi.fn(async () => ({ artifact: mockArtifact })),
   enrichArtifact: vi.fn(),
+  applyArtifactEnrichment: vi.fn(),
   patchArtifact: vi.fn(async () => ({ artifact: mockArtifact })),
   patchArtifactTrust: vi.fn(async () => ({ artifact: mockArtifact })),
   replaceArtifactEntityLinks: vi.fn(),
@@ -270,6 +273,77 @@ describe("ArtifactsPage", () => {
     expect(screen.getByText("Operator local files")).toBeInTheDocument();
     expect(screen.getByText("user_operator")).toBeInTheDocument();
     expect(screen.getByText(/"department": "Research"/)).toBeInTheDocument();
+  });
+
+  it("keeps LLM metadata as a reviewable proposal until the human applies the exact proposal", async () => {
+    const proposedArtifact: Artifact = {
+      ...mockArtifact,
+      enrichmentResults: {
+        generated: true,
+        status: "proposed",
+        proposalId: "artifact_enrichment_review_123",
+        provider: "mock",
+        model: "review-model",
+        generatedAt: "2026-08-11T12:00:00.000Z",
+        fillMissingOnly: true,
+        baseFingerprint: "bounded-fingerprint",
+        output: {
+          title: "Model-proposed budget title",
+          shortDescription: "Model-proposed summary",
+          documentType: "budget workbook",
+          keywords: ["budget", "forecast"],
+          safetySummary: "Review the deterministic spreadsheet findings.",
+          dangerReasons: ["Formula-like cell content"],
+          dangerScore: mockArtifact.dangerScore,
+          suggestedForgeLinks: [{ entityType: "goal", entityId: "goal_budget" }]
+        }
+      }
+    };
+    vi.mocked(enrichArtifact).mockResolvedValue({
+      artifact: proposedArtifact
+    });
+    vi.mocked(applyArtifactEnrichment).mockResolvedValue({
+      artifact: {
+        ...proposedArtifact,
+        title: "Model-proposed budget title",
+        shortDescription: "Model-proposed summary",
+        enrichmentResults: {
+          ...proposedArtifact.enrichmentResults,
+          status: "applied",
+          appliedAt: "2026-08-11T12:01:00.000Z"
+        }
+      }
+    });
+
+    renderArtifactsPage();
+    await screen.findByRole("heading", { name: "Artifacts" });
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Propose metadata" })
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Review proposed metadata" })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Model-proposed budget title")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Current: Thesis budget workbook/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Nothing below changes the artifact until you choose/)
+    ).toBeInTheDocument();
+    expect(applyArtifactEnrichment).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply proposal" }));
+    await waitFor(() =>
+      expect(applyArtifactEnrichment).toHaveBeenCalledWith("artifact_123", {
+        proposalId: "artifact_enrichment_review_123"
+      })
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("heading", { name: "Review proposed metadata" })
+      ).not.toBeInTheDocument()
+    );
   });
 
   it("edits artifact description and provenance through a guided metadata flow", async () => {
@@ -1295,9 +1369,7 @@ describe("ArtifactsPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Artifact 123 scan failed."
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: /Second artifact/ })
-    );
+    fireEvent.click(screen.getByRole("button", { name: /Second artifact/ }));
 
     expect(
       await screen.findByText("A different artifact with its own scan state.")

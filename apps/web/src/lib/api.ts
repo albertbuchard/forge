@@ -44,6 +44,7 @@ import type {
   Artifact,
   ArtifactAuditEvent,
   ArtifactDangerLevel,
+  ArtifactEnrichmentApplyInput,
   ArtifactEnrichmentInput,
   ArtifactFormatFamily,
   ArtifactListResponse,
@@ -3113,6 +3114,19 @@ export function enrichArtifact(
 ) {
   return request<{ artifact: Artifact }>(
     `/api/v1/artifacts/${encodeURIComponent(artifactId)}/enrich`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function applyArtifactEnrichment(
+  artifactId: string,
+  input: ArtifactEnrichmentApplyInput
+) {
+  return request<{ artifact: Artifact }>(
+    `/api/v1/artifacts/${encodeURIComponent(artifactId)}/enrich/apply`,
     {
       method: "POST",
       body: JSON.stringify(input)
@@ -6340,36 +6354,29 @@ export function snoozeAttentionInboxItem(
   return request<{
     attentionState: AttentionInboxStateRecord;
     mutationReceipt: MutationReceipt;
-  }>(
-    `/api/v1/attention-inbox/${encodeURIComponent(itemId)}/snooze`,
-    {
-      method: "POST",
-      body: JSON.stringify(input)
-    }
-  );
+  }>(`/api/v1/attention-inbox/${encodeURIComponent(itemId)}/snooze`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
 }
 
 export function dismissAttentionInboxItem(itemId: string, note = "") {
   return request<{
     attentionState: AttentionInboxStateRecord;
     mutationReceipt: MutationReceipt;
-  }>(
-    `/api/v1/attention-inbox/${encodeURIComponent(itemId)}/dismiss`,
-    {
-      method: "POST",
-      body: JSON.stringify({ note })
-    }
-  );
+  }>(`/api/v1/attention-inbox/${encodeURIComponent(itemId)}/dismiss`, {
+    method: "POST",
+    body: JSON.stringify({ note })
+  });
 }
 
 export function restoreAttentionInboxItem(itemId: string) {
   return request<{
     attentionState: AttentionInboxStateRecord;
     mutationReceipt: MutationReceipt;
-  }>(
-    `/api/v1/attention-inbox/${encodeURIComponent(itemId)}/restore`,
-    { method: "POST" }
-  );
+  }>(`/api/v1/attention-inbox/${encodeURIComponent(itemId)}/restore`, {
+    method: "POST"
+  });
 }
 
 export function getEntityNavigation(
@@ -6616,14 +6623,13 @@ export function updateEntities(input: {
   atomic?: boolean;
 }) {
   return request<{
-    results: Array<Record<string, unknown> & { mutationReceipt?: MutationReceipt | null }>;
-  }>(
-    "/api/v1/entities/update",
-    {
-      method: "POST",
-      body: JSON.stringify(input)
-    }
-  );
+    results: Array<
+      Record<string, unknown> & { mutationReceipt?: MutationReceipt | null }
+    >;
+  }>("/api/v1/entities/update", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
 }
 
 export function deleteEntities(input: {
@@ -6637,14 +6643,13 @@ export function deleteEntities(input: {
   atomic?: boolean;
 }) {
   return request<{
-    results: Array<Record<string, unknown> & { mutationReceipt?: MutationReceipt | null }>;
-  }>(
-    "/api/v1/entities/delete",
-    {
-      method: "POST",
-      body: JSON.stringify(input)
-    }
-  );
+    results: Array<
+      Record<string, unknown> & { mutationReceipt?: MutationReceipt | null }
+    >;
+  }>("/api/v1/entities/delete", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
 }
 
 export function restoreEntities(input: {
@@ -7006,19 +7011,19 @@ export function patchTask(
   return request<{ task: unknown; mutationReceipt: MutationReceipt | null }>(
     `/api/v1/tasks/${taskId}`,
     {
-    method: "PATCH",
-    body: JSON.stringify({
-      ...patch,
-      goalId: patch.goalId === "" ? null : patch.goalId,
-      projectId: patch.projectId === "" ? null : patch.projectId,
-      parentWorkItemId:
-        patch.parentWorkItemId === "" ? null : patch.parentWorkItemId,
-      dueDate: patch.dueDate === "" ? null : patch.dueDate,
-      plannedDurationSeconds:
-        patch.plannedDurationSeconds === undefined
-          ? undefined
-          : patch.plannedDurationSeconds
-    })
+      method: "PATCH",
+      body: JSON.stringify({
+        ...patch,
+        goalId: patch.goalId === "" ? null : patch.goalId,
+        projectId: patch.projectId === "" ? null : patch.projectId,
+        parentWorkItemId:
+          patch.parentWorkItemId === "" ? null : patch.parentWorkItemId,
+        dueDate: patch.dueDate === "" ? null : patch.dueDate,
+        plannedDurationSeconds:
+          patch.plannedDurationSeconds === undefined
+            ? undefined
+            : patch.plannedDurationSeconds
+      })
     }
   );
 }
@@ -7077,7 +7082,7 @@ export function deleteTask(taskId: string) {
   return request<{ task: unknown; mutationReceipt: MutationReceipt }>(
     `/api/v1/tasks/${taskId}`,
     {
-    method: "DELETE"
+      method: "DELETE"
     }
   );
 }
@@ -7114,8 +7119,9 @@ function rememberImplicitWorkAdjustmentRetryKey(
     !implicitWorkAdjustmentRetryKeys.has(fingerprint) &&
     implicitWorkAdjustmentRetryKeys.size >= 50
   ) {
-    const oldestFingerprint =
-      implicitWorkAdjustmentRetryKeys.keys().next().value;
+    const oldestFingerprint = implicitWorkAdjustmentRetryKeys
+      .keys()
+      .next().value;
     if (oldestFingerprint) {
       implicitWorkAdjustmentRetryKeys.delete(oldestFingerprint);
     }

@@ -474,6 +474,8 @@ import {
   recordOfflineTaskMutationOutcome
 } from "./services/offline-mutations.js";
 import {
+  applyArtifactEnrichmentProposal,
+  artifactEnrichmentApplyRequestSchema,
   artifactEnrichmentRequestSchema,
   artifactEncryptRequestSchema,
   artifactHistoryQuerySchema,
@@ -3450,7 +3452,7 @@ function buildPreferredMutationPath(entityType: string) {
     case "calendar_connection":
       return "Use /api/v1/calendar/discovery or /api/v1/calendar/macos-local/discovery before setup when needed; use /api/v1/calendar/connections with POST, PATCH, DELETE, rediscovery, and sync for connection lifecycle work.";
     case "artifact":
-      return "Use GET /api/v1/artifacts with limit/offset for paged metadata listing, POST /api/v1/artifacts for trusted file upload, GET/PATCH /api/v1/artifacts/:id for metadata, POST /api/v1/artifacts/:id/links for generic entity links, POST /api/v1/artifacts/:id/scan for static rescans, POST /api/v1/artifacts/:id/enrich for optional LLM metadata enrichment, POST /api/v1/artifacts/:id/trust for trusted state changes, and GET /api/v1/artifacts/:id/versions plus /audit for history. Human-only download/password/encrypt routes exist in OpenAPI but are intentionally absent from agent route tools; do not call GET or POST /api/v1/artifacts/:id/download or POST /api/v1/artifacts/:id/encrypt from an agent. Agents can see contentProtection mode and password hints but must not receive, store, submit, or route passwords. Batch CRUD may search, patch metadata, soft-delete, restore, and hard-delete metadata only; it must not create file artifacts or download bytes.";
+      return "Use GET /api/v1/artifacts with limit/offset for paged metadata listing, POST /api/v1/artifacts for trusted file upload, GET/PATCH /api/v1/artifacts/:id for metadata, POST /api/v1/artifacts/:id/links for generic entity links, POST /api/v1/artifacts/:id/scan for static rescans, POST /api/v1/artifacts/:id/enrich to generate an optional LLM metadata proposal, POST /api/v1/artifacts/:id/trust for trusted state changes, and GET /api/v1/artifacts/:id/versions plus /audit for history. Enrichment proposals never change metadata until a human reviews and applies the exact current proposal through the operator-only route. Human-only download/password/encrypt and enrichment-apply routes exist in OpenAPI but are intentionally absent from agent route tools; do not call them from an agent. Agents can see contentProtection mode and password hints but must not receive, store, submit, or route passwords. Batch CRUD may search, patch metadata, soft-delete, restore, and hard-delete metadata only; it must not create file artifacts or download bytes.";
     case "task_run":
       return "Use the task-run action routes to start, heartbeat, focus, complete, or release live work. Complete may atomically store bounded completionReport, Git refs, and a generic linked closeout Note; release is handoff-note-only and never completes the task.";
     case "questionnaire_run":
@@ -8268,6 +8270,7 @@ function buildAgentOnboardingPayload(request: {
           humanEncryptOnly: "/api/v1/artifacts/:id/encrypt",
           rescan: "/api/v1/artifacts/:id/scan",
           enrichWithLlm: "/api/v1/artifacts/:id/enrich",
+          humanApplyEnrichmentOnly: "/api/v1/artifacts/:id/enrich/apply",
           replaceGenericLinks: "/api/v1/artifacts/:id/links",
           trustState: "/api/v1/artifacts/:id/trust",
           versions: "/api/v1/artifacts/:id/versions",
@@ -8327,7 +8330,8 @@ function buildAgentOnboardingPayload(request: {
             audit: { method: "GET", path: "/api/v1/artifacts/:id/audit" }
           },
           safetyRules: [
-            "Do not expose download, password download, decrypt, or existing-artifact encryption routes to agent tools. They are human operator routes only.",
+            "Do not expose download, password download, decrypt, existing-artifact encryption, or enrichment-apply routes to agent tools. They are human operator routes only.",
+            "LLM enrichment creates a bounded proposal only. Never represent a proposal as applied metadata; a human must review and apply the exact current proposal in the Artifact Store.",
             "Agents can see contentProtection mode and password hints, but must not receive, store, submit, or route artifact passwords.",
             "Do not execute, preview, parse externally, decrypt, or transform stored file bytes autonomously.",
             "Use general entity links for relationships; do not create artifact-specific link models.",
@@ -9334,6 +9338,7 @@ function buildAgentOnboardingPayload(request: {
       artifactDownloadHumanOnly: "/api/v1/artifacts/:id/download",
       artifactScan: "/api/v1/artifacts/:id/scan",
       artifactEnrich: "/api/v1/artifacts/:id/enrich",
+      artifactEnrichmentApplyHumanOnly: "/api/v1/artifacts/:id/enrich/apply",
       artifactEntityLinks: "/api/v1/artifacts/:id/links",
       artifactTrust: "/api/v1/artifacts/:id/trust",
       artifactVersions: "/api/v1/artifacts/:id/versions",
@@ -11796,10 +11801,9 @@ function buildOperatorOverview(request: {
             : hasObservedEvidence
               ? "high"
               : "unknown",
-        reason:
-          hasObservedEvidence
-            ? "The overview preserves source record identifiers and keeps permission-based omissions explicit."
-            : "Forge evaluated the authorized sources, but none has a persisted observation time."
+        reason: hasObservedEvidence
+          ? "The overview preserves source record identifiers and keeps permission-based omissions explicit."
+          : "Forge evaluated the authorized sources, but none has a persisted observation time."
       },
       sources: [
         {
@@ -13021,9 +13025,7 @@ export async function buildServer(
       const mutationReceipt = createMutationReceipt({
         actorKey: mutationReceiptActorKeyFor(auth),
         ownerUserId,
-        operation: reversible
-          ? "entity_soft_delete"
-          : "entity_hard_delete",
+        operation: reversible ? "entity_soft_delete" : "entity_hard_delete",
         targetType: "task",
         targetId: taskId,
         targetLabel: before.title,
@@ -14379,6 +14381,23 @@ export async function buildServer(
     }
     return { artifact: serializeArtifactPublicPayload(artifact) };
   });
+  app.post("/api/v1/artifacts/:id/enrich/apply", async (request, reply) => {
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/artifacts/:id/enrich/apply" }
+    );
+    const { id } = request.params as { id: string };
+    const artifact = applyArtifactEnrichmentProposal(
+      id,
+      artifactEnrichmentApplyRequestSchema.parse(request.body ?? {}),
+      auth
+    );
+    if (!artifact) {
+      reply.code(404);
+      return { error: "Artifact not found" };
+    }
+    return { artifact: serializeArtifactPublicPayload(artifact) };
+  });
   app.post("/api/v1/artifacts/:id/links", async (request, reply) => {
     const auth = requireArtifactMetadataWriteAccess(
       request.headers as Record<string, unknown>,
@@ -15230,7 +15249,9 @@ export async function buildServer(
     requireOperatorSession(request.headers as Record<string, unknown>, {
       route: "/api/v1/relationship-proposals"
     });
-    const query = relationshipProposalListQuerySchema.parse(request.query ?? {});
+    const query = relationshipProposalListQuerySchema.parse(
+      request.query ?? {}
+    );
     if (!getUserById(query.ownerUserId)) {
       throw new HttpError(
         404,
@@ -15245,7 +15266,9 @@ export async function buildServer(
       request.headers as Record<string, unknown>,
       { route: "/api/v1/relationship-proposals/generate" }
     );
-    const input = relationshipProposalOwnerInputSchema.parse(request.body ?? {});
+    const input = relationshipProposalOwnerInputSchema.parse(
+      request.body ?? {}
+    );
     if (!getUserById(input.ownerUserId)) {
       throw new HttpError(
         404,
@@ -15269,9 +15292,8 @@ export async function buildServer(
       ]
     });
   });
-  const decideRelationshipProposalRoute = (
-    action: "accept" | "reject"
-  ) =>
+  const decideRelationshipProposalRoute =
+    (action: "accept" | "reject") =>
     async (request: FastifyRequest, reply: FastifyReply) => {
       const auth = requireOperatorSession(
         request.headers as Record<string, unknown>,
@@ -21466,230 +21488,234 @@ export async function buildServer(
       { route: "/api/v1/mutation-receipts" }
     );
     const rawQuery = (request.query ?? {}) as Record<string, unknown>;
-    const limit = z.coerce.number().int().min(1).max(50).default(20).parse(
-      rawQuery.limit
-    );
+    const limit = z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .default(20)
+      .parse(rawQuery.limit);
     return listMutationReceipts({
       actorKey: mutationReceiptActorKeyFor(auth),
       ownerUserIds: resolveEffectiveUserIdsForReads(rawQuery, auth),
       limit
     });
   });
-  app.post(
-    "/api/v1/mutation-receipts/:id/undo",
-    async (request, reply) => {
-      const auth = requireScopedAccess(
-        request.headers as Record<string, unknown>,
-        ["write"],
-        { route: "/api/v1/mutation-receipts/:id/undo" }
+  app.post("/api/v1/mutation-receipts/:id/undo", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/mutation-receipts/:id/undo" }
+    );
+    const { id } = request.params as { id: string };
+    const actorKey = mutationReceiptActorKeyFor(auth);
+    const idempotencyKey = parseIdempotencyKey(
+      request.headers as Record<string, unknown>
+    );
+    if (!idempotencyKey) {
+      throw new HttpError(
+        400,
+        "mutation_receipt_idempotency_required",
+        "Undo requires an Idempotency-Key header."
       );
-      const { id } = request.params as { id: string };
-      const actorKey = mutationReceiptActorKeyFor(auth);
-      const idempotencyKey = parseIdempotencyKey(
-        request.headers as Record<string, unknown>
-      );
-      if (!idempotencyKey) {
-        throw new HttpError(
-          400,
-          "mutation_receipt_idempotency_required",
-          "Undo requires an Idempotency-Key header."
-        );
-      }
-      const started = beginMutationReceiptUndo({
-        actorKey,
-        receiptId: id,
-        idempotencyKey,
-        allowedOwnerUserIds: mutationReceiptAllowedOwnerIdsFor(auth)
-      });
-      if (started.replayed) {
-        reply.header("Idempotency-Replayed", "true");
-        return {
-          receipt: started.record.view,
-          replayed: true,
-          result: started.record.undoResult ?? {}
-        };
-      }
-
-      try {
-        return runInTransaction(() => {
-          const currentAttempt = beginMutationReceiptUndo({
-            actorKey,
-            receiptId: id,
-            idempotencyKey,
-            allowedOwnerUserIds: mutationReceiptAllowedOwnerIdsFor(auth)
-          });
-          const inverse = currentAttempt.record.inverse;
-          const expected = currentAttempt.record.expected;
-          if (!inverse || !expected) {
-            throw new HttpError(
-              409,
-              "mutation_receipt_not_reversible",
-              currentAttempt.record.view.explanation
-            );
-          }
-
-          let result: Record<string, unknown>;
-          if (
-            inverse.kind === "entity_update" &&
-            expected.kind === "entity_fields"
-          ) {
-            const entityType = crudEntityTypeSchema.parse(inverse.entityType);
-            const current = getEntityById(entityType, inverse.entityId);
-            if (!current || !mutationReceiptValuesMatch(current, expected.fields)) {
-              throw new HttpError(
-                409,
-                "mutation_receipt_target_changed",
-                "This record changed after the receipt was created. Forge left the newer data unchanged."
-              );
-            }
-            const undone = updateEntities(
-              {
-                atomic: true,
-                operations: [
-                  {
-                    entityType,
-                    id: inverse.entityId,
-                    patch: inverse.patch
-                  }
-                ]
-              },
-              toActivityContext(auth)
-            ).results[0];
-            if (!undone?.ok) {
-              throw new HttpError(
-                409,
-                "mutation_receipt_target_changed",
-                undone?.error?.message ??
-                  "This record can no longer be safely restored."
-              );
-            }
-            result = { entity: undone.entity };
-          } else if (
-            inverse.kind === "entity_restore" &&
-            expected.kind === "entity_deleted"
-          ) {
-            const entityType = crudEntityTypeSchema.parse(inverse.entityType);
-            if (
-              getEntityById(entityType, inverse.entityId) ||
-              !getDeletedEntityRecord(entityType, inverse.entityId)
-            ) {
-              throw new HttpError(
-                409,
-                "mutation_receipt_target_changed",
-                "This record is no longer in the Bin. Forge left the current data unchanged."
-              );
-            }
-            const undone = restoreEntities(
-              {
-                atomic: true,
-                operations: [{ entityType, id: inverse.entityId }]
-              },
-              toActivityContext(auth)
-            ).results[0];
-            if (!undone?.ok) {
-              throw new HttpError(
-                409,
-                "mutation_receipt_target_changed",
-                undone?.error?.message ??
-                  "This record can no longer be safely restored."
-              );
-            }
-            result = { entity: undone.entity };
-          } else if (
-            inverse.kind === "task_update" &&
-            expected.kind === "task_fields"
-          ) {
-            const current = getTaskForAuth(inverse.taskId, auth);
-            if (
-              !current ||
-              !mutationReceiptValuesMatch(
-                current as unknown as Record<string, unknown>,
-                expected.fields
-              )
-            ) {
-              throw new HttpError(
-                409,
-                "mutation_receipt_target_changed",
-                "This task changed after the receipt was created. Forge left the newer task unchanged."
-              );
-            }
-            const task = updateTask(
-              inverse.taskId,
-              inverse.patch as never,
-              toActivityContext(auth)
-            );
-            if (!task) {
-              throw new HttpError(
-                409,
-                "mutation_receipt_target_changed",
-                "This task can no longer be safely restored."
-              );
-            }
-            assertTaskResultScope(task, auth);
-            result = { task };
-          } else if (
-            inverse.kind === "attention_state" &&
-            expected.kind === "attention_state"
-          ) {
-            const item = getAttentionInboxItem(inverse.itemId, {
-              actorKey,
-              ...attentionScopeFor(auth)
-            });
-            if (
-              !item ||
-              item.state !== expected.state ||
-              item.snoozedUntil !== expected.snoozedUntil ||
-              item.sourceUpdatedAt !== expected.sourceUpdatedAt
-            ) {
-              throw new HttpError(
-                409,
-                "mutation_receipt_target_changed",
-                "This Attention item changed after the receipt was created. Forge left the newer state unchanged."
-              );
-            }
-            result = {
-              attentionState: transitionAttentionInboxState({
-                actorKey,
-                item,
-                state: inverse.state,
-                snoozedUntil: inverse.snoozedUntil,
-                note: inverse.note
-              })
-            };
-          } else {
-            throw new HttpError(
-              409,
-              "mutation_receipt_contract_conflict",
-              "This change receipt no longer matches its Undo operation."
-            );
-          }
-
-          const completed = completeMutationReceiptUndo({
-            actorKey,
-            receiptId: id,
-            idempotencyKey,
-            result
-          });
-          return { receipt: completed.view, replayed: false, result };
-        });
-      } catch (error) {
-        if (
-          error instanceof HttpError &&
-          error.code === "mutation_receipt_target_changed"
-        ) {
-          const receipt = markMutationReceiptConflict({
-            actorKey,
-            receiptId: id,
-            explanation: error.message
-          });
-          throw new HttpError(error.statusCode, error.code, error.message, {
-            receipt
-          });
-        }
-        throw error;
-      }
     }
-  );
+    const started = beginMutationReceiptUndo({
+      actorKey,
+      receiptId: id,
+      idempotencyKey,
+      allowedOwnerUserIds: mutationReceiptAllowedOwnerIdsFor(auth)
+    });
+    if (started.replayed) {
+      reply.header("Idempotency-Replayed", "true");
+      return {
+        receipt: started.record.view,
+        replayed: true,
+        result: started.record.undoResult ?? {}
+      };
+    }
+
+    try {
+      return runInTransaction(() => {
+        const currentAttempt = beginMutationReceiptUndo({
+          actorKey,
+          receiptId: id,
+          idempotencyKey,
+          allowedOwnerUserIds: mutationReceiptAllowedOwnerIdsFor(auth)
+        });
+        const inverse = currentAttempt.record.inverse;
+        const expected = currentAttempt.record.expected;
+        if (!inverse || !expected) {
+          throw new HttpError(
+            409,
+            "mutation_receipt_not_reversible",
+            currentAttempt.record.view.explanation
+          );
+        }
+
+        let result: Record<string, unknown>;
+        if (
+          inverse.kind === "entity_update" &&
+          expected.kind === "entity_fields"
+        ) {
+          const entityType = crudEntityTypeSchema.parse(inverse.entityType);
+          const current = getEntityById(entityType, inverse.entityId);
+          if (
+            !current ||
+            !mutationReceiptValuesMatch(current, expected.fields)
+          ) {
+            throw new HttpError(
+              409,
+              "mutation_receipt_target_changed",
+              "This record changed after the receipt was created. Forge left the newer data unchanged."
+            );
+          }
+          const undone = updateEntities(
+            {
+              atomic: true,
+              operations: [
+                {
+                  entityType,
+                  id: inverse.entityId,
+                  patch: inverse.patch
+                }
+              ]
+            },
+            toActivityContext(auth)
+          ).results[0];
+          if (!undone?.ok) {
+            throw new HttpError(
+              409,
+              "mutation_receipt_target_changed",
+              undone?.error?.message ??
+                "This record can no longer be safely restored."
+            );
+          }
+          result = { entity: undone.entity };
+        } else if (
+          inverse.kind === "entity_restore" &&
+          expected.kind === "entity_deleted"
+        ) {
+          const entityType = crudEntityTypeSchema.parse(inverse.entityType);
+          if (
+            getEntityById(entityType, inverse.entityId) ||
+            !getDeletedEntityRecord(entityType, inverse.entityId)
+          ) {
+            throw new HttpError(
+              409,
+              "mutation_receipt_target_changed",
+              "This record is no longer in the Bin. Forge left the current data unchanged."
+            );
+          }
+          const undone = restoreEntities(
+            {
+              atomic: true,
+              operations: [{ entityType, id: inverse.entityId }]
+            },
+            toActivityContext(auth)
+          ).results[0];
+          if (!undone?.ok) {
+            throw new HttpError(
+              409,
+              "mutation_receipt_target_changed",
+              undone?.error?.message ??
+                "This record can no longer be safely restored."
+            );
+          }
+          result = { entity: undone.entity };
+        } else if (
+          inverse.kind === "task_update" &&
+          expected.kind === "task_fields"
+        ) {
+          const current = getTaskForAuth(inverse.taskId, auth);
+          if (
+            !current ||
+            !mutationReceiptValuesMatch(
+              current as unknown as Record<string, unknown>,
+              expected.fields
+            )
+          ) {
+            throw new HttpError(
+              409,
+              "mutation_receipt_target_changed",
+              "This task changed after the receipt was created. Forge left the newer task unchanged."
+            );
+          }
+          const task = updateTask(
+            inverse.taskId,
+            inverse.patch as never,
+            toActivityContext(auth)
+          );
+          if (!task) {
+            throw new HttpError(
+              409,
+              "mutation_receipt_target_changed",
+              "This task can no longer be safely restored."
+            );
+          }
+          assertTaskResultScope(task, auth);
+          result = { task };
+        } else if (
+          inverse.kind === "attention_state" &&
+          expected.kind === "attention_state"
+        ) {
+          const item = getAttentionInboxItem(inverse.itemId, {
+            actorKey,
+            ...attentionScopeFor(auth)
+          });
+          if (
+            !item ||
+            item.state !== expected.state ||
+            item.snoozedUntil !== expected.snoozedUntil ||
+            item.sourceUpdatedAt !== expected.sourceUpdatedAt
+          ) {
+            throw new HttpError(
+              409,
+              "mutation_receipt_target_changed",
+              "This Attention item changed after the receipt was created. Forge left the newer state unchanged."
+            );
+          }
+          result = {
+            attentionState: transitionAttentionInboxState({
+              actorKey,
+              item,
+              state: inverse.state,
+              snoozedUntil: inverse.snoozedUntil,
+              note: inverse.note
+            })
+          };
+        } else {
+          throw new HttpError(
+            409,
+            "mutation_receipt_contract_conflict",
+            "This change receipt no longer matches its Undo operation."
+          );
+        }
+
+        const completed = completeMutationReceiptUndo({
+          actorKey,
+          receiptId: id,
+          idempotencyKey,
+          result
+        });
+        return { receipt: completed.view, replayed: false, result };
+      });
+    } catch (error) {
+      if (
+        error instanceof HttpError &&
+        error.code === "mutation_receipt_target_changed"
+      ) {
+        const receipt = markMutationReceiptConflict({
+          actorKey,
+          receiptId: id,
+          explanation: error.message
+        });
+        throw new HttpError(error.statusCode, error.code, error.message, {
+          receipt
+        });
+      }
+      throw error;
+    }
+  });
   app.get("/api/v1/attention-inbox", async (request) => {
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
@@ -21860,12 +21886,13 @@ export async function buildServer(
       });
       const mutationReceipt = createMutationReceipt({
         actorKey,
-        ownerUserId: item.target.entityType && item.target.entityId
-          ? mutationReceiptOwnerFor(
-              item.target.entityType,
-              item.target.entityId
-            )
-          : null,
+        ownerUserId:
+          item.target.entityType && item.target.entityId
+            ? mutationReceiptOwnerFor(
+                item.target.entityType,
+                item.target.entityId
+              )
+            : null,
         operation: "attention_state",
         targetType: "attention_item",
         targetId: item.id,
@@ -21925,12 +21952,13 @@ export async function buildServer(
       });
       const mutationReceipt = createMutationReceipt({
         actorKey,
-        ownerUserId: item.target.entityType && item.target.entityId
-          ? mutationReceiptOwnerFor(
-              item.target.entityType,
-              item.target.entityId
-            )
-          : null,
+        ownerUserId:
+          item.target.entityType && item.target.entityId
+            ? mutationReceiptOwnerFor(
+                item.target.entityType,
+                item.target.entityId
+              )
+            : null,
         operation: "attention_state",
         targetType: "attention_item",
         targetId: item.id,
@@ -21988,12 +22016,13 @@ export async function buildServer(
       });
       const mutationReceipt = createMutationReceipt({
         actorKey,
-        ownerUserId: item.target.entityType && item.target.entityId
-          ? mutationReceiptOwnerFor(
-              item.target.entityType,
-              item.target.entityId
-            )
-          : null,
+        ownerUserId:
+          item.target.entityType && item.target.entityId
+            ? mutationReceiptOwnerFor(
+                item.target.entityType,
+                item.target.entityId
+              )
+            : null,
         operation: "attention_state",
         targetType: "attention_item",
         targetId: item.id,
@@ -25093,54 +25122,103 @@ export async function buildServer(
     }
     return { task: result.task };
   });
-  app.post(
-    "/api/v1/offline-mutations/task-status",
-    async (request, reply) => {
-      const authentication = request.forgeSecurity?.authentication;
-      if (
-        authentication?.mode !== "browser_session" ||
-        authentication.principal.kind !== "operator_session" ||
-        authentication.principal.profile !== "operator" ||
-        !authentication.browserSession
-      ) {
-        throw new HttpError(
-          403,
-          "offline_mutation_operator_session_required",
-          "Offline mutation replay requires an authenticated operator browser session."
-        );
-      }
-      const auth = requireOperatorSession(
-        request.headers as Record<string, unknown>,
-        { route: "/api/v1/offline-mutations/task-status" }
+  app.post("/api/v1/offline-mutations/task-status", async (request, reply) => {
+    const authentication = request.forgeSecurity?.authentication;
+    if (
+      authentication?.mode !== "browser_session" ||
+      authentication.principal.kind !== "operator_session" ||
+      authentication.principal.profile !== "operator" ||
+      !authentication.browserSession
+    ) {
+      throw new HttpError(
+        403,
+        "offline_mutation_operator_session_required",
+        "Offline mutation replay requires an authenticated operator browser session."
       );
-      const input = offlineTaskMutationInputSchema.parse(request.body ?? {});
-      const sessionId = authentication.browserSession.id;
-      if (input.sessionId !== sessionId) {
-        throw new HttpError(
-          409,
-          "offline_mutation_session_mismatch",
-          "This offline mutation belongs to a different operator session."
-        );
+    }
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/offline-mutations/task-status" }
+    );
+    const input = offlineTaskMutationInputSchema.parse(request.body ?? {});
+    const sessionId = authentication.browserSession.id;
+    if (input.sessionId !== sessionId) {
+      throw new HttpError(
+        409,
+        "offline_mutation_session_mismatch",
+        "This offline mutation belongs to a different operator session."
+      );
+    }
+
+    const requestFingerprint = fingerprintOfflineTaskMutation(input);
+    const response = runInTransaction(() => {
+      const replayedReceipt = readOfflineTaskMutationOutcome({
+        sessionId,
+        idempotencyKey: input.idempotencyKey,
+        requestFingerprint
+      });
+      if (replayedReceipt) {
+        return offlineTaskMutationResponseSchema.parse({
+          receipt: replayedReceipt,
+          replayed: true
+        });
       }
 
-      const requestFingerprint = fingerprintOfflineTaskMutation(input);
-      const response = runInTransaction(() => {
-        const replayedReceipt = readOfflineTaskMutationOutcome({
-          sessionId,
+      const receivedAt = new Date().toISOString();
+      const current = getTaskForAuth(input.taskId, auth);
+      let receipt: OfflineTaskMutationReceipt;
+      if (!current) {
+        receipt = {
+          version: 1,
           idempotencyKey: input.idempotencyKey,
-          requestFingerprint
-        });
-        if (replayedReceipt) {
-          return offlineTaskMutationResponseSchema.parse({
-            receipt: replayedReceipt,
-            replayed: true
-          });
-        }
-
-        const receivedAt = new Date().toISOString();
-        const current = getTaskForAuth(input.taskId, auth);
-        let receipt: OfflineTaskMutationReceipt;
-        if (!current) {
+          action: "task_status",
+          status: "rejected",
+          summary:
+            "Forge could not apply this offline edit because the task is unavailable.",
+          task: null,
+          current: null,
+          mutationReceipt: null,
+          receivedAt
+        };
+      } else if (current.status === "done") {
+        receipt = {
+          version: 1,
+          idempotencyKey: input.idempotencyKey,
+          action: "task_status",
+          status: "rejected",
+          summary:
+            "Forge did not reopen this completed task because reopening requires a live connection.",
+          task: null,
+          current: {
+            status: current.status,
+            updatedAt: current.updatedAt
+          },
+          mutationReceipt: null,
+          receivedAt
+        };
+      } else if (current.updatedAt !== input.expectedUpdatedAt) {
+        receipt = {
+          version: 1,
+          idempotencyKey: input.idempotencyKey,
+          action: "task_status",
+          status: "conflicted",
+          summary:
+            "Forge left the task unchanged because it changed after this offline edit was queued.",
+          task: null,
+          current: {
+            status: current.status,
+            updatedAt: current.updatedAt
+          },
+          mutationReceipt: null,
+          receivedAt
+        };
+      } else {
+        const updated = updateTaskWithMutationReceipt(
+          input.taskId,
+          { status: input.status },
+          auth
+        );
+        if (!updated) {
           receipt = {
             version: 1,
             idempotencyKey: input.idempotencyKey,
@@ -25153,103 +25231,48 @@ export async function buildServer(
             mutationReceipt: null,
             receivedAt
           };
-        } else if (current.status === "done") {
-          receipt = {
-            version: 1,
-            idempotencyKey: input.idempotencyKey,
-            action: "task_status",
-            status: "rejected",
-            summary:
-              "Forge did not reopen this completed task because reopening requires a live connection.",
-            task: null,
-            current: {
-              status: current.status,
-              updatedAt: current.updatedAt
-            },
-            mutationReceipt: null,
-            receivedAt
-          };
-        } else if (current.updatedAt !== input.expectedUpdatedAt) {
-          receipt = {
-            version: 1,
-            idempotencyKey: input.idempotencyKey,
-            action: "task_status",
-            status: "conflicted",
-            summary:
-              "Forge left the task unchanged because it changed after this offline edit was queued.",
-            task: null,
-            current: {
-              status: current.status,
-              updatedAt: current.updatedAt
-            },
-            mutationReceipt: null,
-            receivedAt
-          };
         } else {
-          const updated = updateTaskWithMutationReceipt(
-            input.taskId,
-            { status: input.status },
-            auth
-          );
-          if (!updated) {
-            receipt = {
-              version: 1,
-              idempotencyKey: input.idempotencyKey,
-              action: "task_status",
-              status: "rejected",
-              summary:
-                "Forge could not apply this offline edit because the task is unavailable.",
-              task: null,
-              current: null,
-              mutationReceipt: null,
-              receivedAt
-            };
-          } else {
-            const task = {
-              id: updated.task.id,
-              title: updated.task.title,
-              status: updated.task.status,
-              updatedAt: updated.task.updatedAt
-            };
-            receipt = {
-              version: 1,
-              idempotencyKey: input.idempotencyKey,
-              action: "task_status",
-              status: "accepted",
-              summary:
-                current.status === updated.task.status
-                  ? `Forge confirmed ${updated.task.title} is ${updated.task.status.replaceAll("_", " ")}.`
-                  : `Forge moved ${updated.task.title} from ${current.status.replaceAll("_", " ")} to ${updated.task.status.replaceAll("_", " ")}.`,
-              task,
-              current: {
-                status: task.status,
-                updatedAt: task.updatedAt
-              },
-              mutationReceipt: updated.mutationReceipt,
-              receivedAt
-            };
-          }
+          const task = {
+            id: updated.task.id,
+            title: updated.task.title,
+            status: updated.task.status,
+            updatedAt: updated.task.updatedAt
+          };
+          receipt = {
+            version: 1,
+            idempotencyKey: input.idempotencyKey,
+            action: "task_status",
+            status: "accepted",
+            summary:
+              current.status === updated.task.status
+                ? `Forge confirmed ${updated.task.title} is ${updated.task.status.replaceAll("_", " ")}.`
+                : `Forge moved ${updated.task.title} from ${current.status.replaceAll("_", " ")} to ${updated.task.status.replaceAll("_", " ")}.`,
+            task,
+            current: {
+              status: task.status,
+              updatedAt: task.updatedAt
+            },
+            mutationReceipt: updated.mutationReceipt,
+            receivedAt
+          };
         }
+      }
 
-        const parsedReceipt = offlineTaskMutationResponseSchema.parse({
-          receipt,
-          replayed: false
-        }).receipt;
-        recordOfflineTaskMutationOutcome({
-          sessionId,
-          idempotencyKey: input.idempotencyKey,
-          requestFingerprint,
-          receipt: parsedReceipt
-        });
-        return { receipt: parsedReceipt, replayed: false };
+      const parsedReceipt = offlineTaskMutationResponseSchema.parse({
+        receipt,
+        replayed: false
+      }).receipt;
+      recordOfflineTaskMutationOutcome({
+        sessionId,
+        idempotencyKey: input.idempotencyKey,
+        requestFingerprint,
+        receipt: parsedReceipt
       });
-      reply.header(
-        "Idempotency-Replayed",
-        response.replayed ? "true" : "false"
-      );
-      return response;
-    }
-  );
+      return { receipt: parsedReceipt, replayed: false };
+    });
+    reply.header("Idempotency-Replayed", response.replayed ? "true" : "false");
+    return response;
+  });
   app.post("/api/v1/work-items", async (request, reply) => {
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
@@ -25999,9 +26022,7 @@ export async function buildServer(
         const mutationReceipt = createMutationReceipt({
           actorKey: mutationReceiptActorKeyFor(auth),
           ownerUserId: previous.ownerUserId,
-          operation: isHardDelete
-            ? "entity_hard_delete"
-            : "entity_soft_delete",
+          operation: isHardDelete ? "entity_hard_delete" : "entity_soft_delete",
           targetType: operation.entityType,
           targetId: operation.id,
           targetLabel: label,

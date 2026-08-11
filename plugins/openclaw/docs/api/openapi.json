@@ -32214,6 +32214,7 @@
       },
       "ArtifactEnrichmentInput": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "llmProfileId": {
             "type": "string"
@@ -32225,6 +32226,21 @@
           "explicitApiKey": {
             "type": "string",
             "description": "Optional transient key for the selected LLM provider. It is not persisted by Forge."
+          }
+        }
+      },
+      "ArtifactEnrichmentApplyInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "proposalId"
+        ],
+        "properties": {
+          "proposalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Exact current proposal identifier returned by the enrichment request after human review."
           }
         }
       },
@@ -49172,8 +49188,8 @@
         }
       ],
       "post": {
-        "summary": "Use a configured LLM to fill missing artifact metadata",
-        "description": "LLM enrichment receives safe metadata, scan findings, and a transient in-memory static text sample when plaintext storage permits rescanning. The underlying byte buffer is zeroed after use, and the sample is never persisted or returned. Enrichment may propose title, short description, description, tags, and a danger score, but Forge never lowers the deterministic scanner danger score.",
+        "summary": "Generate an LLM artifact-metadata proposal",
+        "description": "LLM enrichment receives safe metadata, scan findings, and a transient in-memory static text sample when plaintext storage permits rescanning. Artifact content is treated as untrusted data, the underlying byte buffer is zeroed after use, and long verbatim text spans are rejected from persisted output. The bounded proposal may contain title, short description, description, keywords, link suggestions, and danger interpretation, but this route does not apply any proposed metadata. A human operator must review and apply the exact current proposal through the separate apply route, and Forge never lowers the deterministic scanner danger score.",
         "requestBody": {
           "required": false,
           "content": {
@@ -49186,7 +49202,7 @@
         },
         "responses": {
           "200": {
-            "description": "Enriched artifact",
+            "description": "Artifact with a reviewable enrichment proposal",
             "content": {
               "application/json": {
                 "schema": {
@@ -49211,6 +49227,59 @@
           "Artifacts"
         ],
         "operationId": "postartifacts_id_enrich"
+      }
+    },
+    "/api/v1/artifacts/{id}/enrich/apply": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "summary": "Apply an exact current enrichment proposal after review",
+        "description": "Human operator only. Applies the exact current proposal atomically after review. If metadata, stored content identity, protection or trust state, safety evidence, deletion state, or the current proposal changed after generation, Forge returns a stable conflict and applies nothing. Agent tokens cannot call this route.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactEnrichmentApplyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Artifact with the reviewed enrichment proposal applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "artifact"
+                  ],
+                  "properties": {
+                    "artifact": {
+                      "$ref": "#/components/schemas/Artifact"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Artifacts"
+        ],
+        "operationId": "postartifacts_id_enrich_apply"
       }
     },
     "/api/v1/artifacts/{id}/links": {
