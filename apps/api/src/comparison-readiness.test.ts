@@ -514,7 +514,9 @@ test("PREF-08 comparison API is permission-first, complete, explicit about gaps,
     );
     const preferenceLane = lanes[0];
     assert.equal(preferenceLane.unit, "score");
-    assert.match(preferenceLane.limitation, /top 12/i);
+    const preferenceLimitation = preferenceLane.limitation;
+    assert.ok(preferenceLimitation);
+    assert.match(preferenceLimitation, /top 12/i);
     assert.ok(
       preferenceLane.points.some((point) => point.missingReason === "not_stored")
     );
@@ -530,7 +532,9 @@ test("PREF-08 comparison API is permission-first, complete, explicit about gaps,
     assert.equal(psycheLane.points[0].missingReason, "not_recorded");
     assert.equal(psycheLane.points[1].value, 42);
     assert.equal(psycheLane.sourceHref, "/psyche");
-    assert.match(lanes[3].limitation, /does not reconstruct/i);
+    const currentOnlyLimitation = lanes[3].limitation;
+    assert.ok(currentOnlyLimitation);
+    assert.match(currentOnlyLimitation, /does not reconstruct/i);
     assert.equal(
       lanes[3].sourceHref,
       `/knowledge-graph?focus=${encodeURIComponent(`insight:${insight.id}`)}`
