@@ -591,7 +591,8 @@ function courseProgress(courseId: string, userId: string) {
   const courseRow = requireCourseRow(courseId);
   const coursePackage = coursePackageForUser(courseRow, userId);
   const selected = selectedAttempts(coursePackage, courseRow.id, userId);
-  const completed = completedLessonIdSet(coursePackage, selected).size;
+  const completedLessonIds = completedLessonIdSet(coursePackage, selected);
+  const completed = completedLessonIds.size;
   const total = coursePackage.lessons.length;
   const selectedScores = [...selected.values()].map((entry) => entry.score);
   const averageScore = selectedScores.length
@@ -606,6 +607,23 @@ function courseProgress(courseId: string, userId: string) {
     .get(courseId, userId) as
     | { current_lesson_id: string | null; points_earned: number }
     | undefined;
+  const storedLessonId = enrollment?.current_lesson_id ?? null;
+  const storedLessonExists = coursePackage.lessons.some(
+    (lesson) => lesson.id === storedLessonId
+  );
+  const courseIsComplete = total > 0 && completed === total;
+  const firstIncompleteLessonId = coursePackage.lessons.find(
+    (lesson) => !completedLessonIds.has(lesson.id)
+  )?.id;
+  const currentLessonId = !enrollment
+    ? null
+    : storedLessonId &&
+        storedLessonExists &&
+        (!completedLessonIds.has(storedLessonId) || courseIsComplete)
+      ? storedLessonId
+      : (firstIncompleteLessonId ??
+        coursePackage.lessons.at(-1)?.id ??
+        coursePackage.course.entryLessonId);
   return {
     completedLessons: completed,
     totalLessons: total,
@@ -616,7 +634,7 @@ function courseProgress(courseId: string, userId: string) {
         ? null
         : scoreToLetterGrade(averageScore, coursePackage.grading.gradeScale),
     pointsEarned: enrollment?.points_earned ?? 0,
-    currentLessonId: enrollment?.current_lesson_id ?? null
+    currentLessonId
   };
 }
 
@@ -2089,6 +2107,7 @@ export function createCourseAttempt(input: {
           updated_at, course_version
         ) VALUES (?, ?, ?, 0, ?, ?, ?)
         ON CONFLICT(course_id, user_id) DO UPDATE SET
+          current_lesson_id = excluded.current_lesson_id,
           updated_at = excluded.updated_at`
       )
       .run(

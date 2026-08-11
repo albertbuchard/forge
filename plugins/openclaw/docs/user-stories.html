@@ -2490,7 +2490,7 @@
                     <p class="story-expanded-outcome">As a learner, I can browse installed courses, inspect a syllabus and progress, and continue the correct lesson without reconstructing internal ids.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>courses-index</code>, <code>course-detail</code>, <code>course-learn</code>.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>package-backed catalog, exact detail, progress, and learner-safe sessions are implemented; complete empty, multi-user, and resume-state checks.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>package-backed catalog, exact detail, progress, and learner-safe sessions are implemented. New work advances only that learner&#039;s saved lesson, exact retries cannot rewind it, and a removed or completed stale pointer falls back to the first incomplete lesson. Focused empty-catalog, multi-user, exact-retry, and stale-resume checks pass; complete the retained desktop and phone evidence before promotion.</dd></div>
                     </dl>
                   </div>
                 </details>
