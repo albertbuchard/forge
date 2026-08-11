@@ -2030,10 +2030,14 @@ export function PreferencesPage() {
                   </Button>
                   {selectedItemHref ? (
                     <Link
-                      className="text-sm text-[var(--primary)]"
+                      className="inline-flex min-h-11 items-center rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm font-medium text-[var(--primary)] transition hover:bg-[var(--ui-surface-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
                       to={selectedItemHref}
                     >
-                      Open linked entity
+                      Open source{" "}
+                      {selectedScore.item?.sourceEntityType?.replaceAll(
+                        "_",
+                        " "
+                      )}
                     </Link>
                   ) : null}
                 </>

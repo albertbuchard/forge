@@ -5,6 +5,7 @@ import {
   getPreferenceContextScope,
   getPreferenceEffectiveSignal,
   getPreferenceSignalConflicts,
+  getSourceEntityHref,
   isPreferenceHistoryPartial,
   SIGNAL_MODEL_EFFECTS,
   SIGNAL_OPTIONS
@@ -169,5 +170,20 @@ describe("preferences workspace signal model", () => {
     ).toContain(
       "9 prior comparison losses conflict with this positive signal."
     );
+  });
+
+  it("routes linked preference sources through the canonical entity map", () => {
+    expect(getSourceEntityHref("goal", "goal 1")).toBe("/goals/goal 1");
+    expect(getSourceEntityHref("habit", "habit 1")).toBe(
+      "/habits?focus=habit%201"
+    );
+    expect(getSourceEntityHref("artifact", "artifact/1")).toBe(
+      "/artifacts/artifact%2F1"
+    );
+    expect(getSourceEntityHref("psyche_value", "value 1")).toBe(
+      "/psyche/values?focus=value%201#values-atlas"
+    );
+    expect(getSourceEntityHref("preference_item", "item_1")).toBeNull();
+    expect(getSourceEntityHref(null, "item_1")).toBeNull();
   });
 });

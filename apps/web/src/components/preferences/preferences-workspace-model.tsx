@@ -25,6 +25,7 @@ import type {
   PreferenceWorkspacePayload,
   UserSummary
 } from "@/lib/types";
+import { getKnowledgeGraphEntityHref } from "@/lib/knowledge-graph-types";
 import { buildOwnedEntitySearchText } from "@/lib/user-ownership";
 import { cn } from "@/lib/utils";
 
@@ -445,19 +446,7 @@ export function getSourceEntityHref(
   if (!entityType || !entityId) {
     return null;
   }
-  if (entityType === "goal") {
-    return `/goals/${entityId}`;
-  }
-  if (entityType === "project") {
-    return `/projects/${entityId}`;
-  }
-  if (entityType === "task") {
-    return `/tasks/${entityId}`;
-  }
-  if (entityType === "strategy") {
-    return `/strategies/${entityId}`;
-  }
-  return null;
+  return getKnowledgeGraphEntityHref(entityType, entityId);
 }
 
 export function getScoreStatus(score: PreferenceItemScore) {
