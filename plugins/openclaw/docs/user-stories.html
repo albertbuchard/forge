@@ -1602,7 +1602,7 @@
                     <p class="story-expanded-outcome">As a user, I can maintain reusable catalog concepts and concrete preference items without confusing the two.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>preference_catalog_item</code>, <code>preference_item</code>.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>linked concepts now have one atomic identity with deterministic duplicate repair and evidence remapping, while direct same-label records remain distinct and receive a non-blocking warning. Finish membership and deletion-effect matrices.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>linked concepts have one atomic identity with deterministic duplicate repair and evidence remapping, while direct same-label records remain distinct and receive a non-blocking warning. Deleting a concrete scored item now removes its judgments, signals, ownership, links, and projections and recomputes every affected context inside one transaction; a failed recomputation preserves the complete prior state. Complete catalog-membership transitions and retained live desktop and phone verification.</dd></div>
                     </dl>
                   </div>
                 </details>
