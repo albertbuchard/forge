@@ -46,8 +46,8 @@
           <a class="story-metric metric-all" href="./user-stories.html" data-metric-scope="all"><strong>203</strong><span>All stories</span></a>
           <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>193</strong><span>Current product</span></a>
           <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>10</strong><span>Planned</span></a>
-          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>20</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>155</strong><span>In review</span></a>
+          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>21</strong><span>Verified</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>154</strong><span>In review</span></a>
           <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>18</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
@@ -2174,17 +2174,17 @@
                   </div>
                 </details>
 
-                <details class="story-card" id="story-nutr-03" data-story-id="NUTR-03" data-lifecycle="current" data-readiness="In review" data-family="NUTR">
+                <details class="story-card" id="story-nutr-03" data-story-id="NUTR-03" data-lifecycle="current" data-readiness="Verified" data-family="NUTR">
                   <summary class="story-summary">
                     <span class="story-id">NUTR-03</span>
                     <span class="story-summary-outcome">As a user, I can track weight, body composition, appearance, energy, cravings, gut comfort, and sport fueling without collapsing them into one score.</span>
-                    <span class="story-state state-in-review">In review</span>
+                    <span class="story-state state-verified">Verified</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a user, I can track weight, body composition, appearance, energy, cravings, gut comfort, and sport fueling without collapsing them into one score.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Weight Loss subviews and dedicated check-ins.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>body, appearance, subjective, gut, food-quality, training-fuel, and data-quality signals remain distinct, enforce one selected owner, reject cross-owner food links, and retry idempotently. Finish missing-metric and sensitive-copy matrices.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>body, appearance, subjective, gut, food-quality, training-fuel, and data-quality signals remain distinct, enforce one selected owner, reject cross-owner food links, and retry idempotently. The guided check-in now keeps body, subjective, gut, and appearance context in separate records; context without a matching signal is rejected instead of silently discarded. Summary cards expose per-metric values and coverage, note-only rows cannot satisfy evidence requirements, and absent metrics remain <code>n/a</code> rather than zero.</dd></div>
                     </dl>
                   </div>
                 </details>

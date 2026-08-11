@@ -16,7 +16,10 @@ export type WeightLossCheckinDraft = {
   bloating: string;
   facePuffiness: string;
   leanness: string;
-  notes: string;
+  bodyNotes: string;
+  subjectiveNotes: string;
+  gutNotes: string;
+  appearanceNotes: string;
 };
 
 export function buildInitialCheckinDraft(): WeightLossCheckinDraft {
@@ -30,7 +33,10 @@ export function buildInitialCheckinDraft(): WeightLossCheckinDraft {
     bloating: "",
     facePuffiness: "",
     leanness: "",
-    notes: ""
+    bodyNotes: "",
+    subjectiveNotes: "",
+    gutNotes: "",
+    appearanceNotes: ""
   };
 }
 
@@ -83,15 +89,26 @@ export function WeightLossCheckinDialog({
               }
             />
           </FlowField>
+          <div className="md:col-span-3">
+            <FlowField label="Body measurement context">
+              <Textarea
+                value={draft.bodyNotes}
+                onChange={(event) =>
+                  setDraft({ bodyNotes: event.target.value })
+                }
+                placeholder="Measurement conditions, hydration, clothing..."
+              />
+            </FlowField>
+          </div>
         </div>
       )
     },
     {
       id: "state",
       eyebrow: "State",
-      title: "Energy, appetite, and gut",
+      title: "Energy and appetite",
       description:
-        "These subjective signals are what make the view more useful than a calorie ledger.",
+        "Keep subjective state separate from gut and appearance observations.",
       render: (draft, setDraft) => (
         <div className="grid gap-4 md:grid-cols-3">
           <FlowField label="Energy 0-10">
@@ -115,6 +132,28 @@ export function WeightLossCheckinDialog({
               onChange={(event) => setDraft({ cravings: event.target.value })}
             />
           </FlowField>
+          <div className="md:col-span-3">
+            <FlowField label="Energy and appetite context">
+              <Textarea
+                value={draft.subjectiveNotes}
+                onChange={(event) =>
+                  setDraft({ subjectiveNotes: event.target.value })
+                }
+                placeholder="Meal timing, sleep, stress, training context..."
+              />
+            </FlowField>
+          </div>
+        </div>
+      )
+    },
+    {
+      id: "gut",
+      eyebrow: "Gut",
+      title: "Gut comfort",
+      description:
+        "Gut symptoms and their context stay in the gut record only.",
+      render: (draft, setDraft) => (
+        <div className="grid gap-4">
           <FlowField label="Bloating 0-10">
             <Input
               inputMode="decimal"
@@ -122,6 +161,24 @@ export function WeightLossCheckinDialog({
               onChange={(event) => setDraft({ bloating: event.target.value })}
             />
           </FlowField>
+          <FlowField label="Gut context">
+            <Textarea
+              value={draft.gutNotes}
+              onChange={(event) => setDraft({ gutNotes: event.target.value })}
+              placeholder="Trigger food, timing, stool or reflux context..."
+            />
+          </FlowField>
+        </div>
+      )
+    },
+    {
+      id: "appearance",
+      eyebrow: "Appearance",
+      title: "Appearance signals",
+      description:
+        "Appearance observations and their context stay in the appearance record only.",
+      render: (draft, setDraft) => (
+        <div className="grid gap-4 md:grid-cols-2">
           <FlowField label="Face puffiness 0-10">
             <Input
               inputMode="decimal"
@@ -138,22 +195,18 @@ export function WeightLossCheckinDialog({
               onChange={(event) => setDraft({ leanness: event.target.value })}
             />
           </FlowField>
+          <div className="md:col-span-2">
+            <FlowField label="Appearance context">
+              <Textarea
+                value={draft.appearanceNotes}
+                onChange={(event) =>
+                  setDraft({ appearanceNotes: event.target.value })
+                }
+                placeholder="Lighting, posture, sodium, soreness, clothing..."
+              />
+            </FlowField>
+          </div>
         </div>
-      )
-    },
-    {
-      id: "notes",
-      eyebrow: "Context",
-      title: "Notes",
-      description: "Capture anything that explains the signal.",
-      render: (draft, setDraft) => (
-        <FlowField label="Notes">
-          <Textarea
-            value={draft.notes}
-            onChange={(event) => setDraft({ notes: event.target.value })}
-            placeholder="Sleep, sodium, workout soreness, stressful day..."
-          />
-        </FlowField>
       )
     }
   ];
@@ -191,23 +244,23 @@ export function buildCheckinPayloads(draft: WeightLossCheckinDraft) {
       weightKg: numberOrNull(draft.weightKg),
       waistCm: numberOrNull(draft.waistCm),
       bodyFatPercent: numberOrNull(draft.bodyFatPercent),
-      notes: draft.notes
+      notes: draft.bodyNotes
     },
     subjective: {
       energy: numberOrNull(draft.energy),
       hunger: numberOrNull(draft.hunger),
       cravings: numberOrNull(draft.cravings),
       timeRelation: "unspecified",
-      notes: draft.notes
+      notes: draft.subjectiveNotes
     },
     gut: {
       bloating: numberOrNull(draft.bloating),
-      notes: draft.notes
+      notes: draft.gutNotes
     },
     appearance: {
       facePuffiness: numberOrNull(draft.facePuffiness),
       leanness: numberOrNull(draft.leanness),
-      notes: draft.notes
+      notes: draft.appearanceNotes
     }
   };
 }
@@ -232,6 +285,37 @@ export function validateCheckinDraft(draft: WeightLossCheckinDraft) {
   const populated = definitions.filter(({ key }) => draft[key].trim());
   if (populated.length === 0) {
     return "Add at least one measurement or signal before saving.";
+  }
+  const domainContextRequirements = [
+    {
+      notes: draft.bodyNotes,
+      values: [draft.weightKg, draft.waistCm, draft.bodyFatPercent],
+      message: "Add a body measurement before saving body context."
+    },
+    {
+      notes: draft.subjectiveNotes,
+      values: [draft.energy, draft.hunger, draft.cravings],
+      message:
+        "Add an energy or appetite rating before saving subjective context."
+    },
+    {
+      notes: draft.gutNotes,
+      values: [draft.bloating],
+      message: "Add a gut rating before saving gut context."
+    },
+    {
+      notes: draft.appearanceNotes,
+      values: [draft.facePuffiness, draft.leanness],
+      message: "Add an appearance rating before saving appearance context."
+    }
+  ];
+  for (const requirement of domainContextRequirements) {
+    if (
+      requirement.notes.trim() &&
+      !requirement.values.some((value) => value.trim())
+    ) {
+      return requirement.message;
+    }
   }
   for (const { key, label, min, max } of populated) {
     const value = Number(draft[key]);

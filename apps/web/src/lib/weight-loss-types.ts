@@ -248,6 +248,47 @@ export type NutritionExperiment = {
   updatedAt: string;
 };
 
+export type NutritionSubjectiveSummary = {
+  checkinCount: number;
+  averageEnergy: number | null;
+  averageFocus: number | null;
+  averageHunger: number | null;
+  averageCravings: number | null;
+  averageMood: number | null;
+  averageStress: number | null;
+  averageSleepiness: number | null;
+  averageCrash: number | null;
+  metricCoverage: {
+    energy: number;
+    focus: number;
+    hunger: number;
+    cravings: number;
+    mood: number;
+    stress: number;
+    sleepiness: number;
+    crash: number;
+  };
+  recent: Array<Record<string, unknown>>;
+};
+
+export type NutritionGutSummary = {
+  checkinCount: number;
+  averageBloating: number | null;
+  averageReflux: number | null;
+  averageAbdominalPain: number | null;
+  gutComfortScore: number | null;
+  metricCoverage: {
+    bloating: number;
+    reflux: number;
+    abdominalPain: number;
+    gas: number;
+    nausea: number;
+    stoolType: number;
+  };
+  bristolDistribution: Array<{ type: number; count: number }>;
+  recent: Array<Record<string, unknown>>;
+};
+
 export type WeightLossViewData = {
   userId: string;
   generatedAt: string;
@@ -384,8 +425,8 @@ export type WeightLossViewData = {
   };
   foodQuality: Record<string, unknown>;
   trainingFuel: Record<string, unknown>;
-  subjective: Record<string, unknown>;
-  gut: Record<string, unknown>;
+  subjective: NutritionSubjectiveSummary;
+  gut: NutritionGutSummary;
   hypotheses: Array<Record<string, unknown>>;
   experiments: NutritionExperiment[];
   dataQuality: {

@@ -2867,12 +2867,27 @@ function buildFoodQuality(logs: ReturnType<typeof listFoodLogs>) {
 function buildSubjectiveSummary(
   checkins: ReturnType<typeof listSubjectiveCheckins>
 ) {
+  const metricCoverage = {
+    energy: checkins.filter((entry) => entry.energy != null).length,
+    focus: checkins.filter((entry) => entry.focus != null).length,
+    hunger: checkins.filter((entry) => entry.hunger != null).length,
+    cravings: checkins.filter((entry) => entry.cravings != null).length,
+    mood: checkins.filter((entry) => entry.mood != null).length,
+    stress: checkins.filter((entry) => entry.stress != null).length,
+    sleepiness: checkins.filter((entry) => entry.sleepiness != null).length,
+    crash: checkins.filter((entry) => entry.crashScore != null).length
+  };
   return {
     checkinCount: checkins.length,
     averageEnergy: average(checkins.map((entry) => entry.energy)),
     averageFocus: average(checkins.map((entry) => entry.focus)),
+    averageHunger: average(checkins.map((entry) => entry.hunger)),
     averageCravings: average(checkins.map((entry) => entry.cravings)),
+    averageMood: average(checkins.map((entry) => entry.mood)),
+    averageStress: average(checkins.map((entry) => entry.stress)),
+    averageSleepiness: average(checkins.map((entry) => entry.sleepiness)),
     averageCrash: average(checkins.map((entry) => entry.crashScore)),
+    metricCoverage,
     recent: checkins.slice(0, 8)
   };
 }
@@ -2888,6 +2903,15 @@ function buildGutSummary(checkins: ReturnType<typeof listGutCheckins>) {
     averageReflux,
     averageAbdominalPain
   ]);
+  const metricCoverage = {
+    bloating: checkins.filter((entry) => entry.bloating != null).length,
+    reflux: checkins.filter((entry) => entry.reflux != null).length,
+    abdominalPain: checkins.filter((entry) => entry.abdominalPain != null)
+      .length,
+    gas: checkins.filter((entry) => entry.gas != null).length,
+    nausea: checkins.filter((entry) => entry.nausea != null).length,
+    stoolType: checkins.filter((entry) => entry.bristolStoolType != null).length
+  };
   return {
     checkinCount: checkins.length,
     averageBloating,
@@ -2897,6 +2921,7 @@ function buildGutSummary(checkins: ReturnType<typeof listGutCheckins>) {
       discomfortAverage == null
         ? null
         : round(Math.max(0, 10 - discomfortAverage), 1),
+    metricCoverage,
     bristolDistribution: [1, 2, 3, 4, 5, 6, 7].map((type) => ({
       type,
       count: checkins.filter((entry) => entry.bristolStoolType === type).length
@@ -3076,6 +3101,34 @@ export function getWeightLossViewData(
     energyModel.todayTargetAdjustmentKcal,
     energyModel.todayActiveCaloriesSource
   );
+  const bodyMeasurementCount = body.filter((entry) =>
+    [entry.weightKg, entry.waistCm, entry.bodyFatPercent].some(
+      (value) => value != null
+    )
+  ).length;
+  const subjectiveEnergyCount = subjective.filter(
+    (entry) => entry.energy != null
+  ).length;
+  const gutMetricCount = gut.filter((entry) =>
+    [
+      entry.bloating,
+      entry.reflux,
+      entry.abdominalPain,
+      entry.gas,
+      entry.nausea,
+      entry.bristolStoolType
+    ].some((value) => value != null)
+  ).length;
+  const appearanceMetricCount = appearance.filter((entry) =>
+    [
+      entry.facePuffiness,
+      entry.leanness,
+      entry.muscularity,
+      entry.posture,
+      entry.bloatingLook,
+      entry.confidenceScore
+    ].some((value) => value != null)
+  ).length;
 
   return {
     generatedAt,
@@ -3100,9 +3153,9 @@ export function getWeightLossViewData(
         Math.min(
           1,
           trackedDays / 7 +
-            Math.min(0.2, body.length * 0.04) +
-            Math.min(0.2, subjective.length * 0.02) +
-            Math.min(0.2, gut.length * 0.02)
+            Math.min(0.2, bodyMeasurementCount * 0.04) +
+            Math.min(0.2, subjectiveEnergyCount * 0.02) +
+            Math.min(0.2, gutMetricCount * 0.02)
         ),
         2
       )
@@ -3143,9 +3196,10 @@ export function getWeightLossViewData(
             : "confirmed",
       missingHighValueCheckins: [
         logs.length === 0 ? "food log" : null,
-        body.length === 0 ? "body measurement" : null,
-        subjective.length < 3 ? "post-meal energy" : null,
-        gut.length < 3 ? "gut symptom" : null
+        bodyMeasurementCount === 0 ? "body measurement" : null,
+        subjectiveEnergyCount < 3 ? "energy rating" : null,
+        gutMetricCount < 3 ? "gut symptom" : null,
+        appearanceMetricCount < 1 ? "appearance signal" : null
       ].filter((value): value is string => Boolean(value)),
       notes:
         "AI, photo, and barcode estimates stay provisional until confirmed by the user."

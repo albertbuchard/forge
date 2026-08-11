@@ -116,12 +116,16 @@ function keepFailedCheckinDomains(
     weightKg: keep.has("body") ? draft.weightKg : "",
     waistCm: keep.has("body") ? draft.waistCm : "",
     bodyFatPercent: keep.has("body") ? draft.bodyFatPercent : "",
+    bodyNotes: keep.has("body") ? draft.bodyNotes : "",
     energy: keep.has("subjective") ? draft.energy : "",
     hunger: keep.has("subjective") ? draft.hunger : "",
     cravings: keep.has("subjective") ? draft.cravings : "",
+    subjectiveNotes: keep.has("subjective") ? draft.subjectiveNotes : "",
     bloating: keep.has("gut") ? draft.bloating : "",
+    gutNotes: keep.has("gut") ? draft.gutNotes : "",
     facePuffiness: keep.has("appearance") ? draft.facePuffiness : "",
-    leanness: keep.has("appearance") ? draft.leanness : ""
+    leanness: keep.has("appearance") ? draft.leanness : "",
+    appearanceNotes: keep.has("appearance") ? draft.appearanceNotes : ""
   };
 }
 
@@ -1296,18 +1300,18 @@ export function WeightLossPage() {
         />
         <WeightLossInsightMetric
           label="Subjective"
-          value={scoreLabel(subjective.averageFocus)}
-          detail="Focus, energy, hunger, cravings, and performance are tracked as food-effect evidence."
+          value={`${subjective.checkinCount} check-in${subjective.checkinCount === 1 ? "" : "s"}`}
+          detail={`Energy ${scoreLabel(subjective.averageEnergy)} (${subjective.metricCoverage.energy}); focus ${scoreLabel(subjective.averageFocus)} (${subjective.metricCoverage.focus}); hunger ${scoreLabel(subjective.averageHunger)} (${subjective.metricCoverage.hunger}); cravings ${scoreLabel(subjective.averageCravings)} (${subjective.metricCoverage.cravings}). Missing metrics stay n/a.`}
           icon={Activity}
-          help="Subjective signals are self-rated energy, focus, hunger, cravings, and performance. Forge uses them to discover food and timing effects."
+          help="Subjective signals remain separate self-ratings. Parentheses show how many check-ins supplied each metric; absent metrics remain n/a and never become zero."
         />
         <WeightLossInsightMetric
           label="Gut"
-          value={scoreLabel(gut.averageBloating)}
-          detail="Bloating, reflux, stool type, and suspected triggers connect food choices to comfort and look."
+          value={`${gut.checkinCount} check-in${gut.checkinCount === 1 ? "" : "s"}`}
+          detail={`Bloating ${scoreLabel(gut.averageBloating)} (${gut.metricCoverage.bloating}); reflux ${scoreLabel(gut.averageReflux)} (${gut.metricCoverage.reflux}); abdominal pain ${scoreLabel(gut.averageAbdominalPain)} (${gut.metricCoverage.abdominalPain}). Missing metrics stay n/a.`}
           icon={Waves}
           tone="rose"
-          help="Gut signals include bloating, reflux, stool type, and suspected triggers. They help connect foods to comfort, water retention, and appearance hypotheses."
+          help="Gut symptoms remain separate. Parentheses show how many check-ins supplied each metric; absent symptoms remain n/a and never become zero."
         />
       </section>
 
