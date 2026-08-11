@@ -147,6 +147,11 @@ type DailyEnergyOverrideRow = {
 };
 
 const ACTIVE_BASELINE_WINDOW_DAYS = 7;
+// A majority of the prior week is required before measured activity replaces a
+// baseline the user deliberately saved in the plan. This is a data-completeness
+// rule, not a physiological threshold; missing sync days are never treated as
+// zero-calorie days.
+const ACTIVE_BASELINE_MIN_EVIDENCE_DAYS = 4;
 
 type AppearanceCheckinRow = {
   id: string;
@@ -972,8 +977,66 @@ function buildStoredEnergyModel(input: {
     workoutEnergyAverage != null || movementCaloriesAverage != null
       ? n(workoutEnergyAverage) + n(movementCaloriesAverage)
       : null;
-  const activeBurnKcal =
-    activeEnergyAverage ?? fallbackActiveBurn ?? input.defaultActiveCalories;
+  const fallbackBaselineEvidenceDates = [
+    ...workoutBaselineEntries.map(([dateKey]) => dateKey),
+    ...movementBaselineEntries.map(([dateKey]) => dateKey)
+  ];
+  const fallbackBaselineEvidenceDays = new Set(fallbackBaselineEvidenceDates)
+    .size;
+  const healthKitBaselineIsQualified =
+    activeBaselineHealthKitDays.length >= ACTIVE_BASELINE_MIN_EVIDENCE_DAYS;
+  const fallbackBaselineIsQualified =
+    fallbackBaselineEvidenceDays >= ACTIVE_BASELINE_MIN_EVIDENCE_DAYS;
+  const activeBaselineSource =
+    activeEnergyAverage != null &&
+    (healthKitBaselineIsQualified || !fallbackBaselineIsQualified)
+      ? "healthkit_daily_active_energy"
+      : fallbackActiveBurn != null
+        ? "workout_movement_fallback"
+        : null;
+  const activeBaselineSelectedEvidenceDates =
+    activeBaselineSource === "healthkit_daily_active_energy"
+      ? activeBaselineHealthKitDays.map((day) => day.dateKey)
+      : activeBaselineSource === "workout_movement_fallback"
+        ? fallbackBaselineEvidenceDates
+        : [];
+  const activeBaselineSelectedEvidenceDays = new Set(
+    activeBaselineSelectedEvidenceDates
+  ).size;
+  const activeBaselineReliability =
+    activeBaselineSelectedEvidenceDays === 0
+      ? "none"
+      : activeBaselineSelectedEvidenceDays < ACTIVE_BASELINE_MIN_EVIDENCE_DAYS
+        ? "sparse"
+        : activeBaselineSelectedEvidenceDays < ACTIVE_BASELINE_WINDOW_DAYS
+          ? "partial"
+          : "complete";
+  const measuredActiveBurnKcal =
+    activeBaselineSource === "healthkit_daily_active_energy"
+      ? activeEnergyAverage
+      : activeBaselineSource === "workout_movement_fallback"
+        ? fallbackActiveBurn
+        : null;
+  const shouldRetainConfiguredBaseline =
+    input.defaultActiveCalories != null &&
+    measuredActiveBurnKcal != null &&
+    activeBaselineSelectedEvidenceDays < ACTIVE_BASELINE_MIN_EVIDENCE_DAYS;
+  const activeBurnKcal = shouldRetainConfiguredBaseline
+    ? input.defaultActiveCalories
+    : (measuredActiveBurnKcal ?? input.defaultActiveCalories);
+  const activeBaselineDecision = (() => {
+    if (shouldRetainConfiguredBaseline) {
+      return "configured_default_sparse_evidence";
+    }
+    if (measuredActiveBurnKcal != null) {
+      return activeBaselineReliability === "sparse"
+        ? "sparse_measured_only"
+        : "measured_baseline";
+    }
+    return input.defaultActiveCalories != null
+      ? "configured_default_no_measured_evidence"
+      : "no_baseline";
+  })();
   const baselineActiveCalories = activeBurnKcal ?? 0;
   const todayHealthKitActive =
     dailyHealthKit.find((day) => day.dateKey === todayKey)?.activeEnergyKcal ??
@@ -1080,12 +1143,11 @@ function buildStoredEnergyModel(input: {
     wearableRestingKcal != null ||
     workoutEnergyAverage != null;
   const hasMovementEnergy = movementCaloriesAverage != null;
-  const sourceConfidence =
-    activeEnergyAverage != null
-      ? "healthkit_daily_active_energy"
-      : fallbackActiveBurn != null
-        ? "workout_movement_fallback"
-        : "target_inference_only";
+  // Keep this compatibility field as the applied source category. Reliability
+  // and sparse-evidence decisions are exposed separately below.
+  const sourceConfidence = shouldRetainConfiguredBaseline
+    ? "target_inference_only"
+    : (activeBaselineSource ?? "target_inference_only");
 
   return {
     activeEnergyCalories:
@@ -1114,12 +1176,28 @@ function buildStoredEnergyModel(input: {
     estimatedTdeeKcal,
     activeBurnKcal: activeBurnKcal != null ? round(activeBurnKcal, 0) : null,
     activeBaselineWindowDays: ACTIVE_BASELINE_WINDOW_DAYS,
+    activeBaselineMinimumEvidenceDays: ACTIVE_BASELINE_MIN_EVIDENCE_DAYS,
     activeBaselineEvidenceDays: new Set([
       ...activeBaselineHealthKitDays.map((day) => day.dateKey),
       ...workoutBaselineEntries.map(([dateKey]) => dateKey),
       ...movementBaselineEntries.map(([dateKey]) => dateKey)
     ]).size,
+    activeBaselineSelectedEvidenceDays,
+    activeBaselineCoverage: round(
+      activeBaselineSelectedEvidenceDays / ACTIVE_BASELINE_WINDOW_DAYS,
+      2
+    ),
+    activeBaselineReliability,
+    activeBaselineDecision,
+    activeBaselineSource,
+    activeBaselineObservedCaloriesKcal:
+      measuredActiveBurnKcal != null ? round(measuredActiveBurnKcal, 0) : null,
     baselineActiveCaloriesKcal: round(baselineActiveCalories, 0),
+    canonicalUnits: {
+      energy: "kcal",
+      bodyMass: "kg",
+      macronutrients: "g"
+    },
     todayActiveCaloriesKcal: round(todayActiveCalories, 0),
     todayObservedActiveCaloriesKcal:
       todayObservedActiveCalories != null

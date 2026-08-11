@@ -206,10 +206,21 @@ export function isWeightLossPlanConfigured(view: WeightLossViewData) {
 
 function activeBurnEvidenceHint(view: WeightLossViewData) {
   const energy = view.energyModel;
-  const baseline =
-    energy.activeBaselineEvidenceDays > 0
-      ? `Forge is averaging ${energy.activeBaselineEvidenceDays} measured prior day${energy.activeBaselineEvidenceDays === 1 ? "" : "s"} inside the past ${energy.activeBaselineWindowDays} days, excluding today and ignoring missing sync days instead of counting them as zero.`
-      : `Forge has no measured prior-day active evidence in the past ${energy.activeBaselineWindowDays} days, so it is falling back to the saved plan estimate.`;
+  const baseline = (() => {
+    const selectedDays = energy.activeBaselineSelectedEvidenceDays;
+    if (
+      energy.activeBaselineDecision === "configured_default_sparse_evidence"
+    ) {
+      return `Forge observed ${formatNumber(energy.activeBaselineObservedCaloriesKcal)} kcal/day across ${selectedDays} selected-source day${selectedDays === 1 ? "" : "s"}, but keeps the saved plan estimate until ${energy.activeBaselineMinimumEvidenceDays} days are available.`;
+    }
+    if (energy.activeBaselineDecision === "measured_baseline") {
+      return `Forge is averaging ${selectedDays} selected-source prior day${selectedDays === 1 ? "" : "s"} inside the past ${energy.activeBaselineWindowDays} days. Missing sync days are ignored instead of counted as zero.`;
+    }
+    if (energy.activeBaselineDecision === "sparse_measured_only") {
+      return `Forge has no saved plan estimate, so it uses the sparse ${formatNumber(energy.activeBaselineObservedCaloriesKcal)} kcal/day observation across ${selectedDays} selected-source day${selectedDays === 1 ? "" : "s"} with low confidence.`;
+    }
+    return `Forge has no measured prior-day active evidence in the past ${energy.activeBaselineWindowDays} days, so it is falling back to the saved plan estimate.`;
+  })();
   const source =
     energy.energySourceConfidence === "healthkit_daily_active_energy"
       ? "HealthKit daily active energy is the active-burn source; workout and movement values are only visible evidence and are not added again."

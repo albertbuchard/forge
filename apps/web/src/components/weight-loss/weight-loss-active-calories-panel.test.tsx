@@ -47,8 +47,20 @@ function buildView(): WeightLossViewData {
       restingExclusionReasons: [],
       wearableConfidence: "measured_directional",
       activeBaselineWindowDays: 7,
+      activeBaselineMinimumEvidenceDays: 4,
       activeBaselineEvidenceDays: 7,
+      activeBaselineSelectedEvidenceDays: 7,
+      activeBaselineCoverage: 1,
+      activeBaselineReliability: "complete",
+      activeBaselineDecision: "measured_baseline",
+      activeBaselineSource: "healthkit_daily_active_energy",
+      activeBaselineObservedCaloriesKcal: 600,
       baselineActiveCaloriesKcal: 600,
+      canonicalUnits: {
+        energy: "kcal",
+        bodyMass: "kg",
+        macronutrients: "g"
+      },
       todayHealthKitActiveCaloriesKcal: null,
       todayWorkoutEnergyKcal: null,
       todayMovementCaloriesKcal: null,
@@ -105,5 +117,43 @@ describe("WeightLossActiveCaloriesMiniCard", () => {
     });
 
     expect(onDraftChange).toHaveBeenCalledWith("0");
+  });
+});
+
+describe("WeightLossActiveCaloriesPanel", () => {
+  it("shows why sparse measured activity does not replace the saved baseline", async () => {
+    const view = buildView();
+    view.energyModel.activeBaselineSelectedEvidenceDays = 1;
+    view.energyModel.activeBaselineCoverage = 0.14;
+    view.energyModel.activeBaselineReliability = "sparse";
+    view.energyModel.activeBaselineDecision =
+      "configured_default_sparse_evidence";
+    view.energyModel.activeBaselineObservedCaloriesKcal = 900;
+    view.energyModel.baselineActiveCaloriesKcal = 300;
+
+    const { WeightLossActiveCaloriesPanel } =
+      await import("./weight-loss-active-calories-panel");
+    render(
+      <WeightLossActiveCaloriesPanel
+        view={view}
+        draftValue="300"
+        baselineDraftValue="300"
+        pending={false}
+        baselinePending={false}
+        error={null}
+        baselineError={null}
+        onDraftChange={vi.fn()}
+        onBaselineDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onSaveBaseline={vi.fn()}
+        onReset={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByText(/1\/7 selected-source days · sparse/i)
+    ).toHaveTextContent(
+      "measured 900 kcal average remains visible, but Forge retains the saved baseline until 4 days are available"
+    );
   });
 });

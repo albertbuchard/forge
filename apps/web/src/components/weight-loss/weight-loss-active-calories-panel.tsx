@@ -63,7 +63,7 @@ function sourceDescription(
     case "today_step_estimate":
       return "Forge found enough same-day steps to beat the baseline active allowance, so it estimates step calories from latest known body weight and uses that today.";
     default:
-      return `No meaningful same-day active evidence is available yet, so Forge is using the ${energy.activeBaselineWindowDays}-day measured baseline from the plan. Missing sync days are ignored rather than averaged as zero.`;
+      return `No meaningful same-day active evidence is available yet, so Forge is using the active baseline described below. ${baselineEvidenceDetail(energy)}`;
   }
 }
 
@@ -113,6 +113,25 @@ function activeEvidenceSummary(energy: WeightLossViewData["energyModel"]) {
   return evidence.length > 0
     ? evidence.join(" · ")
     : "No same-day HealthKit active energy, workout calories, movement calories, or steps synced yet.";
+}
+
+function baselineEvidenceDetail(energy: WeightLossViewData["energyModel"]) {
+  const coverage = `${energy.activeBaselineSelectedEvidenceDays}/${energy.activeBaselineWindowDays} selected-source days`;
+  if (energy.activeBaselineDecision === "configured_default_sparse_evidence") {
+    return `${coverage} · sparse. The measured ${energy.activeBaselineObservedCaloriesKcal?.toFixed(0) ?? "n/a"} kcal average remains visible, but Forge retains the saved baseline until ${energy.activeBaselineMinimumEvidenceDays} days are available.`;
+  }
+  if (energy.activeBaselineDecision === "sparse_measured_only") {
+    return `${coverage} · sparse. No saved baseline exists, so Forge uses the measured average with low confidence.`;
+  }
+  if (energy.activeBaselineDecision === "measured_baseline") {
+    return `${coverage} · ${energy.activeBaselineReliability}. Missing days are ignored, never counted as zero.`;
+  }
+  if (
+    energy.activeBaselineDecision === "configured_default_no_measured_evidence"
+  ) {
+    return `${coverage}. No measured prior-day activity is available, so Forge uses the saved baseline.`;
+  }
+  return `${coverage}. No saved or measured activity baseline is available.`;
 }
 
 function formatSignedKcal(value: number) {
@@ -324,7 +343,7 @@ export function WeightLossActiveCaloriesPanel({
                 Edit active baseline
                 <InfoTooltip
                   label="Explain active baseline"
-                  content={`This is the baseline active-calorie value saved in the plan. Forge refreshes it from measured active-energy days in the prior ${energy.activeBaselineWindowDays} days when evidence is available, excluding today and ignoring days with no measurement. Changing it recalculates the plan target, macros, and maintenance calories; it does not change today's workout or movement evidence.`}
+                  content={`This is the baseline active-calorie value saved in the plan. Forge refreshes it from measured active-energy days in the prior ${energy.activeBaselineWindowDays} days only after ${energy.activeBaselineMinimumEvidenceDays} selected-source days are available. Sparse observations remain visible but do not replace a saved baseline. Missing sync days are ignored rather than counted as zero. Changing the saved value recalculates the plan target, macros, and maintenance calories; it does not change today's workout or movement evidence.`}
                 />
               </div>
               <label className="grid gap-2">
@@ -469,7 +488,7 @@ export function WeightLossActiveCaloriesPanel({
         <EvidenceTile
           label="Past-week baseline"
           value={`${energy.baselineActiveCaloriesKcal.toFixed(0)} kcal`}
-          detail={`${energy.activeBaselineEvidenceDays}/${energy.activeBaselineWindowDays} measured prior days; missing days ignored.`}
+          detail={baselineEvidenceDetail(energy)}
           active={sourceIsDefault}
         />
         <EvidenceTile

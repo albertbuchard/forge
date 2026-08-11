@@ -310,8 +310,28 @@ export type WeightLossViewData = {
     estimatedTdeeKcal: number | null;
     activeBurnKcal: number | null;
     activeBaselineWindowDays: number;
+    activeBaselineMinimumEvidenceDays: number;
     activeBaselineEvidenceDays: number;
+    activeBaselineSelectedEvidenceDays: number;
+    activeBaselineCoverage: number;
+    activeBaselineReliability: "none" | "sparse" | "partial" | "complete";
+    activeBaselineDecision:
+      | "configured_default_sparse_evidence"
+      | "configured_default_no_measured_evidence"
+      | "sparse_measured_only"
+      | "measured_baseline"
+      | "no_baseline";
+    activeBaselineSource:
+      | "healthkit_daily_active_energy"
+      | "workout_movement_fallback"
+      | null;
+    activeBaselineObservedCaloriesKcal: number | null;
     baselineActiveCaloriesKcal: number;
+    canonicalUnits: {
+      energy: "kcal";
+      bodyMass: "kg";
+      macronutrients: "g";
+    };
     todayActiveCaloriesKcal: number;
     todayObservedActiveCaloriesKcal: number | null;
     todayActiveCaloriesSource: string;
