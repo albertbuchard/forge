@@ -23,7 +23,6 @@ import {
 import { getPsycheMetricsViewData } from "./devrage.js";
 
 const CATALOG_DEFAULT_LIMIT = 40;
-const CATALOG_MAX_LIMIT = 100;
 const CATALOG_MAX_OFFSET = 10_000;
 const COMPARISON_MAX_POINTS = 3_000;
 const MILLISECONDS_PER_DAY = 86_400_000;

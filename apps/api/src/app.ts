@@ -463,13 +463,10 @@ import {
   beginMutationReceiptUndo,
   completeMutationReceiptUndo,
   createMutationReceipt,
-  getMutationReceiptRecord,
   listMutationReceipts,
   markMutationReceiptConflict,
   mutationReceiptValuesMatch,
-  type MutationReceipt,
-  type MutationReceiptExpected,
-  type MutationReceiptInverse
+  type MutationReceipt
 } from "./services/mutation-receipts.js";
 import {
   fingerprintOfflineTaskMutation,

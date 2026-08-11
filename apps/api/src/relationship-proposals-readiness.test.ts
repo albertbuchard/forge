@@ -22,7 +22,6 @@ import { createUser, getDefaultUser } from "./repositories/users.js";
 import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 import { resolveRouteSecurityContract } from "./security/route-contract.js";
 import {
-  RELATIONSHIP_PROPOSAL_CONFIDENCE_THRESHOLD,
   RELATIONSHIP_PROPOSAL_GENERATOR_ID,
   RELATIONSHIP_PROPOSAL_GENERATOR_VERSION,
   RELATIONSHIP_PROPOSAL_MAX_COMPARISONS,

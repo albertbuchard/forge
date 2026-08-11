@@ -33,9 +33,10 @@ export function MutationReceiptBanner({
   const [pending, setPending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [expired, setExpired] = useState(false);
+  const receiptId = receipt?.id ?? null;
   const undoKey = useMemo(
-    () => (receipt ? createMutationReceiptUndoKey() : null),
-    [receipt?.id]
+    () => (receiptId ? createMutationReceiptUndoKey() : null),
+    [receiptId]
   );
 
   useEffect(() => {

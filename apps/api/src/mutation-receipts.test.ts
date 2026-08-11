@@ -77,7 +77,6 @@ test("task moves have expiring idempotent receipts and reject stale inverses", a
   await withTestServer(async (app, cookie) => {
     const taskId = "task_flagship_review";
     setEntityOwner("task", taskId, "user_operator");
-    const originalDescription = getTaskById(taskId)!.description;
     const original = getTaskById(taskId)!;
     const movedStatus = original.status === "focus" ? "backlog" : "focus";
     const moved = await app.inject({

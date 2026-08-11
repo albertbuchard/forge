@@ -7,6 +7,7 @@ import { performance } from "node:perf_hooks";
 import test from "node:test";
 
 import { buildServer } from "./app.js";
+import type { ComparisonLane } from "./comparison-types.js";
 import { closeDatabase, getDatabase, runInTransaction } from "./db.js";
 import { createPreferenceContextSchema } from "./preferences-types.js";
 import { createInsight } from "./repositories/collaboration.js";
@@ -396,18 +397,37 @@ test("PREF-08 comparison API is permission-first, complete, explicit about gaps,
       headers: { cookie }
     });
     assert.equal(openApiResponse.statusCode, 200, openApiResponse.body);
-    const openApi = openApiResponse.json() as any;
+    const openApi = openApiResponse.json() as {
+      components: { schemas: Record<string, unknown> };
+      paths: Record<
+        string,
+        {
+          get: {
+            parameters: Array<{ name: string }>;
+            responses: Record<
+              string,
+              {
+                content: Record<
+                  string,
+                  { schema: { $ref: string } }
+                >;
+              }
+            >;
+          };
+        }
+      >;
+    };
     assert.ok(openApi.components.schemas.ComparisonCatalogResponse);
     assert.ok(openApi.components.schemas.ComparisonResponse);
     assert.deepEqual(
       openApi.paths["/api/v1/comparisons/catalog"].get.parameters.map(
-        (parameter: any) => parameter.name
+        (parameter) => parameter.name
       ),
       ["userId", "query", "family", "limit", "cursor"]
     );
     assert.deepEqual(
       openApi.paths["/api/v1/comparisons"].get.parameters.map(
-        (parameter: any) => parameter.name
+        (parameter) => parameter.name
       ),
       ["userId", "selection", "from", "to", "timeZone", "alignment"]
     );
@@ -480,7 +500,7 @@ test("PREF-08 comparison API is permission-first, complete, explicit about gaps,
       headers
     });
     assert.equal(comparison.statusCode, 200, comparison.body);
-    const lanes = comparison.json().lanes as Array<any>;
+    const lanes = comparison.json().lanes as ComparisonLane[];
     assert.deepEqual(
       lanes.map((lane) => lane.selector),
       [
@@ -496,9 +516,7 @@ test("PREF-08 comparison API is permission-first, complete, explicit about gaps,
     assert.equal(preferenceLane.unit, "score");
     assert.match(preferenceLane.limitation, /top 12/i);
     assert.ok(
-      preferenceLane.points.some(
-        (point: any) => point.missingReason === "not_stored"
-      )
+      preferenceLane.points.some((point) => point.missingReason === "not_stored")
     );
     const healthLane = lanes[1];
     assert.equal(healthLane.unit, "bpm");
@@ -537,7 +555,7 @@ test("PREF-08 comparison API is permission-first, complete, explicit about gaps,
       headers
     });
     assert.equal(generic.statusCode, 200, generic.body);
-    const unavailable = generic.json().lanes as Array<any>;
+    const unavailable = generic.json().lanes as ComparisonLane[];
     assert.ok(unavailable.every((lane) => lane.state === "unavailable"));
     for (const lane of unavailable) {
       assert.equal(lane.family, null);
