@@ -1782,15 +1782,24 @@ function scanStructuredText(
   textIsComplete: boolean
 ) {
   if (extension === "json") {
-    try {
-      JSON.parse(text);
-    } catch {
+    if (!textIsComplete) {
       addFinding(
         findings,
-        "low",
-        "json_parse_error",
-        "The JSON file did not parse as valid JSON."
+        "info",
+        "json_validation_incomplete",
+        "The JSON file exceeds the bounded static syntax-validation sample, so Forge did not classify the unseen remainder as valid or malformed."
       );
+    } else {
+      try {
+        JSON.parse(text);
+      } catch {
+        addFinding(
+          findings,
+          "low",
+          "json_parse_error",
+          "The JSON file did not parse as valid JSON."
+        );
+      }
     }
   }
   if (extension === "yaml" || extension === "yml") {

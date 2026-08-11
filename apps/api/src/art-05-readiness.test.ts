@@ -261,6 +261,32 @@ test("ART-05 classifies malformed, macro, unsafe-archive, and unsupported files"
     false
   );
   assert.ok(findingCodes(safeDelimitedProse).has("static_scan_clean"));
+
+  const malformedJson = scanArtifactBytes({
+    buffer: Buffer.from('{"root": [unterminated}', "utf8"),
+    originalFileName: "malformed.json",
+    declaredMimeType: "application/json"
+  });
+  assert.ok(findingCodes(malformedJson).has("json_parse_error"));
+  assert.equal(malformedJson.dangerLevel, "low");
+  assert.equal(malformedJson.artifactState, "active");
+
+  const validJson = scanArtifactBytes({
+    buffer: Buffer.from('{"root":{"child":"value"}}', "utf8"),
+    originalFileName: "valid.json",
+    declaredMimeType: "application/json"
+  });
+  assert.equal(findingCodes(validJson).has("json_parse_error"), false);
+  assert.ok(findingCodes(validJson).has("static_scan_clean"));
+
+  const validLargeJson = scanArtifactBytes({
+    buffer: Buffer.from(JSON.stringify({ quoted: "a".repeat(85_000) }), "utf8"),
+    originalFileName: "valid-large.json",
+    declaredMimeType: "application/json"
+  });
+  assert.equal(findingCodes(validLargeJson).has("json_parse_error"), false);
+  assert.ok(findingCodes(validLargeJson).has("json_validation_incomplete"));
+  assert.equal(validLargeJson.artifactState, "active");
 });
 
 test("ART-05 preserves the previous scan result when rescan integrity fails", async () => {
