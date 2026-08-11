@@ -2322,7 +2322,7 @@
                     <p class="story-expanded-outcome">As a user, I can update my Life Force profile without replacing the dedicated energy model with generic entity fields.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Life Force <code>profile</code>.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>dedicated partial-profile mutation and recalculation pass the full server route suite; finish ownership and every bound edge.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>dedicated partial updates now require exactly one existing, authorized Forge user; user-scoped write tokens cannot cross owners, ambiguous tokens must select an owner, and project/tag-only tokens cannot change a user-wide profile. Empty, unknown, fractional, and out-of-range fields are rejected while every inclusive bound is accepted. Profile persistence and current-snapshot invalidation are atomic, and the returned model is rebuilt from the accepted values. Complete one live guided profile edit and read-back before promotion.</dd></div>
                     </dl>
                   </div>
                 </details>

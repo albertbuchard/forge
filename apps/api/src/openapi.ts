@@ -15182,6 +15182,54 @@ export function buildOpenApiDocument() {
       "/api/v1/life-force/profile": {
         patch: {
           summary: "Update the user-controlled life-force profile settings",
+          description:
+            "Partially updates exactly one Forge user's dedicated Life Force profile. The profile write and invalidation of today's derived snapshot are atomic; Forge then rebuilds the returned model from the accepted profile. A user-scoped write token may update only one allowed user. Project- or tag-restricted tokens cannot update this user-wide profile.",
+          parameters: [
+            stringQueryParameter("userId"),
+            repeatedStringQueryParameter("userIds")
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  minProperties: 1,
+                  properties: {
+                    baseDailyAp: {
+                      type: "integer",
+                      minimum: 50,
+                      maximum: 500
+                    },
+                    readinessMultiplier: {
+                      type: "number",
+                      minimum: 0.5,
+                      maximum: 1.5
+                    },
+                    stats: {
+                      type: "object",
+                      additionalProperties: false,
+                      minProperties: 1,
+                      properties: Object.fromEntries(
+                        [
+                          "life_force",
+                          "activation",
+                          "focus",
+                          "vigor",
+                          "composure",
+                          "flow"
+                        ].map((key) => [
+                          key,
+                          { type: "integer", minimum: 1, maximum: 100 }
+                        ])
+                      )
+                    }
+                  }
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {

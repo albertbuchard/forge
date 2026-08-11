@@ -4052,51 +4052,52 @@ export function updateLifeForceProfile(
   patch: LifeForceProfilePatchInput
 ) {
   const parsed = lifeForceProfilePatchSchema.parse(patch);
-  const current = ensureLifeForceProfile(userId);
-  const next = {
-    base_daily_ap: parsed.baseDailyAp ?? current.base_daily_ap,
-    readiness_multiplier:
-      parsed.readinessMultiplier ?? current.readiness_multiplier,
-    life_force_level: parsed.stats?.life_force ?? current.life_force_level,
-    activation_level: parsed.stats?.activation ?? current.activation_level,
-    focus_level: parsed.stats?.focus ?? current.focus_level,
-    vigor_level: parsed.stats?.vigor ?? current.vigor_level,
-    composure_level: parsed.stats?.composure ?? current.composure_level,
-    flow_level: parsed.stats?.flow ?? current.flow_level
-  };
-  getDatabase()
-    .prepare(
-      `UPDATE life_force_profiles
-       SET base_daily_ap = ?,
-           readiness_multiplier = ?,
-           life_force_level = ?,
-           activation_level = ?,
-           focus_level = ?,
-           vigor_level = ?,
-           composure_level = ?,
-           flow_level = ?,
-           updated_at = ?
-       WHERE user_id = ?`
-    )
-    .run(
-      next.base_daily_ap,
-      next.readiness_multiplier,
-      next.life_force_level,
-      next.activation_level,
-      next.focus_level,
-      next.vigor_level,
-      next.composure_level,
-      next.flow_level,
-      nowIso(),
-      userId
-    );
-  const todayKey = toDateKey(new Date());
-  getDatabase()
-    .prepare(
-      `DELETE FROM life_force_day_snapshots
-       WHERE user_id = ? AND date_key = ?`
-    )
-    .run(userId, todayKey);
+  runInTransaction(() => {
+    const current = ensureLifeForceProfile(userId);
+    const next = {
+      base_daily_ap: parsed.baseDailyAp ?? current.base_daily_ap,
+      readiness_multiplier:
+        parsed.readinessMultiplier ?? current.readiness_multiplier,
+      life_force_level: parsed.stats?.life_force ?? current.life_force_level,
+      activation_level: parsed.stats?.activation ?? current.activation_level,
+      focus_level: parsed.stats?.focus ?? current.focus_level,
+      vigor_level: parsed.stats?.vigor ?? current.vigor_level,
+      composure_level: parsed.stats?.composure ?? current.composure_level,
+      flow_level: parsed.stats?.flow ?? current.flow_level
+    };
+    getDatabase()
+      .prepare(
+        `UPDATE life_force_profiles
+         SET base_daily_ap = ?,
+             readiness_multiplier = ?,
+             life_force_level = ?,
+             activation_level = ?,
+             focus_level = ?,
+             vigor_level = ?,
+             composure_level = ?,
+             flow_level = ?,
+             updated_at = ?
+         WHERE user_id = ?`
+      )
+      .run(
+        next.base_daily_ap,
+        next.readiness_multiplier,
+        next.life_force_level,
+        next.activation_level,
+        next.focus_level,
+        next.vigor_level,
+        next.composure_level,
+        next.flow_level,
+        nowIso(),
+        userId
+      );
+    getDatabase()
+      .prepare(
+        `DELETE FROM life_force_day_snapshots
+         WHERE user_id = ? AND date_key = ?`
+      )
+      .run(userId, toDateKey(new Date()));
+  });
   return buildLifeForcePayload(new Date(), [userId]);
 }
 

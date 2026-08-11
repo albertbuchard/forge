@@ -5244,13 +5244,25 @@ export const offlineTaskMutationResponseSchema = z
   })
   .strict();
 
-export const lifeForceProfilePatchSchema = z.object({
-  baseDailyAp: z.number().int().min(50).max(500).optional(),
-  readinessMultiplier: z.number().min(0.5).max(1.5).optional(),
-  stats: z
-    .record(lifeForceStatKeySchema, z.number().int().min(1).max(100))
-    .optional()
-});
+export const lifeForceProfilePatchSchema = z
+  .object({
+    baseDailyAp: z.number().int().min(50).max(500).optional(),
+    readinessMultiplier: z.number().min(0.5).max(1.5).optional(),
+    stats: z
+      .record(lifeForceStatKeySchema, z.number().int().min(1).max(100))
+      .refine((stats) => Object.keys(stats).length > 0, {
+        message: "Provide at least one Life Force stat to update."
+      })
+      .optional()
+  })
+  .strict()
+  .refine(
+    (patch) =>
+      patch.baseDailyAp !== undefined ||
+      patch.readinessMultiplier !== undefined ||
+      patch.stats !== undefined,
+    { message: "Provide at least one Life Force profile field to update." }
+  );
 
 export const lifeForceTemplateUpdateSchema = z.object({
   points: z.array(lifeForceCurvePointSchema).min(2)

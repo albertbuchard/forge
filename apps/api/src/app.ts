@@ -10138,6 +10138,61 @@ function resolveNutritionMutationUserId(
   return effectiveUserId;
 }
 
+function resolveLifeForceMutationUserId(
+  query: Record<string, unknown> | undefined,
+  auth: UserScopeAuth
+) {
+  const requestedUserIds = resolveScopedUserIds(query) ?? [];
+  if (requestedUserIds.length > 1) {
+    throw new HttpError(
+      400,
+      "life_force_user_selection_ambiguous",
+      "Life Force profile mutations require exactly one selected Forge user."
+    );
+  }
+
+  const policy = auth.token?.scopePolicy;
+  if (policy && (policy.projectIds.length > 0 || policy.tagIds.length > 0)) {
+    throw new HttpError(
+      403,
+      "life_force_scope_forbidden",
+      "A project- or tag-restricted token cannot change a user-wide Life Force profile."
+    );
+  }
+
+  const requestedUserId = requestedUserIds[0] ?? null;
+  const allowedUserIds = policy?.userIds ?? [];
+  if (
+    requestedUserId &&
+    allowedUserIds.length > 0 &&
+    !allowedUserIds.includes(requestedUserId)
+  ) {
+    throw new HttpError(
+      403,
+      "life_force_scope_forbidden",
+      "The requested Life Force profile is outside this token's allowed users."
+    );
+  }
+  if (!requestedUserId && allowedUserIds.length > 1) {
+    throw new HttpError(
+      400,
+      "life_force_user_selection_required",
+      "This token can change several Forge users; select exactly one Life Force profile."
+    );
+  }
+
+  const effectiveUserId =
+    requestedUserId ?? allowedUserIds[0] ?? getDefaultUser().id;
+  if (!listUsers().some((user) => user.id === effectiveUserId)) {
+    throw new HttpError(
+      404,
+      "life_force_user_not_found",
+      "The selected Forge user does not exist."
+    );
+  }
+  return effectiveUserId;
+}
+
 function requireNutritionRecordOwner(
   actualUserId: string | null | undefined,
   expectedUserId: string
@@ -15103,9 +15158,10 @@ export async function buildServer(
       ["write"],
       { route: "/api/v1/life-force/profile" }
     );
-    const userId = resolveLifeForceUser(
-      resolveScopedUserIds(request.query as Record<string, unknown>)
-    ).id;
+    const userId = resolveLifeForceMutationUserId(
+      request.query as Record<string, unknown>,
+      auth
+    );
     return {
       lifeForce: updateLifeForceProfile(
         userId,
