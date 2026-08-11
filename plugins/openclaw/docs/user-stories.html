@@ -2763,7 +2763,7 @@
                     <p class="story-expanded-outcome">As an operator, I can configure available local or remote model providers, defaults, reasoning settings, and health checks.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>settings-models</code>.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>stored credentials are bound to their saved provider, base URL, and model; caller overrides require a fresh key, and health checks require an operator session. Finish missing-key, invalid-model, local-offline, and fallback matrices.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>stored credentials are bound to their saved provider, base URL, and model; caller overrides require a fresh key, and health checks require an operator session. The settings page now explains missing-key and blank-model states, requires a fresh key after the stored target changes, clears stale health results after an update, and reports local-offline failure without claiming Forge switched connections. Complete the live provider and fallback integration matrix.</dd></div>
                     </dl>
                   </div>
                 </details>
