@@ -2718,7 +2718,7 @@
                     <p class="story-expanded-outcome">As an operator, I can review soft-deleted records and restore them before any deliberate permanent cleanup.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>settings-bin</code>, batch restore/hard-delete.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>Bin rendering and batches are capped at 40, permanent delete is confirmed, and mutation failures remain visible; complete entity and authorization matrices.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>Bin rendering and bulk restore or permanent-delete payloads are capped at 40, destructive confirmation copy matches the actual payload, entity filters expose their selected state and reconcile when records disappear, mutation failures remain visible, and successful mutations restore focus to the results summary. Complete the remaining entity and authorization matrices before verification.</dd></div>
                     </dl>
                   </div>
                 </details>
