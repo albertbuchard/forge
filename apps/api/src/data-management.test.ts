@@ -887,6 +887,18 @@ test("restoreDataBackup rejects manifest path substitution, traversal entries, a
     assert.equal(replacementCount, 2);
     await writeFile(traversal.archivePath, traversalBytes);
     await chmod(traversal.archivePath, 0o600);
+    const traversalManifest = JSON.parse(
+      await readFile(traversal.manifestPath, "utf8")
+    );
+    traversalManifest.archiveSha256 = createHash("sha256")
+      .update(traversalBytes)
+      .digest("hex");
+    await writeFile(
+      traversal.manifestPath,
+      `${JSON.stringify(traversalManifest, null, 2)}\n`,
+      "utf8"
+    );
+    await chmod(traversal.manifestPath, 0o600);
     await assert.rejects(
       restoreDataBackup(traversal.id, { createSafetyBackup: false }),
       /traversal path|invalid relative path/u
