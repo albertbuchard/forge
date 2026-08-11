@@ -44,10 +44,10 @@
 
         <section class="story-metrics" aria-label="Story totals">
           <a class="story-metric metric-all" href="./user-stories.html" data-metric-scope="all"><strong>203</strong><span>All stories</span></a>
-          <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>186</strong><span>Current product</span></a>
-          <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>17</strong><span>Planned</span></a>
+          <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>187</strong><span>Current product</span></a>
+          <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>16</strong><span>Planned</span></a>
           <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>14</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>142</strong><span>In review</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>143</strong><span>In review</span></a>
           <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>30</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
@@ -1081,7 +1081,7 @@
             <details class="story-family" data-family-group="KNOW">
               <summary>
                 <span class="family-title"><span class="family-code">KNOW</span>Notes, KarpaWiki, and Knowledge Graph</span>
-                <span class="family-counts"><span data-family-visible>9</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 8 current · 1 planned</span></span>
+                <span class="family-counts"><span data-family-visible>9</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 9 current</span></span>
               </summary>
               <div class="story-list">
 
@@ -1205,17 +1205,17 @@
                   </div>
                 </details>
 
-                <details class="story-card" id="story-know-09" data-story-id="KNOW-09" data-lifecycle="planned" data-readiness="planned" data-family="KNOW">
+                <details class="story-card" id="story-know-09" data-story-id="KNOW-09" data-lifecycle="current" data-readiness="In review" data-family="KNOW">
                   <summary class="story-summary">
                     <span class="story-id">KNOW-09</span>
                     <span class="story-summary-outcome">As a user, I can find meaningfully related local records across Forge and see the exact source evidence behind every result.</span>
-                    <span class="story-state state-planned">Planned</span>
+                    <span class="story-state state-in-review">In review</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a user, I can find meaningfully related local records across Forge and see the exact source evidence behind every result.</p>
                     <dl class="story-details">
-                      <div><dt>Where it lives</dt><dd>Local semantic index, search, Knowledge Graph, permission and provenance filters.</dd></div>
-                      <div><dt>First evidence needed</dt><dd>establish a representative retrieval fixture, relevance thresholds, local resource bounds, deletion behavior, and zero cross-user leakage before choosing an embedding or index implementation.</dd></div>
+                      <div><dt>Where it lives</dt><dd>Local lexical and structural search, Action Bar, Knowledge Graph, permission and provenance filters.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>operator-only local search covers all 31 eligible record families, removes deleted and out-of-scope records before tokenization, and returns exact raw-text or one-hop relationship evidence with canonical source links. The transient index refuses more than 750 records, 750 relationships, or 3 MiB of text; it uses no embeddings and makes no hidden semantic claim. Complete live desktop, phone, and keyboard verification.</dd></div>
                     </dl>
                   </div>
                 </details>
