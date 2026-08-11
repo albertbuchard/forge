@@ -17213,20 +17213,24 @@ export async function buildServer(
     const result = startQuestionnaireRun(
       id,
       startQuestionnaireRunSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
+      {
+        ...toActivityContext(auth),
+        userIds: auth.token?.scopePolicy.userIds ?? []
+      }
     );
     reply.code(201);
     return result;
   });
   app.get("/api/v1/psyche/questionnaire-runs/:id", async (request) => {
-    requirePsycheScopedAccess(
+    const auth = requirePsycheScopedAccess(
       request.headers as Record<string, unknown>,
       ["psyche.read"],
       { route: "/api/v1/psyche/questionnaire-runs/:id" }
     );
     const { id } = request.params as { id: string };
-    const userIds = resolveScopedUserIds(
-      request.query as Record<string, unknown>
+    const userIds = resolveEffectiveUserIdsForReads(
+      request.query as Record<string, unknown>,
+      auth
     );
     return getQuestionnaireRunDetail(id, { userIds });
   });
@@ -17240,7 +17244,10 @@ export async function buildServer(
     return updateQuestionnaireRun(
       id,
       updateQuestionnaireRunSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
+      {
+        ...toActivityContext(auth),
+        userIds: auth.token?.scopePolicy.userIds ?? []
+      }
     );
   });
   app.post(
@@ -17252,7 +17259,10 @@ export async function buildServer(
         { route: "/api/v1/psyche/questionnaire-runs/:id/complete" }
       );
       const { id } = request.params as { id: string };
-      return completeQuestionnaireRun(id, toActivityContext(auth));
+      return completeQuestionnaireRun(id, {
+        ...toActivityContext(auth),
+        userIds: auth.token?.scopePolicy.userIds ?? []
+      });
     }
   );
   app.get("/api/v1/psyche/self-observation/calendar", async (request) => {

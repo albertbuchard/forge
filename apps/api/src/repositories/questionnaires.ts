@@ -39,6 +39,7 @@ import type { ActivitySource } from "../types.js";
 type QuestionnaireContext = {
   source: ActivitySource;
   actor?: string | null;
+  userIds?: string[];
 };
 
 type InstrumentRow = {
@@ -161,6 +162,47 @@ function slugify(text: string) {
 
 function normalizeCustomOwner(userId: string | null | undefined) {
   return userId ?? DEFAULT_CUSTOM_USER_ID;
+}
+
+function resolveQuestionnaireRunUserId(
+  requestedUserId: string | null | undefined,
+  context: QuestionnaireContext
+) {
+  const allowedUserIds = context.userIds ?? [];
+  if (!requestedUserId && allowedUserIds.length > 1) {
+    throw createHttpError({
+      statusCode: 400,
+      code: "questionnaire_run_user_required",
+      message:
+        "Select exactly one allowed Forge user before starting a questionnaire run."
+    });
+  }
+  const userId = normalizeCustomOwner(requestedUserId ?? allowedUserIds[0]);
+  if (allowedUserIds.length > 0 && !allowedUserIds.includes(userId)) {
+    throw createHttpError({
+      statusCode: 403,
+      code: "questionnaire_run_user_forbidden",
+      message: "The selected Forge user is outside this credential's scope."
+    });
+  }
+  return userId;
+}
+
+function requireQuestionnaireRunScope(
+  run: RunRow,
+  context: QuestionnaireContext
+) {
+  const allowedUserIds = context.userIds ?? [];
+  if (
+    allowedUserIds.length > 0 &&
+    (!run.user_id || !allowedUserIds.includes(run.user_id))
+  ) {
+    throw createHttpError({
+      statusCode: 404,
+      code: "questionnaire_run_not_found",
+      message: "Questionnaire run not found."
+    });
+  }
 }
 
 function isInstrumentVisible(row: InstrumentRow, userIds?: string[]) {
@@ -1534,7 +1576,7 @@ export function startQuestionnaireRun(
         message: "Questionnaire version not found."
       });
     }
-    const userId = normalizeCustomOwner(parsed.userId);
+    const userId = resolveQuestionnaireRunUserId(parsed.userId, context);
     const existing = getDatabase()
       .prepare(
         `
@@ -1596,7 +1638,7 @@ export function startQuestionnaireRun(
 export function updateQuestionnaireRun(
   runId: string,
   input: unknown,
-  _context: QuestionnaireContext
+  context: QuestionnaireContext
 ) {
   const parsed = updateQuestionnaireRunSchema.parse(input ?? {});
   return runInTransaction(() => {
@@ -1608,6 +1650,7 @@ export function updateQuestionnaireRun(
         message: "Questionnaire run not found."
       });
     }
+    requireQuestionnaireRunScope(run, context);
     if (run.status !== "draft") {
       throw createHttpError({
         statusCode: 409,
@@ -1640,6 +1683,7 @@ export function completeQuestionnaireRun(runId: string, context: QuestionnaireCo
         message: "Questionnaire run not found."
       });
     }
+    requireQuestionnaireRunScope(run, context);
     if (run.status !== "draft") {
       return getQuestionnaireRunDetail(runId);
     }
@@ -1799,8 +1843,7 @@ export function getQuestionnaireRunDetail(
   if (
     options.userIds &&
     options.userIds.length > 0 &&
-    run.user_id &&
-    !options.userIds.includes(run.user_id)
+    (!run.user_id || !options.userIds.includes(run.user_id))
   ) {
     throw createHttpError({
       statusCode: 404,
