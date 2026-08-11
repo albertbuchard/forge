@@ -192,6 +192,7 @@ const BASE_FLOW: AiConnector = {
   ],
   lastRun: null,
   legacyProcessorId: null,
+  revision: 1,
   createdAt: "2026-04-10T10:00:00.000Z",
   updatedAt: "2026-04-10T10:00:00.000Z"
 };

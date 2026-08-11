@@ -1,9 +1,11 @@
 import { useNavigate, useParams } from "react-router-dom";
+import { useEffect, useRef } from "react";
 import { OpenInGraphButton } from "@/components/knowledge-graph/open-in-graph-button";
 import { PageHero } from "@/components/shell/page-hero";
 import { Button } from "@/components/ui/button";
 import { useWorkbenchNodeCatalog } from "@/components/workbench/workbench-provider";
 import { WorkbenchFlowEditor } from "@/components/workbench/workbench-flow-editor";
+import { WorkbenchFlowVersionHistory } from "@/components/workbench/workbench-flow-version-history";
 import {
   EmptyState,
   ErrorState,
@@ -14,7 +16,9 @@ import {
   useDeleteWorkbenchFlowMutation,
   useGetSettingsQuery,
   useGetWorkbenchFlowQuery,
+  useListWorkbenchFlowVersionsQuery,
   useRunWorkbenchFlowMutation,
+  useRestoreWorkbenchFlowVersionMutation,
   useUpdateWorkbenchFlowMutation
 } from "@/store/api/forge-api";
 
@@ -27,11 +31,28 @@ export function WorkbenchFlowPage() {
   const flowQuery = useGetWorkbenchFlowQuery(flowId, {
     skip: flowId.length === 0
   });
+  const versionsQuery = useListWorkbenchFlowVersionsQuery(
+    { flowId, limit: 20 },
+    { skip: flowId.length === 0 }
+  );
   const settingsQuery = useGetSettingsQuery();
   const [updateFlow] = useUpdateWorkbenchFlowMutation();
   const [deleteFlow] = useDeleteWorkbenchFlowMutation();
+  const [restoreFlow] = useRestoreWorkbenchFlowVersionMutation();
   const [runFlow] = useRunWorkbenchFlowMutation();
   const [chatFlow] = useChatWorkbenchFlowMutation();
+  const revisionRef = useRef({ flowId: "", revision: 0 });
+
+  useEffect(() => {
+    const revision = flowQuery.data?.flow.revision;
+    if (revision === undefined) return;
+    if (
+      revisionRef.current.flowId !== flowId ||
+      revision > revisionRef.current.revision
+    ) {
+      revisionRef.current = { flowId, revision };
+    }
+  }, [flowId, flowQuery.data?.flow.revision]);
 
   if (flowQuery.isLoading) {
     return (
@@ -109,10 +130,23 @@ export function WorkbenchFlowPage() {
         }))}
         runs={flowQuery.data.runs}
         onSave={async (patch) => {
-          await updateFlow({ flowId, patch }).unwrap();
+          const result = await updateFlow({
+            flowId,
+            patch: {
+              ...patch,
+              expectedRevision: revisionRef.current.revision
+            }
+          }).unwrap();
+          revisionRef.current = {
+            flowId,
+            revision: result.flow.revision
+          };
         }}
         onDelete={async () => {
-          await deleteFlow(flowId).unwrap();
+          await deleteFlow({
+            flowId,
+            expectedRevision: revisionRef.current.revision
+          }).unwrap();
           navigate("/workbench");
         }}
         onRun={async (input) => {
@@ -126,6 +160,23 @@ export function WorkbenchFlowPage() {
             flowId,
             input
           }).unwrap();
+        }}
+      />
+      <WorkbenchFlowVersionHistory
+        currentRevision={flowQuery.data.flow.revision}
+        versions={versionsQuery.data?.versions ?? []}
+        loading={versionsQuery.isLoading}
+        unavailable={versionsQuery.isError}
+        onRestore={async (revision) => {
+          const result = await restoreFlow({
+            flowId,
+            revision,
+            expectedRevision: revisionRef.current.revision
+          }).unwrap();
+          revisionRef.current = {
+            flowId,
+            revision: result.flow.revision
+          };
         }}
       />
     </div>

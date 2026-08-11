@@ -2986,6 +2986,7 @@ export const aiConnectorSchema = z.object({
   publishedOutputs: z.array(aiConnectorOutputSchema).default([]),
   lastRun: aiConnectorRunSchema.nullable(),
   legacyProcessorId: trimmedString.nullable().default(null),
+  revision: z.number().int().positive(),
   createdAt: z.string(),
   updatedAt: z.string()
 });
@@ -5596,6 +5597,7 @@ export const createAiConnectorSchema = z.object({
 });
 
 export const updateAiConnectorSchema = z.object({
+  expectedRevision: z.number().int().positive(),
   title: nonEmptyTrimmedString.optional(),
   description: trimmedString.optional(),
   kind: aiConnectorKindSchema.optional(),
@@ -5608,6 +5610,11 @@ export const updateAiConnectorSchema = z.object({
       edges: z.array(aiConnectorEdgeSchema).default([])
     })
     .optional()
+});
+
+export const restoreAiConnectorVersionSchema = z.object({
+  revision: z.number().int().positive(),
+  expectedRevision: z.number().int().positive()
 });
 
 export const runAiConnectorSchema = z.object({

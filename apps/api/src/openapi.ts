@@ -34,6 +34,17 @@ function jsonResponse(schema: Record<string, unknown>, description: string) {
   };
 }
 
+function jsonRequestBody(schema: Record<string, unknown>, required = false) {
+  return {
+    required,
+    content: {
+      "application/json": {
+        schema
+      }
+    }
+  };
+}
+
 function stringQueryParameter(name: string) {
   return {
     name,
@@ -12202,6 +12213,55 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const workbenchFlowVersionSummary = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "connectorId",
+      "revision",
+      "changeKind",
+      "restoredFromRevision",
+      "title",
+      "kind",
+      "nodeCount",
+      "edgeCount",
+      "publicInputCount",
+      "publishedOutputCount",
+      "createdAt"
+    ],
+    properties: {
+      connectorId: { type: "string", minLength: 1 },
+      revision: { type: "integer", minimum: 1 },
+      changeKind: {
+        type: "string",
+        enum: ["baseline", "created", "updated", "restored"]
+      },
+      restoredFromRevision: nullable({ type: "integer", minimum: 1 }),
+      title: { type: "string", minLength: 1 },
+      kind: { type: "string", enum: ["functor", "chat"] },
+      nodeCount: { type: "integer", minimum: 0 },
+      edgeCount: { type: "integer", minimum: 0 },
+      publicInputCount: { type: "integer", minimum: 0 },
+      publishedOutputCount: { type: "integer", minimum: 0 },
+      createdAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const workbenchFlowVersionPage = {
+    type: "object",
+    additionalProperties: false,
+    required: ["versions", "total", "limit", "offset", "hasMore"],
+    properties: {
+      versions: arrayOf({
+        $ref: "#/components/schemas/WorkbenchFlowVersionSummary"
+      }),
+      total: { type: "integer", minimum: 0 },
+      limit: { type: "integer", minimum: 1, maximum: 50 },
+      offset: { type: "integer", minimum: 0 },
+      hasMore: { type: "boolean" }
+    }
+  };
+
   const workbenchCatalogFacet = {
     type: "object",
     additionalProperties: false,
@@ -12709,6 +12769,8 @@ export function buildOpenApiDocument() {
         WorkbenchRun: workbenchRun,
         WorkbenchRunSummary: workbenchRunSummary,
         WorkbenchRunPage: workbenchRunPage,
+        WorkbenchFlowVersionSummary: workbenchFlowVersionSummary,
+        WorkbenchFlowVersionPage: workbenchFlowVersionPage,
         WorkbenchReadMetadata: workbenchReadMetadata,
         WorkbenchNodeResultSummary: workbenchNodeResultSummary,
         WorkbenchCatalogFacet: workbenchCatalogFacet,
@@ -16135,6 +16197,29 @@ export function buildOpenApiDocument() {
         },
         patch: {
           summary: "Update one Workbench flow",
+          description:
+            "Requires the revision returned by the exact flow read. A stale revision returns 409 and never overwrites the newer graph or public input/output contract.",
+          requestBody: jsonRequestBody(
+            {
+              type: "object",
+              additionalProperties: false,
+              required: ["expectedRevision"],
+              properties: {
+                expectedRevision: { type: "integer", minimum: 1 },
+                title: { type: "string", minLength: 1 },
+                description: { type: "string" },
+                kind: { type: "string", enum: ["functor", "chat"] },
+                homeSurfaceId: nullable({ type: "string" }),
+                endpointEnabled: { type: "boolean" },
+                publicInputs: arrayOf({
+                  type: "object",
+                  additionalProperties: true
+                }),
+                graph: { type: "object", additionalProperties: true }
+              }
+            },
+            true
+          ),
           responses: {
             "200": jsonResponse(
               {
@@ -16149,11 +16234,25 @@ export function buildOpenApiDocument() {
               },
               "Updated Workbench flow"
             ),
+            "409": { $ref: "#/components/responses/Error" },
             "404": { $ref: "#/components/responses/Error" }
           }
         },
         delete: {
           summary: "Delete one Workbench flow",
+          description:
+            "Requires the current revision so a stale editor cannot delete a newer flow revision.",
+          requestBody: jsonRequestBody(
+            {
+              type: "object",
+              additionalProperties: false,
+              required: ["expectedRevision"],
+              properties: {
+                expectedRevision: { type: "integer", minimum: 1 }
+              }
+            },
+            true
+          ),
           responses: {
             "200": jsonResponse(
               {
@@ -16162,7 +16261,109 @@ export function buildOpenApiDocument() {
               },
               "Deleted Workbench flow"
             ),
+            "409": { $ref: "#/components/responses/Error" },
             "404": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/workbench/flows/{id}/versions": {
+        get: {
+          summary: "List bounded Workbench flow version history",
+          description:
+            "Returns at most 50 compact revision summaries. Full graph and public input/output contracts are available only from the exact revision route.",
+          parameters: [
+            {
+              name: "limit",
+              in: "query",
+              schema: {
+                type: "integer",
+                minimum: 1,
+                maximum: 50,
+                default: 20
+              }
+            },
+            {
+              name: "offset",
+              in: "query",
+              schema: { type: "integer", minimum: 0, default: 0 }
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              { $ref: "#/components/schemas/WorkbenchFlowVersionPage" },
+              "Bounded Workbench flow version history"
+            ),
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/workbench/flows/{id}/versions/{revision}": {
+        get: {
+          summary: "Read one exact Workbench flow version",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["version"],
+                properties: {
+                  version: {
+                    allOf: [
+                      {
+                        $ref: "#/components/schemas/WorkbenchFlowVersionSummary"
+                      },
+                      {
+                        type: "object",
+                        required: ["snapshot"],
+                        properties: {
+                          snapshot: {
+                            type: "object",
+                            additionalProperties: true,
+                            description:
+                              "Exact saved identity, graph, public inputs, and published outputs for this revision."
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              "Exact Workbench flow version"
+            ),
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/workbench/flows/{id}/restore": {
+        post: {
+          summary: "Restore one Workbench flow version as a new revision",
+          description:
+            "Restores an existing retained revision without erasing history. The caller must provide the current expectedRevision; stale restores return 409.",
+          requestBody: jsonRequestBody(
+            {
+              type: "object",
+              additionalProperties: false,
+              required: ["revision", "expectedRevision"],
+              properties: {
+                revision: { type: "integer", minimum: 1 },
+                expectedRevision: { type: "integer", minimum: 1 }
+              }
+            },
+            true
+          ),
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["flow"],
+                properties: {
+                  flow: { type: "object", additionalProperties: true }
+                }
+              },
+              "Restored Workbench flow"
+            ),
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" }
           }
         }
       },

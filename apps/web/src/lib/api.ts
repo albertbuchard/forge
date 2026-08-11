@@ -5012,7 +5012,7 @@ export function getWorkbenchFlow(connectorId: string) {
 
 export function updateWorkbenchFlow(
   connectorId: string,
-  patch: Partial<{
+  patch: { expectedRevision: number } & Partial<{
     title: string;
     description: string;
     kind: import("./types").AiConnectorKind;
@@ -5034,11 +5034,47 @@ export function updateWorkbenchFlow(
   );
 }
 
-export function deleteWorkbenchFlow(connectorId: string) {
+export function listWorkbenchFlowVersions(
+  connectorId: string,
+  input: { limit?: number; offset?: number } = {}
+) {
+  const search = new URLSearchParams();
+  if (input.limit !== undefined) search.set("limit", String(input.limit));
+  if (input.offset !== undefined) search.set("offset", String(input.offset));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<import("./types").WorkbenchFlowVersionPage>(
+    `/api/v1/workbench/flows/${connectorId}/versions${suffix}`
+  );
+}
+
+export function getWorkbenchFlowVersion(connectorId: string, revision: number) {
+  return request<{ version: import("./types").WorkbenchFlowVersionDetail }>(
+    `/api/v1/workbench/flows/${connectorId}/versions/${revision}`
+  );
+}
+
+export function restoreWorkbenchFlowVersion(
+  connectorId: string,
+  input: { revision: number; expectedRevision: number }
+) {
+  return request<{ flow: import("./types").AiConnector }>(
+    `/api/v1/workbench/flows/${connectorId}/restore`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function deleteWorkbenchFlow(
+  connectorId: string,
+  expectedRevision: number
+) {
   return request<{ flow: import("./types").AiConnector }>(
     `/api/v1/workbench/flows/${connectorId}`,
     {
-      method: "DELETE"
+      method: "DELETE",
+      body: JSON.stringify({ expectedRevision })
     }
   );
 }

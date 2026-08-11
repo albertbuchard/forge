@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-11T20:36:15.112Z",
+  "generatedAt": "2026-08-11T20:53:05.709Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
     "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
@@ -320,7 +320,7 @@
       "label": "Forge Workbench Route",
       "summary": "Call one allowed dedicated Workbench route after the conversation has narrowed to flow catalog/detail, flow CRUD, execution, run history, published output, node result, or latest node output.",
       "whenToUse": "Use for Workbench saved-flow discovery, flow creation or edits, one-off runs, saved-flow execution, chat follow-ups, run detail, node results, latest node output, and published output. Do not use batch CRUD for Workbench.",
-      "inputShape": "{ routeKey: \"listFlows\"|\"flowDetail\"|\"flowById\"|\"flowBySlug\"|\"publishedOutput\"|\"runHistory\"|\"runs\"|\"runDetail\"|\"runNodes\"|\"nodeResult\"|\"latestNodeOutput\"|\"boxCatalog\"|\"createFlow\"|\"updateFlow\"|\"deleteFlow\"|\"runFlow\"|\"runByPayload\"|\"chatFlow\", pathParams?: { id?: string, slug?: string, runId?: string, nodeId?: string }, query?: object, body?: object }",
+      "inputShape": "{ routeKey: \"listFlows\"|\"flowDetail\"|\"flowById\"|\"flowVersions\"|\"flowVersion\"|\"restoreFlow\"|\"flowBySlug\"|\"publishedOutput\"|\"runHistory\"|\"runs\"|\"runDetail\"|\"runNodes\"|\"nodeResult\"|\"latestNodeOutput\"|\"boxCatalog\"|\"createFlow\"|\"updateFlow\"|\"deleteFlow\"|\"runFlow\"|\"runByPayload\"|\"chatFlow\", pathParams?: { id?: string, revision?: string, slug?: string, runId?: string, nodeId?: string }, query?: object, body?: object }",
       "requiredFields": [
         "routeKey"
       ],
@@ -328,6 +328,8 @@
         "Choose routeKey from live onboarding specializedDomainSurfaces.workbench.routeKeys and methodRoutes.",
         "Fill every :placeholder through pathParams using the exact placeholder name; do not put flow, slug, run, or node ids inside routeKey, query, or body.",
         "Use runByPayload for one-off execution; createFlow only when the user wants a reusable saved flow.",
+        "For updateFlow and deleteFlow, first read flowDetail and carry its exact revision as body.expectedRevision. After a revision conflict, reread instead of retrying blindly.",
+        "Use flowVersions for bounded history, flowVersion for one exact saved contract, and restoreFlow with both revision and the current expectedRevision. Restore creates a new revision and never erases later history.",
         "Use publishedOutput, nodeResult, latestNodeOutput, runDetail, or runHistory reads before editing when the user is inspecting an existing artifact.",
         "After a Workbench run or edit, read back the flow detail, run detail, node output, published output, or run history when that verifies the user's practical goal."
       ],

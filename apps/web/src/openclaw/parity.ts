@@ -194,6 +194,21 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
     },
     {
       method: "GET",
+      path: "/api/v1/workbench/flows/:id/versions",
+      purpose: "workbench"
+    },
+    {
+      method: "GET",
+      path: "/api/v1/workbench/flows/:id/versions/:revision",
+      purpose: "workbench"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/workbench/flows/:id/restore",
+      purpose: "workbench"
+    },
+    {
+      method: "GET",
       path: "/api/v1/workbench/flows/by-slug/:slug",
       purpose: "workbench"
     },

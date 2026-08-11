@@ -27,6 +27,7 @@ import {
   getSleepView,
   getXpMetrics,
   getWorkbenchFlow,
+  listWorkbenchFlowVersions,
   getWorkbenchFlowNodeOutput,
   getWorkbenchFlowRun,
   getWorkbenchFlowRunNode,
@@ -48,6 +49,7 @@ import {
   revokeOperatorSession,
   runWorkbenchFlow,
   releaseTaskRun,
+  restoreWorkbenchFlowVersion,
   updateWorkbenchFlow
 } from "@/lib/api";
 import type {
@@ -125,6 +127,18 @@ export const forgeApi = createApi({
       providesTags: (_result, _error, flowId) => [
         { type: "WorkbenchFlow", id: flowId },
         "WorkbenchFlows"
+      ]
+    }),
+    listWorkbenchFlowVersions: builder.query<
+      AsyncResult<typeof listWorkbenchFlowVersions>,
+      { flowId: string; limit?: number; offset?: number }
+    >({
+      queryFn: ({ flowId, limit, offset }) =>
+        resolveResult(() =>
+          listWorkbenchFlowVersions(flowId, { limit, offset })
+        ),
+      providesTags: (_result, _error, { flowId }) => [
+        { type: "WorkbenchFlow", id: flowId }
       ]
     }),
     getWorkbenchFlowRun: builder.query<
@@ -390,12 +404,29 @@ export const forgeApi = createApi({
         "WorkbenchFlows"
       ]
     }),
+    restoreWorkbenchFlowVersion: builder.mutation<
+      AsyncResult<typeof restoreWorkbenchFlowVersion>,
+      { flowId: string; revision: number; expectedRevision: number }
+    >({
+      queryFn: ({ flowId, revision, expectedRevision }) =>
+        resolveResult(() =>
+          restoreWorkbenchFlowVersion(flowId, {
+            revision,
+            expectedRevision
+          })
+        ),
+      invalidatesTags: (_result, _error, { flowId }) => [
+        { type: "WorkbenchFlow", id: flowId },
+        "WorkbenchFlows"
+      ]
+    }),
     deleteWorkbenchFlow: builder.mutation<
       AsyncResult<typeof deleteWorkbenchFlow>,
-      string
+      { flowId: string; expectedRevision: number }
     >({
-      queryFn: (flowId) => resolveResult(() => deleteWorkbenchFlow(flowId)),
-      invalidatesTags: (_result, _error, flowId) => [
+      queryFn: ({ flowId, expectedRevision }) =>
+        resolveResult(() => deleteWorkbenchFlow(flowId, expectedRevision)),
+      invalidatesTags: (_result, _error, { flowId }) => [
         { type: "WorkbenchFlow", id: flowId },
         "WorkbenchFlows"
       ]
@@ -449,6 +480,7 @@ export const {
   useGetWorkbenchFlowNodeOutputQuery,
   useGetTriggerReportsQuery,
   useGetWorkbenchFlowQuery,
+  useListWorkbenchFlowVersionsQuery,
   useGetWorkbenchFlowRunNodeQuery,
   useGetWorkbenchFlowRunNodesQuery,
   useGetWorkbenchFlowRunQuery,
@@ -468,5 +500,6 @@ export const {
   useApplyForgeDoctorFixesMutation,
   useRevokeOperatorSessionMutation,
   useRunWorkbenchFlowMutation,
+  useRestoreWorkbenchFlowVersionMutation,
   useUpdateWorkbenchFlowMutation
 } = forgeApi;

@@ -48,11 +48,14 @@ import {
   updateInsight
 } from "./repositories/collaboration.js";
 import {
+  DEFAULT_AI_CONNECTOR_VERSION_LIMIT,
   DEFAULT_AI_CONNECTOR_RUN_HISTORY_LIMIT,
+  MAX_AI_CONNECTOR_VERSION_LIMIT,
   MAX_AI_CONNECTOR_RUN_HISTORY_LIMIT,
   createAiConnector,
   deleteAiConnector,
   getAiConnectorById,
+  getAiConnectorVersion,
   getAiConnectorRunDetail,
   getAiConnectorRunNodeResult,
   getAiConnectorRunNodeResults,
@@ -61,7 +64,9 @@ import {
   getAiConnectorBySlug,
   getAiConnectorConversationReadModel,
   ensureLegacyProcessorsMigrated,
+  listAiConnectorVersionsPage,
   listAiConnectorRunsPage,
+  restoreAiConnectorVersion,
   runAiConnector,
   updateAiConnector
 } from "./repositories/ai-connectors.js";
@@ -650,6 +655,7 @@ import {
   createAgentRuntimeSessionSchema,
   createAgentTokenSchema,
   createAiConnectorSchema,
+  restoreAiConnectorVersionSchema,
   createAiProcessorLinkSchema,
   createAiProcessorSchema,
   runAiConnectorSchema,
@@ -3631,7 +3637,7 @@ function buildPreferredReadPath(entityType: string) {
     case "life_force":
       return "Read /api/v1/life-force first when the current energy picture matters; focused write lanes are /api/v1/life-force/profile, /api/v1/life-force/templates/:weekday, and /api/v1/life-force/fatigue-signals.";
     case "workbench":
-      return "/api/v1/workbench/flows | /api/v1/workbench/flows/:id | /api/v1/workbench/flows/by-slug/:slug | /api/v1/workbench/flows/:id/output | /api/v1/workbench/flows/:id/runs | /api/v1/workbench/flows/:id/runs/:runId | /api/v1/workbench/flows/:id/runs/:runId/nodes | /api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId | /api/v1/workbench/flows/:id/nodes/:nodeId/output | /api/v1/workbench/catalog/boxes";
+      return "/api/v1/workbench/flows | /api/v1/workbench/flows/:id | /api/v1/workbench/flows/:id/versions | /api/v1/workbench/flows/:id/versions/:revision | /api/v1/workbench/flows/:id/restore | /api/v1/workbench/flows/by-slug/:slug | /api/v1/workbench/flows/:id/output | /api/v1/workbench/flows/:id/runs | /api/v1/workbench/flows/:id/runs/:runId | /api/v1/workbench/flows/:id/runs/:runId/nodes | /api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId | /api/v1/workbench/flows/:id/nodes/:nodeId/output | /api/v1/workbench/catalog/boxes";
     case "course":
       return "/api/v1/courses | /api/v1/courses/:courseId | /api/v1/courses/:courseId/learn | /api/v1/courses/:courseId/voice-session | /api/v1/courses/:courseId/export";
     case "concept":
@@ -3659,7 +3665,7 @@ const QUESTION_FLOW_SPECIALIZED_ROUTE_HINTS = {
   life_force:
     "Specialized route surface: lifeForce. Route tool: forge_call_life_force_route. Route keys: overview, profile, weekdayTemplate, fatigueSignal.",
   workbench:
-    "Specialized route surface: workbench. Route tool: forge_call_workbench_route. Route keys: listFlows, flowDetail, flowById, flowBySlug, publishedOutput, runHistory, runs, runDetail, runNodes, nodeResult, latestNodeOutput, boxCatalog, createFlow, updateFlow, deleteFlow, runFlow, runByPayload, chatFlow. Catalog reads are paged; follow hasMore with the returned offset plus item count.",
+    "Specialized route surface: workbench. Route tool: forge_call_workbench_route. Route keys: listFlows, flowDetail, flowById, flowVersions, flowVersion, restoreFlow, flowBySlug, publishedOutput, runHistory, runs, runDetail, runNodes, nodeResult, latestNodeOutput, boxCatalog, createFlow, updateFlow, deleteFlow, runFlow, runByPayload, chatFlow. Catalog and version-history reads are paged; follow hasMore with the returned offset plus item count.",
   course:
     "Specialized route surface: courses. Route tool: forge_call_course_route. Route keys: listCourses, courseDetail, learningSession, voiceLearningSession, submitAttempt, upgradeEnrollment, importCourse, exportCourse, listConcepts, conceptDetail. Use learningSession for visual coaching. For voice, start voiceLearningSession with the exact week and day, teach one returned learner-safe block at a time in source order, and submit only Albert's confirmed, lightly formatted answer text through submitAttempt with the returned token and exact identifiers. Never store or submit audio or a separate voice transcript.",
   concept:
@@ -7038,12 +7044,14 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     whenToUse:
       "Use for Workbench saved-flow discovery, flow creation or edits, one-off runs, saved-flow execution, chat follow-ups, run detail, node results, latest node output, and published output. Do not use batch CRUD for Workbench.",
     inputShape:
-      '{ routeKey: "listFlows"|"flowDetail"|"flowById"|"flowBySlug"|"publishedOutput"|"runHistory"|"runs"|"runDetail"|"runNodes"|"nodeResult"|"latestNodeOutput"|"boxCatalog"|"createFlow"|"updateFlow"|"deleteFlow"|"runFlow"|"runByPayload"|"chatFlow", pathParams?: { id?: string, slug?: string, runId?: string, nodeId?: string }, query?: object, body?: object }',
+      '{ routeKey: "listFlows"|"flowDetail"|"flowById"|"flowVersions"|"flowVersion"|"restoreFlow"|"flowBySlug"|"publishedOutput"|"runHistory"|"runs"|"runDetail"|"runNodes"|"nodeResult"|"latestNodeOutput"|"boxCatalog"|"createFlow"|"updateFlow"|"deleteFlow"|"runFlow"|"runByPayload"|"chatFlow", pathParams?: { id?: string, revision?: string, slug?: string, runId?: string, nodeId?: string }, query?: object, body?: object }',
     requiredFields: ["routeKey"],
     notes: [
       "Choose routeKey from live onboarding specializedDomainSurfaces.workbench.routeKeys and methodRoutes.",
       "Fill every :placeholder through pathParams using the exact placeholder name; do not put flow, slug, run, or node ids inside routeKey, query, or body.",
       "Use runByPayload for one-off execution; createFlow only when the user wants a reusable saved flow.",
+      "For updateFlow and deleteFlow, first read flowDetail and carry its exact revision as body.expectedRevision. After a revision conflict, reread instead of retrying blindly.",
+      "Use flowVersions for bounded history, flowVersion for one exact saved contract, and restoreFlow with both revision and the current expectedRevision. Restore creates a new revision and never erases later history.",
       "Use publishedOutput, nodeResult, latestNodeOutput, runDetail, or runHistory reads before editing when the user is inspecting an existing artifact.",
       "After a Workbench run or edit, read back the flow detail, run detail, node output, published output, or run history when that verifies the user's practical goal."
     ],
@@ -9022,6 +9030,9 @@ function buildAgentOnboardingPayload(request: {
             "listFlows",
             "flowDetail",
             "flowById",
+            "flowVersions",
+            "flowVersion",
+            "restoreFlow",
             "flowBySlug",
             "publishedOutput",
             "runHistory",
@@ -9050,6 +9061,9 @@ function buildAgentOnboardingPayload(request: {
             listFlows: "GET /api/v1/workbench/flows",
             flowDetail: "GET /api/v1/workbench/flows/:id",
             flowById: "GET /api/v1/workbench/flows/:id",
+            flowVersions: "GET /api/v1/workbench/flows/:id/versions",
+            flowVersion: "GET /api/v1/workbench/flows/:id/versions/:revision",
+            restoreFlow: "POST /api/v1/workbench/flows/:id/restore",
             flowBySlug: "GET /api/v1/workbench/flows/by-slug/:slug",
             publishedOutput: "GET /api/v1/workbench/flows/:id/output",
             runHistory: "GET /api/v1/workbench/flows/:id/runs",
@@ -9072,6 +9086,8 @@ function buildAgentOnboardingPayload(request: {
             listFlows: "/api/v1/workbench/flows",
             flowDetail: "/api/v1/workbench/flows/:id",
             flowById: "/api/v1/workbench/flows/:id",
+            flowVersions: "/api/v1/workbench/flows/:id/versions",
+            flowVersion: "/api/v1/workbench/flows/:id/versions/:revision",
             flowBySlug: "/api/v1/workbench/flows/by-slug/:slug",
             publishedOutput: "/api/v1/workbench/flows/:id/output",
             runHistory: "/api/v1/workbench/flows/:id/runs",
@@ -9087,6 +9103,7 @@ function buildAgentOnboardingPayload(request: {
             createFlow: "/api/v1/workbench/flows",
             updateFlow: "/api/v1/workbench/flows/:id",
             deleteFlow: "/api/v1/workbench/flows/:id",
+            restoreFlow: "/api/v1/workbench/flows/:id/restore",
             runFlow: "/api/v1/workbench/flows/:id/run",
             runByPayload: "/api/v1/workbench/run",
             chatFlow: "/api/v1/workbench/flows/:id/chat"
@@ -9102,6 +9119,8 @@ function buildAgentOnboardingPayload(request: {
             "For flow creation, clarify what the flow should reliably produce, which input contract it should accept, and which first node or box anchors the flow before asking for structured input details.",
             "For one-off execution, do not create a saved flow unless the user wants reuse. Ask whether the input contract should stay temporary or become durable, then use POST /api/v1/workbench/run for the temporary case.",
             "For flow edits, ask what behavior should change while preserving the public contract unless the user explicitly wants the contract changed.",
+            "For updateFlow and deleteFlow, read the exact flow first and include its revision as expectedRevision. A 409 means another editor saved a newer revision; reread and discuss the current flow rather than retrying blindly.",
+            "Use flowVersions and flowVersion to inspect retained contracts. restoreFlow creates a new revision from a retained snapshot and requires both the selected revision and the current expectedRevision.",
             "For flow deletion, confirm the saved flow and whether published outputs or run history need preservation elsewhere before using the delete route.",
             "For saved flow chat follow-ups, use POST /api/v1/workbench/flows/:id/chat only when the user wants to continue a flow-specific conversation. Do not turn that into a new run, note, or generic entity update unless the user asks.",
             "Prefer the dedicated output and node-result routes over reverse-engineering raw traces.",
@@ -9616,7 +9635,7 @@ function buildAgentOnboardingPayload(request: {
       updateRule:
         "Each update operation must include entityType, id, and patch. For projects, lifecycle changes are status patches: active to restart, paused to suspend, completed to finish. Keep task and project scheduling rules on those same patch payloads. Official habit outcomes can also be logged through forge_update_entities by patching the habit with checkIn: { status, dateKey?, note?, description? } instead of route-hunting. Calendar-event updates still run downstream provider projection sync, and manual health-session field edits belong on the batch route by default rather than on the reflective review helpers.",
       specializedRouteToolRule:
-        "forge_call_movement_route, forge_call_life_event_route, forge_call_life_force_route, and forge_call_workbench_route expect { routeKey, pathParams?, query?, body? }. Use toolInputCatalog as the compact input reminder, then verify the selected routeKey against entityRouteModel.specializedDomainSurfaces routeKeys and methodRoutes before calling. Fill every methodRoutes placeholder with pathParams using names such as id, weekday, slug, runId, nodeId, or pointId, use query for read filters and userIds, and use body only for POST, PATCH, or PUT route keys. Do not put required IDs, artifact ids, weekdays, flow ids, or node ids inside routeKey, query, or body when the published path has a placeholder. The Life Force overview route key maps to GET /api/v1/life-force; do not invent /api/v1/life-force/overview. Life Events timeline maps to GET /api/v1/life-events/timeline, while stored life_event create/update/delete/search still use the shared batch entity tools. Workbench listFlows and boxCatalog are bounded: start with limit 24, apply the published filters, and continue only while hasMore is true by adding the returned item count to offset; use status=enabled or status=disabled rather than inventing includeArchived.",
+        "forge_call_movement_route, forge_call_life_event_route, forge_call_life_force_route, and forge_call_workbench_route expect { routeKey, pathParams?, query?, body? }. Use toolInputCatalog as the compact input reminder, then verify the selected routeKey against entityRouteModel.specializedDomainSurfaces routeKeys and methodRoutes before calling. Fill every methodRoutes placeholder with pathParams using names such as id, weekday, revision, slug, runId, nodeId, or pointId, use query for read filters and userIds, and use body only for POST, PATCH, PUT, or a published DELETE body. Do not put required IDs, artifact ids, weekdays, revisions, flow ids, or node ids inside routeKey, query, or body when the published path has a placeholder. The Life Force overview route key maps to GET /api/v1/life-force; do not invent /api/v1/life-force/overview. Life Events timeline maps to GET /api/v1/life-events/timeline, while stored life_event create/update/delete/search still use the shared batch entity tools. Workbench listFlows and boxCatalog are bounded: start with limit 24, apply the published filters, and continue only while hasMore is true by adding the returned item count to offset; use status=enabled or status=disabled rather than inventing includeArchived.",
       attentionRouteToolRule:
         "forge_call_attention_route expects { routeKey, pathParams?, query?, body? }. Use list with state, limit, offset, and optional effective-scope filters; use snooze, dismiss, or restore only with pathParams.id from a current result and only when allowedActions includes that action. Snooze requires body.until; dismiss may include body.note; restore needs no body.",
       entityNavigationRouteToolRule:
@@ -24190,6 +24209,19 @@ export async function buildServer(
       .default(DEFAULT_AI_CONNECTOR_RUN_HISTORY_LIMIT),
     offset: z.coerce.number().int().min(0).optional().default(0)
   });
+  const workbenchVersionHistoryQuerySchema = z.object({
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_AI_CONNECTOR_VERSION_LIMIT)
+      .optional()
+      .default(DEFAULT_AI_CONNECTOR_VERSION_LIMIT),
+    offset: z.coerce.number().int().min(0).optional().default(0)
+  });
+  const deleteWorkbenchFlowSchema = z.object({
+    expectedRevision: z.number().int().positive()
+  });
   const normalizeRepeatedWorkbenchQuery = (value: unknown) =>
     value === undefined ? [] : Array.isArray(value) ? value : [value];
   const workbenchFlowCatalogQuerySchema = z
@@ -24352,6 +24384,46 @@ export async function buildServer(
         conversation: getAiConnectorConversationReadModel(connector.id)
       };
     });
+    app.get(`${basePath}/:id/versions`, async (request, reply) => {
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["read"],
+        {
+          route: `${basePath}/:id/versions`
+        }
+      );
+      const params = request.params as { id: string };
+      const page = listAiConnectorVersionsPage(
+        params.id,
+        workbenchVersionHistoryQuerySchema.parse(request.query ?? {})
+      );
+      if (!page) {
+        reply.code(404);
+        return { error: `${noun} not found` };
+      }
+      return page;
+    });
+    app.get(`${basePath}/:id/versions/:revision`, async (request, reply) => {
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["read"],
+        {
+          route: `${basePath}/:id/versions/:revision`
+        }
+      );
+      const params = request.params as { id: string; revision: string };
+      const revision = z.coerce
+        .number()
+        .int()
+        .positive()
+        .parse(params.revision);
+      const version = getAiConnectorVersion(params.id, revision);
+      if (!version) {
+        reply.code(404);
+        return { error: `${noun} version not found` };
+      }
+      return { version };
+    });
     app.patch(`${basePath}/:id`, async (request, reply) => {
       requireScopedAccess(
         request.headers as Record<string, unknown>,
@@ -24360,15 +24432,53 @@ export async function buildServer(
           route: `${basePath}/:id`
         }
       );
-      const connector = updateAiConnector(
+      const result = updateAiConnector(
         (request.params as { id: string }).id,
         updateAiConnectorSchema.parse(request.body ?? {})
       );
-      if (!connector) {
+      if (result.status === "not_found") {
         reply.code(404);
         return { error: `${noun} not found` };
       }
-      return { [singularKey]: connector };
+      if (result.status === "conflict") {
+        throw new HttpError(
+          409,
+          "workbench_flow_revision_conflict",
+          "This flow changed after it was opened. Reload the current revision before saving or restoring.",
+          { currentRevision: result.currentRevision }
+        );
+      }
+      return { [singularKey]: result.connector };
+    });
+    app.post(`${basePath}/:id/restore`, async (request, reply) => {
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        {
+          route: `${basePath}/:id/restore`
+        }
+      );
+      const result = restoreAiConnectorVersion(
+        (request.params as { id: string }).id,
+        restoreAiConnectorVersionSchema.parse(request.body ?? {})
+      );
+      if (result.status === "not_found") {
+        reply.code(404);
+        return { error: `${noun} not found` };
+      }
+      if (result.status === "version_not_found") {
+        reply.code(404);
+        return { error: `${noun} version not found` };
+      }
+      if (result.status === "conflict") {
+        throw new HttpError(
+          409,
+          "workbench_flow_revision_conflict",
+          "This flow changed after it was opened. Reload the current revision before saving or restoring.",
+          { currentRevision: result.currentRevision }
+        );
+      }
+      return { [singularKey]: result.connector };
     });
     app.delete(`${basePath}/:id`, async (request, reply) => {
       requireScopedAccess(
@@ -24378,14 +24488,23 @@ export async function buildServer(
           route: `${basePath}/:id`
         }
       );
-      const connector = deleteAiConnector(
-        (request.params as { id: string }).id
+      const result = deleteAiConnector(
+        (request.params as { id: string }).id,
+        deleteWorkbenchFlowSchema.parse(request.body ?? {}).expectedRevision
       );
-      if (!connector) {
+      if (result.status === "not_found") {
         reply.code(404);
         return { error: `${noun} not found` };
       }
-      return { [singularKey]: connector };
+      if (result.status === "conflict") {
+        throw new HttpError(
+          409,
+          "workbench_flow_revision_conflict",
+          "This flow changed after it was opened. Reload the current revision before deleting it.",
+          { currentRevision: result.currentRevision }
+        );
+      }
+      return { [singularKey]: result.connector };
     });
     app.post(`${basePath}/:id/run`, async (request, reply) => {
       requireScopedAccess(

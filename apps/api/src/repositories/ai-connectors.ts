@@ -7,10 +7,12 @@ import {
 } from "../managers/platform/llm-manager.js";
 import {
   createAiConnectorSchema,
+  aiConnectorOutputSchema,
   aiConnectorConversationSchema,
   aiConnectorRunResultSchema,
   aiConnectorRunSchema,
   aiConnectorSchema,
+  restoreAiConnectorVersionSchema,
   runAiConnectorSchema,
   updateAiConnectorSchema,
   type AiConnector,
@@ -75,9 +77,41 @@ type AiConnectorRow = {
   published_outputs_json: string;
   last_run_json: string | null;
   legacy_processor_id: string | null;
+  revision: number;
   created_at: string;
   updated_at: string;
 };
+
+type AiConnectorVersionRow = {
+  connector_id: string;
+  revision: number;
+  title: string;
+  kind: "functor" | "chat";
+  node_count: number;
+  edge_count: number;
+  public_input_count: number;
+  published_output_count: number;
+  snapshot_json: string;
+  change_kind: "baseline" | "created" | "updated" | "restored";
+  restored_from_revision: number | null;
+  created_at: string;
+};
+
+type AiConnectorSnapshot = Pick<
+  AiConnector,
+  | "title"
+  | "description"
+  | "kind"
+  | "homeSurfaceId"
+  | "endpointEnabled"
+  | "graph"
+  | "publicInputs"
+  | "publishedOutputs"
+>;
+
+export const DEFAULT_AI_CONNECTOR_VERSION_LIMIT = 20;
+export const MAX_AI_CONNECTOR_VERSION_LIMIT = 50;
+const MAX_RETAINED_AI_CONNECTOR_VERSIONS = 50;
 
 type AiConnectorExecutionServices = {
   llm: TextPromptRunner;
@@ -488,9 +522,98 @@ function mapConnector(row: AiConnectorRow): AiConnector {
     publishedOutputs: parseJson(row.published_outputs_json, []),
     lastRun: buildConnectorLastRunSummary(parseJson(row.last_run_json, null)),
     legacyProcessorId: row.legacy_processor_id,
+    revision: row.revision,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   });
+}
+
+function connectorSnapshot(connector: AiConnector): AiConnectorSnapshot {
+  return {
+    title: connector.title,
+    description: connector.description,
+    kind: connector.kind,
+    homeSurfaceId: connector.homeSurfaceId,
+    endpointEnabled: connector.endpointEnabled,
+    graph: connector.graph,
+    publicInputs: connector.publicInputs,
+    publishedOutputs: connector.publishedOutputs
+  };
+}
+
+function parseConnectorSnapshot(value: string): AiConnectorSnapshot {
+  const parsed = JSON.parse(value) as AiConnectorSnapshot;
+  const currentShape = createAiConnectorSchema.parse(parsed);
+  return {
+    title: currentShape.title,
+    description: currentShape.description,
+    kind: currentShape.kind,
+    homeSurfaceId: currentShape.homeSurfaceId,
+    endpointEnabled: currentShape.endpointEnabled,
+    graph: normalizeConnectorGraph(currentShape.graph),
+    publicInputs: currentShape.publicInputs,
+    publishedOutputs: aiConnectorOutputSchema
+      .array()
+      .parse(parsed.publishedOutputs)
+  };
+}
+
+function insertConnectorVersion(
+  connector: AiConnector,
+  changeKind: AiConnectorVersionRow["change_kind"],
+  restoredFromRevision: number | null = null
+) {
+  getDatabase()
+    .prepare(
+      `INSERT INTO ai_connector_versions (
+         connector_id, revision, title, kind, node_count, edge_count,
+         public_input_count, published_output_count, snapshot_json,
+         change_kind, restored_from_revision, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      connector.id,
+      connector.revision,
+      connector.title,
+      connector.kind,
+      connector.graph.nodes.length,
+      connector.graph.edges.length,
+      connector.publicInputs.length,
+      connector.publishedOutputs.length,
+      JSON.stringify(connectorSnapshot(connector)),
+      changeKind,
+      restoredFromRevision,
+      connector.updatedAt
+    );
+  getDatabase()
+    .prepare(
+      `DELETE FROM ai_connector_versions
+       WHERE connector_id = ?
+         AND revision NOT IN (
+           SELECT revision
+           FROM ai_connector_versions
+           WHERE connector_id = ?
+           ORDER BY revision DESC
+           LIMIT ?
+         )`
+    )
+    .run(connector.id, connector.id, MAX_RETAINED_AI_CONNECTOR_VERSIONS);
+}
+
+function connectorVersionSummary(row: AiConnectorVersionRow) {
+  return {
+    connectorId: row.connector_id,
+    revision: row.revision,
+    changeKind: row.change_kind,
+    restoredFromRevision: row.restored_from_revision,
+    title: row.title,
+    kind: row.kind,
+    nodeCount: row.node_count,
+    edgeCount: row.edge_count,
+    publicInputCount: row.public_input_count,
+    publishedOutputCount: row.published_output_count,
+    createdAt: row.created_at
+  };
 }
 
 function buildConnectorLastRunSummary(run: AiConnectorRun | null) {
@@ -2591,87 +2714,248 @@ export function createAiConnector(
       : buildDefaultGraph(parsed.kind, parsed.title)
   );
   const publishedOutputs = ensurePublishedOutputs(id, graph);
-  getDatabase()
-    .prepare(
-      `INSERT INTO ai_connectors (
-        id, slug, title, description, kind, home_surface_id, endpoint_enabled, graph_json, public_inputs_json, published_outputs_json, last_run_json, legacy_processor_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      id,
-      slug,
-      parsed.title,
-      parsed.description,
-      parsed.kind,
-      parsed.homeSurfaceId,
-      parsed.endpointEnabled ? 1 : 0,
-      JSON.stringify(graph),
-      JSON.stringify(parsed.publicInputs),
-      JSON.stringify(publishedOutputs),
-      null,
-      input.legacyProcessorId ?? null,
-      now,
-      now
-    );
-  return getAiConnectorById(id)!;
+  return runInTransaction(() => {
+    getDatabase()
+      .prepare(
+        `INSERT INTO ai_connectors (
+          id, slug, title, description, kind, home_surface_id, endpoint_enabled, graph_json, public_inputs_json, published_outputs_json, last_run_json, legacy_processor_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        id,
+        slug,
+        parsed.title,
+        parsed.description,
+        parsed.kind,
+        parsed.homeSurfaceId,
+        parsed.endpointEnabled ? 1 : 0,
+        JSON.stringify(graph),
+        JSON.stringify(parsed.publicInputs),
+        JSON.stringify(publishedOutputs),
+        null,
+        input.legacyProcessorId ?? null,
+        now,
+        now
+      );
+    const connector = getAiConnectorById(id)!;
+    insertConnectorVersion(connector, "created");
+    return connector;
+  });
 }
 
 export function updateAiConnector(
   connectorId: string,
   patch: UpdateAiConnectorInput
 ) {
-  const current = getAiConnectorById(connectorId);
-  if (!current) {
-    return null;
-  }
   const parsed = updateAiConnectorSchema.parse(patch);
-  const nextGraph = normalizeConnectorGraph(parsed.graph ?? current.graph);
-  validateConnectorGraph(nextGraph);
-  const nextTitle = parsed.title ?? current.title;
-  const next = {
-    ...current,
-    ...parsed,
-    title: nextTitle,
-    slug:
-      parsed.title && parsed.title !== current.title
-        ? buildConnectorSlug(parsed.title, current.id)
-        : current.slug,
-    graph: nextGraph,
-    publicInputs: parsed.publicInputs ?? current.publicInputs,
-    publishedOutputs: ensurePublishedOutputs(current.id, nextGraph)
-  };
-  const now = new Date().toISOString();
-  getDatabase()
-    .prepare(
-      `UPDATE ai_connectors
-       SET slug = ?, title = ?, description = ?, kind = ?, home_surface_id = ?, endpoint_enabled = ?, graph_json = ?, public_inputs_json = ?, published_outputs_json = ?, updated_at = ?
-       WHERE id = ?`
-    )
-    .run(
-      next.slug,
-      next.title,
-      next.description,
-      next.kind,
-      next.homeSurfaceId,
-      next.endpointEnabled ? 1 : 0,
-      JSON.stringify(next.graph),
-      JSON.stringify(next.publicInputs),
-      JSON.stringify(next.publishedOutputs),
-      now,
-      connectorId
-    );
-  return getAiConnectorById(connectorId)!;
+  return runInTransaction(() => {
+    const current = getAiConnectorById(connectorId);
+    if (!current) {
+      return { status: "not_found" } as const;
+    }
+    if (current.revision !== parsed.expectedRevision) {
+      return {
+        status: "conflict",
+        currentRevision: current.revision
+      } as const;
+    }
+    const { expectedRevision: _expectedRevision, ...changes } = parsed;
+    const nextGraph = normalizeConnectorGraph(changes.graph ?? current.graph);
+    validateConnectorGraph(nextGraph);
+    const nextTitle = changes.title ?? current.title;
+    const next = {
+      ...current,
+      ...changes,
+      title: nextTitle,
+      slug:
+        changes.title && changes.title !== current.title
+          ? buildConnectorSlug(changes.title, current.id)
+          : current.slug,
+      graph: nextGraph,
+      publicInputs: changes.publicInputs ?? current.publicInputs,
+      publishedOutputs: ensurePublishedOutputs(current.id, nextGraph)
+    };
+    const now = new Date().toISOString();
+    const update = getDatabase()
+      .prepare(
+        `UPDATE ai_connectors
+         SET slug = ?, title = ?, description = ?, kind = ?, home_surface_id = ?, endpoint_enabled = ?, graph_json = ?, public_inputs_json = ?, published_outputs_json = ?, revision = revision + 1, updated_at = ?
+         WHERE id = ? AND revision = ?`
+      )
+      .run(
+        next.slug,
+        next.title,
+        next.description,
+        next.kind,
+        next.homeSurfaceId,
+        next.endpointEnabled ? 1 : 0,
+        JSON.stringify(next.graph),
+        JSON.stringify(next.publicInputs),
+        JSON.stringify(next.publishedOutputs),
+        now,
+        connectorId,
+        parsed.expectedRevision
+      );
+    if (update.changes !== 1) {
+      return {
+        status: "conflict",
+        currentRevision: getAiConnectorById(connectorId)?.revision ?? null
+      } as const;
+    }
+    const connector = getAiConnectorById(connectorId)!;
+    insertConnectorVersion(connector, "updated");
+    return { status: "updated", connector } as const;
+  });
 }
 
-export function deleteAiConnector(connectorId: string) {
-  const current = getAiConnectorById(connectorId);
-  if (!current) {
+export function deleteAiConnector(
+  connectorId: string,
+  expectedRevision: number
+) {
+  return runInTransaction(() => {
+    const current = getAiConnectorById(connectorId);
+    if (!current) {
+      return { status: "not_found" } as const;
+    }
+    if (current.revision !== expectedRevision) {
+      return {
+        status: "conflict",
+        currentRevision: current.revision
+      } as const;
+    }
+    const deleted = getDatabase()
+      .prepare(`DELETE FROM ai_connectors WHERE id = ? AND revision = ?`)
+      .run(connectorId, expectedRevision);
+    if (deleted.changes !== 1) {
+      return {
+        status: "conflict",
+        currentRevision: getAiConnectorById(connectorId)?.revision ?? null
+      } as const;
+    }
+    return { status: "deleted", connector: current } as const;
+  });
+}
+
+export function listAiConnectorVersionsPage(
+  connectorId: string,
+  input: { limit?: number; offset?: number } = {}
+) {
+  if (!getAiConnectorById(connectorId)) {
     return null;
   }
-  getDatabase()
-    .prepare(`DELETE FROM ai_connectors WHERE id = ?`)
-    .run(connectorId);
-  return current;
+  const limit = Math.min(
+    Math.max(input.limit ?? DEFAULT_AI_CONNECTOR_VERSION_LIMIT, 1),
+    MAX_AI_CONNECTOR_VERSION_LIMIT
+  );
+  const offset = Math.max(input.offset ?? 0, 0);
+  const total = (
+    getDatabase()
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM ai_connector_versions
+         WHERE connector_id = ?`
+      )
+      .get(connectorId) as { count: number }
+  ).count;
+  const rows = getDatabase()
+    .prepare(
+      `SELECT *
+       FROM ai_connector_versions
+       WHERE connector_id = ?
+       ORDER BY revision DESC
+       LIMIT ? OFFSET ?`
+    )
+    .all(connectorId, limit, offset) as AiConnectorVersionRow[];
+  return {
+    versions: rows.map(connectorVersionSummary),
+    total,
+    limit,
+    offset,
+    hasMore: offset + rows.length < total
+  };
+}
+
+export function getAiConnectorVersion(connectorId: string, revision: number) {
+  if (!getAiConnectorById(connectorId)) {
+    return null;
+  }
+  const row = getDatabase()
+    .prepare(
+      `SELECT *
+       FROM ai_connector_versions
+       WHERE connector_id = ? AND revision = ?`
+    )
+    .get(connectorId, revision) as AiConnectorVersionRow | undefined;
+  if (!row) {
+    return undefined;
+  }
+  return {
+    ...connectorVersionSummary(row),
+    snapshot: parseConnectorSnapshot(row.snapshot_json)
+  };
+}
+
+export function restoreAiConnectorVersion(
+  connectorId: string,
+  input: { revision: number; expectedRevision: number }
+) {
+  const parsed = restoreAiConnectorVersionSchema.parse(input);
+  return runInTransaction(() => {
+    const current = getAiConnectorById(connectorId);
+    if (!current) {
+      return { status: "not_found" } as const;
+    }
+    if (current.revision !== parsed.expectedRevision) {
+      return {
+        status: "conflict",
+        currentRevision: current.revision
+      } as const;
+    }
+    const version = getDatabase()
+      .prepare(
+        `SELECT *
+         FROM ai_connector_versions
+         WHERE connector_id = ? AND revision = ?`
+      )
+      .get(connectorId, parsed.revision) as AiConnectorVersionRow | undefined;
+    if (!version) {
+      return { status: "version_not_found" } as const;
+    }
+    const snapshot = parseConnectorSnapshot(version.snapshot_json);
+    validateConnectorGraph(snapshot.graph);
+    const nextRevision = current.revision + 1;
+    const now = new Date().toISOString();
+    const updated = getDatabase()
+      .prepare(
+        `UPDATE ai_connectors
+         SET slug = ?, title = ?, description = ?, kind = ?, home_surface_id = ?, endpoint_enabled = ?, graph_json = ?, public_inputs_json = ?, published_outputs_json = ?, revision = ?, updated_at = ?
+         WHERE id = ? AND revision = ?`
+      )
+      .run(
+        buildConnectorSlug(snapshot.title, current.id),
+        snapshot.title,
+        snapshot.description,
+        snapshot.kind,
+        snapshot.homeSurfaceId,
+        snapshot.endpointEnabled ? 1 : 0,
+        JSON.stringify(snapshot.graph),
+        JSON.stringify(snapshot.publicInputs),
+        JSON.stringify(snapshot.publishedOutputs),
+        nextRevision,
+        now,
+        connectorId,
+        parsed.expectedRevision
+      );
+    if (updated.changes !== 1) {
+      return {
+        status: "conflict",
+        currentRevision: getAiConnectorById(connectorId)?.revision ?? null
+      } as const;
+    }
+    const connector = getAiConnectorById(connectorId)!;
+    insertConnectorVersion(connector, "restored", parsed.revision);
+    return { status: "restored", connector } as const;
+  });
 }
 
 export async function runAiConnector(

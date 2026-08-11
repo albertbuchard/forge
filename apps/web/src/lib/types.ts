@@ -4551,8 +4551,45 @@ export interface AiConnector {
   publishedOutputs: AiConnectorOutput[];
   lastRun: AiConnectorRun | null;
   legacyProcessorId: string | null;
+  revision: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface WorkbenchFlowVersionSummary {
+  connectorId: string;
+  revision: number;
+  changeKind: "baseline" | "created" | "updated" | "restored";
+  restoredFromRevision: number | null;
+  title: string;
+  kind: AiConnectorKind;
+  nodeCount: number;
+  edgeCount: number;
+  publicInputCount: number;
+  publishedOutputCount: number;
+  createdAt: string;
+}
+
+export interface WorkbenchFlowVersionPage {
+  versions: WorkbenchFlowVersionSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+export interface WorkbenchFlowVersionDetail extends WorkbenchFlowVersionSummary {
+  snapshot: Pick<
+    AiConnector,
+    | "title"
+    | "description"
+    | "kind"
+    | "homeSurfaceId"
+    | "endpointEnabled"
+    | "graph"
+    | "publicInputs"
+    | "publishedOutputs"
+  >;
 }
 
 export interface WorkbenchCatalogFacet {

@@ -592,6 +592,33 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
       },
       {
         method: "GET",
+        pattern: /^\/forge\/v1\/workbench\/flows\/([^/]+)\/versions$/,
+        upstreamPath: "/api/v1/workbench/flows/:id/versions",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/workbench/flows/${match[1]}/versions`, url)
+      },
+      {
+        method: "GET",
+        pattern:
+          /^\/forge\/v1\/workbench\/flows\/([^/]+)\/versions\/([1-9][0-9]*)$/,
+        upstreamPath: "/api/v1/workbench/flows/:id/versions/:revision",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(
+            `/api/v1/workbench/flows/${match[1]}/versions/${match[2]}`,
+            url
+          )
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/workbench\/flows\/([^/]+)\/restore$/,
+        upstreamPath: "/api/v1/workbench/flows/:id/restore",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/workbench/flows/${match[1]}/restore`, url)
+      },
+      {
+        method: "GET",
         pattern: /^\/forge\/v1\/workbench\/flows\/([^/]+)$/,
         upstreamPath: "/api/v1/workbench/flows/:id",
         target: (match: RegExpMatchArray, url: URL) =>
@@ -610,6 +637,7 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
         method: "DELETE",
         pattern: /^\/forge\/v1\/workbench\/flows\/([^/]+)$/,
         upstreamPath: "/api/v1/workbench/flows/:id",
+        requestBody: "json",
         requiresToken: true,
         target: (match: RegExpMatchArray, url: URL) =>
           passthroughSearch(`/api/v1/workbench/flows/${match[1]}`, url)
@@ -741,10 +769,7 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
         requestBody: "json",
         requiresToken: true,
         target: (match: RegExpMatchArray, url: URL) =>
-          passthroughSearch(
-            `/api/v1/courses/${match[1]}/voice-session`,
-            url
-          )
+          passthroughSearch(`/api/v1/courses/${match[1]}/voice-session`, url)
       },
       {
         method: "POST",
