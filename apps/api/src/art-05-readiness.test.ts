@@ -162,6 +162,22 @@ test("ART-05 classifies malformed, macro, unsafe-archive, and unsupported files"
     assert.ok(findingCodes(validLargeYaml).has("yaml_validation_incomplete"));
     assert.equal(validLargeYaml.artifactState, "active");
   }
+
+  const malformedPdf = scanArtifactBytes({
+    buffer: Buffer.from("plain text disguised as a PDF", "utf8"),
+    originalFileName: "malformed.pdf"
+  });
+  assert.ok(findingCodes(malformedPdf).has("pdf_header_invalid"));
+  assert.equal(malformedPdf.dangerLevel, "high");
+  assert.equal(malformedPdf.artifactState, "quarantined");
+
+  const validPdfHeader = scanArtifactBytes({
+    buffer: Buffer.from("%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF", "latin1"),
+    originalFileName: "valid-header.pdf",
+    declaredMimeType: "application/pdf"
+  });
+  assert.equal(findingCodes(validPdfHeader).has("pdf_header_invalid"), false);
+  assert.ok(findingCodes(validPdfHeader).has("static_scan_clean"));
 });
 
 test("ART-05 preserves the previous scan result when rescan integrity fails", async () => {

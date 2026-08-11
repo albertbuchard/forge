@@ -1773,6 +1773,14 @@ export function scanArtifactBytes(input: {
       "The declared MIME type differs from static file detection."
     );
   }
+  if (detectedExtension === "pdf" && detectedMimeType !== "application/pdf") {
+    addFinding(
+      findings,
+      "high",
+      "pdf_header_invalid",
+      "The file has a .pdf extension but does not begin with a PDF signature."
+    );
+  }
 
   let extractedTextSample = "";
   if (
