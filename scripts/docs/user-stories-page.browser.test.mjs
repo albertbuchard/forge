@@ -140,14 +140,14 @@ test("summary metrics apply fast filters with mouse and keyboard", async (contex
   await page.locator('[data-metric-scope="current"]').click();
   assert.equal(
     await page.locator("[data-story-id]:not([hidden])").count(),
-    192
+    193
   );
   assert.equal(new URL(page.url()).search, "?scope=current");
   assert.equal(new URL(page.url()).hash, "");
   await page.reload({ waitUntil: "domcontentloaded" });
   assert.equal(
     await page.locator("[data-story-id]:not([hidden])").count(),
-    192
+    193
   );
   assert.equal(new URL(page.url()).search, "?scope=current");
   assert.equal(new URL(page.url()).hash, "");
@@ -155,7 +155,7 @@ test("summary metrics apply fast filters with mouse and keyboard", async (contex
   await page.locator('[data-metric-readiness="In review"]').click();
   assert.equal(
     await page.locator("[data-story-id]:not([hidden])").count(),
-    148
+    149
   );
   assert.equal(new URL(page.url()).search, "?readiness=In+review");
   assert.equal(
@@ -166,7 +166,7 @@ test("summary metrics apply fast filters with mouse and keyboard", async (contex
   );
 
   await page.locator('[data-metric-scope="planned"]').press("Enter");
-  assert.equal(await page.locator("[data-story-id]:not([hidden])").count(), 11);
+  assert.equal(await page.locator("[data-story-id]:not([hidden])").count(), 10);
   assert.equal(new URL(page.url()).search, "?scope=planned");
 
   await page.locator('[data-metric-scope="all"]').click();
