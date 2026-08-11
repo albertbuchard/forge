@@ -2421,7 +2421,7 @@
                     <p class="story-expanded-outcome">As a user or trusted agent, I can execute a saved or one-off flow and see truthful progress and failure state.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Workbench <code>runFlow</code> and <code>runByPayload</code>.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>durable per-flow/per-mode single-flight, stable idempotent replay, changed-payload conflict, stored-input retry, and interrupted-run recovery are implemented; complete explicit cancellation, timeout, and partial-failure semantics.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>durable per-flow/per-mode single-flight, stable idempotent replay, changed-payload conflict, stored-input retry, interrupted-run recovery, and completed-node evidence on partial failure are implemented; complete explicit cancellation and whole-flow timeout semantics after execution tools expose a common cancellation signal.</dd></div>
                     </dl>
                   </div>
                 </details>

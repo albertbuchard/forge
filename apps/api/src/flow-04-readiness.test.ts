@@ -187,6 +187,109 @@ test("FLOW-04 preserves one durable run receipt across replay, contention, resta
     assert.equal(receipts[0]?.idempotency_key, "flow-04-exact-run");
     assert.match(String(receipts[0]?.request_fingerprint), /^[0-9a-f]{64}$/);
     assert.equal(receipts[2]?.idempotency_key, "flow-04-retry");
+
+    const partialFlow = await app.inject({
+      method: "POST",
+      url: "/api/v1/workbench/flows",
+      headers,
+      payload: {
+        title: "Partial failure evidence",
+        description: "One branch completes before another branch fails.",
+        kind: "functor",
+        graph: {
+          nodes: [
+            {
+              id: "good_value",
+              type: "value",
+              position: { x: 100, y: 80 },
+              data: {
+                label: "Good value",
+                description: "Completes before the failing branch.",
+                valueType: "string",
+                valueLiteral: "preserved"
+              }
+            },
+            {
+              id: "good_output",
+              type: "output",
+              position: { x: 420, y: 80 },
+              data: {
+                label: "Good output",
+                description: "Preserves completed evidence.",
+                outputKey: "good"
+              }
+            },
+            {
+              id: "failing_model",
+              type: "functor",
+              position: { x: 100, y: 260 },
+              data: {
+                label: "Missing model",
+                description: "Fails because no model connection is configured.",
+                prompt: "This node must fail in the readiness fixture.",
+                outputs: [{ key: "answer", label: "Answer", kind: "text" }]
+              }
+            },
+            {
+              id: "failed_output",
+              type: "output",
+              position: { x: 420, y: 260 },
+              data: {
+                label: "Failed output",
+                description: "Receives the unavailable model output.",
+                outputKey: "failed"
+              }
+            }
+          ],
+          edges: [
+            {
+              id: "good_edge",
+              source: "good_value",
+              target: "good_output",
+              sourceHandle: "value",
+              targetHandle: "result",
+              label: null
+            },
+            {
+              id: "failed_edge",
+              source: "failing_model",
+              target: "failed_output",
+              sourceHandle: "answer",
+              targetHandle: "result",
+              label: null
+            }
+          ]
+        }
+      }
+    });
+    assert.equal(partialFlow.statusCode, 201, partialFlow.body);
+    const partialFlowId = partialFlow.json().flow.id as string;
+    const partialRun = await app.inject({
+      method: "POST",
+      url: `/api/v1/workbench/flows/${partialFlowId}/run`,
+      headers,
+      payload: { idempotencyKey: "flow-04-partial", debug: true }
+    });
+    assert.equal(partialRun.statusCode, 422, partialRun.body);
+    assert.equal(partialRun.json().code, "workbench_run_failed");
+    const partialDetail = await app.inject({
+      method: "GET",
+      url: `/api/v1/workbench/flows/${partialFlowId}/runs/${partialRun.json().runId}`,
+      headers
+    });
+    assert.equal(partialDetail.statusCode, 200, partialDetail.body);
+    assert.equal(partialDetail.json().run.status, "failed");
+    assert.deepEqual(
+      partialDetail
+        .json()
+        .run.result.nodeResults.map((node: { nodeId: string }) => node.nodeId),
+      ["good_value", "good_output"]
+    );
+    assert.match(partialDetail.json().run.error, /model connection/i);
+    assert.match(
+      partialDetail.json().run.result.debugTrace.errors[0],
+      /model connection/i
+    );
   } finally {
     await app.close();
     closeDatabase();

@@ -195,6 +195,17 @@ type AiConnectorRunReceipt = {
 const INTERRUPTED_WORKBENCH_RUN_ERROR =
   "Forge restarted before this Workbench run completed.";
 
+class AiConnectorExecutionFailure extends Error {
+  constructor(
+    message: string,
+    readonly partialResult: AiConnectorRunResult,
+    options?: ErrorOptions
+  ) {
+    super(message, options);
+    this.name = "AiConnectorExecutionFailure";
+  }
+}
+
 type ConnectorNodeValue = {
   text: string;
   json: Record<string, unknown> | null;
@@ -2769,10 +2780,21 @@ async function executeConnector(
       await evaluateNode(outputNode.id);
     }
   } catch (error) {
-    debugErrors.push(
-      error instanceof Error ? error.message : "Flow execution failed"
-    );
-    throw error;
+    const message =
+      error instanceof Error ? error.message : "Flow execution failed";
+    debugErrors.push(message);
+    const partialResult = aiConnectorRunResultSchema.parse({
+      ...buildOutputResult(connector, values, nodeResults),
+      debugTrace: parsedInput.debug
+        ? {
+            nodes: debugNodes,
+            errors: debugErrors
+          }
+        : undefined
+    });
+    throw new AiConnectorExecutionFailure(message, partialResult, {
+      cause: error
+    });
   }
   const result = aiConnectorRunResultSchema.parse({
     ...buildOutputResult(connector, values, nodeResults),
@@ -3389,6 +3411,10 @@ export async function runAiConnector(
     const failedRun = aiConnectorRunSchema.parse({
       ...pendingRun,
       status: "failed",
+      result:
+        error instanceof AiConnectorExecutionFailure
+          ? error.partialResult
+          : null,
       error: error instanceof Error ? error.message : "Connector run failed",
       completedAt: new Date().toISOString()
     });
