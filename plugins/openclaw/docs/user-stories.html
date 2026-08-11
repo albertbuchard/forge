@@ -44,10 +44,10 @@
 
         <section class="story-metrics" aria-label="Story totals">
           <a class="story-metric metric-all" href="./user-stories.html" data-metric-scope="all"><strong>203</strong><span>All stories</span></a>
-          <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>187</strong><span>Current product</span></a>
-          <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>16</strong><span>Planned</span></a>
+          <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>188</strong><span>Current product</span></a>
+          <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>15</strong><span>Planned</span></a>
           <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>14</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>143</strong><span>In review</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>144</strong><span>In review</span></a>
           <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>30</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
@@ -130,7 +130,7 @@
             <details class="story-family" data-family-group="SYS">
               <summary>
                 <span class="family-title"><span class="family-code">SYS</span>Global shell and navigation</span>
-                <span class="family-counts"><span data-family-visible>22</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 17 current · 5 planned</span></span>
+                <span class="family-counts"><span data-family-visible>22</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 18 current · 4 planned</span></span>
               </summary>
               <div class="story-list">
 
@@ -374,6 +374,21 @@
                   </div>
                 </details>
 
+                <details class="story-card" id="story-sys-18" data-story-id="SYS-18" data-lifecycle="current" data-readiness="In review" data-family="SYS">
+                  <summary class="story-summary">
+                    <span class="story-id">SYS-18</span>
+                    <span class="story-summary-outcome">As a user, I can undo a recent reversible change through a bounded receipt without hiding changes that cannot be safely reversed.</span>
+                    <span class="story-state state-in-review">In review</span>
+                  </summary>
+                  <div class="story-expanded">
+                    <p class="story-expanded-outcome">As a user, I can undo a recent reversible change through a bounded receipt without hiding changes that cannot be safely reversed.</p>
+                    <dl class="story-details">
+                      <div><dt>Where it lives</dt><dd>Mutation receipts, soft delete, board moves, dismissals, metadata edits.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>reversible task moves, metadata edits, soft deletes, and Attention changes now return expiring principal-scoped receipts with idempotent Undo; stale source revisions refuse unsafe reversal, the banner expires live and keeps one retry key, and permanent deletion returns a truthful terminal reason. Complete live desktop, phone, and keyboard verification.</dd></div>
+                    </dl>
+                  </div>
+                </details>
+
                 <details class="story-card" id="story-sys-19" data-story-id="SYS-19" data-lifecycle="current" data-readiness="In review" data-family="SYS">
                   <summary class="story-summary">
                     <span class="story-id">SYS-19</span>
@@ -400,21 +415,6 @@
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Action Bar, guided create flows, general entity links, return-state contract.</dd></div>
                       <div><dt>First evidence needed</dt><dd>measure current create-and-return steps in at least five story families and test ambiguous, unauthorized, deleted, and stale source records.</dd></div>
-                    </dl>
-                  </div>
-                </details>
-
-                <details class="story-card" id="story-sys-18" data-story-id="SYS-18" data-lifecycle="planned" data-readiness="planned" data-family="SYS">
-                  <summary class="story-summary">
-                    <span class="story-id">SYS-18</span>
-                    <span class="story-summary-outcome">As a user, I can undo a recent reversible change through a bounded receipt without hiding changes that cannot be safely reversed.</span>
-                    <span class="story-state state-planned">Planned</span>
-                  </summary>
-                  <div class="story-expanded">
-                    <p class="story-expanded-outcome">As a user, I can undo a recent reversible change through a bounded receipt without hiding changes that cannot be safely reversed.</p>
-                    <dl class="story-details">
-                      <div><dt>Where it lives</dt><dd>Mutation receipts, soft delete, board moves, dismissals, metadata edits.</dd></div>
-                      <div><dt>First evidence needed</dt><dd>inventory reversible mutations and define expiry, idempotency, authorization, concurrency, and honest non-reversible states before exposing a shared control.</dd></div>
                     </dl>
                   </div>
                 </details>
