@@ -46,8 +46,8 @@
           <a class="story-metric metric-all" href="./user-stories.html" data-metric-scope="all"><strong>203</strong><span>All stories</span></a>
           <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>193</strong><span>Current product</span></a>
           <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>10</strong><span>Planned</span></a>
-          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>16</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>159</strong><span>In review</span></a>
+          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>17</strong><span>Verified</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>158</strong><span>In review</span></a>
           <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>18</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
@@ -2060,17 +2060,17 @@
                   </div>
                 </details>
 
-                <details class="story-card" id="story-health-03" data-story-id="HEALTH-03" data-lifecycle="current" data-readiness="In review" data-family="HEALTH">
+                <details class="story-card" id="story-health-03" data-story-id="HEALTH-03" data-lifecycle="current" data-readiness="Verified" data-family="HEALTH">
                   <summary class="story-summary">
                     <span class="story-id">HEALTH-03</span>
                     <span class="story-summary-outcome">As a user, I can inspect one workout&#039;s heart-rate timeline, zones, route points, events, and preserved raw evidence.</span>
-                    <span class="story-state state-in-review">In review</span>
+                    <span class="story-state state-verified">Verified</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a user, I can inspect one workout&#039;s heart-rate timeline, zones, route points, events, and preserved raw evidence.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>sports-workout-detail</code>.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>adaptive detail now bounds dense heart-rate/route evidence while preserving endpoint samples, and missing-sensor sessions remain explicit instead of zero-filled. Finish map-theme, privacy presentation, and live large-timeline interaction checks.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>adaptive detail bounds dense heart-rate and route evidence while preserving first and final samples, missing sensors remain explicit instead of zero-filled, and the route fallback follows Forge theme tokens without sending map requests. Local tiles may load directly; external or malformed tile sources remain off behind an explicit 44 px consent action that names the route-area disclosure.</dd></div>
                     </dl>
                   </div>
                 </details>

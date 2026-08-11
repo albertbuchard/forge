@@ -120,19 +120,50 @@ export function describeWorkoutTileSource(tileUrl: string, origin: string) {
   }
 }
 
+export function workoutTileSourceNeedsConsent(
+  tileUrl: string,
+  origin: string
+) {
+  if (!tileUrl) {
+    return false;
+  }
+  try {
+    const url = new URL(tileUrl, origin);
+    const localHostnames = new Set(["localhost", "127.0.0.1", "[::1]"]);
+    return !(
+      url.origin === origin ||
+      localHostnames.has(url.hostname) ||
+      ["file:", "mbtiles:", "pmtiles:"].includes(url.protocol)
+    );
+  } catch {
+    return true;
+  }
+}
+
 function RoutePreview({ points }: { points: WorkoutRoutePointRecord[] }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const themeKey = useForgeThemeKey();
   const [mapReady, setMapReady] = useState(false);
+  const [externalTilesAllowed, setExternalTilesAllowed] = useState(false);
   const tileUrl =
     typeof window !== "undefined"
       ? (window.localStorage.getItem("forge.map.tile-url")?.trim() ?? "")
       : "";
+  const externalTileSource = workoutTileSourceNeedsConsent(
+    tileUrl,
+    window.location.origin
+  );
+  const tileLoadingAllowed = !externalTileSource || externalTilesAllowed;
 
   useEffect(() => {
     let cancelled = false;
     let map: import("maplibre-gl").Map | null = null;
-    if (!tileUrl || !containerRef.current || points.length < 2) {
+    if (
+      !tileUrl ||
+      !tileLoadingAllowed ||
+      !containerRef.current ||
+      points.length < 2
+    ) {
       setMapReady(false);
       return undefined;
     }
@@ -203,7 +234,7 @@ function RoutePreview({ points }: { points: WorkoutRoutePointRecord[] }) {
       cancelled = true;
       map?.remove();
     };
-  }, [points, tileUrl, themeKey]);
+  }, [points, tileLoadingAllowed, tileUrl, themeKey]);
 
   const bounds = routeBounds(points);
   const polyline = useMemo(() => {
@@ -242,8 +273,24 @@ function RoutePreview({ points }: { points: WorkoutRoutePointRecord[] }) {
           ) : null}
         </svg>
       ) : null}
-      <div className="absolute left-3 top-3 max-w-[calc(100%-1.5rem)] rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] px-3 py-2 text-xs text-[var(--ui-ink-medium)] backdrop-blur">
-        {describeWorkoutTileSource(tileUrl, window.location.origin)}
+      <div className="absolute left-3 top-3 grid max-w-[calc(100%-1.5rem)] gap-2 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] px-3 py-2 text-xs text-[var(--ui-ink-medium)] backdrop-blur">
+        <span>{describeWorkoutTileSource(tileUrl, window.location.origin)}</span>
+        {externalTileSource && !externalTilesAllowed ? (
+          <>
+            <span>
+              External tiles are off. This view has not requested the route
+              area.
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              className="min-h-11 w-fit"
+              onClick={() => setExternalTilesAllowed(true)}
+            >
+              Load external map tiles
+            </Button>
+          </>
+        ) : null}
       </div>
     </div>
   );

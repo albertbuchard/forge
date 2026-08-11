@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import {
   describeWorkoutTileSource,
-  WorkoutDetailPage
+  WorkoutDetailPage,
+  workoutTileSourceNeedsConsent
 } from "@/pages/workout-detail-page";
 import type {
   WorkoutRoutePointRecord,
@@ -357,6 +358,28 @@ describe("WorkoutDetailPage", () => {
       "var(--chart-zone-4)"
     );
   });
+
+  it("keeps external route tiles off until the user explicitly consents", async () => {
+    window.localStorage.setItem(
+      "forge.map.tile-url",
+      "https://tiles.example.com/{z}/{x}/{y}.png"
+    );
+    const fixture = detailFixture({
+      routePoints: [routePoint(0), routePoint(1)]
+    });
+    fixture.analytics.routeSummary = { hasRoute: true, pointCount: 2 };
+    getWorkoutDetailMock.mockResolvedValue(fixture);
+    renderDetail();
+
+    expect(
+      await screen.findByRole("button", { name: "Load external map tiles" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "External tiles are off. This view has not requested the route area."
+      )
+    ).toBeInTheDocument();
+  });
 });
 
 describe("describeWorkoutTileSource", () => {
@@ -375,5 +398,23 @@ describe("describeWorkoutTileSource", () => {
     ).toBe(
       "External tiles from tiles.example.com. Tile requests disclose the viewed route area to that provider."
     );
+    expect(
+      workoutTileSourceNeedsConsent(
+        "http://127.0.0.1:8080/{z}/{x}/{y}.png",
+        "http://127.0.0.1:4317"
+      )
+    ).toBe(false);
+    expect(
+      workoutTileSourceNeedsConsent(
+        "https://tiles.example.com/{z}/{x}/{y}.png",
+        "http://127.0.0.1:4317"
+      )
+    ).toBe(true);
+    expect(
+      workoutTileSourceNeedsConsent(
+        "http://[invalid",
+        "http://127.0.0.1:4317"
+      )
+    ).toBe(true);
   });
 });
