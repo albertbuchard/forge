@@ -55,8 +55,8 @@ test("the authoritative contract has the expected current and planned inventory"
   assert.equal(count("lifecycle", "current"), 193);
   assert.equal(count("lifecycle", "planned"), 10);
   assert.equal(count("readiness", "Verified"), 14);
-  assert.equal(count("readiness", "In review"), 149);
-  assert.equal(count("readiness", "Needs audit"), 30);
+  assert.equal(count("readiness", "In review"), 150);
+  assert.equal(count("readiness", "Needs audit"), 29);
   assert.equal(count("readiness", "Limited"), 0);
   assert.equal(count("readiness", "Externally blocked"), 0);
   assert.equal(new Set(stories.map((story) => story.prefix)).size, 23);
@@ -247,7 +247,7 @@ test("the client supports search, empty recovery, reset focus, and safe anchors"
     '[data-metric-readiness="In review"]'
   );
   inReviewMetric.click();
-  assert.equal(visibleStories(defaultDom.window.document).length, 149);
+  assert.equal(visibleStories(defaultDom.window.document).length, 150);
   assert.equal(inReviewMetric.getAttribute("aria-current"), "true");
   assert.equal(defaultDom.window.location.search, "?readiness=In+review");
   defaultDom.window.document.querySelector('[data-metric-scope="all"]').click();

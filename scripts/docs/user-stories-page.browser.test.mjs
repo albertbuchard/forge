@@ -155,7 +155,7 @@ test("summary metrics apply fast filters with mouse and keyboard", async (contex
   await page.locator('[data-metric-readiness="In review"]').click();
   assert.equal(
     await page.locator("[data-story-id]:not([hidden])").count(),
-    149
+    150
   );
   assert.equal(new URL(page.url()).search, "?readiness=In+review");
   assert.equal(

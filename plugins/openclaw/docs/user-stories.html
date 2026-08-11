@@ -47,8 +47,8 @@
           <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>193</strong><span>Current product</span></a>
           <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>10</strong><span>Planned</span></a>
           <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>14</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>149</strong><span>In review</span></a>
-          <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>30</strong><span>Needs audit</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>150</strong><span>In review</span></a>
+          <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>29</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
 
@@ -732,7 +732,7 @@
                     <p class="story-expanded-outcome">As a user or trusted agent, I can start, heartbeat, focus, complete, or release a real task run instead of pretending status means active work.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>task_run</code> action routes and task-run controls.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>bounded controls cover claim, heartbeat, focus, completion, release, stale leases, and offline errors; complete conflict, idempotency, and handoff matrices.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>bounded controls cover claim, heartbeat, focus, completion, release, stale leases, and offline errors. Timed-out runs stop credit at <code>lease_expires_at</code>, and any linked active timebox is cancelled at that same instant inside the timeout transaction, including startup recovery. Release stores a canonical handoff fingerprint: exact replay returns the existing run, while changed note or closeout content returns a 409 and cannot create duplicate handoff evidence. Complete live competing-run, offline, keyboard, and handoff verification.</dd></div>
                     </dl>
                   </div>
                 </details>
@@ -857,17 +857,17 @@
                   </div>
                 </details>
 
-                <details class="story-card" id="story-plan-17" data-story-id="PLAN-17" data-lifecycle="current" data-readiness="Needs audit" data-family="PLAN">
+                <details class="story-card" id="story-plan-17" data-story-id="PLAN-17" data-lifecycle="current" data-readiness="In review" data-family="PLAN">
                   <summary class="story-summary">
                     <span class="story-id">PLAN-17</span>
                     <span class="story-summary-outcome">As a user, I can close work with notes, links, artifacts, git references, and a completion summary that remains inspectable.</span>
-                    <span class="story-state state-needs-audit">Needs audit</span>
+                    <span class="story-state state-in-review">In review</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a user, I can close work with notes, links, artifacts, git references, and a completion summary that remains inspectable.</p>
                     <dl class="story-details">
-                      <div><dt>Where it lives</dt><dd>Task/project detail, notes, artifacts, git ref picker.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>verify incomplete evidence, broken refs, permission changes, and read-back.</dd></div>
+                      <div><dt>Where it lives</dt><dd>Task/project detail, Notes, Artifacts, Git reference picker.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>every closeout link is validated against the live, non-deleted, caller-visible target with one generic 404 boundary before mutation. Note reads omit currently unavailable link IDs and expose only <code>unavailableLinkCount</code>; direct and batch edits preserve stored links the caller could not see. Exact terminal replay is resolved before current-link validation, while changed replay remains a 409. Unsafe new Git URLs are rejected and unsafe legacy <code>rawUrl</code> values are redacted. Atomic closeout, permission-change, user/project/tag scope, ref integrity, replay, and UI unavailable-link evidence pass focused checks. Complete live desktop, phone, keyboard, and post-permission-change verification.</dd></div>
                     </dl>
                   </div>
                 </details>
