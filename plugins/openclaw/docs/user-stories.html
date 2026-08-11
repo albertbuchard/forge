@@ -702,7 +702,7 @@
                     <p class="story-expanded-outcome">As a user, I can move projects, issues, tasks, and subtasks through one Kanban board without losing type or hierarchy.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>kanban-index</code>, task/project status mutations.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>move paths now share optimistic rollback and accessible failure receipts; complete keyboard move, hierarchy, and dense-board matrices.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>project, issue, task, and subtask moves share optimistic rollback and accessible failure receipts, support standard keyboard drag activation and sortable coordinates, and retain type identity even when a project and task share the same bare ID. One-pass goal, tag, lane, hierarchy, and parent indexes replace repeated dense scans; the accepted 12,600-record fixture preserved all identities while median preparation improved from 35.224 ms to 1.529 ms, about 23 times faster. Touched movement and action controls meet the 44 px target. Complete live desktop, phone, keyboard, and assistive-technology verification.</dd></div>
                     </dl>
                   </div>
                 </details>
