@@ -56,6 +56,7 @@ import {
   formatLifeForceAp,
   formatLifeForceRate
 } from "@/lib/life-force-display";
+import { formatLocalDateKey, getRuntimeTimeZone } from "@/lib/date-keys";
 import { cn } from "@/lib/utils";
 import type { MovementKnownPlace, MovementTripPointRecord } from "@/lib/types";
 
@@ -505,13 +506,12 @@ function MovementPointEditor({
 export function MovementPage() {
   const shell = useForgeShell();
   const queryClient = useQueryClient();
+  const movementTimeZone = useMemo(() => getRuntimeTimeZone(), []);
   const selectedUserIds = Array.isArray(shell.selectedUserIds)
     ? shell.selectedUserIds
     : [];
   const [viewMode, setViewMode] = useState<MovementViewMode>("life");
-  const [targetDate, setTargetDate] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
+  const [targetDate, setTargetDate] = useState(() => formatLocalDateKey());
   const [targetMonth, setTargetMonth] = useState(
     new Date().toISOString().slice(0, 7)
   );
@@ -534,9 +534,18 @@ export function MovementPage() {
   const pointListRef = useRef<HTMLDivElement | null>(null);
 
   const movementDayQuery = useQuery({
-    queryKey: ["forge-movement-day", targetDate, ...selectedUserIds],
+    queryKey: [
+      "forge-movement-day",
+      targetDate,
+      movementTimeZone,
+      ...selectedUserIds
+    ],
     queryFn: async () =>
-      (await getMovementDay({ date: targetDate, userIds: selectedUserIds }))
+      (await getMovementDay({
+        date: targetDate,
+        timeZone: movementTimeZone,
+        userIds: selectedUserIds
+      }))
         .movement
   });
   const movementMonthQuery = useQuery({
@@ -763,6 +772,9 @@ export function MovementPage() {
   }
 
   const movementDay = movementDayQuery.data;
+  const movementDayDurationSeconds =
+    movementDay.dayDurationSeconds ?? 24 * 60 * 60;
+  const movementDayTimeZone = movementDay.timeZone || movementTimeZone;
   const movementMonth = movementMonthQuery.data;
   const movementAllTime = movementAllTimeQuery.data;
   const movementSettings = movementSettingsQuery.data;
@@ -782,7 +794,12 @@ export function MovementPage() {
   });
   const selectionAggregate =
     selectionAggregateQuery.data ?? movementDay.selectionAggregate;
-  const movementDayAp = movementDay.trips.reduce(
+  const fullyAttributedDayTrips = movementDay.trips.filter(
+    (trip) =>
+      Date.parse(trip.startedAt) >= Date.parse(movementDay.dayStartAt) &&
+      Date.parse(trip.endedAt) <= Date.parse(movementDay.dayEndAt)
+  );
+  const movementDayAp = fullyAttributedDayTrips.reduce(
     (sum, trip) => sum + estimateMovementTripActionPointLoad(trip).totalAp,
     0
   );
@@ -835,7 +852,9 @@ export function MovementPage() {
             {formatLifeForceAp(movementDayAp)}
           </div>
           <div className="mt-2 hidden text-sm text-[var(--ui-ink-muted)] sm:block">
-            Trips and transitions now contribute to the same Action Point ledger as work, habits, and notes.
+            {movementDay.summary.boundaryCrossingTripCount > 0
+              ? `${movementDay.summary.boundaryCrossingTripCount} boundary-crossing trip estimate excluded because Forge cannot divide the stored aggregate exactly.`
+              : "Trips and transitions now contribute to the same Action Point ledger as work, habits, and notes."}
           </div>
         </div>
         <div>
@@ -843,9 +862,9 @@ export function MovementPage() {
             Typical trip drain
           </div>
           <div className="mt-2 text-xl font-semibold text-[var(--primary)] sm:text-2xl">
-            {movementDay.trips[0]
+            {fullyAttributedDayTrips[0]
               ? formatLifeForceRate(
-                  estimateMovementTripActionPointLoad(movementDay.trips[0]).rateApPerHour
+                  estimateMovementTripActionPointLoad(fullyAttributedDayTrips[0]).rateApPerHour
                 )
               : "0 AP/h"}
           </div>
@@ -916,7 +935,9 @@ export function MovementPage() {
                 {distanceLabel(movementDay.summary.totalDistanceMeters)}
               </div>
               <div className="mt-2 hidden text-sm text-[var(--ui-ink-muted)] sm:block">
-                Across trips, stops, and linked place changes.
+                {movementDay.summary.boundaryCrossingTripCount > 0
+                  ? "Boundary-crossing trip distance is excluded because the stored aggregate cannot be split exactly."
+                  : "Across trips, stops, and linked place changes."}
               </div>
             </Card>
             <Card className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
@@ -1112,10 +1133,10 @@ export function MovementPage() {
                   <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                     Day strip
                   </div>
-                  <InfoTooltip content="A compressed 24-hour strip. Each segment keeps its true order and duration, but the whole day stays navigable on one line." />
+                  <InfoTooltip content="A compressed local-day strip. Each segment keeps its true elapsed duration across daylight-saving changes, while the whole calendar day stays navigable on one line." />
                 </div>
                 <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
-                  A single-row timeline from 00:00 to 24:00, always compressed into one navigable strip.
+                  Local midnight to next midnight in {movementDayTimeZone}. This date spans {movementDayDurationSeconds / 3_600} elapsed hours.
                 </div>
               </div>
               <Input
@@ -1127,16 +1148,16 @@ export function MovementPage() {
             </div>
             <div className="mt-6 overflow-x-auto pb-2">
               <div className="w-full min-w-full sm:min-w-[52rem]">
-                <div className="mb-3 flex justify-between text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
-                  {["00:00", "06:00", "12:00", "18:00", "24:00"].map((label) => (
-                    <span key={label}>{label}</span>
-                  ))}
+                <div className="mb-3 flex justify-between gap-3 text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+                  <span>00:00</span>
+                  <span>{movementDayDurationSeconds / 3_600} elapsed hours</span>
+                  <span>Next 00:00</span>
                 </div>
                 <div className="flex h-28 items-stretch overflow-hidden rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-2">
                   {movementDaySegments.map((segment, index) => {
                     const width = Math.max(
                       9,
-                      (segment.durationSeconds / 86_400) * 100
+                      (segment.durationSeconds / movementDayDurationSeconds) * 100
                     );
                     const active =
                       segment.kind === "stay"

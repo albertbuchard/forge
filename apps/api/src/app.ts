@@ -15854,14 +15854,38 @@ export async function buildServer(
     return { workout };
   });
   app.get("/api/v1/movement/day", async (request) => {
-    const query = request.query as Record<string, unknown>;
+    const rawQuery = request.query as Record<string, unknown>;
+    const query = z
+      .object({
+        date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, "date must use YYYY-MM-DD")
+          .refine((value) => {
+            const parsed = new Date(`${value}T12:00:00.000Z`);
+            return (
+              Number.isFinite(parsed.getTime()) &&
+              parsed.toISOString().slice(0, 10) === value
+            );
+          }, "date must be a real calendar date")
+          .optional(),
+        timeZone: z
+          .string()
+          .trim()
+          .min(1)
+          .max(100)
+          .refine(isValidTimeZone, "timeZone must be a valid IANA timezone")
+          .optional()
+      })
+      .passthrough()
+      .parse(rawQuery);
     const auth = authenticateRequest(
       request.headers as Record<string, unknown>
     );
     return {
       movement: getMovementDayDetail({
-        date: typeof query.date === "string" ? query.date : undefined,
-        userIds: resolveEffectiveUserIdsForReads(query, auth)
+        date: query.date,
+        timeZone: query.timeZone ?? getRuntimeTimeZone(),
+        userIds: resolveEffectiveUserIdsForReads(rawQuery, auth)
       })
     };
   });

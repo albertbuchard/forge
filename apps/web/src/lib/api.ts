@@ -5546,11 +5546,15 @@ export function patchNutritionExperiment(
 
 export function getMovementDay(input?: {
   date?: string;
+  timeZone?: string;
   userIds?: string[] | unknown;
 }) {
   const search = new URLSearchParams();
   if (input?.date) {
     search.set("date", input.date);
+  }
+  if (input?.timeZone) {
+    search.set("timeZone", input.timeZone);
   }
   appendUserIds(search, coerceUserIds(input?.userIds));
   const suffix = search.size > 0 ? `?${search.toString()}` : "";

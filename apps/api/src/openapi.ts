@@ -15286,6 +15286,17 @@ export function buildOpenApiDocument() {
               in: "query",
               schema: { type: "string", format: "date" },
               description: "Local calendar date. Defaults to today."
+            },
+            {
+              name: "timeZone",
+              in: "query",
+              schema: {
+                type: "string",
+                maxLength: 100,
+                example: "Europe/Zurich"
+              },
+              description:
+                "IANA timezone that defines the selected local date and its DST-aware midnight boundaries. Defaults to the Forge runtime timezone."
             }
           ],
           responses: {

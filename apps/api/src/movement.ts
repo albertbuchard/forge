@@ -9,6 +9,7 @@ import { listTaskRuns } from "./repositories/task-runs.js";
 import { getDefaultUser } from "./repositories/users.js";
 import { getScreenTimeOverlapSummary } from "./screen-time.js";
 import { buildDerivedDataProvenance, latestObservedAt } from "./provenance.js";
+import { isValidTimeZone } from "./services/calendar-time.js";
 
 const movementPublishModeSchema = z.enum([
   "auto_publish",
@@ -1408,6 +1409,103 @@ function dayKey(value: string) {
   return value.slice(0, 10);
 }
 
+function dateKeyInTimeZone(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  const read = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return `${read("year")}-${read("month")}-${read("day")}`;
+}
+
+function isValidMovementDateKey(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const parsed = new Date(`${value}T12:00:00.000Z`);
+  return (
+    Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+  );
+}
+
+function addMovementDateKeyDays(value: string, days: number) {
+  const date = new Date(`${value}T12:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function firstInstantOfMovementDate(date: string, timeZone: string) {
+  const targetUtc = Date.parse(`${date}T00:00:00.000Z`);
+  let below = targetUtc - 48 * 60 * 60 * 1_000;
+  let atOrAbove = targetUtc + 48 * 60 * 60 * 1_000;
+  if (
+    dateKeyInTimeZone(new Date(below), timeZone) >= date ||
+    dateKeyInTimeZone(new Date(atOrAbove), timeZone) < date
+  ) {
+    throw new HttpError(
+      400,
+      "movement_day_unresolvable",
+      `Unable to resolve ${date} in ${timeZone}.`
+    );
+  }
+  while (below + 1 < atOrAbove) {
+    const candidate = Math.floor((below + atOrAbove) / 2);
+    if (dateKeyInTimeZone(new Date(candidate), timeZone) < date) {
+      below = candidate;
+    } else {
+      atOrAbove = candidate;
+    }
+  }
+  if (dateKeyInTimeZone(new Date(atOrAbove), timeZone) !== date) {
+    throw new HttpError(
+      400,
+      "movement_day_unresolvable",
+      `${date} does not exist in ${timeZone}.`
+    );
+  }
+  return new Date(atOrAbove);
+}
+
+export function resolveMovementDayRange(input: {
+  date?: string;
+  timeZone?: string;
+  now?: Date;
+}) {
+  const timeZone = input.timeZone?.trim() ||
+    Intl.DateTimeFormat().resolvedOptions().timeZone ||
+    "UTC";
+  if (!isValidTimeZone(timeZone)) {
+    throw new HttpError(
+      400,
+      "movement_day_invalid_timezone",
+      "timeZone must be a valid IANA timezone."
+    );
+  }
+  const date = input.date ?? dateKeyInTimeZone(input.now ?? new Date(), timeZone);
+  if (!isValidMovementDateKey(date)) {
+    throw new HttpError(
+      400,
+      "movement_day_invalid_date",
+      "date must be a real calendar date in YYYY-MM-DD form."
+    );
+  }
+  const start = firstInstantOfMovementDate(date, timeZone);
+  const end = firstInstantOfMovementDate(
+    addMovementDateKeyDays(date, 1),
+    timeZone
+  );
+  return {
+    date,
+    timeZone,
+    startAt: start.toISOString(),
+    endAt: end.toISOString(),
+    durationSeconds: (end.getTime() - start.getTime()) / 1_000
+  };
+}
+
 function monthKey(value: string) {
   return value.slice(0, 7);
 }
@@ -1944,16 +2042,23 @@ function listMovementPlaceRows(userIds?: string[]) {
     .all(...params) as MovementPlaceRow[];
 }
 
-function listMovementStayRows(userIds?: string[], dateKey?: string) {
+type MovementInstantRange = {
+  startAt: string;
+  endAt: string;
+};
+
+function listMovementStayRows(userIds?: string[], range?: MovementInstantRange) {
   const params: string[] = [];
   const whereClauses: string[] = [];
   if (userIds && userIds.length > 0) {
     whereClauses.push(`user_id IN (${userIds.map(() => "?").join(",")})`);
     params.push(...userIds);
   }
-  if (dateKey) {
-    whereClauses.push("substr(started_at, 1, 10) <= ? AND substr(ended_at, 1, 10) >= ?");
-    params.push(dateKey, dateKey);
+  if (range) {
+    whereClauses.push(
+      "julianday(ended_at) > julianday(?) AND julianday(started_at) < julianday(?)"
+    );
+    params.push(range.startAt, range.endAt);
   }
   const where = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
   return getDatabase()
@@ -1966,16 +2071,21 @@ function listMovementStayRows(userIds?: string[], dateKey?: string) {
     .all(...params) as MovementStayRow[];
 }
 
-function listMovementTripRows(userIds?: string[], options: { dateKey?: string; month?: string } = {}) {
+function listMovementTripRows(
+  userIds?: string[],
+  options: { range?: MovementInstantRange; month?: string } = {}
+) {
   const params: string[] = [];
   const whereClauses: string[] = [];
   if (userIds && userIds.length > 0) {
     whereClauses.push(`user_id IN (${userIds.map(() => "?").join(",")})`);
     params.push(...userIds);
   }
-  if (options.dateKey) {
-    whereClauses.push("substr(started_at, 1, 10) <= ? AND substr(ended_at, 1, 10) >= ?");
-    params.push(options.dateKey, options.dateKey);
+  if (options.range) {
+    whereClauses.push(
+      "julianday(ended_at) > julianday(?) AND julianday(started_at) < julianday(?)"
+    );
+    params.push(options.range.startAt, options.range.endAt);
   }
   if (options.month) {
     whereClauses.push("substr(started_at, 1, 7) = ?");
@@ -6081,18 +6191,23 @@ function computeSelectionAggregate(input: {
 
 export function getMovementDayDetail(input: {
   date?: string;
+  timeZone?: string;
   userIds?: string[];
 }) {
   const generatedAt = nowIso();
-  const targetDate = input.date ?? dayKey(nowIso());
+  const dayRange = resolveMovementDayRange({
+    date: input.date,
+    timeZone: input.timeZone
+  });
+  const targetDate = dayRange.date;
   const userIds = input.userIds && input.userIds.length > 0 ? input.userIds : [getDefaultUser().id];
   const placeRows = listMovementPlaceRows(input.userIds);
   const places = placeRows.map(mapMovementPlace);
   const placesById = new Map(places.map((place) => [place.id, place]));
-  const stays = listMovementStayRows(input.userIds, targetDate)
+  const stays = listMovementStayRows(input.userIds, dayRange)
     .map((row) => mapMovementStay(row, placesById))
     .map((stay) => enrichMovementSegmentWithScreenTime(stay, input.userIds));
-  const tripRows = listMovementTripRows(input.userIds, { dateKey: targetDate });
+  const tripRows = listMovementTripRows(input.userIds, { range: dayRange });
   const tripIds = tripRows.map((row) => row.id);
   const pointsByTrip = new Map<string, MovementTripPointRow[]>();
   const stopsByTrip = new Map<string, MovementTripStopRow[]>();
@@ -6112,8 +6227,8 @@ export function getMovementDayDetail(input: {
       )
     )
     .map((trip) => enrichMovementSegmentWithScreenTime(trip, input.userIds));
-  const dayStart = `${targetDate}T00:00:00.000Z`;
-  const dayEnd = `${targetDate}T23:59:59.999Z`;
+  const dayStart = dayRange.startAt;
+  const dayEnd = dayRange.endAt;
   const projectedBoxes = projectMovementBoxes({
     userIds,
     rangeStart: dayStart,
@@ -6130,6 +6245,15 @@ export function getMovementDayDetail(input: {
       rawStay?.estimatedScreenTimeSeconds ?? rawTrip?.estimatedScreenTimeSeconds ?? 0;
     const pickupCount = rawStay?.pickupCount ?? rawTrip?.pickupCount ?? 0;
     const noteCount = rawStay?.note ? 1 : rawTrip?.note ? 1 : 0;
+    const visibleStartedAt = new Date(
+      Math.max(Date.parse(segment.startedAt), Date.parse(dayStart))
+    ).toISOString();
+    const visibleEndedAt = new Date(
+      Math.min(Date.parse(segment.endedAt), Date.parse(dayEnd))
+    ).toISOString();
+    const crossesDayBoundary =
+      Date.parse(segment.startedAt) < Date.parse(dayStart) ||
+      Date.parse(segment.endedAt) > Date.parse(dayEnd);
     return {
       id: segment.id,
       boxId: segment.boxId,
@@ -6137,16 +6261,23 @@ export function getMovementDayDetail(input: {
       sourceKind: segment.sourceKind,
       origin: segment.origin,
       editable: segment.editable,
-      startedAt: segment.startedAt,
-      endedAt: segment.endedAt,
+      startedAt: visibleStartedAt,
+      endedAt: visibleEndedAt,
       trueStartedAt: segment.trueStartedAt,
       trueEndedAt: segment.trueEndedAt,
-      visibleStartedAt: segment.visibleStartedAt,
-      visibleEndedAt: segment.visibleEndedAt,
-      durationSeconds: segment.durationSeconds,
+      visibleStartedAt,
+      visibleEndedAt,
+      durationSeconds: durationSeconds(visibleStartedAt, visibleEndedAt),
       label: segment.title,
       subtitle: segment.subtitle,
-      distanceMeters: segment.distanceMeters,
+      distanceMeters:
+        segment.kind === "trip" && crossesDayBoundary
+          ? 0
+          : segment.distanceMeters,
+      distanceAttribution:
+        segment.kind === "trip" && crossesDayBoundary
+          ? "unavailable_at_day_boundary"
+          : "complete",
       averageSpeedMps: segment.averageSpeedMps,
       estimatedScreenTimeSeconds,
       pickupCount,
@@ -6182,8 +6313,22 @@ export function getMovementDayDetail(input: {
     ...stays.map((stay) => stay.endedAt),
     ...trips.map((trip) => trip.endedAt)
   ]);
+  const fullyAttributedTrips = trips.filter(
+    (trip) =>
+      Date.parse(trip.startedAt) >= Date.parse(dayStart) &&
+      Date.parse(trip.endedAt) <= Date.parse(dayEnd)
+  );
+  const boundaryCrossingTripCount = trips.filter(
+    (trip) =>
+      Date.parse(trip.startedAt) < Date.parse(dayStart) ||
+      Date.parse(trip.endedAt) > Date.parse(dayEnd)
+  ).length;
   return {
     date: targetDate,
+    timeZone: dayRange.timeZone,
+    dayStartAt: dayStart,
+    dayEndAt: dayEnd,
+    dayDurationSeconds: dayRange.durationSeconds,
     settings: getMovementSettings(input.userIds),
     summary: {
       totalDistanceMeters: round(
@@ -6202,6 +6347,7 @@ export function getMovementDayDetail(input: {
         0
       ),
       tripCount: allSegments.filter((segment) => segment.kind === "trip").length,
+      boundaryCrossingTripCount,
       stayCount: allSegments.filter((segment) => segment.kind === "stay").length,
       missingCount: allSegments.filter((segment) => segment.kind === "missing").length,
       missingDurationSeconds: allSegments
@@ -6220,13 +6366,16 @@ export function getMovementDayDetail(input: {
         .reduce((sum, segment) => sum + segment.durationSeconds, 0),
       knownPlaceCount: places.length,
       caloriesKcal: round(
-        trips.reduce((sum, trip) => sum + (trip.caloriesKcal ?? 0), 0)
+        fullyAttributedTrips.reduce(
+          (sum, trip) => sum + (trip.caloriesKcal ?? 0),
+          0
+        )
       ),
       estimatedScreenTimeSeconds: selectionAggregate.estimatedScreenTimeSeconds,
       pickupCount: selectionAggregate.pickupCount,
       averageSpeedMps: round(
         average(
-          trips
+          fullyAttributedTrips
             .map((trip) => trip.averageSpeedMps)
             .filter((value): value is number => typeof value === "number")
         ),
@@ -6246,12 +6395,15 @@ export function getMovementDayDetail(input: {
       completeness:
         allSegments.length === 0
           ? "unknown"
-          : allSegments.some((segment) => segment.kind === "missing")
+          : allSegments.some((segment) => segment.kind === "missing") ||
+              boundaryCrossingTripCount > 0
             ? "partial"
             : "complete",
       completenessReason:
         allSegments.length === 0
           ? `No movement evidence is stored for ${targetDate}.`
+          : boundaryCrossingTripCount > 0
+            ? `${boundaryCrossingTripCount} trip${boundaryCrossingTripCount === 1 ? " crosses" : "s cross"} a local-day boundary; Forge keeps the trip visible but excludes its distance and Action Point estimate because the stored aggregate cannot be divided exactly.`
           : allSegments.some((segment) => segment.kind === "missing")
             ? `${allSegments.filter((segment) => segment.kind === "missing").length} gap${allSegments.filter((segment) => segment.kind === "missing").length === 1 ? " is" : "s are"} visible in the day.`
             : "No unresolved movement gap is visible in the day.",
@@ -6259,7 +6411,8 @@ export function getMovementDayDetail(input: {
         level:
           allSegments.length === 0
             ? "unknown"
-            : allSegments.some((segment) => segment.kind === "missing")
+            : allSegments.some((segment) => segment.kind === "missing") ||
+                boundaryCrossingTripCount > 0
               ? "medium"
               : "high",
         reason:
@@ -6271,21 +6424,21 @@ export function getMovementDayDetail(input: {
           label: "Recorded stays",
           kind: "record",
           observedAt: latestObservedAt(stays.map((stay) => stay.endedAt)),
-          detailRoute: `/api/v1/movement/day?date=${targetDate}`
+          detailRoute: `/api/v1/movement/day?date=${targetDate}&timeZone=${encodeURIComponent(dayRange.timeZone)}`
         },
         {
           id: "movement-trips",
           label: "Recorded trips",
           kind: "record",
           observedAt: latestObservedAt(trips.map((trip) => trip.endedAt)),
-          detailRoute: `/api/v1/movement/day?date=${targetDate}`
+          detailRoute: `/api/v1/movement/day?date=${targetDate}&timeZone=${encodeURIComponent(dayRange.timeZone)}`
         },
         {
           id: "movement-projection",
           label: "Canonical movement boxes",
           kind: "derived",
           observedAt,
-          detailRoute: `/api/v1/movement/day?date=${targetDate}`
+          detailRoute: `/api/v1/movement/day?date=${targetDate}&timeZone=${encodeURIComponent(dayRange.timeZone)}`
         }
       ],
       evidence: allSegments.slice(0, 24).map((segment) => ({

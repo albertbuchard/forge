@@ -3259,12 +3259,17 @@ export interface MovementSelectionAggregate {
 
 export interface MovementDayData {
   date: string;
+  timeZone: string;
+  dayStartAt: string;
+  dayEndAt: string;
+  dayDurationSeconds: number;
   settings: MovementSettingsPayload;
   summary: {
     totalDistanceMeters: number;
     totalMovingSeconds: number;
     totalIdleSeconds: number;
     tripCount: number;
+    boundaryCrossingTripCount: number;
     stayCount: number;
     missingCount: number;
     missingDurationSeconds: number;
@@ -3301,6 +3306,7 @@ export interface MovementDayData {
     label: string;
     subtitle: string;
     distanceMeters: number;
+    distanceAttribution: "complete" | "unavailable_at_day_boundary";
     averageSpeedMps: number;
     estimatedScreenTimeSeconds: number;
     pickupCount: number;

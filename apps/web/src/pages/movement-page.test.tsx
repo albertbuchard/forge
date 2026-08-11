@@ -181,9 +181,15 @@ describe("Movement page Life Force integration", () => {
     });
     getMovementDayMock.mockResolvedValue({
       movement: {
+        date: "2026-04-11",
         dateKey: "2026-04-11",
+        timeZone: "Europe/Zurich",
+        dayStartAt: "2026-04-10T22:00:00.000Z",
+        dayEndAt: "2026-04-11T22:00:00.000Z",
+        dayDurationSeconds: 86_400,
         summary: {
           tripCount: 2,
+          boundaryCrossingTripCount: 0,
           stayCount: 3,
           totalDistanceMeters: 4200,
           totalIdleSeconds: 7200,
@@ -342,6 +348,27 @@ describe("Movement page Life Force integration", () => {
 
     expect(await screen.findByText("Airport transfer")).toBeInTheDocument();
     expect(screen.getAllByText("8 AP/h").length).toBeGreaterThan(0);
+  });
+
+  it("requests and explains the browser-local movement day", async () => {
+    renderWithProviders();
+
+    await screen.findByText("Movement AP today");
+    expect(getMovementDayMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        timeZone: expect.any(String),
+        userIds: ["user_operator"]
+      })
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Day" }));
+    expect(
+      await screen.findByText(
+        "Local midnight to next midnight in Europe/Zurich. This date spans 24 elapsed hours."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText("Next 00:00")).toBeInTheDocument();
   });
 
   it("does not crash when instant Life Force data is partially missing", async () => {
