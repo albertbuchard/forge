@@ -2847,7 +2847,7 @@
                     <p class="story-expanded-outcome">As a user who prefers reduced motion, I retain the information and visual state without forced decorative animation.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Shell, signal deck, reward celebrations.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>reduced-motion rewards use zero-duration visual receipts, live announcements, safe timers, and manual dismissal; complete runtime preference-change checks.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>reduced-motion rewards use zero-duration visual receipts, live announcements, safe timers, and a 44-pixel manual-dismiss control. Celebration, XP, and failure feedback now subscribe to live <code>prefers-reduced-motion</code> changes, including the legacy listener fallback, so an open animation becomes static immediately when the preference changes. Complete the retained live desktop and phone promotion gate.</dd></div>
                     </dl>
                   </div>
                 </details>
