@@ -61,6 +61,8 @@ describe("wiki page relationship links", () => {
             "[[Missing page|Broken page]]",
             "[[Expired page]]",
             "[[forge:task:task_plugin_surface|Plugin task]]",
+            "[[forge:artifact:artifact_123|Artifact detail]]",
+            "![[forge:artifact:artifact_123|Download evidence]]",
             "",
             ":::forge-links",
             "[Primary source](https://example.test/source)",
@@ -97,6 +99,15 @@ describe("wiki page relationship links", () => {
     expect(screen.getByRole("link", { name: "Plugin task" })).toHaveAttribute(
       "data-wiki-link-status",
       "unverified"
+    );
+    expect(
+      screen.getByRole("link", { name: "Artifact detail" })
+    ).toHaveAttribute("href", "/artifacts/artifact_123");
+    expect(
+      screen.getByRole("link", { name: "Download evidence" })
+    ).toHaveAttribute(
+      "href",
+      "/artifacts/artifact_123#artifact-human-download"
     );
     expect(
       screen.getByRole("link", {

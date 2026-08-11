@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { getArtifactHumanDownloadRoute } from "@/lib/artifact-routes";
 import { getEntityRoute } from "@/lib/note-helpers";
 import { resolveForgePath } from "@/lib/runtime-paths";
 import {
@@ -21,6 +22,11 @@ const wikiMutedPanelClass =
   "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
 const wikiInlineTokenClass =
   "max-w-full break-words rounded-sm bg-[var(--ui-surface-2)] px-1.5 py-0.5 text-[var(--ui-ink-strong)] no-underline ring-1 ring-[var(--ui-border-subtle)] transition hover:bg-[var(--ui-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40";
+
+function resolveForgeHref(route: string) {
+  const parsed = new URL(route, window.location.origin);
+  return `${resolveForgePath(parsed.pathname)}${parsed.search}${parsed.hash}`;
+}
 
 export type WikiArticleLinkState = {
   rawTarget: string;
@@ -146,10 +152,17 @@ function renderInlineTokens(
           linkStateIndex,
           rawTarget,
           token.label,
-          false
+          token.embed
         );
-        const route = getEntityRoute(token.entityType as never, token.entityId);
-        const href = route ? resolveForgePath(route) : null;
+        const entityRoute = getEntityRoute(
+          token.entityType as never,
+          token.entityId
+        );
+        const route =
+          entityRoute && token.entityType === "artifact" && token.embed
+            ? getArtifactHumanDownloadRoute(token.entityId)
+            : entityRoute;
+        const href = route ? resolveForgeHref(route) : null;
         if (state && state.status !== "unverified") {
           return unavailableInlineLink(
             token.label,

@@ -21,7 +21,7 @@ import {
   Upload,
   XCircle
 } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArtifactEntityLinksEditor,
   ArtifactEntityLinksList,
@@ -60,6 +60,7 @@ import {
   rescanArtifact,
   uploadArtifact
 } from "@/lib/api";
+import { ARTIFACT_HUMAN_DOWNLOAD_ANCHOR } from "@/lib/artifact-routes";
 import { cn } from "@/lib/utils";
 import type {
   Artifact,
@@ -808,11 +809,13 @@ function ArtifactEnrichmentProposalReview({
 
 export function ArtifactsPage() {
   const { artifactId } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [committedQuery, setCommittedQuery] = useState("");
   const artifactListRef = useRef<HTMLDivElement>(null);
+  const humanDownloadAnchorRef = useRef<HTMLDivElement>(null);
   const [artifactState, setArtifactState] = useState<ArtifactState | "">("");
   const [dangerLevel, setDangerLevel] = useState<ArtifactDangerLevel | "">("");
   const [formatFamily, setFormatFamily] = useState<ArtifactFormatFamily | "">(
@@ -973,6 +976,21 @@ export function ArtifactsPage() {
     setVersionPageIndex(0);
     setAuditPageIndex(0);
   }, [selectedArtifact?.id]);
+
+  useEffect(() => {
+    if (
+      !selectedArtifact?.id ||
+      location.hash !== `#${ARTIFACT_HUMAN_DOWNLOAD_ANCHOR}`
+    ) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      const target = humanDownloadAnchorRef.current;
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView?.({ block: "center" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [location.hash, selectedArtifact?.id]);
 
   useEffect(() => {
     const firstArtifact = artifacts[0];
@@ -3024,18 +3042,27 @@ export function ArtifactsPage() {
                         Encrypt
                       </Button>
                     ) : null}
-                    <Button
-                      type="button"
-                      onClick={() => downloadMutation.mutate()}
-                      pending={downloadMutation.isPending}
-                      disabled={
-                        selectedArtifact.downloadPolicy !== "human_only" ||
-                        selectedArtifact.artifactState === "blocked"
-                      }
+                    <div
+                      ref={humanDownloadAnchorRef}
+                      id={ARTIFACT_HUMAN_DOWNLOAD_ANCHOR}
+                      role="region"
+                      aria-label="Human-only artifact download"
+                      tabIndex={-1}
+                      className="inline-flex rounded-[var(--radius-control)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/45"
                     >
-                      <Download className="size-4" />
-                      Download
-                    </Button>
+                      <Button
+                        type="button"
+                        onClick={() => downloadMutation.mutate()}
+                        pending={downloadMutation.isPending}
+                        disabled={
+                          selectedArtifact.downloadPolicy !== "human_only" ||
+                          selectedArtifact.artifactState === "blocked"
+                        }
+                      >
+                        <Download className="size-4" />
+                        Download
+                      </Button>
+                    </div>
                     <Button
                       variant="secondary"
                       type="button"

@@ -7,6 +7,7 @@ import {
 } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getArtifactHumanDownloadRoute } from "@/lib/artifact-routes";
 import { getEntityRoute } from "@/lib/note-helpers";
 import { resolveForgePath } from "@/lib/runtime-paths";
 import type { CrudEntityType } from "@/lib/types";
@@ -74,7 +75,9 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
         const [, entityType, entityId] = rawTarget.split(":");
         const route =
           entityType && entityId
-            ? getEntityRoute(entityType as CrudEntityType, entityId)
+            ? isEmbed && entityType === "artifact"
+              ? getArtifactHumanDownloadRoute(entityId)
+              : getEntityRoute(entityType as CrudEntityType, entityId)
             : null;
         const href = route ? resolveForgeHref(route) : null;
         nodes.push(

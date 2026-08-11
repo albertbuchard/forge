@@ -1,7 +1,13 @@
 export type WikiInlineToken =
   | { type: "text"; value: string }
   | { type: "wiki-link"; target: string; label: string; embed: boolean }
-  | { type: "forge-link"; entityType: string; entityId: string; label: string }
+  | {
+      type: "forge-link";
+      entityType: string;
+      entityId: string;
+      label: string;
+      embed: boolean;
+    }
   | { type: "link"; label: string; href: string }
   | { type: "code"; value: string }
   | { type: "strong"; value: string }
@@ -103,7 +109,8 @@ export function parseWikiInline(text: string): WikiInlineToken[] {
           type: "forge-link",
           entityType: entityType ?? "",
           entityId: entityIdParts.join(":").trim(),
-          label
+          label,
+          embed
         });
       } else {
         tokens.push({

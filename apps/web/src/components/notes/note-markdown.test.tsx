@@ -92,6 +92,27 @@ describe("NoteMarkdown", () => {
     ).toHaveAttribute("href", expect.stringContaining("/notes?focus=note_123"));
   });
 
+  it("anchors embedded artifacts at their human-only download action", () => {
+    render(
+      <NoteMarkdown
+        markdown={[
+          "[[forge:artifact:artifact_123|Artifact detail]]",
+          "![[forge:artifact:artifact_123|Download evidence]]"
+        ].join(" ")}
+      />
+    );
+
+    expect(
+      screen.getByRole("link", { name: /Artifact detail/i })
+    ).toHaveAttribute("href", "/artifacts/artifact_123");
+    expect(
+      screen.getByRole("link", { name: /Download evidence/i })
+    ).toHaveAttribute(
+      "href",
+      "/artifacts/artifact_123#artifact-human-download"
+    );
+  });
+
   it("keeps long note bodies unmounted until the reader expands them", () => {
     const markdown = `Visible opening ${"context ".repeat(90)}private-tail-marker`;
     render(

@@ -35,6 +35,7 @@ vi.setConfig({ testTimeout: ARTIFACT_INTEGRATION_TEST_TIMEOUT_MS });
 const createObjectURLMock = vi.fn(() => "blob:artifact-download");
 const revokeObjectURLMock = vi.fn();
 const anchorClickMock = vi.fn();
+const scrollIntoViewMock = vi.fn();
 
 Object.defineProperty(URL, "createObjectURL", {
   configurable: true,
@@ -47,6 +48,10 @@ Object.defineProperty(URL, "revokeObjectURL", {
 vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(
   anchorClickMock
 );
+Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+  configurable: true,
+  value: scrollIntoViewMock
+});
 
 vi.mock("@/components/shell/page-hero", () => ({
   PageHero: ({
@@ -210,9 +215,10 @@ vi.mock("@/lib/api", () => ({
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  scrollIntoViewMock.mockClear();
 });
 
-function renderArtifactsPage() {
+function renderArtifactsPage(initialEntry = "/artifacts/artifact_123") {
   const client = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -221,7 +227,7 @@ function renderArtifactsPage() {
   });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/artifacts/artifact_123"]}>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
           <Route path="/artifacts" element={<ArtifactsPage />} />
           <Route path="/artifacts/:artifactId" element={<ArtifactsPage />} />
@@ -232,6 +238,16 @@ function renderArtifactsPage() {
 }
 
 describe("ArtifactsPage", () => {
+  it("focuses the human-only download anchor after linked detail loads", async () => {
+    renderArtifactsPage("/artifacts/artifact_123#artifact-human-download");
+
+    const target = await screen.findByRole("region", {
+      name: "Human-only artifact download"
+    });
+    await waitFor(() => expect(target).toHaveFocus());
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: "center" });
+  });
+
   it("renders artifact metadata, safety findings, and generic entity links", async () => {
     renderArtifactsPage();
 
