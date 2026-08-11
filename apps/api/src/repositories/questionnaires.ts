@@ -1325,6 +1325,22 @@ export function updateQuestionnaireDraftVersion(
         message: "No editable draft version is available."
       });
     }
+    const linkedRun = getDatabase()
+      .prepare(
+        `SELECT 1
+         FROM questionnaire_runs
+         WHERE version_id = ?
+         LIMIT 1`
+      )
+      .get(draftVersionId);
+    if (linkedRun) {
+      throw createHttpError({
+        statusCode: 409,
+        code: "questionnaire_draft_has_runs",
+        message:
+          "This questionnaire version already has answer runs and cannot be changed. Publish it before creating another draft."
+      });
+    }
     getDatabase()
       .prepare(
         `
@@ -1557,23 +1573,27 @@ export function startQuestionnaireRun(
         message: "Questionnaire instrument not found."
       });
     }
-    const versionId =
-      parsed.versionId ??
-      row.current_published_version_id ??
-      row.current_draft_version_id;
+    const versionId = parsed.versionId ?? row.current_published_version_id;
     if (!versionId) {
       throw createHttpError({
-        statusCode: 404,
-        code: "questionnaire_version_missing",
-        message: "No questionnaire version is available for this instrument."
+        statusCode: 409,
+        code: "questionnaire_published_version_required",
+        message: "Publish the questionnaire before starting an answer run."
       });
     }
     const version = getVersionRow(versionId);
-    if (!version) {
+    if (!version || version.instrument_id !== instrumentId) {
       throw createHttpError({
         statusCode: 404,
         code: "questionnaire_version_missing",
         message: "Questionnaire version not found."
+      });
+    }
+    if (version.status !== "published") {
+      throw createHttpError({
+        statusCode: 409,
+        code: "questionnaire_published_version_required",
+        message: "Publish the questionnaire before starting an answer run."
       });
     }
     const userId = resolveQuestionnaireRunUserId(parsed.userId, context);
