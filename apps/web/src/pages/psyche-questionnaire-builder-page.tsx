@@ -3,11 +3,20 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { FileStack, LayoutTemplate, PenSquare, Rocket } from "lucide-react";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
+import {
+  QuestionnaireDefinitionEditor,
+  QuestionnaireProvenanceEditor,
+  QuestionnaireScoringEditor
+} from "@/components/psyche/questionnaire-visual-editor";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState
+} from "@/components/ui/page-state";
 import {
   cloneQuestionnaire,
   createQuestionnaire,
@@ -65,7 +74,12 @@ const EMPTY_DEFINITION: QuestionnaireDefinition = {
       options: [
         { key: "0", label: "Not at all", value: 0, description: "" },
         { key: "1", label: "Several days", value: 1, description: "" },
-        { key: "2", label: "More than half the days", value: 2, description: "" },
+        {
+          key: "2",
+          label: "More than half the days",
+          value: 2,
+          description: ""
+        },
         { key: "3", label: "Nearly every day", value: 3, description: "" }
       ]
     }
@@ -113,7 +127,9 @@ const EMPTY_PROVENANCE: QuestionnaireProvenance = {
   ]
 };
 
-function toBuilderState(detail?: QuestionnaireInstrumentDetail | null): BuilderState {
+function toBuilderState(
+  detail?: QuestionnaireInstrumentDetail | null
+): BuilderState {
   const version = detail?.draftVersion ?? detail?.currentVersion;
   return {
     title: detail?.title ?? "",
@@ -126,9 +142,17 @@ function toBuilderState(detail?: QuestionnaireInstrumentDetail | null): BuilderS
     availability: detail?.availability ?? "custom",
     isSelfReport: detail?.isSelfReport ?? true,
     label: version?.label ?? "Draft 1",
-    definitionJson: JSON.stringify(version?.definition ?? EMPTY_DEFINITION, null, 2),
+    definitionJson: JSON.stringify(
+      version?.definition ?? EMPTY_DEFINITION,
+      null,
+      2
+    ),
     scoringJson: JSON.stringify(version?.scoring ?? EMPTY_SCORING, null, 2),
-    provenanceJson: JSON.stringify(version?.provenance ?? EMPTY_PROVENANCE, null, 2)
+    provenanceJson: JSON.stringify(
+      version?.provenance ?? EMPTY_PROVENANCE,
+      null,
+      2
+    )
   };
 }
 
@@ -137,6 +161,88 @@ function splitCsv(value: string) {
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isVisualDefinition(value: unknown): value is QuestionnaireDefinition {
+  if (!isObject(value)) return false;
+  if (
+    !Array.isArray(value.itemIds) ||
+    !Array.isArray(value.items) ||
+    !Array.isArray(value.sections)
+  ) {
+    return false;
+  }
+  return (
+    value.items.every(
+      (item) =>
+        isObject(item) &&
+        typeof item.id === "string" &&
+        typeof item.prompt === "string" &&
+        Array.isArray(item.options)
+    ) &&
+    value.sections.every(
+      (section) =>
+        isObject(section) &&
+        typeof section.id === "string" &&
+        typeof section.title === "string" &&
+        Array.isArray(section.itemIds)
+    ) &&
+    typeof value.instructions === "string" &&
+    typeof value.completionNote === "string" &&
+    typeof value.presentationMode === "string"
+  );
+}
+
+function isVisualScoring(value: unknown): value is QuestionnaireScoring {
+  return (
+    isObject(value) &&
+    Array.isArray(value.scores) &&
+    value.scores.every(
+      (score) =>
+        isObject(score) &&
+        typeof score.key === "string" &&
+        typeof score.label === "string" &&
+        typeof score.description === "string" &&
+        isObject(score.expression) &&
+        typeof score.expression.kind === "string" &&
+        Array.isArray(score.dependsOnItemIds) &&
+        Array.isArray(score.bands)
+    )
+  );
+}
+
+function isVisualProvenance(value: unknown): value is QuestionnaireProvenance {
+  return (
+    isObject(value) &&
+    typeof value.retrievalDate === "string" &&
+    typeof value.sourceClass === "string" &&
+    typeof value.scoringNotes === "string" &&
+    Array.isArray(value.sources) &&
+    value.sources.every(
+      (source) =>
+        isObject(source) &&
+        typeof source.label === "string" &&
+        typeof source.url === "string" &&
+        typeof source.citation === "string" &&
+        typeof source.notes === "string"
+    )
+  );
+}
+
+function parseForVisualEditor<T>(
+  raw: string,
+  guard: (value: unknown) => value is T
+) {
+  try {
+    const value: unknown = JSON.parse(raw);
+    return guard(value) ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 function parseState(state: BuilderState): CreateQuestionnaireInstrumentInput {
@@ -284,16 +390,15 @@ export function PsycheQuestionnaireBuilderPage() {
     updateMutation.isPending ||
     publishMutation.isPending;
 
-  const parsedPreview = useMemo(() => {
-    try {
-      return {
-        definition: JSON.parse(state.definitionJson) as QuestionnaireDefinition,
-        scoring: JSON.parse(state.scoringJson) as QuestionnaireScoring
-      };
-    } catch {
-      return null;
-    }
-  }, [state.definitionJson, state.scoringJson]);
+  const parsedDefinition = useMemo(() => {
+    return parseForVisualEditor(state.definitionJson, isVisualDefinition);
+  }, [state.definitionJson]);
+  const parsedScoring = useMemo(() => {
+    return parseForVisualEditor(state.scoringJson, isVisualScoring);
+  }, [state.scoringJson]);
+  const parsedProvenance = useMemo(() => {
+    return parseForVisualEditor(state.provenanceJson, isVisualProvenance);
+  }, [state.provenanceJson]);
 
   if (instrumentId && detailQuery.isLoading && !detail) {
     return (
@@ -324,7 +429,11 @@ export function PsycheQuestionnaireBuilderPage() {
         await createMutation.mutateAsync();
       }
     } catch (error) {
-      setJsonError(error instanceof Error ? error.message : "Unable to save questionnaire draft.");
+      setJsonError(
+        error instanceof Error
+          ? error.message
+          : "Unable to save questionnaire draft."
+      );
     }
   };
 
@@ -334,7 +443,7 @@ export function PsycheQuestionnaireBuilderPage() {
         eyebrow="Psyche"
         title={pageTitle}
         description="Edit versioned questionnaire metadata, structure, scoring, and publication state directly in the app. Seeded instruments branch into editable drafts before any change is made."
-        badge={instrumentId ? detail?.title ?? "Draft" : "New draft"}
+        badge={instrumentId ? (detail?.title ?? "Draft") : "New draft"}
         actions={
           instrumentId ? (
             <Link to={`/psyche/questionnaires/${instrumentId}`}>
@@ -377,7 +486,12 @@ export function PsycheQuestionnaireBuilderPage() {
                 <span className={fieldLabelClass}>Title</span>
                 <input
                   value={state.title}
-                  onChange={(event) => setState((current) => ({ ...current, title: event.target.value }))}
+                  onChange={(event) =>
+                    setState((current) => ({
+                      ...current,
+                      title: event.target.value
+                    }))
+                  }
                   className={fieldControlClass}
                 />
               </label>
@@ -385,7 +499,12 @@ export function PsycheQuestionnaireBuilderPage() {
                 <span className={fieldLabelClass}>Subtitle</span>
                 <input
                   value={state.subtitle}
-                  onChange={(event) => setState((current) => ({ ...current, subtitle: event.target.value }))}
+                  onChange={(event) =>
+                    setState((current) => ({
+                      ...current,
+                      subtitle: event.target.value
+                    }))
+                  }
                   className={fieldControlClass}
                 />
               </label>
@@ -393,7 +512,12 @@ export function PsycheQuestionnaireBuilderPage() {
                 <span className={fieldLabelClass}>Description</span>
                 <textarea
                   value={state.description}
-                  onChange={(event) => setState((current) => ({ ...current, description: event.target.value }))}
+                  onChange={(event) =>
+                    setState((current) => ({
+                      ...current,
+                      description: event.target.value
+                    }))
+                  }
                   className={cn(fieldControlClass, "min-h-28 resize-y")}
                 />
               </label>
@@ -402,7 +526,12 @@ export function PsycheQuestionnaireBuilderPage() {
                   <span className={fieldLabelClass}>Aliases</span>
                   <input
                     value={state.aliases}
-                    onChange={(event) => setState((current) => ({ ...current, aliases: event.target.value }))}
+                    onChange={(event) =>
+                      setState((current) => ({
+                        ...current,
+                        aliases: event.target.value
+                      }))
+                    }
                     className={fieldControlClass}
                   />
                 </label>
@@ -411,7 +540,10 @@ export function PsycheQuestionnaireBuilderPage() {
                   <input
                     value={state.symptomDomains}
                     onChange={(event) =>
-                      setState((current) => ({ ...current, symptomDomains: event.target.value }))
+                      setState((current) => ({
+                        ...current,
+                        symptomDomains: event.target.value
+                      }))
                     }
                     className={fieldControlClass}
                   />
@@ -422,7 +554,12 @@ export function PsycheQuestionnaireBuilderPage() {
                   <span className={fieldLabelClass}>Tags</span>
                   <input
                     value={state.tags}
-                    onChange={(event) => setState((current) => ({ ...current, tags: event.target.value }))}
+                    onChange={(event) =>
+                      setState((current) => ({
+                        ...current,
+                        tags: event.target.value
+                      }))
+                    }
                     className={fieldControlClass}
                   />
                 </label>
@@ -433,7 +570,8 @@ export function PsycheQuestionnaireBuilderPage() {
                     onChange={(event) =>
                       setState((current) => ({
                         ...current,
-                        sourceClass: event.target.value as QuestionnaireSourceClass
+                        sourceClass: event.target
+                          .value as QuestionnaireSourceClass
                       }))
                     }
                     className={fieldControlClass}
@@ -459,7 +597,8 @@ export function PsycheQuestionnaireBuilderPage() {
                     onChange={(event) =>
                       setState((current) => ({
                         ...current,
-                        availability: event.target.value as QuestionnaireAvailability
+                        availability: event.target
+                          .value as QuestionnaireAvailability
                       }))
                     }
                     className={fieldControlClass}
@@ -476,49 +615,129 @@ export function PsycheQuestionnaireBuilderPage() {
           ) : null}
 
           {step === "structure" ? (
-            <div className="grid min-w-0 gap-2">
-              <span className={fieldLabelClass}>Definition JSON</span>
-              <div className="min-w-0 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
-                Items and sections can declare
-                <code className={inlineCodeClass}>
-                  visibility.script
-                </code>
-                rules such as
-                <code className={inlineCodeClass}>
-                  audit_1 &gt; 0
-                </code>
-                or
-                <code className={inlineCodeClass}>
-                  answered(question_12) and option(question_12) == "yes"
-                </code>
-                .
-              </div>
-              <textarea
-                value={state.definitionJson}
-                onChange={(event) => setState((current) => ({ ...current, definitionJson: event.target.value }))}
-                className={cn(jsonTextareaClass, "min-h-[32rem]")}
-              />
+            <div className="grid min-w-0 gap-4">
+              {parsedDefinition ? (
+                <QuestionnaireDefinitionEditor
+                  definition={parsedDefinition}
+                  onChange={(definition) =>
+                    setState((current) => ({
+                      ...current,
+                      definitionJson: JSON.stringify(definition, null, 2)
+                    }))
+                  }
+                />
+              ) : (
+                <div
+                  role="alert"
+                  className="rounded-[16px] border border-[var(--danger)]/20 bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--danger)]"
+                >
+                  Definition JSON is invalid. Repair it in Advanced definition
+                  JSON before returning to the visual editor.
+                </div>
+              )}
+              <details className="min-w-0 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <summary className="cursor-pointer text-sm font-medium text-[var(--ui-ink-strong)]">
+                  Advanced definition JSON
+                </summary>
+                <div className="mt-4 min-w-0 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
+                  Use this for conditional
+                  <code className={inlineCodeClass}>visibility.script</code>
+                  rules, option values, imported definitions, and other advanced
+                  fields. Visual edits preserve these fields.
+                </div>
+                <textarea
+                  aria-label="Advanced definition JSON"
+                  value={state.definitionJson}
+                  onChange={(event) =>
+                    setState((current) => ({
+                      ...current,
+                      definitionJson: event.target.value
+                    }))
+                  }
+                  className={cn(jsonTextareaClass, "mt-3 min-h-[32rem]")}
+                />
+              </details>
             </div>
           ) : null}
 
           {step === "scoring" ? (
             <div className="grid gap-4">
-              <label className="grid gap-2">
-                <span className={fieldLabelClass}>Scoring JSON</span>
+              {parsedScoring ? (
+                <QuestionnaireScoringEditor
+                  scoring={parsedScoring}
+                  itemIds={parsedDefinition?.itemIds ?? []}
+                  onChange={(scoring) =>
+                    setState((current) => ({
+                      ...current,
+                      scoringJson: JSON.stringify(scoring, null, 2)
+                    }))
+                  }
+                />
+              ) : (
+                <div
+                  role="alert"
+                  className="rounded-[16px] border border-[var(--danger)]/20 bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--danger)]"
+                >
+                  Scoring JSON is invalid. Repair it in Advanced scoring JSON
+                  before returning to the visual scoring editor.
+                </div>
+              )}
+              <details className="min-w-0 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <summary className="cursor-pointer text-sm font-medium text-[var(--ui-ink-strong)]">
+                  Advanced scoring JSON
+                </summary>
+                <p className="mt-4 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                  Use this for weighted or conditional expressions,
+                  interpretation bands, cross-score references, and imported
+                  scoring definitions.
+                </p>
                 <textarea
+                  aria-label="Advanced scoring JSON"
                   value={state.scoringJson}
-                  onChange={(event) => setState((current) => ({ ...current, scoringJson: event.target.value }))}
-                  className={cn(jsonTextareaClass, "min-h-[24rem]")}
+                  onChange={(event) =>
+                    setState((current) => ({
+                      ...current,
+                      scoringJson: event.target.value
+                    }))
+                  }
+                  className={cn(jsonTextareaClass, "mt-3 min-h-[24rem]")}
                 />
-              </label>
-              <label className="grid gap-2">
-                <span className={fieldLabelClass}>Provenance JSON</span>
+              </details>
+              {parsedProvenance ? (
+                <QuestionnaireProvenanceEditor
+                  provenance={parsedProvenance}
+                  onChange={(provenance) =>
+                    setState((current) => ({
+                      ...current,
+                      provenanceJson: JSON.stringify(provenance, null, 2)
+                    }))
+                  }
+                />
+              ) : (
+                <div
+                  role="alert"
+                  className="rounded-[16px] border border-[var(--danger)]/20 bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--danger)]"
+                >
+                  Provenance JSON is invalid. Repair it below before using the
+                  visual provenance editor.
+                </div>
+              )}
+              <details className="min-w-0 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <summary className="cursor-pointer text-sm font-medium text-[var(--ui-ink-strong)]">
+                  Advanced provenance JSON
+                </summary>
                 <textarea
+                  aria-label="Advanced provenance JSON"
                   value={state.provenanceJson}
-                  onChange={(event) => setState((current) => ({ ...current, provenanceJson: event.target.value }))}
-                  className={cn(jsonTextareaClass, "min-h-[16rem]")}
+                  onChange={(event) =>
+                    setState((current) => ({
+                      ...current,
+                      provenanceJson: event.target.value
+                    }))
+                  }
+                  className={cn(jsonTextareaClass, "mt-3 min-h-[16rem]")}
                 />
-              </label>
+              </details>
             </div>
           ) : null}
 
@@ -528,42 +747,41 @@ export function PsycheQuestionnaireBuilderPage() {
                 <span className={fieldLabelClass}>Version label</span>
                 <input
                   value={state.label}
-                  onChange={(event) => setState((current) => ({ ...current, label: event.target.value }))}
+                  onChange={(event) =>
+                    setState((current) => ({
+                      ...current,
+                      label: event.target.value
+                    }))
+                  }
                   className={fieldControlClass}
                 />
               </label>
-              {parsedPreview ? (
+              {parsedDefinition && parsedScoring ? (
                 <div className="grid gap-3 md:grid-cols-3">
                   <div className={metricCardClass}>
-                    <div className={mutedLabelClass}>
-                      Items
-                    </div>
+                    <div className={mutedLabelClass}>Items</div>
                     <div className="mt-2 text-2xl font-semibold text-[var(--ui-ink-strong)]">
-                      {parsedPreview.definition.items.length}
+                      {parsedDefinition.items.length}
                     </div>
                   </div>
                   <div className={metricCardClass}>
-                    <div className={mutedLabelClass}>
-                      Sections
-                    </div>
+                    <div className={mutedLabelClass}>Sections</div>
                     <div className="mt-2 text-2xl font-semibold text-[var(--ui-ink-strong)]">
-                      {parsedPreview.definition.sections.length}
+                      {parsedDefinition.sections.length}
                     </div>
                   </div>
                   <div className={metricCardClass}>
-                    <div className={mutedLabelClass}>
-                      Scores
-                    </div>
+                    <div className={mutedLabelClass}>Scores</div>
                     <div className="mt-2 text-2xl font-semibold text-[var(--ui-ink-strong)]">
-                      {parsedPreview.scoring.scores.length}
+                      {parsedScoring.scores.length}
                     </div>
                   </div>
                 </div>
               ) : null}
               <p className="text-sm leading-6 text-[var(--ui-ink-soft)]">
-                Publishing freezes the current draft into an immutable version for
-                future runs. Past run history will always keep the version it was
-                scored against.
+                Publishing freezes the current draft into an immutable version
+                for future runs. Past run history will always keep the version
+                it was scored against.
               </p>
             </div>
           ) : null}
@@ -571,9 +789,7 @@ export function PsycheQuestionnaireBuilderPage() {
 
         <div className="grid gap-4">
           <Card className="min-w-0 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)]">
-            <div className={mutedLabelClass}>
-              Draft posture
-            </div>
+            <div className={mutedLabelClass}>Draft posture</div>
             {detail?.isSystem ? (
               <div className="mt-4">
                 <EmptyState
@@ -588,17 +804,16 @@ export function PsycheQuestionnaireBuilderPage() {
                   {detail?.draftVersion ? "Draft available" : "New draft"}
                 </Badge>
                 <div className="break-words text-sm leading-6 text-[var(--ui-ink-soft)]">
-                  Save updates whenever the metadata or JSON changes, then publish
-                  once the definition is ready for scoring and longitudinal history.
+                  Save updates whenever the metadata or JSON changes, then
+                  publish once the definition is ready for scoring and
+                  longitudinal history.
                 </div>
               </div>
             )}
           </Card>
 
           <Card className="min-w-0 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)]">
-            <div className={mutedLabelClass}>
-              Actions
-            </div>
+            <div className={mutedLabelClass}>Actions</div>
             <div className="mt-4 grid gap-3">
               <Button onClick={() => void save()} disabled={isBusy}>
                 Save draft
