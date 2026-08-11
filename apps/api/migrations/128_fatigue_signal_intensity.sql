@@ -1,0 +1,2 @@
+ALTER TABLE fatigue_signals
+ADD COLUMN intensity INTEGER NOT NULL DEFAULT 5;

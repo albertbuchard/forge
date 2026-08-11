@@ -229,16 +229,55 @@ describe("Life Force workspace", () => {
     expect(screen.getByText("Afternoon planning block")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /i'm getting tired/i }));
+    expect(
+      screen.getByRole("group", { name: /record current tiredness/i })
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Fatigue signal intensity"), {
+      target: { value: "8" }
+    });
+    fireEvent.change(screen.getByLabelText("Fatigue signal context"), {
+      target: { value: "Poor sleep and a demanding morning." }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Record signal" }));
 
     await waitFor(() => {
       expect(createFatigueSignalMock).toHaveBeenCalledWith(
-        { signalType: "tired" },
+        {
+          signalType: "tired",
+          intensity: 8,
+          note: "Poor sleep and a demanding morning."
+        },
         ["user_operator"]
       );
     });
     expect(
       await screen.findByText(/Tiredness signal applied/i)
     ).toBeInTheDocument();
+  });
+
+  it("keeps the fatigue context draft available when saving fails", async () => {
+    createFatigueSignalMock.mockRejectedValueOnce(
+      new Error("Signal could not be saved.")
+    );
+    renderWithQueryClient(
+      <LifeForceOverviewWorkspace
+        selectedUserIds={["user_operator"]}
+        fallbackLifeForce={createLifeForcePayload()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /i'm getting tired/i }));
+    fireEvent.change(screen.getByLabelText("Fatigue signal context"), {
+      target: { value: "Poor sleep." }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Record signal" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Signal could not be saved."
+    );
+    expect(screen.getByLabelText("Fatigue signal context")).toHaveValue(
+      "Poor sleep."
+    );
   });
 
   it("saves curve edits through the template mutation", async () => {
@@ -394,10 +433,21 @@ describe("Life Force workspace", () => {
     expect(screen.getByText("Deep work")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /i'm okay again/i }));
+    expect(
+      screen.getByRole("group", { name: /record current recovery/i })
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Fatigue signal context"), {
+      target: { value: "Recovered after a quiet break." }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Record signal" }));
 
     await waitFor(() => {
       expect(createFatigueSignalMock).toHaveBeenCalledWith(
-        { signalType: "okay_again" },
+        {
+          signalType: "okay_again",
+          intensity: 5,
+          note: "Recovered after a quiet break."
+        },
         ["user_operator"]
       );
     });

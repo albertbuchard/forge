@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
+import { HttpError } from "../errors.js";
 import { getDefaultUser, getUserById } from "../repositories/users.js";
 import {
   actionProfileSchema,
@@ -3291,14 +3292,30 @@ function readTodayLedger(userId: string, dateKey: string): ApLedgerRow[] {
     .all(userId, dateKey) as ApLedgerRow[];
 }
 
-function readTodayFatigueSignals(userId: string, dateKey: string) {
+const FATIGUE_SIGNAL_ACTIVE_WINDOW_MS = 4 * 60 * 60 * 1_000;
+
+function readActiveFatigueSignal(userId: string, now: Date) {
+  const oldestActiveAt = new Date(
+    now.getTime() - FATIGUE_SIGNAL_ACTIVE_WINDOW_MS
+  ).toISOString();
   return getDatabase()
     .prepare(
-      `SELECT signal_type, delta
+      `SELECT signal_type, delta, intensity, observed_at
        FROM fatigue_signals
-       WHERE user_id = ? AND date_key = ?`
+       WHERE user_id = ?
+         AND observed_at >= ?
+         AND observed_at <= ?
+       ORDER BY observed_at DESC, created_at DESC, id DESC
+       LIMIT 1`
     )
-    .all(userId, dateKey) as Array<{ signal_type: string; delta: number }>;
+    .get(userId, oldestActiveAt, now.toISOString()) as
+    | {
+        signal_type: string;
+        delta: number;
+        intensity: number;
+        observed_at: string;
+      }
+    | undefined;
 }
 
 function buildWarnings(input: {
@@ -3767,10 +3784,8 @@ export function buildLifeForcePayload(
     (sortedRates[1] ?? 0) * 0.6 +
     (sortedRates[2] ?? 0) * 0.35 +
     sortedRates.slice(3).reduce((sum, value) => sum + value * 0.2, 0);
-  const fatigueFromSignals = readTodayFatigueSignals(
-    user.id,
-    range.dateKey
-  ).reduce((sum, signal) => sum + signal.delta, 0);
+  const activeFatigueSignal = readActiveFatigueSignal(user.id, now);
+  const fatigueFromSignals = activeFatigueSignal?.delta ?? 0;
   const fatigueBufferApPerHour = Math.max(
     0,
     Number(
@@ -4113,9 +4128,18 @@ export function createFatigueSignal(
   input: FatigueSignalCreateInput
 ) {
   const parsed = fatigueSignalCreateSchema.parse(input);
-  const observedAt = parsed.observedAt ?? nowIso();
+  const createdAt = nowIso();
+  const observedAt = new Date(parsed.observedAt ?? createdAt).toISOString();
+  if (Date.parse(observedAt) > Date.parse(createdAt)) {
+    throw new HttpError(
+      409,
+      "fatigue_signal_future_observation",
+      "A fatigue signal cannot be recorded in the future."
+    );
+  }
   const dateKey = observedAt.slice(0, 10);
-  const delta = parsed.signalType === "tired" ? 4 : -4;
+  const magnitude = Number((parsed.intensity * 0.8).toFixed(2));
+  const delta = parsed.signalType === "tired" ? magnitude : -magnitude;
   getDatabase()
     .prepare(
       `INSERT INTO fatigue_signals (
@@ -4126,8 +4150,9 @@ export function createFatigueSignal(
          observed_at,
          note,
          delta,
+         intensity,
          created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       `fatigue_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
@@ -4135,11 +4160,12 @@ export function createFatigueSignal(
       dateKey,
       parsed.signalType,
       observedAt,
-      parsed.note ?? "",
+      parsed.note,
       delta,
-      nowIso()
+      parsed.intensity,
+      createdAt
     );
-  return buildLifeForcePayload(new Date(observedAt), [userId]);
+  return buildLifeForcePayload(new Date(createdAt), [userId]);
 }
 
 export function listLifeForceTemplates(userId: string) {

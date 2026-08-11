@@ -7024,7 +7024,8 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       "Choose routeKey from live onboarding specializedDomainSurfaces.lifeForce routeKeys and methodRoutes.",
       "The overview routeKey maps to GET /api/v1/life-force; do not invent /api/v1/life-force/overview.",
       "Fill weekday through pathParams.weekday for weekdayTemplate; do not put the weekday inside routeKey, query, or body.",
-      "Patch profile only for durable personal assumptions, update weekdayTemplate for repeated energy curves, and use fatigueSignal for a right-now tired or recovered observation.",
+      "Patch profile only for durable personal assumptions, update weekdayTemplate for repeated energy curves, and use fatigueSignal for a right-now tired or recovered observation with intensity from 1 to 10 and optional context in note.",
+      "Only the newest fatigue signal affects the short-term model, and it expires after four hours; send okay_again to record recovery instead of stacking an inverse correction manually.",
       "After a profile, template, or fatigue write, read the overview back when the user is making a planning decision from the change."
     ],
     example:
@@ -9683,7 +9684,7 @@ function buildAgentOnboardingPayload(request: {
         lifeForceWeekdayTemplate:
           '{"routeKey":"weekdayTemplate","pathParams":{"weekday":"monday"},"body":{"points":[{"hour":13,"freeAp":-4}]}}',
         lifeForceFatigueSignal:
-          '{"routeKey":"fatigueSignal","body":{"signal":"tired","intensity":7,"note":"Sharp post-lunch dip after clinic admin."}}',
+          '{"routeKey":"fatigueSignal","body":{"signalType":"tired","intensity":7,"note":"Sharp post-lunch dip after clinic admin."}}',
         workbenchFlowCatalog:
           '{"routeKey":"listFlows","query":{"includeArchived":false}}',
         workbenchFlowDetail:

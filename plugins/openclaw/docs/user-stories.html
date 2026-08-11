@@ -46,8 +46,8 @@
           <a class="story-metric metric-all" href="./user-stories.html" data-metric-scope="all"><strong>203</strong><span>All stories</span></a>
           <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>193</strong><span>Current product</span></a>
           <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>10</strong><span>Planned</span></a>
-          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>22</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>153</strong><span>In review</span></a>
+          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>23</strong><span>Verified</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>152</strong><span>In review</span></a>
           <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>18</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
@@ -2342,17 +2342,17 @@
                   </div>
                 </details>
 
-                <details class="story-card" id="story-lf-04" data-story-id="LF-04" data-lifecycle="current" data-readiness="In review" data-family="LF">
+                <details class="story-card" id="story-lf-04" data-story-id="LF-04" data-lifecycle="current" data-readiness="Verified" data-family="LF">
                   <summary class="story-summary">
                     <span class="story-id">LF-04</span>
                     <span class="story-summary-outcome">As a user, I can record a fatigue signal with intensity and context and see its effect on the current model.</span>
-                    <span class="story-state state-in-review">In review</span>
+                    <span class="story-state state-verified">Verified</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a user, I can record a fatigue signal with intensity and context and see its effect on the current model.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Life Force <code>fatigueSignal</code>.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>the guided fatigue signal reaches the dedicated route and updates the workspace in focused tests; finish expiry, correction, repeated-signal, and future-time cases.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the guided Life Force control records tiredness or recovery with intensity from 1 to 10 and optional context. The newest signal replaces the earlier short-term effect instead of stacking repeatedly, expires after four hours, preserves its audit row, normalizes offset-bearing timestamps to UTC, and rejects future observations. A failed save keeps the draft and exposes the error for retry.</dd></div>
                     </dl>
                   </div>
                 </details>

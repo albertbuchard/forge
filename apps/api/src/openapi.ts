@@ -15228,6 +15228,34 @@ export function buildOpenApiDocument() {
         post: {
           summary:
             "Record a tired or recovered fatigue signal and rebuild life-force state",
+          description:
+            "Records a current intensity-scaled signal with optional context. The newest signal replaces the previous short-term effect, expires after four hours, and cannot be future-dated.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["signalType"],
+                  properties: {
+                    signalType: {
+                      type: "string",
+                      enum: ["tired", "okay_again"]
+                    },
+                    intensity: {
+                      type: "integer",
+                      minimum: 1,
+                      maximum: 10,
+                      default: 5
+                    },
+                    observedAt: { type: "string", format: "date-time" },
+                    note: { type: "string", maxLength: 500, default: "" }
+                  }
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {

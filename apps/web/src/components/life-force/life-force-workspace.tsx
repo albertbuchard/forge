@@ -33,6 +33,7 @@ import { ProvenanceSummary } from "@/components/provenance-summary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import {
   FloatingActionMenu,
   type FloatingActionMenuItem
@@ -47,7 +48,8 @@ import type {
   LifeForceCurvePoint,
   LifeForceDrainEntry,
   LifeForcePayload,
-  LifeForceWarning
+  LifeForceWarning,
+  FatigueSignalInput
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -1154,19 +1156,41 @@ function LifeForceDrains({
 
 function LifeForceCompact({
   lifeForce,
-  onTired,
-  onOkayAgain,
-  tiredPending,
-  okayPending,
+  onSignal,
+  signalPending,
+  signalError,
   feedback
 }: {
   lifeForce: LifeForcePayload;
-  onTired: () => void;
-  onOkayAgain: () => void;
-  tiredPending: boolean;
-  okayPending: boolean;
+  onSignal: (input: FatigueSignalInput) => Promise<void>;
+  signalPending: boolean;
+  signalError?: string | null;
   feedback?: string | null;
 }) {
+  const [signalType, setSignalType] = useState<
+    FatigueSignalInput["signalType"] | null
+  >(null);
+  const [intensity, setIntensity] = useState(5);
+  const [note, setNote] = useState("");
+
+  const startSignal = (nextType: FatigueSignalInput["signalType"]) => {
+    setSignalType(nextType);
+    setIntensity(5);
+    setNote("");
+  };
+
+  const submitSignal = async () => {
+    if (!signalType) {
+      return;
+    }
+    try {
+      await onSignal({ signalType, intensity, note });
+      setSignalType(null);
+    } catch {
+      // The mutation owns the rendered error and the draft stays available.
+    }
+  };
+
   return (
     <Card className="overflow-hidden p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1186,20 +1210,86 @@ function LifeForceCompact({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={onTired} pending={tiredPending}>
+          <Button
+            variant="secondary"
+            onClick={() => startSignal("tired")}
+            disabled={signalPending}
+          >
             <Moon className="mr-2 size-4" />
             I&apos;m getting tired
           </Button>
           <Button
             variant="secondary"
-            onClick={onOkayAgain}
-            pending={okayPending}
+            onClick={() => startSignal("okay_again")}
+            disabled={signalPending}
           >
             <BatteryCharging className="mr-2 size-4" />
             I&apos;m okay again
           </Button>
         </div>
       </div>
+
+      {signalType ? (
+        <fieldset
+          aria-labelledby="life-force-signal-title"
+          className="mt-4 grid gap-4 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4"
+        >
+          <legend
+            id="life-force-signal-title"
+            className="text-base font-semibold text-[var(--ui-ink-strong)]"
+          >
+            {signalType === "tired"
+              ? "Record current tiredness"
+              : "Record current recovery"}
+          </legend>
+          <div className="text-sm leading-6 text-[var(--ui-ink-soft)]">
+            The newest signal replaces the previous short-term signal and
+            expires after four hours.
+          </div>
+          <label className="grid gap-2 text-sm text-[var(--ui-ink-medium)]">
+            <span>
+              Intensity: <strong>{intensity}/10</strong>
+            </span>
+            <input
+              aria-label="Fatigue signal intensity"
+              type="range"
+              min={1}
+              max={10}
+              step={1}
+              value={intensity}
+              onChange={(event) => setIntensity(Number(event.target.value))}
+              className="h-11 w-full accent-[var(--primary)]"
+            />
+          </label>
+          <label className="grid gap-2 text-sm text-[var(--ui-ink-medium)]">
+            <span>Context (optional)</span>
+            <Textarea
+              aria-label="Fatigue signal context"
+              value={note}
+              maxLength={500}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder="For example: poor sleep, post-training fatigue, or recovered after a break."
+            />
+          </label>
+          {signalError ? (
+            <div role="alert" className="text-sm text-[var(--danger)]">
+              {signalError}
+            </div>
+          ) : null}
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => setSignalType(null)}
+              disabled={signalPending}
+            >
+              Cancel
+            </Button>
+            <Button onClick={() => void submitSignal()} pending={signalPending}>
+              Record signal
+            </Button>
+          </div>
+        </fieldset>
+      ) : null}
 
       {feedback ? (
         <div className="mt-4 rounded-[18px] border border-[color-mix(in_srgb,var(--primary)_24%,transparent)] bg-[var(--ui-accent-soft)] px-4 py-3 text-sm text-[var(--ui-ink-medium)]">
@@ -1334,31 +1424,19 @@ export function LifeForceOverviewWorkspace({
       setDirty(false);
     }
   });
-  const tiredMutation = useMutation({
-    mutationFn: () =>
-      createFatigueSignal({ signalType: "tired" }, selectedUserIds),
-    onSuccess: async () => {
+  const signalMutation = useMutation({
+    mutationFn: (input: FatigueSignalInput) =>
+      createFatigueSignal(input, selectedUserIds),
+    onSuccess: async (_response, input) => {
       await queryClient.invalidateQueries({ queryKey: ["forge-life-force"] });
       await invalidateForgeSnapshot(queryClient);
       if (onRefresh) {
         await onRefresh();
       }
       setFeedback(
-        "Tiredness signal applied. Today’s Life Force now reflects the extra strain."
-      );
-    }
-  });
-  const okayAgainMutation = useMutation({
-    mutationFn: () =>
-      createFatigueSignal({ signalType: "okay_again" }, selectedUserIds),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["forge-life-force"] });
-      await invalidateForgeSnapshot(queryClient);
-      if (onRefresh) {
-        await onRefresh();
-      }
-      setFeedback(
-        "Recovery signal applied. Instant strain has been eased for the rest of today."
+        input.signalType === "tired"
+          ? "Tiredness signal applied. Today’s Life Force now reflects the extra strain."
+          : "Recovery signal applied. Instant strain has been eased."
       );
     }
   });
@@ -1369,14 +1447,15 @@ export function LifeForceOverviewWorkspace({
       <LifeForceStatsStrip lifeForce={payload} />
       <LifeForceCompact
         lifeForce={payload}
-        onTired={() => {
-          void tiredMutation.mutateAsync();
+        onSignal={async (input) => {
+          await signalMutation.mutateAsync(input);
         }}
-        onOkayAgain={() => {
-          void okayAgainMutation.mutateAsync();
-        }}
-        tiredPending={tiredMutation.isPending}
-        okayPending={okayAgainMutation.isPending}
+        signalPending={signalMutation.isPending}
+        signalError={
+          signalMutation.error instanceof Error
+            ? signalMutation.error.message
+            : null
+        }
         feedback={feedback}
       />
       {showEditor ? (
@@ -1454,30 +1533,20 @@ export function LifeForceTodayCard({
             templates: []
           }
   });
-  const tiredMutation = useMutation({
-    mutationFn: () =>
-      createFatigueSignal({ signalType: "tired" }, resolvedUserIds),
-    onSuccess: async () => {
+  const signalMutation = useMutation({
+    mutationFn: (input: FatigueSignalInput) =>
+      createFatigueSignal(input, resolvedUserIds),
+    onSuccess: async (_response, input) => {
       await queryClient.invalidateQueries({ queryKey: ["forge-life-force"] });
       await invalidateForgeSnapshot(queryClient);
       if (onRefresh) {
         await onRefresh();
       }
       setFeedback(
-        "Tiredness signal applied. Today’s headroom has been reduced."
+        input.signalType === "tired"
+          ? "Tiredness signal applied. Today’s headroom has been reduced."
+          : "Recovery signal applied. Today’s headroom has been eased."
       );
-    }
-  });
-  const okayAgainMutation = useMutation({
-    mutationFn: () =>
-      createFatigueSignal({ signalType: "okay_again" }, resolvedUserIds),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["forge-life-force"] });
-      await invalidateForgeSnapshot(queryClient);
-      if (onRefresh) {
-        await onRefresh();
-      }
-      setFeedback("Recovery signal applied. Today’s headroom has been eased.");
     }
   });
   const payload = lifeForceQuery.data?.lifeForce ?? fallbackLifeForce;
@@ -1501,14 +1570,15 @@ export function LifeForceTodayCard({
   return (
     <LifeForceCompact
       lifeForce={payload}
-      onTired={() => {
-        void tiredMutation.mutateAsync();
+      onSignal={async (input) => {
+        await signalMutation.mutateAsync(input);
       }}
-      onOkayAgain={() => {
-        void okayAgainMutation.mutateAsync();
-      }}
-      tiredPending={tiredMutation.isPending}
-      okayPending={okayAgainMutation.isPending}
+      signalPending={signalMutation.isPending}
+      signalError={
+        signalMutation.error instanceof Error
+          ? signalMutation.error.message
+          : null
+      }
       feedback={feedback}
     />
   );

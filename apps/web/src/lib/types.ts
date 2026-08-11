@@ -772,6 +772,7 @@ export interface LifeForceProfilePatchInput {
 
 export interface FatigueSignalInput {
   signalType: "tired" | "okay_again";
+  intensity?: number;
   observedAt?: string;
   note?: string;
 }
@@ -2958,9 +2959,7 @@ export interface VitalMetricDayRecord {
   sourceSystems: string[];
   sourceDevices: string[];
   inputUnits: string[];
-  unitNormalizations: Array<
-    "canonical" | "converted" | "unrecognized_metric"
-  >;
+  unitNormalizations: Array<"canonical" | "converted" | "unrecognized_metric">;
 }
 
 export interface VitalsViewData {

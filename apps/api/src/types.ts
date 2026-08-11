@@ -3678,10 +3678,7 @@ export const relationshipProposalStatusSchema = z.enum([
 export const relationshipProposalEvidenceSchema = z.object({
   sourceField: z.string().trim().min(1).max(80),
   targetField: z.string().trim().min(1).max(80),
-  matchedTerms: z
-    .array(z.string().trim().min(2).max(80))
-    .min(1)
-    .max(8)
+  matchedTerms: z.array(z.string().trim().min(2).max(80)).min(1).max(8)
 });
 export const relationshipProposalEndpointSchema = z.object({
   entityType: crudEntityTypeSchema,
@@ -5261,8 +5258,9 @@ export const lifeForceTemplateUpdateSchema = z.object({
 
 export const fatigueSignalCreateSchema = z.object({
   signalType: z.enum(["tired", "okay_again"]),
+  intensity: z.coerce.number().int().min(1).max(10).default(5),
   observedAt: dateTimeSchema.optional(),
-  note: trimmedString.optional()
+  note: z.string().trim().max(500).default("")
 });
 
 export const taskSplitCreateSchema = z.object({
