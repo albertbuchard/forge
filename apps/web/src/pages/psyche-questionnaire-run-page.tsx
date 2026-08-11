@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
@@ -36,6 +37,36 @@ const selectedOptionClass =
 const idleOptionClass =
   "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-2)]";
 
+type RunPatchInput = {
+  answers: QuestionnaireAnswerInput[];
+  progressIndex: number;
+};
+
+function applyRunPatchLocally(
+  detail: QuestionnaireRunDetail,
+  input: RunPatchInput
+): QuestionnaireRunDetail {
+  const patchedItemIds = new Set(input.answers.map((answer) => answer.itemId));
+  const timestamp = new Date().toISOString();
+  return {
+    ...detail,
+    run: {
+      ...detail.run,
+      progressIndex: input.progressIndex
+    },
+    answers: [
+      ...detail.answers.filter((answer) => !patchedItemIds.has(answer.itemId)),
+      ...input.answers.map((answer) => ({
+        ...answer,
+        optionKey: answer.optionKey ?? null,
+        numericValue: answer.numericValue ?? null,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      }))
+    ]
+  };
+}
+
 function toAnswer(
   item: QuestionnaireItem,
   optionKey: string
@@ -60,6 +91,10 @@ export function PsycheQuestionnaireRunPage() {
   const { instrumentId = "" } = useParams();
   const navigate = useNavigate();
   const [detail, setDetail] = useState<QuestionnaireRunDetail | null>(null);
+  const [saveFailure, setSaveFailure] = useState<{
+    input: RunPatchInput;
+    message: string;
+  } | null>(null);
 
   const startMutation = useMutation({
     mutationFn: () =>
@@ -70,11 +105,8 @@ export function PsycheQuestionnaireRunPage() {
   });
 
   const patchMutation = useMutation({
-    mutationFn: (input: {
-      answers: QuestionnaireAnswerInput[];
-      progressIndex: number;
-    }) => patchQuestionnaireRun(detail!.run.id, input),
-    onSuccess: (payload) => setDetail(payload)
+    mutationFn: (input: RunPatchInput) =>
+      patchQuestionnaireRun(detail!.run.id, input)
   });
 
   const completeMutation = useMutation({
@@ -158,25 +190,30 @@ export function PsycheQuestionnaireRunPage() {
     (item) => !item.required || answerMap.has(item.id)
   );
 
-  const persistProgressOnly = async (progressIndex: number) => {
+  const persistRunPatch = async (input: RunPatchInput) => {
     if (!runDetail) {
       return;
     }
-    setDetail((current) =>
-      current
-        ? {
-            ...current,
-            run: {
-              ...current.run,
-              progressIndex
-            }
-          }
-        : current
-    );
-    await patchMutation.mutateAsync({
-      answers: [],
-      progressIndex
-    });
+    const acknowledgedDetail = runDetail;
+    setSaveFailure(null);
+    setDetail(applyRunPatchLocally(acknowledgedDetail, input));
+    try {
+      const saved = await patchMutation.mutateAsync(input);
+      setDetail(saved);
+    } catch (error) {
+      setDetail(acknowledgedDetail);
+      setSaveFailure({
+        input,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Forge could not save the latest questionnaire change."
+      });
+    }
+  };
+
+  const persistProgressOnly = async (progressIndex: number) => {
+    await persistRunPatch({ answers: [], progressIndex });
   };
 
   const updateAnswer = async (
@@ -188,32 +225,7 @@ export function PsycheQuestionnaireRunPage() {
     if (!answer || !runDetail) {
       return;
     }
-    setDetail((current) => {
-      if (!current) {
-        return current;
-      }
-      const filtered = current.answers.filter(
-        (entry) => entry.itemId !== item.id
-      );
-      return {
-        ...current,
-        run: {
-          ...current.run,
-          progressIndex
-        },
-        answers: [
-          ...filtered,
-          {
-            ...answer,
-            optionKey: answer.optionKey ?? null,
-            numericValue: answer.numericValue ?? null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          }
-        ]
-      };
-    });
-    await patchMutation.mutateAsync({
+    await persistRunPatch({
       answers: [answer],
       progressIndex
     });
@@ -271,6 +283,11 @@ export function PsycheQuestionnaireRunPage() {
                   <LoaderCircle className="size-4 animate-spin" />
                   Autosaving
                 </>
+              ) : saveFailure ? (
+                <>
+                  <AlertTriangle className="size-4 text-[var(--danger)]" />
+                  Not saved
+                </>
               ) : (
                 <>
                   <CheckCircle2 className="size-4 text-[var(--tertiary)]" />
@@ -286,6 +303,58 @@ export function PsycheQuestionnaireRunPage() {
             />
           </div>
         </div>
+        {saveFailure ? (
+          <div
+            role="alert"
+            className="mx-5 mt-4 grid gap-3 rounded-[8px] border border-[var(--danger)]/25 bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--ui-ink-strong)]"
+          >
+            <div>
+              <div className="font-semibold">
+                Your latest answer or place was not saved.
+              </div>
+              <div className="mt-1 break-words text-[var(--ui-ink-soft)]">
+                {saveFailure.message} Forge restored the last acknowledged
+                answer state so the page does not claim an unsaved response.
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-fit"
+              disabled={patchMutation.isPending}
+              onClick={() => void persistRunPatch(saveFailure.input)}
+            >
+              Retry latest save
+            </Button>
+          </div>
+        ) : null}
+        {completeMutation.isError ? (
+          <div
+            role="alert"
+            className="mx-5 mt-4 grid gap-3 rounded-[8px] border border-[var(--danger)]/25 bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--ui-ink-strong)]"
+          >
+            <div>
+              <div className="font-semibold">Completion was not confirmed.</div>
+              <div className="mt-1 break-words text-[var(--ui-ink-soft)]">
+                {completeMutation.error instanceof Error
+                  ? completeMutation.error.message
+                  : "Forge could not confirm questionnaire completion."}{" "}
+                Your saved draft remains available. Retrying is safe and will
+                return the same completed run if the first request reached
+                Forge.
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-fit"
+              disabled={completeMutation.isPending}
+              onClick={() => completeMutation.mutate()}
+            >
+              Retry completion
+            </Button>
+          </div>
+        ) : null}
 
         {runDetail.version.definition.presentationMode === "single_question" &&
         currentItem ? (
@@ -301,6 +370,10 @@ export function PsycheQuestionnaireRunPage() {
                     <button
                       key={option.key}
                       type="button"
+                      aria-pressed={selected}
+                      disabled={
+                        patchMutation.isPending || completeMutation.isPending
+                      }
                       className={cn(
                         optionButtonClass,
                         selected ? selectedOptionClass : idleOptionClass
@@ -325,7 +398,7 @@ export function PsycheQuestionnaireRunPage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <Button
                   variant="secondary"
-                  disabled={currentIndex === 0}
+                  disabled={currentIndex === 0 || patchMutation.isPending}
                   onClick={() =>
                     void persistProgressOnly(Math.max(0, currentIndex - 1))
                   }
@@ -336,6 +409,7 @@ export function PsycheQuestionnaireRunPage() {
 
                 {currentIndex < visibleItems.length - 1 ? (
                   <Button
+                    disabled={patchMutation.isPending}
                     onClick={() =>
                       void persistProgressOnly(
                         Math.min(visibleItems.length - 1, currentIndex + 1)
@@ -347,7 +421,12 @@ export function PsycheQuestionnaireRunPage() {
                   </Button>
                 ) : (
                   <Button
-                    disabled={!requiredAnswered || completeMutation.isPending}
+                    disabled={
+                      !requiredAnswered ||
+                      patchMutation.isPending ||
+                      Boolean(saveFailure) ||
+                      completeMutation.isPending
+                    }
                     onClick={() => completeMutation.mutate()}
                   >
                     Finish and score
@@ -399,6 +478,11 @@ export function PsycheQuestionnaireRunPage() {
                             <button
                               key={option.key}
                               type="button"
+                              aria-pressed={selected}
+                              disabled={
+                                patchMutation.isPending ||
+                                completeMutation.isPending
+                              }
                               className={cn(
                                 compactOptionButtonClass,
                                 selected ? selectedOptionClass : idleOptionClass
@@ -426,7 +510,7 @@ export function PsycheQuestionnaireRunPage() {
               <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
                 <Button
                   variant="secondary"
-                  disabled={currentIndex === 0}
+                  disabled={currentIndex === 0 || patchMutation.isPending}
                   onClick={() =>
                     void persistProgressOnly(Math.max(0, currentIndex - 1))
                   }
@@ -437,6 +521,7 @@ export function PsycheQuestionnaireRunPage() {
 
                 {currentIndex < visibleSections.length - 1 ? (
                   <Button
+                    disabled={patchMutation.isPending}
                     onClick={() =>
                       void persistProgressOnly(
                         Math.min(visibleSections.length - 1, currentIndex + 1)
@@ -448,7 +533,12 @@ export function PsycheQuestionnaireRunPage() {
                   </Button>
                 ) : (
                   <Button
-                    disabled={!requiredAnswered || completeMutation.isPending}
+                    disabled={
+                      !requiredAnswered ||
+                      patchMutation.isPending ||
+                      Boolean(saveFailure) ||
+                      completeMutation.isPending
+                    }
                     onClick={() => completeMutation.mutate()}
                   >
                     Finish and score

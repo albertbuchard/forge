@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { PsycheQuestionnaireRunPage } from "@/pages/psyche-questionnaire-run-page";
@@ -21,9 +27,10 @@ const {
 }));
 
 vi.mock("react-router-dom", async () => {
-  const actual = await vi.importActual<typeof import("react-router-dom")>(
-    "react-router-dom"
-  );
+  const actual =
+    await vi.importActual<typeof import("react-router-dom")>(
+      "react-router-dom"
+    );
   return {
     ...actual,
     useNavigate: () => navigateMock
@@ -98,10 +105,7 @@ function buildAuditRunDetail(
         completionNote: "",
         presentationMode: "single_question",
         responseStyle: "mixed_frequency",
-        itemIds: [
-          "audit_1",
-          "audit_2"
-        ],
+        itemIds: ["audit_1", "audit_2"],
         items: [
           {
             id: "audit_1",
@@ -199,7 +203,9 @@ function renderPage() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={["/psyche/questionnaires/instrument_audit/take"]}>
+      <MemoryRouter
+        initialEntries={["/psyche/questionnaires/instrument_audit/take"]}
+      >
         <Routes>
           <Route
             path="/psyche/questionnaires/:instrumentId/take"
@@ -213,6 +219,7 @@ function renderPage() {
 
 describe("PsycheQuestionnaireRunPage", () => {
   afterEach(() => {
+    cleanup();
     vi.clearAllMocks();
   });
 
@@ -253,7 +260,9 @@ describe("PsycheQuestionnaireRunPage", () => {
     renderPage();
 
     expect(
-      await screen.findByText("How often do you have a drink containing alcohol?")
+      await screen.findByText(
+        "How often do you have a drink containing alcohol?"
+      )
     ).toBeInTheDocument();
     expect(
       screen.queryByText(
@@ -277,5 +286,107 @@ describe("PsycheQuestionnaireRunPage", () => {
     expect(
       screen.getByRole("button", { name: "Finish and score" })
     ).toBeInTheDocument();
+  });
+
+  it("restores the acknowledged answer and offers one exact retry when autosave fails", async () => {
+    const savedNever = buildAuditRunDetail([
+      {
+        itemId: "audit_1",
+        optionKey: "never",
+        valueText: "Never",
+        numericValue: 0,
+        answer: { label: "Never", value: 0 },
+        createdAt: "2026-04-06T10:00:01.000Z",
+        updatedAt: "2026-04-06T10:00:01.000Z"
+      }
+    ]);
+    startQuestionnaireRunMock.mockResolvedValue(buildAuditRunDetail());
+    patchQuestionnaireRunMock
+      .mockRejectedValueOnce(new Error("Network unavailable."))
+      .mockResolvedValueOnce(savedNever);
+
+    renderPage();
+
+    const never = await screen.findByRole("button", { name: "Never" });
+    expect(never).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(never);
+
+    expect(
+      await screen.findByText("Your latest answer or place was not saved.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Not saved")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Network unavailable.");
+    expect(never).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.getByRole("button", { name: "Finish and score" })
+    ).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry latest save" }));
+
+    await waitFor(() =>
+      expect(patchQuestionnaireRunMock).toHaveBeenCalledTimes(2)
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Never" })).toHaveAttribute(
+        "aria-pressed",
+        "true"
+      )
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("Saved")).toBeInTheDocument();
+  });
+
+  it("keeps the saved draft and safely retries an unconfirmed completion", async () => {
+    const answered = buildAuditRunDetail([
+      {
+        itemId: "audit_1",
+        optionKey: "never",
+        valueText: "Never",
+        numericValue: 0,
+        answer: { label: "Never", value: 0 },
+        createdAt: "2026-04-06T10:00:01.000Z",
+        updatedAt: "2026-04-06T10:00:01.000Z"
+      }
+    ]);
+    const completed = {
+      ...answered,
+      run: {
+        ...answered.run,
+        status: "completed" as const,
+        completedAt: "2026-04-06T10:00:02.000Z"
+      }
+    };
+    startQuestionnaireRunMock.mockResolvedValue(answered);
+    completeQuestionnaireAssessmentMock
+      .mockRejectedValueOnce(new Error("Connection lost after submission."))
+      .mockResolvedValueOnce(completed);
+
+    renderPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Finish and score" })
+    );
+
+    expect(
+      await screen.findByText("Completion was not confirmed.")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Connection lost after submission."
+    );
+    expect(screen.getByRole("button", { name: "Never" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry completion" }));
+
+    await waitFor(() =>
+      expect(completeQuestionnaireAssessmentMock).toHaveBeenCalledTimes(2)
+    );
+    await waitFor(() =>
+      expect(navigateMock).toHaveBeenCalledWith(
+        "/psyche/questionnaire-runs/run_audit"
+      )
+    );
   });
 });
