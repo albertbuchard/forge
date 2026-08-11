@@ -125,15 +125,21 @@ export function GoalDetailPage() {
       .filter((task) => projectIds.has(task.projectId ?? ""))
       .map((task) => task.id)
   );
-  const evidence = shell.snapshot.activity.filter(
-    (event) =>
-      event.entityId === params.goalId ||
-      projectIds.has(event.entityId) ||
-      taskIds.has(event.entityId) ||
-      (event.entityType === "task_run" &&
-        typeof event.metadata.taskId === "string" &&
-        taskIds.has(event.metadata.taskId))
-  );
+  const evidence = [...shell.snapshot.activity]
+    .filter(
+      (event) =>
+        event.entityId === params.goalId ||
+        projectIds.has(event.entityId) ||
+        taskIds.has(event.entityId) ||
+        (event.entityType === "task_run" &&
+          typeof event.metadata.taskId === "string" &&
+          taskIds.has(event.metadata.taskId))
+    )
+    .sort(
+      (left, right) =>
+        right.createdAt.localeCompare(left.createdAt) ||
+        right.id.localeCompare(left.id)
+    );
 
   if (deletedGoal) {
     return (

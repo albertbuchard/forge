@@ -444,7 +444,45 @@ describe("core route states", () => {
         projects
       },
       goals: [goal],
-      projects
+      projects,
+      activity: [
+        {
+          id: "activity_goal_oldest",
+          entityType: "goal",
+          entityId: goal.id,
+          eventType: "goal.updated",
+          title: "Oldest goal evidence",
+          description: "This older record arrived first in the response.",
+          actor: "user_operator",
+          source: "ui",
+          metadata: {},
+          createdAt: "2026-03-24T09:00:00.000Z"
+        },
+        {
+          id: "activity_goal_middle",
+          entityType: "project",
+          entityId: projects[0].id,
+          eventType: "project.updated",
+          title: "Middle project evidence",
+          description: "This belongs to a project under the goal.",
+          actor: "user_operator",
+          source: "ui",
+          metadata: {},
+          createdAt: "2026-03-24T10:00:00.000Z"
+        },
+        {
+          id: "activity_goal_newest",
+          entityType: "goal",
+          entityId: goal.id,
+          eventType: "goal.updated",
+          title: "Newest goal evidence",
+          description: "This newest record arrived last in the response.",
+          actor: "user_operator",
+          source: "ui",
+          metadata: {},
+          createdAt: "2026-03-24T12:00:00.000Z"
+        }
+      ]
     });
     useForgeShellMock.mockReturnValue({
       snapshot,
@@ -469,6 +507,8 @@ describe("core route states", () => {
     expect(screen.getByText("Showing 8 of 12 projects")).toBeInTheDocument();
     expect(screen.getByText("Dense project 8")).toBeInTheDocument();
     expect(screen.queryByText("Dense project 9")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Newest goal evidence")).toHaveLength(2);
+    expect(screen.getAllByText("Oldest goal evidence")).toHaveLength(1);
 
     fireEvent.click(
       screen.getByRole("button", { name: "Show 4 more projects" })
