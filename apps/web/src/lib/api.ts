@@ -5870,8 +5870,11 @@ export function invalidateAutomaticMovementBox(
 export function getMovementSelectionAggregate(input: {
   stayIds?: string[];
   tripIds?: string[];
+  placeIds?: string[];
   startedAt?: string;
   endedAt?: string;
+  from?: string;
+  to?: string;
   userIds?: string[];
 }) {
   return request<{ movement: MovementSelectionAggregate }>(

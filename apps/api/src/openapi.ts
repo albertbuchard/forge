@@ -15780,6 +15780,8 @@ export function buildOpenApiDocument() {
       "/api/v1/movement/selection": {
         post: {
           summary: "Aggregate one selected movement range or set of segments",
+          description:
+            "Accepts at most 120 explicit stay/trip IDs, or a half-open [start, end) range of at most 366 days. `from`/`to` are supported aliases for `startedAt`/`endedAt`; conflicting aliases are rejected. Up to 20 place IDs may narrow a bounded range. All segment and place reads are restricted to the authorized user scope, and a range returning more than 2,000 source records is rejected before aggregation. Boundary-crossing trips remain counted but their indivisible stored distance, energy, and speed aggregates are omitted and reported as partial attribution. Response units are explicit.",
           responses: {
             "200": jsonResponse(
               {

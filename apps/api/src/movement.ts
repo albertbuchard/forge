@@ -250,13 +250,120 @@ export const movementPlaceMutationSchema = movementPlaceInputSchema.extend({
 
 export const movementPlacePatchSchema = movementPlaceInputSchema.partial();
 
-export const movementSelectionAggregateSchema = z.object({
-  stayIds: z.array(z.string().trim().min(1)).default([]),
-  tripIds: z.array(z.string().trim().min(1)).default([]),
-  startedAt: z.string().datetime().optional(),
-  endedAt: z.string().datetime().optional(),
-  userIds: z.array(z.string().trim().min(1)).default([])
-});
+const MOVEMENT_SELECTION_MAX_SEGMENT_IDS = 120;
+const MOVEMENT_SELECTION_MAX_PLACE_IDS = 20;
+const MOVEMENT_SELECTION_MAX_RANGE_SECONDS = 366 * 24 * 60 * 60;
+const MOVEMENT_SELECTION_MAX_MATCHED_RECORDS = 2_000;
+
+export const movementSelectionAggregateSchema = z
+  .object({
+    stayIds: z
+      .array(z.string().trim().min(1))
+      .max(MOVEMENT_SELECTION_MAX_SEGMENT_IDS)
+      .default([]),
+    tripIds: z
+      .array(z.string().trim().min(1))
+      .max(MOVEMENT_SELECTION_MAX_SEGMENT_IDS)
+      .default([]),
+    placeIds: z
+      .array(z.string().trim().min(1))
+      .max(MOVEMENT_SELECTION_MAX_PLACE_IDS)
+      .default([]),
+    startedAt: z.string().datetime().optional(),
+    endedAt: z.string().datetime().optional(),
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
+    userIds: z.array(z.string().trim().min(1)).max(8).default([])
+  })
+  .superRefine((value, ctx) => {
+    const startedAt = value.startedAt ?? value.from;
+    const endedAt = value.endedAt ?? value.to;
+    const allSegmentIds = [...value.stayIds, ...value.tripIds];
+    if (new Set(value.stayIds).size !== value.stayIds.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["stayIds"],
+        message: "Movement stay selections cannot contain duplicate IDs."
+      });
+    }
+    if (new Set(value.tripIds).size !== value.tripIds.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["tripIds"],
+        message: "Movement trip selections cannot contain duplicate IDs."
+      });
+    }
+    if (new Set(value.placeIds).size !== value.placeIds.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["placeIds"],
+        message: "Movement place selections cannot contain duplicate IDs."
+      });
+    }
+    if (allSegmentIds.length > MOVEMENT_SELECTION_MAX_SEGMENT_IDS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["stayIds"],
+        message: `Select at most ${MOVEMENT_SELECTION_MAX_SEGMENT_IDS} stays and trips in total.`
+      });
+    }
+    if (value.startedAt && value.from && value.startedAt !== value.from) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["from"],
+        message: "from must match startedAt when both aliases are supplied."
+      });
+    }
+    if (value.endedAt && value.to && value.endedAt !== value.to) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["to"],
+        message: "to must match endedAt when both aliases are supplied."
+      });
+    }
+    if (Boolean(startedAt) !== Boolean(endedAt)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: startedAt ? ["endedAt"] : ["startedAt"],
+        message: "Movement range selection requires both start and end timestamps."
+      });
+    }
+    if (startedAt && endedAt) {
+      const rangeSeconds = durationSeconds(startedAt, endedAt);
+      if (rangeSeconds <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["endedAt"],
+          message: "Movement selection must end after it starts."
+        });
+      } else if (rangeSeconds > MOVEMENT_SELECTION_MAX_RANGE_SECONDS) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["endedAt"],
+          message: "Movement selection ranges cannot exceed 366 days."
+        });
+      }
+    }
+    if (value.placeIds.length > 0 && (!startedAt || !endedAt)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["placeIds"],
+        message: "Place-based movement selection requires a bounded time range."
+      });
+    }
+    if (allSegmentIds.length === 0 && !startedAt) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["stayIds"],
+        message: "Select at least one movement segment or a bounded time range."
+      });
+    }
+  })
+  .transform(({ from, to, ...value }) => ({
+    ...value,
+    startedAt: value.startedAt ?? from,
+    endedAt: value.endedAt ?? to
+  }));
 
 export const movementSettingsPatchSchema = movementSettingsInputSchema.partial();
 const MOVEMENT_TIMELINE_MAX_LIMIT = 360;
@@ -6260,29 +6367,46 @@ function computeSelectionAggregate(input: {
   trips: ReturnType<typeof mapMovementTrip>[];
   userIds?: string[];
 }) {
-  const relevantTaskRuns = listTaskRuns({ userIds: input.userIds }).filter((run) =>
-    overlapSeconds(
-      input.startedAt,
-      input.endedAt,
-      run.claimedAt,
-      run.completedAt ?? run.updatedAt
-    ) > 0
+  const hasEmptyAuthorizedUserScope =
+    Array.isArray(input.userIds) && input.userIds.length === 0;
+  const fullyAttributedTrips = input.trips.filter(
+    (trip) =>
+      Date.parse(trip.startedAt) >= Date.parse(input.startedAt) &&
+      Date.parse(trip.endedAt) <= Date.parse(input.endedAt)
   );
+  const boundaryCrossingTripCount = input.trips.length - fullyAttributedTrips.length;
+  const relevantTaskRuns = hasEmptyAuthorizedUserScope
+    ? []
+    : listTaskRuns({ userIds: input.userIds }).filter((run) =>
+        overlapSeconds(
+          input.startedAt,
+          input.endedAt,
+          run.claimedAt,
+          run.completedAt ?? run.updatedAt
+        ) > 0
+      );
   const publishedNotes = [
     ...input.stays.map((stay) => stay.note).filter(Boolean),
     ...input.trips.map((trip) => trip.note).filter(Boolean)
   ];
   const selectionDuration = durationSeconds(input.startedAt, input.endedAt);
-  const tripDistances = input.trips.reduce((sum, trip) => sum + trip.distanceMeters, 0);
-  const calories = input.trips.reduce(
+  const tripDistances = fullyAttributedTrips.reduce(
+    (sum, trip) => sum + trip.distanceMeters,
+    0
+  );
+  const calories = fullyAttributedTrips.reduce(
     (sum, trip) => sum + (trip.caloriesKcal ?? 0),
     0
   );
   const averageSpeedMps = average(
-    input.trips
+    fullyAttributedTrips
       .map((trip) => trip.averageSpeedMps)
       .filter((value): value is number => typeof value === "number")
   );
+  const referencedPlaces = [
+    ...input.stays.map((stay) => stay.place).filter(Boolean),
+    ...input.trips.flatMap((trip) => [trip.startPlace, trip.endPlace]).filter(Boolean)
+  ];
   const placeLabels = uniqStrings(
     input.stays
       .map((stay) => stay.place?.label ?? stay.label)
@@ -6303,16 +6427,28 @@ function computeSelectionAggregate(input: {
       )
     )
   );
-  const screenTime = getScreenTimeOverlapSummary({
-    startedAt: input.startedAt,
-    endedAt: input.endedAt,
-    userIds: input.userIds
-  });
+  const screenTime = hasEmptyAuthorizedUserScope
+    ? {
+        estimatedScreenTimeSeconds: 0,
+        pickupCount: 0,
+        notificationCount: 0,
+        topApps: [],
+        topCategories: []
+      }
+    : getScreenTimeOverlapSummary({
+        startedAt: input.startedAt,
+        endedAt: input.endedAt,
+        userIds: input.userIds
+      });
   return {
     startedAt: input.startedAt,
     endedAt: input.endedAt,
+    rangeSemantics: "start_inclusive_end_exclusive" as const,
     durationSeconds: selectionDuration,
     distanceMeters: round(tripDistances),
+    distanceAttribution:
+      boundaryCrossingTripCount > 0 ? ("partial" as const) : ("complete" as const),
+    boundaryCrossingTripCount,
     caloriesKcal: round(calories),
     averageSpeedMps: round(averageSpeedMps, 2),
     stayCount: input.stays.length,
@@ -6324,7 +6460,16 @@ function computeSelectionAggregate(input: {
       return sum + overlapSeconds(input.startedAt, input.endedAt, run.claimedAt, end);
     }, 0),
     placeLabels,
+    placeAliases: uniqStrings(
+      referencedPlaces.flatMap((place) => place?.aliases ?? [])
+    ),
     tags,
+    units: {
+      duration: "seconds" as const,
+      distance: "meters" as const,
+      energy: "kilocalories" as const,
+      speed: "meters_per_second" as const
+    },
     estimatedScreenTimeSeconds: screenTime.estimatedScreenTimeSeconds,
     pickupCount: screenTime.pickupCount,
     notificationCount: screenTime.notificationCount,
@@ -7096,31 +7241,103 @@ export function getMovementSelectionAggregate(
   input: z.input<typeof movementSelectionAggregateSchema>
 ) {
   const parsed = movementSelectionAggregateSchema.parse(input);
-  const placeRows = listMovementPlaceRows(parsed.userIds);
+  const placeRows =
+    parsed.userIds.length > 0 ? listMovementPlaceRows(parsed.userIds) : [];
   const placesById = new Map(placeRows.map((row) => {
     const mapped = mapMovementPlace(row);
     return [mapped.id, mapped] as const;
   }));
-  const stayRows =
-    parsed.stayIds.length > 0
-      ? (getDatabase()
-          .prepare(
-            `SELECT *
-             FROM movement_stays
-             WHERE id IN (${parsed.stayIds.map(() => "?").join(",")})`
-          )
-          .all(...parsed.stayIds) as MovementStayRow[])
-      : [];
-  const tripRows =
-    parsed.tripIds.length > 0
-      ? (getDatabase()
-          .prepare(
-            `SELECT *
-             FROM movement_trips
-             WHERE id IN (${parsed.tripIds.map(() => "?").join(",")})`
-          )
-          .all(...parsed.tripIds) as MovementTripRow[])
-      : [];
+  const scopedPlaceIds = parsed.placeIds.filter((placeId) => placesById.has(placeId));
+  const userPlaceholders = parsed.userIds.map(() => "?").join(",");
+  const rangeRequested = Boolean(parsed.startedAt && parsed.endedAt);
+
+  const readSelectionRows = <TRow>(input: {
+    table: "movement_stays" | "movement_trips";
+    ids: string[];
+    placeColumns: string[];
+  }) => {
+    if (parsed.userIds.length === 0) {
+      return [] as TRow[];
+    }
+    const selectors: string[] = [];
+    const selectorParams: string[] = [];
+    if (input.ids.length > 0) {
+      selectors.push(`id IN (${input.ids.map(() => "?").join(",")})`);
+      selectorParams.push(...input.ids);
+    }
+    if (rangeRequested && parsed.startedAt && parsed.endedAt) {
+      const placePredicate =
+        parsed.placeIds.length === 0
+          ? ""
+          : scopedPlaceIds.length === 0
+            ? " AND 1 = 0"
+            : ` AND (${input.placeColumns
+                .map(
+                  (column) =>
+                    `${column} IN (${scopedPlaceIds.map(() => "?").join(",")})`
+                )
+                .join(" OR ")})`;
+      selectors.push(
+        `(started_at < ? AND ended_at > ?${placePredicate})`
+      );
+      selectorParams.push(parsed.endedAt, parsed.startedAt);
+      if (scopedPlaceIds.length > 0 && parsed.placeIds.length > 0) {
+        for (const _column of input.placeColumns) {
+          selectorParams.push(...scopedPlaceIds);
+        }
+      }
+    }
+    if (selectors.length === 0) {
+      return [] as TRow[];
+    }
+    const rows = getDatabase()
+      .prepare(
+        `SELECT *
+         FROM ${input.table}
+         WHERE user_id IN (${userPlaceholders})
+           AND (${selectors.join(" OR ")})
+         ORDER BY started_at ASC, id ASC
+         LIMIT ?`
+      )
+      .all(
+        ...parsed.userIds,
+        ...selectorParams,
+        MOVEMENT_SELECTION_MAX_MATCHED_RECORDS + 1
+      ) as TRow[];
+    if (rows.length > MOVEMENT_SELECTION_MAX_MATCHED_RECORDS) {
+      throw new z.ZodError([
+        {
+          code: z.ZodIssueCode.custom,
+          path: ["selection"],
+          message: `Movement selection matched more than ${MOVEMENT_SELECTION_MAX_MATCHED_RECORDS} records; narrow the time or place range.`
+        }
+      ]);
+    }
+    return rows;
+  };
+
+  const stayRows = readSelectionRows<MovementStayRow>({
+    table: "movement_stays",
+    ids: parsed.stayIds,
+    placeColumns: ["place_id"]
+  });
+  const tripRows = readSelectionRows<MovementTripRow>({
+    table: "movement_trips",
+    ids: parsed.tripIds,
+    placeColumns: ["start_place_id", "end_place_id"]
+  });
+  if (
+    stayRows.length + tripRows.length >
+    MOVEMENT_SELECTION_MAX_MATCHED_RECORDS
+  ) {
+    throw new z.ZodError([
+      {
+        code: z.ZodIssueCode.custom,
+        path: ["selection"],
+        message: `Movement selection matched more than ${MOVEMENT_SELECTION_MAX_MATCHED_RECORDS} records; narrow the time or place range.`
+      }
+    ]);
+  }
   const tripIds = tripRows.map((row) => row.id);
   const pointsByTrip = new Map<string, MovementTripPointRow[]>();
   listTripPoints(tripIds).forEach((point) => {

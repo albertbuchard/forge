@@ -3239,8 +3239,11 @@ export interface MovementTripRecord {
 export interface MovementSelectionAggregate {
   startedAt: string;
   endedAt: string;
+  rangeSemantics: "start_inclusive_end_exclusive";
   durationSeconds: number;
   distanceMeters: number;
+  distanceAttribution: "complete" | "partial";
+  boundaryCrossingTripCount: number;
   caloriesKcal: number;
   averageSpeedMps: number;
   stayCount: number;
@@ -3249,7 +3252,14 @@ export interface MovementSelectionAggregate {
   taskRunCount: number;
   trackedWorkSeconds: number;
   placeLabels: string[];
+  placeAliases: string[];
   tags: string[];
+  units: {
+    duration: "seconds";
+    distance: "meters";
+    energy: "kilocalories";
+    speed: "meters_per_second";
+  };
   estimatedScreenTimeSeconds: number;
   pickupCount: number;
   notificationCount: number;
