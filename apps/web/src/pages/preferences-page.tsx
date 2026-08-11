@@ -2096,11 +2096,15 @@ export function PreferencesPage() {
                   const left =
                     workspace.scores.find(
                       (score) => score.itemId === judgment.leftItemId
-                    )?.item?.label ?? judgment.leftItemId;
+                    )?.item?.label ??
+                    workspace.history.itemLabels?.[judgment.leftItemId] ??
+                    "Unavailable item";
                   const right =
                     workspace.scores.find(
                       (score) => score.itemId === judgment.rightItemId
-                    )?.item?.label ?? judgment.rightItemId;
+                    )?.item?.label ??
+                    workspace.history.itemLabels?.[judgment.rightItemId] ??
+                    "Unavailable item";
                   return (
                     <div
                       key={judgment.id}
@@ -2137,7 +2141,9 @@ export function PreferencesPage() {
                   const item =
                     workspace.scores.find(
                       (score) => score.itemId === signal.itemId
-                    )?.item?.label ?? signal.itemId;
+                    )?.item?.label ??
+                    workspace.history.itemLabels?.[signal.itemId] ??
+                    "Unavailable item";
                   return (
                     <div
                       key={signal.id}

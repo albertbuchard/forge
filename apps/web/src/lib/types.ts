@@ -6108,6 +6108,7 @@ export interface PreferenceWorkspacePayload {
   history: {
     judgments: PairwiseJudgment[];
     signals: AbsoluteSignal[];
+    itemLabels?: Record<string, string>;
     snapshots: PreferenceSnapshot[];
     staleItemIds: string[];
     flippedItemIds: string[];

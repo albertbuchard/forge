@@ -536,6 +536,63 @@ describe("PreferencesPage", () => {
     );
   });
 
+  it("names bounded history evidence even when its items are outside the score page", async () => {
+    const payload = workspace();
+    payload.history = {
+      ...payload.history,
+      judgments: [
+        {
+          id: "judgment_history",
+          profileId: "profile_1",
+          contextId: "context_1",
+          userId: user.id,
+          leftItemId: "item_outside_left",
+          rightItemId: "item_outside_right",
+          outcome: "left",
+          strength: 1,
+          responseTimeMs: null,
+          source: "ui",
+          reasonTags: [],
+          createdAt: "2026-01-02T12:00:00.000Z"
+        }
+      ],
+      signals: [
+        {
+          id: "signal_history",
+          profileId: "profile_1",
+          contextId: "context_1",
+          userId: user.id,
+          ownerUserId: user.id,
+          itemId: "item_outside_right",
+          signalType: "bookmark",
+          strength: 1,
+          modelWeight: 0,
+          source: "ui",
+          actor: "Albert",
+          createdAt: "2026-01-02T12:01:00.000Z"
+        }
+      ],
+      itemLabels: {
+        item_outside_left: "Readable left item",
+        item_outside_right: "Readable right item"
+      }
+    };
+    getPreferenceWorkspaceMock.mockResolvedValue({ workspace: payload });
+    renderPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "History" })
+    );
+
+    expect(
+      await screen.findByText("Readable left item vs Readable right item")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Readable right item · bookmark/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/item_outside_/i)).not.toBeInTheDocument();
+  });
+
   it("applies a direct signal to the selected item through the guided flow", async () => {
     renderPage();
 

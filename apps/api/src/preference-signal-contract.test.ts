@@ -58,6 +58,74 @@ function itemInput(domain: "projects" | "food", label: string) {
 
 const issueOperatorSessionCookie = issueTestOperatorSessionCookie;
 
+test("workspace history labels remain readable outside the current score page", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-pref-history-labels-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+  try {
+    const baseWorkspace = refreshPreferenceWorkspace({
+      userId: "user_operator",
+      domain: "projects"
+    });
+    const left = createPreferenceItem(
+      itemInput("projects", "Readable history left")
+    );
+    const right = createPreferenceItem(
+      itemInput("projects", "Readable history right")
+    );
+    submitPairwiseJudgment({
+      userId: "user_operator",
+      domain: "projects",
+      contextId: baseWorkspace.selectedContext.id,
+      leftItemId: left.id,
+      rightItemId: right.id,
+      outcome: "left",
+      strength: 1,
+      reasonTags: []
+    });
+    submitAbsoluteSignal({
+      userId: "user_operator",
+      domain: "projects",
+      contextId: baseWorkspace.selectedContext.id,
+      itemId: right.id,
+      signalType: "bookmark",
+      strength: 1
+    });
+
+    const page = getPreferenceWorkspace({
+      userId: "user_operator",
+      domain: "projects",
+      contextId: baseWorkspace.selectedContext.id,
+      itemLimit: 1,
+      itemOffset: 0,
+      historyLimit: 10
+    });
+    const referencedIds = new Set(
+      page.history.judgments.flatMap((judgment) => [
+        judgment.leftItemId,
+        judgment.rightItemId
+      ])
+    );
+    for (const signal of page.history.signals) {
+      referencedIds.add(signal.itemId);
+    }
+
+    assert.equal(page.scores.length, 1);
+    assert.equal(page.history.itemLabels[left.id], left.label);
+    assert.equal(page.history.itemLabels[right.id], right.label);
+    assert.deepEqual(
+      Object.keys(page.history.itemLabels).sort(),
+      [...referencedIds].sort(),
+      "the label map must include only items referenced by the bounded history window"
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 async function issueScopedToken(
   app: Awaited<ReturnType<typeof buildServer>>,
   cookie: string,

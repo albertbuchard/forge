@@ -3381,6 +3381,26 @@ function buildWorkspace(
   );
   const returnedItemIds = new Set(mappedScores.map((score) => score.itemId));
   const returnedItems = items.filter((item) => returnedItemIds.has(item.id));
+  const historyJudgments = judgments
+    .filter((judgment) => judgment.contextId === selectedContext.id)
+    .slice(0, query.historyLimit);
+  const historySignals = signalHistory.slice(0, query.historyLimit);
+  const historyItemIds = new Set<string>();
+  for (const judgment of historyJudgments) {
+    historyItemIds.add(judgment.leftItemId);
+    historyItemIds.add(judgment.rightItemId);
+  }
+  for (const signal of historySignals) {
+    historyItemIds.add(signal.itemId);
+  }
+  const historyItemLabels = Object.fromEntries(
+    [...historyItemIds]
+      .sort()
+      .flatMap((itemId) => {
+        const item = itemsById.get(itemId);
+        return item ? [[itemId, item.label] as const] : [];
+      })
+  );
   const mappedDimensions = listStoredDimensions(selectedContext.id);
   const nextPair = buildNextPair({
     selectedContext,
@@ -3436,10 +3456,9 @@ function buildWorkspace(
       scores.filter((score) => returnedItemIds.has(score.itemId))
     ),
     history: {
-      judgments: judgments
-        .filter((judgment) => judgment.contextId === selectedContext.id)
-        .slice(0, query.historyLimit),
-      signals: signalHistory.slice(0, query.historyLimit),
+      judgments: historyJudgments,
+      signals: historySignals,
+      itemLabels: historyItemLabels,
       snapshots,
       staleItemIds,
       flippedItemIds

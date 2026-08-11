@@ -29904,6 +29904,7 @@
             "required": [
               "judgments",
               "signals",
+              "itemLabels",
               "snapshots",
               "staleItemIds",
               "flippedItemIds"
@@ -29919,6 +29920,13 @@
                 "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/AbsolutePreferenceSignal"
+                }
+              },
+              "itemLabels": {
+                "type": "object",
+                "description": "Bounded labels for only the item identifiers referenced by the returned judgment and signal history window.",
+                "additionalProperties": {
+                  "type": "string"
                 }
               },
               "snapshots": {

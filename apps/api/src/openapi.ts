@@ -10727,6 +10727,7 @@ export function buildOpenApiDocument() {
         required: [
           "judgments",
           "signals",
+          "itemLabels",
           "snapshots",
           "staleItemIds",
           "flippedItemIds"
@@ -10738,6 +10739,12 @@ export function buildOpenApiDocument() {
           signals: arrayOf({
             $ref: "#/components/schemas/AbsolutePreferenceSignal"
           }),
+          itemLabels: {
+            type: "object",
+            description:
+              "Bounded labels for only the item identifiers referenced by the returned judgment and signal history window.",
+            additionalProperties: { type: "string" }
+          },
           snapshots: arrayOf({
             $ref: "#/components/schemas/PreferenceSnapshot"
           }),

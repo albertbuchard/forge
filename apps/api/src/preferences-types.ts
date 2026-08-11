@@ -316,6 +316,9 @@ export const preferenceWorkspacePayloadSchema = z.object({
   history: z.object({
     judgments: z.array(pairwiseJudgmentSchema),
     signals: z.array(absoluteSignalSchema),
+    itemLabels: z
+      .record(nonEmptyTrimmedString, nonEmptyTrimmedString)
+      .default({}),
     snapshots: z.array(preferenceSnapshotSchema),
     staleItemIds: z.array(nonEmptyTrimmedString).default([]),
     flippedItemIds: z.array(nonEmptyTrimmedString).default([])
