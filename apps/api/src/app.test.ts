@@ -6705,7 +6705,7 @@ test("mobile health sync stores canonical sleep nights with raw segments and exp
   }
 });
 
-test("sleep view collapses duplicate localDateKey nights into one calendar day and keeps the strongest representative", async () => {
+test("sleep view keeps same-day sessions inspectable while trends use the strongest representative", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-mobile-health-sleep-calendar-dedupe-")
   );
@@ -6815,17 +6815,30 @@ test("sleep view collapses duplicate localDateKey nights into one calendar day a
             dateKey: string;
             sleepHours: number;
           }>;
-          sessions: Array<{ id: string }>;
+          sessions: Array<{
+            id: string;
+            externalUid: string;
+            asleepSeconds: number;
+          }>;
         };
       }
     ).sleep;
 
-    assert.equal(sleep.sessions.length, 1);
+    assert.equal(sleep.sessions.length, 2);
     assert.equal(sleep.calendarDays.length, 1);
     assert.equal(sleep.calendarDays[0]?.dateKey, "2026-04-05");
     assert.equal(sleep.latestNight?.dateKey, "2026-04-05");
     assert.equal(sleep.latestNight?.asleepSeconds, 28_200);
-    assert.equal(sleep.sessions[0]?.id, sleep.latestNight?.sleepId);
+    assert.equal(
+      sleep.sessions.find((session) => session.externalUid === "night_long")
+        ?.id,
+      sleep.latestNight?.sleepId
+    );
+    assert.equal(
+      sleep.sessions.find((session) => session.externalUid === "night_short")
+        ?.asleepSeconds,
+      4_200
+    );
     assert.equal(sleep.latestNight?.sleepId, sleep.calendarDays[0]?.sleepId);
   } finally {
     await app.close();

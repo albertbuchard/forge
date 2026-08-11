@@ -240,6 +240,27 @@ describe("SleepPage", () => {
       recoveryState: "fragile"
     }
   });
+  const napSession = createSleepSession({
+    id: "sleep_nap",
+    externalUid: "nap_latest_day",
+    localDateKey: latestSession.localDateKey,
+    startedAt: "2026-04-14T11:00:00.000Z",
+    endedAt: "2026-04-14T12:10:00.000Z",
+    timeInBedSeconds: 4_200,
+    asleepSeconds: 3_900,
+    awakeSeconds: 300,
+    rawSegmentCount: 0,
+    sleepScore: 72,
+    regularityScore: 0,
+    bedtimeConsistencyMinutes: 0,
+    wakeConsistencyMinutes: 0,
+    stageBreakdown: [{ stage: "core", seconds: 3_900 }],
+    derived: {
+      efficiency: 0.93,
+      restorativeShare: 0,
+      recoveryState: "stable"
+    }
+  });
   const outsideWindowSession = createSleepSession({
     ...olderSession,
     id: "sleep_outside_window",
@@ -342,7 +363,7 @@ describe("SleepPage", () => {
       { stage: "rem", averageSeconds: 7_200 }
     ],
     linkBreakdown: [],
-    sessions: [latestSession, olderSession]
+    sessions: [napSession, latestSession, olderSession]
   };
 
   const rawDetails = new Map<string, SleepSessionDetailPayload>([
@@ -602,6 +623,38 @@ describe("SleepPage", () => {
       expect(container.textContent).toContain("Sleep segments");
       expect(container.textContent).toContain("See JSON");
       expect(container.textContent).toMatch(/awake/i);
+    });
+  });
+
+  it("keeps a same-day nap inspectable without replacing the calendar night", async () => {
+    await renderPage();
+
+    await waitForCondition(() => {
+      expect(container.textContent).toContain("Same wake date");
+      expect(container.textContent).toContain("Additional sleep");
+      expect(container.textContent).toContain("2 nights · 1 additional");
+      expect(
+        requireButton("Select calendar night sleep_latest").getAttribute(
+          "aria-pressed"
+        )
+      ).toBe("true");
+    });
+
+    await act(async () => {
+      requireButton("Select additional sleep sleep_nap").click();
+    });
+    await flushUi();
+
+    await waitForCondition(() => {
+      expect(getSleepSessionRawDetailMock).toHaveBeenLastCalledWith(
+        "sleep_nap"
+      );
+      expect(
+        requireButton("Select additional sleep sleep_nap").getAttribute(
+          "aria-pressed"
+        )
+      ).toBe("true");
+      expect(container.textContent).toContain("1h 5m");
     });
   });
 

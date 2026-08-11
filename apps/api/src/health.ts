@@ -7001,6 +7001,12 @@ export function getSleepViewData(
   const monthly = recentDisplay.slice(0, 30);
   const calendarWindow = displaySessions.slice(0, 84);
   const latestNight = recentDisplay[0] ?? null;
+  const recentSessions = sessions.slice(0, 30);
+  const inspectableSessions =
+    latestNight &&
+    !recentSessions.some((session) => session.id === latestNight.id)
+      ? [latestNight, ...recentSessions.slice(0, 29)]
+      : recentSessions;
   const latestNightFreshness = buildLatestSleepNightFreshness(
     latestNight,
     options.now
@@ -7136,7 +7142,7 @@ export function getSleepViewData(
     linkBreakdown: [...linkTotals.entries()]
       .map(([entityType, count]) => ({ entityType, count }))
       .sort((left, right) => right.count - left.count),
-    sessions: recentDisplay
+    sessions: inspectableSessions
   };
 }
 

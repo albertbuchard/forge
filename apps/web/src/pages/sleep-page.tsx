@@ -840,6 +840,78 @@ function WeekBaselineCard({
   );
 }
 
+function SameWakeDateSessions({
+  sessions,
+  representativeId,
+  selectedSleepId,
+  onSelect
+}: {
+  sessions: SleepSessionRecord[];
+  representativeId: string | null;
+  selectedSleepId: string | null;
+  onSelect: (sleepId: string) => void;
+}) {
+  if (sessions.length <= 1) {
+    return null;
+  }
+
+  const orderedSessions = [...sessions].sort((left, right) => {
+    if (left.id === representativeId) return -1;
+    if (right.id === representativeId) return 1;
+    return Date.parse(right.endedAt) - Date.parse(left.endedAt);
+  });
+
+  return (
+    <Card className="border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+      <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+        Same wake date
+      </div>
+      <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-muted)]">
+        The calendar and trends use one representative night. Every stored
+        session remains available here, including naps and overlapping source
+        records.
+      </div>
+      <div className="mt-3 grid gap-2">
+        {orderedSessions.map((session) => {
+          const isRepresentative = session.id === representativeId;
+          const isSelected = session.id === selectedSleepId;
+          return (
+            <button
+              key={session.id}
+              type="button"
+              aria-pressed={isSelected}
+              aria-label={`Select ${isRepresentative ? "calendar night" : "additional sleep"} ${session.id}`}
+              onClick={() => onSelect(session.id)}
+              className={cn(
+                "min-h-11 rounded-[14px] border px-3 py-2 text-left transition",
+                isSelected
+                  ? "border-[var(--primary)] bg-[var(--primary)]/12"
+                  : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] hover:border-[var(--ui-border-strong)]"
+              )}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-medium text-[var(--ui-ink-strong)]">
+                  {isRepresentative ? "Calendar night" : "Additional sleep"}
+                </span>
+                <Badge tone="meta">
+                  {formatDurationCompact(session.asleepSeconds)}
+                </Badge>
+              </div>
+              <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
+                {formatSleepWindow(
+                  session.startedAt,
+                  session.endedAt,
+                  session.sourceTimezone
+                )} · {session.sourceDevice || session.source}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 function SleepCalendar({
   days,
   selectedSleepId,
@@ -1695,6 +1767,22 @@ export function SleepPage() {
   const activeDraft = activeSession
     ? (drafts[activeSession.id] ?? buildSleepDraft(activeSession))
     : null;
+  const activeDateSessions = activeSession
+    ? sessions.filter(
+        (session) => session.localDateKey === activeSession.localDateKey
+      )
+    : [];
+  const activeDateRepresentativeId = activeSession
+    ? (sleep.calendarDays.find(
+        (day) => day.dateKey === activeSession.localDateKey
+      )?.sleepId ?? null)
+    : null;
+  const representativeSessionIds = new Set(
+    sleep.calendarDays.map((day) => day.sleepId)
+  );
+  const additionalSessionCount = sessions.filter(
+    (session) => !representativeSessionIds.has(session.id)
+  ).length;
 
   const linkOptions = buildHealthEntityLinkOptions({
     goals: shellSnapshot?.dashboard.goals ?? [],
@@ -1760,7 +1848,7 @@ export function SleepPage() {
         eyebrow="Health"
         title="Sleep"
         description="Canonical overnight sessions first, with last-night recovery, a clickable night calendar, and raw segment evidence only when you ask for it."
-        badge={`${sessions.length} nights`}
+        badge={`${sleep.calendarDays.length} nights${additionalSessionCount > 0 ? ` · ${additionalSessionCount} additional` : ""}`}
       />
 
       <PsycheSectionNav />
@@ -1828,21 +1916,29 @@ export function SleepPage() {
           />
 
           {activeSession && activeDraft ? (
-            <SleepDetailPanel
-              session={activeSession}
-              draft={activeDraft}
-              rawDetail={rawDetailQuery.data ?? null}
-              rawDetailLoading={rawDetailQuery.isLoading}
-              pending={
-                saveMutation.isPending &&
-                saveMutation.variables?.sleepId === activeSession.id
-              }
-              tab={detailTab}
-              linkOptions={linkOptions}
-              onTabChange={setDetailTab}
-              onDraftChange={(patch) => patchDraft(activeSession.id, patch)}
-              onSave={() => void saveSleep(activeSession.id)}
-            />
+            <div className="grid gap-4">
+              <SameWakeDateSessions
+                sessions={activeDateSessions}
+                representativeId={activeDateRepresentativeId}
+                selectedSleepId={activeSession.id}
+                onSelect={selectSleep}
+              />
+              <SleepDetailPanel
+                session={activeSession}
+                draft={activeDraft}
+                rawDetail={rawDetailQuery.data ?? null}
+                rawDetailLoading={rawDetailQuery.isLoading}
+                pending={
+                  saveMutation.isPending &&
+                  saveMutation.variables?.sleepId === activeSession.id
+                }
+                tab={detailTab}
+                linkOptions={linkOptions}
+                onTabChange={setDetailTab}
+                onDraftChange={(patch) => patchDraft(activeSession.id, patch)}
+                onSave={() => void saveSleep(activeSession.id)}
+              />
+            </div>
           ) : (
             <Card className="border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-6 py-8 text-sm leading-6 text-[var(--ui-ink-muted)]">
               Pick a night from the calendar to inspect its phase timing, stage
