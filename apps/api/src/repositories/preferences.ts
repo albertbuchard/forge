@@ -69,6 +69,7 @@ import { getUserById, getDefaultUser, listUsersByIds } from "./users.js";
 import { clearEntityOwner, setEntityOwner } from "./entity-ownership.js";
 import { recordActivityEvent } from "./activity-events.js";
 import {
+  deleteEntityLinksForEntity,
   listEntityLinksForSources,
   normalizeEntityLinks,
   replaceEntityLinksForSource
@@ -4563,6 +4564,19 @@ export function createPreferenceItem(
           ) as { id: string })
       : { id: itemId };
     setEntityOwner("preference_item", storedItem.id, parsed.userId);
+    replaceEntityLinksForSource({
+      sourceEntityType: "preference_item",
+      sourceEntityId: storedItem.id,
+      links: linkedIdentity
+        ? [
+            {
+              entityType: linkedIdentity.entityType,
+              entityId: linkedIdentity.entityId,
+              relationship: "source"
+            }
+          ]
+        : []
+    });
     const selectedContext = resolveContext(profile, null);
     if (parsed.queueForCompare) {
       upsertPreferenceScoreState(storedItem.id, selectedContext.id, {
@@ -4660,91 +4674,107 @@ export function updatePreferenceItem(
   itemId: string,
   patch: UpdatePreferenceItemInput
 ): PreferenceItem {
-  const item = getItemById(itemId);
-  if (!item) {
-    throw new HttpError(
-      404,
-      "preferences_item_not_found",
-      `Preference item ${itemId} was not found.`
-    );
-  }
-  const parsed = updatePreferenceItemSchema.parse(patch);
-  const next = {
-    label: parsed.label ?? item.label,
-    description: parsed.description ?? item.description,
-    tags: parsed.tags ?? item.tags,
-    featureWeights:
-      parsed.featureWeights !== undefined
-        ? normalizeDimensionVector(parsed.featureWeights)
-        : item.featureWeights,
-    sourceEntityType:
-      parsed.sourceEntityType !== undefined
-        ? parsed.sourceEntityType
-        : (item.sourceEntityType ?? null),
-    sourceEntityId:
-      parsed.sourceEntityId !== undefined
-        ? parsed.sourceEntityId
-        : (item.sourceEntityId ?? null),
-    metadata:
-      parsed.metadata !== undefined
-        ? (parsed.metadata as Record<string, unknown>)
-        : item.metadata
-  };
-  if (Boolean(next.sourceEntityType) !== Boolean(next.sourceEntityId)) {
-    throw new HttpError(
-      400,
-      "preferences_invalid_linked_identity",
-      "A preference linked identity requires both sourceEntityType and sourceEntityId."
-    );
-  }
-  if (next.sourceEntityType && next.sourceEntityId) {
-    const identityOwner = getDatabase()
-      .prepare(
-        `SELECT id
+  return runInTransaction(() => {
+    const item = getItemById(itemId);
+    if (!item) {
+      throw new HttpError(
+        404,
+        "preferences_item_not_found",
+        `Preference item ${itemId} was not found.`
+      );
+    }
+    const parsed = updatePreferenceItemSchema.parse(patch);
+    const next = {
+      label: parsed.label ?? item.label,
+      description: parsed.description ?? item.description,
+      tags: parsed.tags ?? item.tags,
+      featureWeights:
+        parsed.featureWeights !== undefined
+          ? normalizeDimensionVector(parsed.featureWeights)
+          : item.featureWeights,
+      sourceEntityType:
+        parsed.sourceEntityType !== undefined
+          ? parsed.sourceEntityType
+          : (item.sourceEntityType ?? null),
+      sourceEntityId:
+        parsed.sourceEntityId !== undefined
+          ? parsed.sourceEntityId
+          : (item.sourceEntityId ?? null),
+      metadata:
+        parsed.metadata !== undefined
+          ? (parsed.metadata as Record<string, unknown>)
+          : item.metadata
+    };
+    if (Boolean(next.sourceEntityType) !== Boolean(next.sourceEntityId)) {
+      throw new HttpError(
+        400,
+        "preferences_invalid_linked_identity",
+        "A preference linked identity requires both sourceEntityType and sourceEntityId."
+      );
+    }
+    if (next.sourceEntityType && next.sourceEntityId) {
+      const identityOwner = getDatabase()
+        .prepare(
+          `SELECT id
          FROM preference_items
          WHERE profile_id = ?
            AND source_entity_type = ?
            AND source_entity_id = ?
            AND id <> ?`
-      )
-      .get(
-        item.profileId,
-        next.sourceEntityType,
-        next.sourceEntityId,
-        itemId
-      ) as { id: string } | undefined;
-    if (identityOwner) {
-      throw new HttpError(
-        409,
-        "preferences_linked_identity_conflict",
-        "This Forge entity is already represented by another preference item in the selected profile."
-      );
+        )
+        .get(
+          item.profileId,
+          next.sourceEntityType,
+          next.sourceEntityId,
+          itemId
+        ) as { id: string } | undefined;
+      if (identityOwner) {
+        throw new HttpError(
+          409,
+          "preferences_linked_identity_conflict",
+          "This Forge entity is already represented by another preference item in the selected profile."
+        );
+      }
     }
-  }
-  const timestamp = nowIso();
-  getDatabase()
-    .prepare(
-      `UPDATE preference_items
+    const timestamp = nowIso();
+    getDatabase()
+      .prepare(
+        `UPDATE preference_items
        SET label = ?, description = ?, tags_json = ?, feature_weights_json = ?, source_entity_type = ?, source_entity_id = ?, metadata_json = ?, updated_at = ?
        WHERE id = ?`
-    )
-    .run(
-      next.label,
-      next.description,
-      JSON.stringify(next.tags),
-      JSON.stringify(next.featureWeights),
-      next.sourceEntityType,
-      next.sourceEntityId,
-      JSON.stringify(next.metadata ?? {}),
-      timestamp,
-      itemId
-    );
-  const updated = getItemById(itemId)!;
-  const profile = getPreferenceProfileById(item.profileId);
-  if (profile) {
-    recomputeAffectedContexts(profile, null);
-  }
-  return updated;
+      )
+      .run(
+        next.label,
+        next.description,
+        JSON.stringify(next.tags),
+        JSON.stringify(next.featureWeights),
+        next.sourceEntityType,
+        next.sourceEntityId,
+        JSON.stringify(next.metadata ?? {}),
+        timestamp,
+        itemId
+      );
+    replaceEntityLinksForSource({
+      sourceEntityType: "preference_item",
+      sourceEntityId: itemId,
+      links:
+        next.sourceEntityType && next.sourceEntityId
+          ? [
+              {
+                entityType: next.sourceEntityType,
+                entityId: next.sourceEntityId,
+                relationship: "source"
+              }
+            ]
+          : []
+    });
+    const updated = getItemById(itemId)!;
+    const profile = getPreferenceProfileById(item.profileId);
+    if (profile) {
+      recomputeAffectedContexts(profile, null);
+    }
+    return updated;
+  });
 }
 
 export function deletePreferenceItem(itemId: string): PreferenceItem {
@@ -4757,6 +4787,7 @@ export function deletePreferenceItem(itemId: string): PreferenceItem {
     );
   }
   runInTransaction(() => {
+    deleteEntityLinksForEntity("preference_item", itemId);
     clearEntityOwner("preference_item", itemId);
     getDatabase()
       .prepare(

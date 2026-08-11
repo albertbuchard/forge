@@ -20386,6 +20386,64 @@ export async function buildServer(
       );
     }
   };
+  const requirePreferenceItemBatchSourceAccess = (
+    operations: Array<{
+      entityType: CrudEntityType;
+      id?: string;
+      data?: Record<string, unknown>;
+      patch?: Record<string, unknown>;
+    }>,
+    auth: ReturnType<typeof authenticateRequest>
+  ) => {
+    for (const operation of operations) {
+      if (operation.entityType !== "preference_item") {
+        continue;
+      }
+      if (operation.data) {
+        const parsed = createPreferenceItemSchema.safeParse(operation.data);
+        if (!parsed.success) {
+          continue;
+        }
+        resolvePreferenceMutationUserId(undefined, auth, parsed.data.userId);
+        if (parsed.data.sourceEntityType && parsed.data.sourceEntityId) {
+          requirePreferenceSourceReadAccess(
+            {
+              entityType: parsed.data.sourceEntityType,
+              entityId: parsed.data.sourceEntityId
+            },
+            auth
+          );
+        }
+        continue;
+      }
+      if (!operation.id || !operation.patch) {
+        continue;
+      }
+      const existing = getPreferenceItemById(operation.id);
+      requirePreferenceProfileOwner(existing?.profileId, auth);
+      if (!existing) {
+        continue;
+      }
+      const parsed = updatePreferenceItemSchema.safeParse(operation.patch);
+      if (!parsed.success) {
+        continue;
+      }
+      const sourceEntityType =
+        parsed.data.sourceEntityType !== undefined
+          ? parsed.data.sourceEntityType
+          : existing.sourceEntityType;
+      const sourceEntityId =
+        parsed.data.sourceEntityId !== undefined
+          ? parsed.data.sourceEntityId
+          : existing.sourceEntityId;
+      if (sourceEntityType && sourceEntityId) {
+        requirePreferenceSourceReadAccess(
+          { entityType: sourceEntityType, entityId: sourceEntityId },
+          auth
+        );
+      }
+    }
+  };
 
   app.get("/api/v1/preferences/workspace", async (request) => {
     const auth = requireScopedAccess(
@@ -25766,6 +25824,7 @@ export async function buildServer(
     requirePsycheNoteBatchMutationAccess(auth, input.operations);
     requirePsycheVocabularyBatchMutationAccess(auth, input.operations);
     requirePreferenceCatalogBatchLinkAccess(input.operations, auth);
+    requirePreferenceItemBatchSourceAccess(input.operations, auth);
     const result = createEntities(input, toActivityContext(auth));
     await applyBatchCalendarEntityEffects(result.results, auth, "create");
     return redactPreferenceBatchPayload(result, auth);
@@ -25817,6 +25876,7 @@ export async function buildServer(
     requirePsycheNoteBatchMutationAccess(auth, preparedInput.operations);
     requirePsycheVocabularyBatchMutationAccess(auth, preparedInput.operations);
     requirePreferenceCatalogBatchLinkAccess(preparedInput.operations, auth);
+    requirePreferenceItemBatchSourceAccess(preparedInput.operations, auth);
     const result = runInTransaction(() => {
       const before = preparedInput.operations.map((operation) =>
         getEntityById(operation.entityType, operation.id)
