@@ -747,7 +747,7 @@
                     <p class="story-expanded-outcome">As a user, I can record truthful signed time corrections when work occurred without a live run.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>work_adjustment</code>, operator context.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>the mutation now submits the exact clamped signed delta shown to the user; complete attribution and aggregate-recalculation checks.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the mutation submits the exact clamped signed delta shown to the user and stores one authority-scoped idempotency key, request fingerprint, adjustment, reward, Activity evidence, and exact response atomically. Exact retries replay without duplicate rows, changed payloads return 409, and user/project/tag scope is authorized before replay or mutation without exposing owner-wide XP. Complete live desktop and phone dialog verification.</dd></div>
                     </dl>
                   </div>
                 </details>
