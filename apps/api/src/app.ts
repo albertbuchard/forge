@@ -5714,7 +5714,7 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     ],
     notes: [
       "Use an ACT-style values clarification stance: values are directions to live toward, not boxes to complete.",
-      "Ask one or two questions at a time, reflect back the user's language, and move toward committed actions or linked work items only when the user wants that help.",
+      "Ask exactly one question at a time, reflect back the user's language before the question, and move toward committed actions or linked work items only when the user wants that help.",
       "Reflect the pain, longing, or importance that makes the value alive before narrowing to action.",
       "Once one ordinary moment is clear, offer one tentative hypothesis about the pain, longing, or value conflict that makes this value alive now, then ask whether it lands before turning it into action wording.",
       "If the user says they want to understand it first, start with one orienting question before offering a formulation or save suggestion.",
@@ -6363,6 +6363,30 @@ function buildQuestionFlowStyle(
   return "active_listening_structured" as const;
 }
 
+function buildQuestionFlowTurnContract(
+  guide: (typeof AGENT_ONBOARDING_ENTITY_CATALOG)[number]
+) {
+  const isTherapeutic = THERAPEUTIC_QUESTION_FLOW_ENTITIES.has(
+    guide.entityType
+  );
+  const requiresReflection =
+    isTherapeutic || guide.entityType === "self_observation";
+
+  const sharedContract = {
+    maxQuestionsPerTurn: 1 as const,
+    reflectionBeforeQuestion: requiresReflection
+  };
+
+  return isTherapeutic
+    ? {
+        ...sharedContract,
+        maxHypothesesPerTurn: 1 as const,
+        hypothesisStyle: "tentative_functional_non_diagnostic" as const,
+        requiresFitOrCorrection: true as const
+      }
+    : sharedContract;
+}
+
 function buildEntityQuestionFlow(
   guide: (typeof AGENT_ONBOARDING_ENTITY_CATALOG)[number]
 ) {
@@ -6383,6 +6407,7 @@ function buildEntityQuestionFlow(
       coachingGoal: psychePlaybook.coachingGoal,
       askSequence: [...psychePlaybook.askSequence],
       questionStyle: buildQuestionFlowStyle(guide),
+      ...buildQuestionFlowTurnContract(guide),
       readinessCheck: buildQuestionFlowReadinessCheck(guide),
       ...routeInfo
     };
@@ -6399,6 +6424,7 @@ function buildEntityQuestionFlow(
       ? [...entityPlaybook.askSequence]
       : [...guide.searchHints],
     questionStyle: buildQuestionFlowStyle(guide),
+    ...buildQuestionFlowTurnContract(guide),
     readinessCheck: buildQuestionFlowReadinessCheck(guide),
     ...routeInfo
   };

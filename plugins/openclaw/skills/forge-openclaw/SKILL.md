@@ -478,14 +478,17 @@ Health rule:
 - Read the exact workout before review, correction, enrichment, or deletion. Preserve provider-backed or habit-generated timing, metrics, source, and provenance unless the user explicitly corrects one field. Deletion is immediate, non-restorable, and bypasses the settings bin, so require the exact target and explicit confirmation; there is no restore lane.
 - Habit-generated workouts and imported HealthKit workouts belong to the same workout record model, so do not invent a separate storage path for sport sessions.
 
-Write to Forge only with clear user consent. If the user is just thinking aloud, helping first is usually better than writing immediately. After helping, you may offer one short Forge prompt if the match is strong. If the user agrees, ask only for the missing fields and only one to three focused questions at a time. Do not offer Forge again after a decline unless the user reopens it.
+Write to Forge only with clear user consent. If the user is just thinking aloud, helping first is usually better than writing immediately. After helping, you may offer one short Forge prompt if the match is strong. If the user agrees, ask only for the missing fields and exactly one focused question at a time. Do not offer Forge again after a decline unless the user reopens it.
 
 Entity conversation rule:
 
 - For all entity creation or update flows, use
   `forge_get_agent_onboarding.entityCatalog[].questionFlow` as the live compact
   source of truth for the opening question, coaching goal, readiness check, and
-  route posture. Use [`entity_conversation_playbooks.md`](./entity_conversation_playbooks.md)
+  route posture. Enforce `maxQuestionsPerTurn` and `reflectionBeforeQuestion`
+  on every turn; when the Psyche hypothesis fields are published, also enforce
+  `maxHypothesesPerTurn`, `hypothesisStyle`, and `requiresFitOrCorrection`.
+  Use [`entity_conversation_playbooks.md`](./entity_conversation_playbooks.md)
   for deeper examples and pacing details.
 - Calibrate depth before deepening: choose quick capture, guided formulation,
   review-first, or action-first. For quick capture, use the user's supplied wording,

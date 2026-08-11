@@ -21956,6 +21956,8 @@
                     "coachingGoal",
                     "askSequence",
                     "questionStyle",
+                    "maxQuestionsPerTurn",
+                    "reflectionBeforeQuestion",
                     "readinessCheck",
                     "routePosture",
                     "apiAccessHint"
@@ -21981,6 +21983,33 @@
                         "operational_fast_path",
                         "dedicated_route_active_listening",
                         "read_model_practical_scope"
+                      ]
+                    },
+                    "maxQuestionsPerTurn": {
+                      "type": "integer",
+                      "enum": [
+                        1
+                      ]
+                    },
+                    "reflectionBeforeQuestion": {
+                      "type": "boolean"
+                    },
+                    "maxHypothesesPerTurn": {
+                      "type": "integer",
+                      "enum": [
+                        1
+                      ]
+                    },
+                    "hypothesisStyle": {
+                      "type": "string",
+                      "enum": [
+                        "tentative_functional_non_diagnostic"
+                      ]
+                    },
+                    "requiresFitOrCorrection": {
+                      "type": "boolean",
+                      "enum": [
+                        true
                       ]
                     },
                     "readinessCheck": {

@@ -456,8 +456,12 @@ Surface rule:
   records, not plain taxonomy rows. Start from the repeated lived moment or felt
   signature before settling the reusable label.
 - Let each question have one job. Know what you are trying to clarify before you ask it.
-- Ask one to three focused questions at a time. One is usually best when the user is
-  uncertain, reflective, or emotionally loaded.
+- Enforce the live question flow's `maxQuestionsPerTurn` and
+  `reflectionBeforeQuestion` fields. When the Psyche hypothesis fields are
+  published, also enforce `maxHypothesesPerTurn`, `hypothesisStyle`, and
+  `requiresFitOrCorrection`. The current contract asks exactly one focused question
+  per turn and makes Psyche hypotheses tentative, functional, non-diagnostic, and
+  subject to one fit-or-correction check.
 - Before asking another follow-up, run the playbook's minimum save-readiness
   checkpoint: if accepted wording, meaningful body, route lane, target object or time
   scope, and any ownership or placement that changes later use are already clear,

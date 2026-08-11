@@ -7110,6 +7110,8 @@ export function buildOpenApiDocument() {
               "coachingGoal",
               "askSequence",
               "questionStyle",
+              "maxQuestionsPerTurn",
+              "reflectionBeforeQuestion",
               "readinessCheck",
               "routePosture",
               "apiAccessHint"
@@ -7128,6 +7130,14 @@ export function buildOpenApiDocument() {
                   "read_model_practical_scope"
                 ]
               },
+              maxQuestionsPerTurn: { type: "integer", enum: [1] },
+              reflectionBeforeQuestion: { type: "boolean" },
+              maxHypothesesPerTurn: { type: "integer", enum: [1] },
+              hypothesisStyle: {
+                type: "string",
+                enum: ["tentative_functional_non_diagnostic"]
+              },
+              requiresFitOrCorrection: { type: "boolean", enum: [true] },
               readinessCheck: { type: "string" },
               routePosture: {
                 type: "string",

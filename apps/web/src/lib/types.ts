@@ -5305,6 +5305,11 @@ export interface AgentOnboardingEntityGuide {
       | "operational_fast_path"
       | "dedicated_route_active_listening"
       | "read_model_practical_scope";
+    maxQuestionsPerTurn: 1;
+    reflectionBeforeQuestion: boolean;
+    maxHypothesesPerTurn?: 1;
+    hypothesisStyle?: "tentative_functional_non_diagnostic";
+    requiresFitOrCorrection?: true;
     readinessCheck: string;
     routePosture: AgentOnboardingEntityClassification;
     apiAccessHint: string;

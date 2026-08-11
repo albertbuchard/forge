@@ -82,6 +82,11 @@ async function loadOnboardingPayload() {
         coachingGoal: string;
         askSequence: string[];
         questionStyle: string;
+        maxQuestionsPerTurn: number;
+        reflectionBeforeQuestion: boolean;
+        maxHypothesesPerTurn: number;
+        hypothesisStyle: string;
+        requiresFitOrCorrection: boolean;
         readinessCheck: string;
         routePosture: string;
         apiAccessHint: string;
@@ -327,6 +332,14 @@ describe("forge onboarding contract", () => {
         flow.askSequence.length,
         `${catalogEntry.entityType} should publish a sequenced flow`
       ).toBeGreaterThan(0);
+      expect(
+        flow.maxQuestionsPerTurn,
+        `${catalogEntry.entityType} should ask exactly one question per turn`
+      ).toBe(1);
+      expect(
+        flow.openingQuestion.match(/\?/g),
+        `${catalogEntry.entityType} opening should contain one question`
+      ).toHaveLength(1);
       expect(flow.routePosture).toBe(catalogEntry.classification);
       expect(flow.apiAccessHint).toContain(
         `Focus: ${catalogEntry.entityType}.`
@@ -490,10 +503,10 @@ describe("forge onboarding contract", () => {
       (entry) => entry.entityType === "artifact"
     )?.questionFlow.apiAccessHint;
     expect(artifactHint).toMatch(
-      /Human-only download\/password\/encrypt routes exist in OpenAPI[\s\S]*intentionally absent from agent route tools/i
+      /Human-only download\/password\/encrypt(?: and enrichment-apply)? routes exist in OpenAPI[\s\S]*intentionally absent from agent route tools/i
     );
     expect(artifactHint).toMatch(
-      /do not call GET or POST \/api\/v1\/artifacts\/:id\/download or POST \/api\/v1\/artifacts\/:id\/encrypt from an agent/i
+      /intentionally absent from agent route tools[\s\S]*do not call them from an agent/i
     );
     const taskCatalog = onboarding.entityCatalog.find(
       (entry) => entry.entityType === "task"
@@ -604,6 +617,37 @@ describe("forge onboarding contract", () => {
       expect(playbookFocuses.has(focus), `${focus} playbook should exist`).toBe(
         true
       );
+    }
+
+    const therapeuticEntityTypes = new Set([
+      "psyche_value",
+      "behavior_pattern",
+      "behavior",
+      "belief_entry",
+      "mode_profile",
+      "mode_guide_session",
+      "flashcard",
+      "trigger_report",
+      "event_type",
+      "emotion_definition"
+    ]);
+    for (const catalogEntry of onboarding.entityCatalog) {
+      const flow = catalogEntry.questionFlow;
+      const therapeutic = therapeuticEntityTypes.has(catalogEntry.entityType);
+      expect(flow.reflectionBeforeQuestion).toBe(
+        therapeutic || catalogEntry.entityType === "self_observation"
+      );
+      if (therapeutic) {
+        expect(flow.maxHypothesesPerTurn).toBe(1);
+        expect(flow.hypothesisStyle).toBe(
+          "tentative_functional_non_diagnostic"
+        );
+        expect(flow.requiresFitOrCorrection).toBe(true);
+      } else {
+        expect(flow.maxHypothesesPerTurn).toBeUndefined();
+        expect(flow.hypothesisStyle).toBeUndefined();
+        expect(flow.requiresFitOrCorrection).toBeUndefined();
+      }
     }
 
     for (const focus of [

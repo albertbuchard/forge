@@ -372,3 +372,33 @@ test("Psyche contract requires active formulation, correction, and consent", () 
     "Psyche contract must move accepted wording to consent without reopening intake"
   );
 });
+
+test("all adapters enforce the live one-question Psyche turn contract", () => {
+  for (const target of [
+    "plugins/openclaw/skills/forge-openclaw/SKILL.md",
+    "plugins/hermes/skill.md",
+    "plugins/hermes/forge_hermes/skill.md",
+    "plugins/codex/skills/forge-codex/SKILL.md"
+  ]) {
+    const skill = read(target);
+    for (const field of [
+      "maxQuestionsPerTurn",
+      "reflectionBeforeQuestion",
+      "maxHypothesesPerTurn",
+      "hypothesisStyle",
+      "requiresFitOrCorrection"
+    ]) {
+      assert.ok(skill.includes(field), `${target} is missing ${field}`);
+    }
+  }
+
+  const openClawSkill = read(
+    "plugins/openclaw/skills/forge-openclaw/SKILL.md"
+  );
+  const codexSkill = read("plugins/codex/skills/forge-codex/SKILL.md");
+  assert.match(openClawSkill, /exactly one focused question at a time/i);
+  assert.match(
+    codexSkill,
+    /exactly one focused\s+question\s+per turn[\s\S]*tentative, functional,[\s\S]*non-diagnostic/i
+  );
+});
