@@ -3939,10 +3939,29 @@ async function scanArtifactForEnrichment(
   }
 }
 
+type ArtifactEnrichmentDiagnostic = {
+  level: string;
+  messageAvailable: boolean;
+};
+
+function recordArtifactEnrichmentDiagnostics(
+  id: string,
+  diagnostics: ArtifactEnrichmentDiagnostic[],
+  context: ArtifactContext
+) {
+  for (const diagnostic of diagnostics) {
+    recordArtifactAudit(id, "artifact.enrichment_log", context, {
+      ...diagnostic,
+      messagePersisted: false
+    });
+  }
+}
+
 function persistArtifactEnrichmentFailure(
   id: string,
   _error: unknown,
-  context: ArtifactContext
+  context: ArtifactContext,
+  diagnostics: ArtifactEnrichmentDiagnostic[] = []
 ) {
   const errorCode = ARTIFACT_FAILURE_CODE;
   runInTransaction(() => {
@@ -3952,6 +3971,7 @@ function persistArtifactEnrichmentFailure(
       errorCode,
       generatedAt: nowIso()
     });
+    recordArtifactEnrichmentDiagnostics(id, diagnostics, context);
     recordArtifactAudit(id, "artifact.enrichment_failed", context, {
       errorCode
     });
@@ -3989,6 +4009,8 @@ export async function enrichArtifactWithLlm(
     return getArtifactById(id, context)!;
   }
 
+  const enrichmentStartRow = getArtifactRow(id)!;
+  const enrichmentLogs: ArtifactEnrichmentDiagnostic[] = [];
   try {
     const internalScanResults = await scanArtifactForEnrichment(
       artifact,
@@ -4013,10 +4035,9 @@ export async function enrichArtifactWithLlm(
         prompt
       },
       (log) => {
-        recordArtifactAudit(id, "artifact.enrichment_log", context, {
+        enrichmentLogs.push({
           level: log.level,
-          messageAvailable: log.message.length > 0,
-          messagePersisted: false
+          messageAvailable: log.message.length > 0
         });
       }
     );
@@ -4066,13 +4087,23 @@ export async function enrichArtifactWithLlm(
         : artifact.description;
 
     runInTransaction(() => {
-      getDatabase()
+      const update = getDatabase()
         .prepare(
           `UPDATE artifacts
            SET title = ?, short_description = ?, description = ?,
                danger_score = MAX(danger_score, ?), enrichment_results_json = ?,
                updated_at = ?
-           WHERE id = ?`
+           WHERE id = ?
+             AND title = ?
+             AND short_description = ?
+             AND description = ?
+             AND enrichment_results_json = ?
+             AND NOT EXISTS (
+               SELECT 1
+               FROM deleted_entities
+               WHERE deleted_entities.entity_type = 'artifact'
+                 AND deleted_entities.entity_id = artifacts.id
+             )`
         )
         .run(
           title,
@@ -4081,8 +4112,21 @@ export async function enrichArtifactWithLlm(
           nextDangerScore,
           JSON.stringify(enrichment),
           nowIso(),
-          id
+          id,
+          enrichmentStartRow.title,
+          enrichmentStartRow.short_description,
+          enrichmentStartRow.description,
+          enrichmentStartRow.enrichment_results_json
         );
+      if (update.changes === 0) {
+        throw new HttpError(
+          409,
+          "artifact_enrichment_conflict",
+          "Artifact metadata changed while LLM enrichment was running. Review the current metadata and request enrichment again.",
+          { artifactId: id }
+        );
+      }
+      recordArtifactEnrichmentDiagnostics(id, enrichmentLogs, context);
       recordArtifactAudit(id, "artifact.enriched_with_llm", context, {
         provider: profile.provider,
         model: profile.model,
@@ -4091,7 +4135,13 @@ export async function enrichArtifactWithLlm(
     });
     return getArtifactById(id, context)!;
   } catch (error) {
-    persistArtifactEnrichmentFailure(id, error, context);
+    if (
+      error instanceof HttpError &&
+      error.code === "artifact_enrichment_conflict"
+    ) {
+      throw error;
+    }
+    persistArtifactEnrichmentFailure(id, error, context, enrichmentLogs);
     throw error;
   }
 }
