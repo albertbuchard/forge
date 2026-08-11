@@ -1374,7 +1374,7 @@
                     <p class="story-expanded-outcome">As a human operator, I can use supported content protection and a password hint without exposing the password to Forge agents.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Human encryption/download flow and protected metadata.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>password/encryption flows remain human-only and explicit; complete transition, wrong-password, hint, version, and secret-log checks.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>password/encryption flows remain human-only and explicit, and concurrent encryption transitions now serialize so exactly one coherent password, encrypted version, and audit trail wins without orphaning ciphertext. Complete the remaining wrong-password, hint, version, and secret-log checks.</dd></div>
                     </dl>
                   </div>
                 </details>
