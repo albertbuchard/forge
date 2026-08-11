@@ -2505,7 +2505,7 @@
                     <p class="story-expanded-outcome">As a learner, I can submit one activity answer and receive truthful feedback, including an explicit withheld result when structured grading is unavailable.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>course-learn</code>, dedicated attempt action.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>deterministic multiple-choice and model-backed written assessment preserve attempts and mastery evidence; complete retry, unavailable-model, and adversarial-answer checks.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>deterministic multiple-choice and model-backed written assessment preserve attempts and mastery evidence, while unusable or unavailable model output explicitly withholds the grade. Browser submissions now keep one idempotency key across uncertain failure and refresh, rotate it after edits or success, and cannot duplicate an exact retry. Focused retry, unavailable-model, structured-output, and adversarial-answer checks pass; complete retained phone evidence before promotion.</dd></div>
                     </dl>
                   </div>
                 </details>

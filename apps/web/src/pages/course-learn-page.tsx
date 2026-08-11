@@ -99,6 +99,7 @@ type CourseDraft = {
   answer: string;
   selectedOptions: string[];
   updatedAt: string;
+  submissionIdentity?: CourseAttemptSubmissionIdentity;
 };
 
 export function courseDraftStorageKey(input: {
@@ -127,7 +128,14 @@ export function parseCourseDraft(value: string | null): CourseDraft | null {
       typeof parsed.answer !== "string" ||
       !Array.isArray(parsed.selectedOptions) ||
       parsed.selectedOptions.some((option) => typeof option !== "string") ||
-      typeof parsed.updatedAt !== "string"
+      typeof parsed.updatedAt !== "string" ||
+      (parsed.submissionIdentity !== undefined &&
+        (typeof parsed.submissionIdentity !== "object" ||
+          parsed.submissionIdentity === null ||
+          typeof parsed.submissionIdentity.fingerprint !== "string" ||
+          typeof parsed.submissionIdentity.idempotencyKey !== "string" ||
+          parsed.submissionIdentity.idempotencyKey.length < 8 ||
+          parsed.submissionIdentity.idempotencyKey.length > 160))
     ) {
       return null;
     }
@@ -135,6 +143,34 @@ export function parseCourseDraft(value: string | null): CourseDraft | null {
   } catch {
     return null;
   }
+}
+
+export type CourseAttemptSubmissionIdentity = {
+  fingerprint: string;
+  idempotencyKey: string;
+};
+
+export function resolveCourseAttemptSubmissionIdentity(
+  previous: CourseAttemptSubmissionIdentity | null,
+  input: {
+    courseId: string;
+    lessonId: string;
+    activityId: string;
+    userId?: string;
+    answerMarkdown: string;
+  },
+  createIdempotencyKey: () => string = () => crypto.randomUUID()
+): CourseAttemptSubmissionIdentity {
+  const fingerprint = JSON.stringify([
+    input.userId ?? null,
+    input.courseId,
+    input.lessonId,
+    input.activityId,
+    input.answerMarkdown
+  ]);
+  return previous?.fingerprint === fingerprint
+    ? previous
+    : { fingerprint, idempotencyKey: createIdempotencyKey() };
 }
 
 export function courseAccentStyle(
@@ -838,6 +874,9 @@ export function CourseLearnPage() {
     activityId: string;
     feedback: AssessmentFeedback;
   } | null>(null);
+  const submissionIdentityRef = useRef<CourseAttemptSubmissionIdentity | null>(
+    null
+  );
 
   const query = useQuery({
     queryKey: ["forge-course-learn", courseId, lessonId, userId],
@@ -934,6 +973,7 @@ export function CourseLearnPage() {
           ? restoredAnswer.split(",").filter(Boolean)
           : [])
     );
+    submissionIdentityRef.current = stored?.submissionIdentity ?? null;
     setLocalFeedback(null);
     setHydratedDraftKey(draftKey);
   }, [activity, draftKey, session?.latestAttempts]);
@@ -972,16 +1012,48 @@ export function CourseLearnPage() {
           : activity.type === "extension" && activity.responseMode === "none"
             ? "completed"
             : answer;
+      const submissionIdentity = resolveCourseAttemptSubmissionIdentity(
+        submissionIdentityRef.current,
+        {
+          courseId: session.course.id,
+          lessonId: session.lesson.id,
+          activityId: activity.id,
+          userId,
+          answerMarkdown
+        }
+      );
+      submissionIdentityRef.current = submissionIdentity;
+      if (draftKey) {
+        const draft: CourseDraft = {
+          version: 1,
+          answer,
+          selectedOptions,
+          updatedAt: new Date().toISOString(),
+          submissionIdentity
+        };
+        window.localStorage.setItem(draftKey, JSON.stringify(draft));
+      }
       const result = await submitForgeCourseAttempt({
         courseId: session.course.id,
         lessonId: session.lesson.id,
         activityId: activity.id,
         userId,
-        answerMarkdown
+        answerMarkdown,
+        idempotencyKey: submissionIdentity.idempotencyKey
       });
       return { ...result, activityId: activity.id };
     },
     onSuccess: async (result) => {
+      submissionIdentityRef.current = null;
+      if (draftKey) {
+        const draft: CourseDraft = {
+          version: 1,
+          answer,
+          selectedOptions,
+          updatedAt: new Date().toISOString()
+        };
+        window.localStorage.setItem(draftKey, JSON.stringify(draft));
+      }
       setLocalFeedback({
         activityId: result.activityId,
         feedback: result.feedback

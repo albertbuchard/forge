@@ -12,7 +12,8 @@ import {
   feedbackBridgeMarkdown,
   isFeedbackBridgeBlock,
   parseCourseDraft,
-  recallWeekCheckpoints
+  recallWeekCheckpoints,
+  resolveCourseAttemptSubmissionIdentity
 } from "./course-learn-page";
 import type {
   CourseActivity,
@@ -34,6 +35,67 @@ describe("course activity labels", () => {
       expect(activitySubmissionLabel(type)).toBe("Submit for written review");
     }
     expect(activitySubmissionLabel("extension")).toBe("Submit activity");
+  });
+});
+
+describe("course submission retry identity", () => {
+  it("keeps one key for the exact payload and rotates after learner edits", () => {
+    const keys = ["attempt-key-one", "attempt-key-two"];
+    const createKey = () => keys.shift()!;
+    const payload = {
+      courseId: "course-a",
+      lessonId: "lesson-a",
+      activityId: "activity-a",
+      userId: "learner-a",
+      answerMarkdown: "A complete answer."
+    };
+
+    const first = resolveCourseAttemptSubmissionIdentity(
+      null,
+      payload,
+      createKey
+    );
+    const uncertainRetry = resolveCourseAttemptSubmissionIdentity(
+      first,
+      payload,
+      createKey
+    );
+    const edited = resolveCourseAttemptSubmissionIdentity(
+      uncertainRetry,
+      { ...payload, answerMarkdown: "A corrected complete answer." },
+      createKey
+    );
+
+    expect(uncertainRetry).toBe(first);
+    expect(first.idempotencyKey).toBe("attempt-key-one");
+    expect(edited.idempotencyKey).toBe("attempt-key-two");
+  });
+
+  it("accepts a bounded persisted retry identity and rejects malformed keys", () => {
+    const draft = {
+      version: 1,
+      answer: "A complete answer.",
+      selectedOptions: [],
+      updatedAt: "2026-08-12T00:00:00.000Z",
+      submissionIdentity: {
+        fingerprint:
+          '["learner-a","course-a","lesson-a","activity-a","A complete answer."]',
+        idempotencyKey: "attempt-key-stable"
+      }
+    };
+
+    expect(parseCourseDraft(JSON.stringify(draft))).toEqual(draft);
+    expect(
+      parseCourseDraft(
+        JSON.stringify({
+          ...draft,
+          submissionIdentity: {
+            ...draft.submissionIdentity,
+            idempotencyKey: "short"
+          }
+        })
+      )
+    ).toBeNull();
   });
 });
 

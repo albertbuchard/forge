@@ -7449,6 +7449,7 @@ export function submitForgeCourseAttempt(input: {
   activityId: string;
   userId?: string;
   answerMarkdown: string;
+  idempotencyKey: string;
 }) {
   return request<{
     attemptId: string;
@@ -7468,7 +7469,8 @@ export function submitForgeCourseAttempt(input: {
       method: "POST",
       body: JSON.stringify({
         userId: input.userId,
-        answerMarkdown: input.answerMarkdown
+        answerMarkdown: input.answerMarkdown,
+        idempotencyKey: input.idempotencyKey
       })
     }
   );

@@ -3,7 +3,7 @@ const diagnosticMocks = vi.hoisted(() => ({
   publishUiDiagnosticLog: vi.fn()
 }));
 vi.mock("./diagnostics", () => diagnosticMocks);
-import { getForgeLearningSession } from "./api";
+import { getForgeLearningSession, submitForgeCourseAttempt } from "./api";
 
 describe("Course learning request cancellation", () => {
   afterEach(() => {
@@ -57,5 +57,30 @@ describe("Course learning request cancellation", () => {
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(diagnosticMocks.publishUiDiagnosticLog).not.toHaveBeenCalled();
+  });
+
+  it("sends the caller's stable idempotency key with a course attempt", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ attemptId: "attempt-a" }), {
+        status: 201,
+        headers: { "content-type": "application/json" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await submitForgeCourseAttempt({
+      courseId: "course-a",
+      lessonId: "lesson-a",
+      activityId: "activity-a",
+      userId: "learner-a",
+      answerMarkdown: "A complete answer.",
+      idempotencyKey: "attempt-key-stable"
+    });
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      answerMarkdown: "A complete answer.",
+      idempotencyKey: "attempt-key-stable"
+    });
   });
 });
