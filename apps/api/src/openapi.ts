@@ -9451,22 +9451,13 @@ export function buildOpenApiDocument() {
       sessionRelations: arrayOf({
         type: "object",
         additionalProperties: false,
-        required: [
-          "sleepId",
-          "representativeSleepId",
-          "role",
-          "overlapRatio"
-        ],
+        required: ["sleepId", "representativeSleepId", "role", "overlapRatio"],
         properties: {
           sleepId: { type: "string" },
           representativeSleepId: { type: "string" },
           role: {
             type: "string",
-            enum: [
-              "representative",
-              "overlapping_record",
-              "additional_session"
-            ]
+            enum: ["representative", "overlapping_record", "additional_session"]
           },
           overlapRatio: { type: "number", minimum: 0, maximum: 1 }
         }
@@ -9929,6 +9920,28 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const nutritionExperimentAdherence = {
+    type: "object",
+    additionalProperties: true,
+    properties: {
+      plannedExposures: { type: "integer", minimum: 0, maximum: 1000 },
+      completedExposures: { type: "integer", minimum: 0, maximum: 1000 },
+      baselineObservationCount: {
+        type: "integer",
+        minimum: 0,
+        maximum: 1000
+      },
+      interventionObservationCount: {
+        type: "integer",
+        minimum: 0,
+        maximum: 1000
+      },
+      notes: { type: "string", maxLength: 4000 }
+    },
+    description:
+      "Observed adherence and evidence counts. Completed exposures cannot exceed planned exposures."
+  };
+
   const nutritionExperimentInputProperties = {
     userId: { type: "string" },
     hypothesisId: nullable({ type: "string" }),
@@ -9953,23 +9966,25 @@ export function buildOpenApiDocument() {
       minLength: 1,
       description: "Specific food, timing, or fueling change being tested."
     },
-    baselineStart: nullable({ type: "string" }),
-    baselineEnd: nullable({ type: "string" }),
-    interventionStart: nullable({ type: "string" }),
-    interventionEnd: nullable({ type: "string" }),
+    baselineStart: nullable({ type: "string", format: "date" }),
+    baselineEnd: nullable({ type: "string", format: "date" }),
+    interventionStart: nullable({ type: "string", format: "date" }),
+    interventionEnd: nullable({ type: "string", format: "date" }),
     experimentStart: nullable({
       type: "string",
+      format: "date",
       description: "Alias for interventionStart."
     }),
     experimentEnd: nullable({
       type: "string",
+      format: "date",
       description: "Alias for interventionEnd."
     }),
     successCriteria: nullable({ type: "string" }),
     confounders: arrayOf({ type: "string" }),
     trackedOutcomes: arrayOf({ type: "string" }),
     protocol: { type: "object", additionalProperties: true },
-    adherence: { type: "object", additionalProperties: true },
+    adherence: nutritionExperimentAdherence,
     resultSummary: { type: "string" }
   };
 
@@ -10049,7 +10064,7 @@ export function buildOpenApiDocument() {
       confounders: arrayOf({ type: "string" }),
       trackedOutcomes: arrayOf({ type: "string" }),
       protocol: { type: "object", additionalProperties: true },
-      adherence: { type: "object", additionalProperties: true },
+      adherence: nutritionExperimentAdherence,
       resultSummary: { type: "string" },
       conclusion: nullable({ type: "string" }),
       createdAt: { type: "string", format: "date-time" },
@@ -14940,7 +14955,7 @@ export function buildOpenApiDocument() {
           tags: ["Health"],
           summary: "Create a nutrition N-of-1 experiment",
           description:
-            "Creates a structured experiment. Agents should provide a testable hypothesis, one primary metric, and a specific intervention even though title is the only compatibility-required field.",
+            "Creates a structured experiment. Agents should provide a testable hypothesis, one primary metric, and a specific intervention even though title is the only compatibility-required field. A scheduled baseline must end before the intervention starts.",
           parameters: [
             {
               name: "userIds",
@@ -14983,6 +14998,8 @@ export function buildOpenApiDocument() {
         patch: {
           tags: ["Health"],
           summary: "Patch a nutrition N-of-1 experiment",
+          description:
+            "Updates method, status, adherence, evidence counts, or conclusion. Completion requires an explicit conclusion, at least one planned exposure, at least one completed exposure, at least two intervention observations, and at least two baseline observations when a baseline window was scheduled.",
           parameters: [
             {
               name: "id",

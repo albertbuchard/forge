@@ -36915,7 +36915,8 @@
           "baselineStart": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "format": "date"
               },
               {
                 "type": "null"
@@ -36925,7 +36926,8 @@
           "baselineEnd": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "format": "date"
               },
               {
                 "type": "null"
@@ -36935,7 +36937,8 @@
           "interventionStart": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "format": "date"
               },
               {
                 "type": "null"
@@ -36945,7 +36948,8 @@
           "interventionEnd": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "format": "date"
               },
               {
                 "type": "null"
@@ -36956,6 +36960,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "date",
                 "description": "Alias for interventionStart."
               },
               {
@@ -36967,6 +36972,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "date",
                 "description": "Alias for interventionEnd."
               },
               {
@@ -37002,7 +37008,34 @@
           },
           "adherence": {
             "type": "object",
-            "additionalProperties": true
+            "additionalProperties": true,
+            "properties": {
+              "plannedExposures": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "completedExposures": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "baselineObservationCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "interventionObservationCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "notes": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            },
+            "description": "Observed adherence and evidence counts. Completed exposures cannot exceed planned exposures."
           },
           "resultSummary": {
             "type": "string"
@@ -37055,7 +37088,8 @@
           "baselineStart": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "format": "date"
               },
               {
                 "type": "null"
@@ -37065,7 +37099,8 @@
           "baselineEnd": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "format": "date"
               },
               {
                 "type": "null"
@@ -37075,7 +37110,8 @@
           "interventionStart": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "format": "date"
               },
               {
                 "type": "null"
@@ -37085,7 +37121,8 @@
           "interventionEnd": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "format": "date"
               },
               {
                 "type": "null"
@@ -37096,6 +37133,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "date",
                 "description": "Alias for interventionStart."
               },
               {
@@ -37107,6 +37145,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "format": "date",
                 "description": "Alias for interventionEnd."
               },
               {
@@ -37142,7 +37181,34 @@
           },
           "adherence": {
             "type": "object",
-            "additionalProperties": true
+            "additionalProperties": true,
+            "properties": {
+              "plannedExposures": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "completedExposures": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "baselineObservationCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "interventionObservationCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "notes": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            },
+            "description": "Observed adherence and evidence counts. Completed exposures cannot exceed planned exposures."
           },
           "resultSummary": {
             "type": "string"
@@ -37336,7 +37402,34 @@
           },
           "adherence": {
             "type": "object",
-            "additionalProperties": true
+            "additionalProperties": true,
+            "properties": {
+              "plannedExposures": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "completedExposures": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "baselineObservationCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "interventionObservationCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "notes": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            },
+            "description": "Observed adherence and evidence counts. Completed exposures cannot exceed planned exposures."
           },
           "resultSummary": {
             "type": "string"
@@ -51885,7 +51978,7 @@
           "Health"
         ],
         "summary": "Create a nutrition N-of-1 experiment",
-        "description": "Creates a structured experiment. Agents should provide a testable hypothesis, one primary metric, and a specific intervention even though title is the only compatibility-required field.",
+        "description": "Creates a structured experiment. Agents should provide a testable hypothesis, one primary metric, and a specific intervention even though title is the only compatibility-required field. A scheduled baseline must end before the intervention starts.",
         "parameters": [
           {
             "name": "userIds",
@@ -51941,6 +52034,7 @@
           "Health"
         ],
         "summary": "Patch a nutrition N-of-1 experiment",
+        "description": "Updates method, status, adherence, evidence counts, or conclusion. Completion requires an explicit conclusion, at least one planned exposure, at least one completed exposure, at least two intervention observations, and at least two baseline observations when a baseline window was scheduled.",
         "parameters": [
           {
             "name": "id",

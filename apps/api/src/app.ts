@@ -7593,14 +7593,15 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     whenToUse:
       "Use to change an experiment's status, dates, hypothesis, metric, intervention, success criteria, confounders, or conclusion without creating a duplicate experiment.",
     inputShape:
-      '{ experimentId: string, title?: string, hypothesis?: string, metricKey?: string, intervention?: string, baselineStart?: string|null, baselineEnd?: string|null, experimentStart?: string|null, experimentEnd?: string|null, status?: "planned"|"running"|"paused"|"completed"|"abandoned", successCriteria?: string|null, confounders?: string[], conclusion?: string|null, userIds?: string[] }',
+      '{ experimentId: string, title?: string, hypothesis?: string, metricKey?: string, intervention?: string, baselineStart?: string|null, baselineEnd?: string|null, experimentStart?: string|null, experimentEnd?: string|null, status?: "planned"|"running"|"paused"|"completed"|"abandoned", successCriteria?: string|null, confounders?: string[], conclusion?: string|null, adherence?: { plannedExposures?: integer, completedExposures?: integer, baselineObservationCount?: integer, interventionObservationCount?: integer, notes?: string }, userIds?: string[] }',
     requiredFields: ["experimentId"],
     notes: [
       "Read current nutrition patterns and the experiment state first, then patch only fields the operator intends to change.",
+      "Baseline and intervention windows cannot overlap. Completion requires a conclusion, one planned exposure, one completed exposure, two intervention observations, and two baseline observations when a baseline window was scheduled.",
       "Do not present a conclusion as causal certainty or medical diagnosis."
     ],
     example:
-      '{"experimentId":"nexp_123","status":"completed","conclusion":"Performance improved on two of three matched sessions; repeat before treating this as stable."}'
+      '{"experimentId":"nexp_123","status":"completed","conclusion":"Performance improved in both intervention observations; repeat before treating this as stable.","adherence":{"plannedExposures":3,"completedExposures":2,"baselineObservationCount":2,"interventionObservationCount":2,"notes":"One session was missed."}}'
   },
   {
     toolName: "forge_update_sleep_session",

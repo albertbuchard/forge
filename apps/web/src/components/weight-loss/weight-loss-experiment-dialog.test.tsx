@@ -73,25 +73,74 @@ describe("nutrition experiment draft", () => {
         experimentEnd: "2026-07-08"
       })
     ).toMatch(/experiment end date/i);
+    expect(
+      validateExperimentDraft({
+        ...complete,
+        baselineStart: "2026-07-01",
+        baselineEnd: "2026-07-10",
+        experimentStart: "2026-07-10",
+        experimentEnd: "2026-07-21"
+      })
+    ).toMatch(/cannot overlap/i);
   });
 
   it("keeps review status separate and requires a conclusion to finish", () => {
     const draft = buildExperimentReviewDraft({
       status: "running",
-      conclusion: null
+      conclusion: null,
+      adherence: {}
     } as NutritionExperiment);
     expect(validateExperimentReviewDraft(draft)).toBeNull();
     expect(
       validateExperimentReviewDraft({ ...draft, status: "completed" })
     ).toMatch(/record a conclusion/i);
     expect(
-      buildExperimentReviewPatch({
+      validateExperimentReviewDraft(
+        {
+          ...draft,
+          status: "completed",
+          conclusion: "Energy improved.",
+          plannedExposures: "1",
+          completedExposures: "1",
+          baselineObservationCount: "1",
+          interventionObservationCount: "2"
+        },
+        {
+          baselineStart: "2026-07-01",
+          baselineEnd: "2026-07-07"
+        } as NutritionExperiment
+      )
+    ).toMatch(/two baseline observations/i);
+    expect(
+      validateExperimentReviewDraft({
+        ...draft,
         status: "completed",
-        conclusion: " Performance improved, but adherence was incomplete. "
+        conclusion: "Energy improved.",
+        completedExposures: "1",
+        interventionObservationCount: "2"
+      })
+    ).toMatch(/planned exposure/i);
+    expect(
+      buildExperimentReviewPatch({
+        ...draft,
+        status: "completed",
+        conclusion: " Performance improved, but adherence was incomplete. ",
+        plannedExposures: "3",
+        completedExposures: "2",
+        baselineObservationCount: "2",
+        interventionObservationCount: "2",
+        adherenceNotes: " One session was missed. "
       })
     ).toEqual({
       status: "completed",
-      conclusion: "Performance improved, but adherence was incomplete."
+      conclusion: "Performance improved, but adherence was incomplete.",
+      adherence: {
+        plannedExposures: 3,
+        completedExposures: 2,
+        baselineObservationCount: 2,
+        interventionObservationCount: 2,
+        notes: "One session was missed."
+      }
     });
   });
 });

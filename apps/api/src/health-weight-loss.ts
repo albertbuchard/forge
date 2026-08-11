@@ -488,6 +488,54 @@ export const nutritionGutCheckinCreateSchema = z.object({
   notes: z.string().trim().default("")
 });
 
+function isValidExperimentCalendarDate(value: string) {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return (
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
+}
+
+const nutritionExperimentDateSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine(isValidExperimentCalendarDate, "Enter a valid calendar date.")
+  .nullable();
+
+export const nutritionExperimentAdherenceSchema = z
+  .object({
+    plannedExposures: z.coerce.number().int().min(0).max(1_000).optional(),
+    completedExposures: z.coerce.number().int().min(0).max(1_000).optional(),
+    baselineObservationCount: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(1_000)
+      .optional(),
+    interventionObservationCount: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(1_000)
+      .optional(),
+    notes: z.string().trim().max(4_000).optional()
+  })
+  .passthrough()
+  .superRefine((value, context) => {
+    if (
+      value.plannedExposures != null &&
+      value.completedExposures != null &&
+      value.completedExposures > value.plannedExposures
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["completedExposures"],
+        message: "Completed exposures cannot exceed planned exposures."
+      });
+    }
+  });
+
 export const nutritionExperimentCreateSchema = z.object({
   userId: z.string().trim().min(1).optional(),
   hypothesisId: z.string().trim().min(1).nullable().optional(),
@@ -505,17 +553,17 @@ export const nutritionExperimentCreateSchema = z.object({
   hypothesis: z.string().trim().min(1).optional(),
   metricKey: z.string().trim().min(1).optional(),
   intervention: z.string().trim().min(1).optional(),
-  baselineStart: z.string().trim().nullable().optional(),
-  baselineEnd: z.string().trim().nullable().optional(),
-  interventionStart: z.string().trim().nullable().optional(),
-  interventionEnd: z.string().trim().nullable().optional(),
-  experimentStart: z.string().trim().nullable().optional(),
-  experimentEnd: z.string().trim().nullable().optional(),
+  baselineStart: nutritionExperimentDateSchema.optional(),
+  baselineEnd: nutritionExperimentDateSchema.optional(),
+  interventionStart: nutritionExperimentDateSchema.optional(),
+  interventionEnd: nutritionExperimentDateSchema.optional(),
+  experimentStart: nutritionExperimentDateSchema.optional(),
+  experimentEnd: nutritionExperimentDateSchema.optional(),
   successCriteria: z.string().trim().nullable().optional(),
   confounders: tagsSchema,
   trackedOutcomes: tagsSchema,
   protocol: z.record(z.string(), z.unknown()).default({}),
-  adherence: z.record(z.string(), z.unknown()).default({}),
+  adherence: nutritionExperimentAdherenceSchema.default({}),
   resultSummary: z.string().trim().default("")
 });
 
@@ -523,6 +571,89 @@ export const nutritionExperimentPatchSchema = nutritionExperimentCreateSchema
   .omit({ userId: true })
   .partial()
   .extend({ conclusion: z.string().trim().nullable().optional() });
+
+function assertNutritionExperimentMethod(input: {
+  baselineStart: string | null;
+  baselineEnd: string | null;
+  interventionStart: string | null;
+  interventionEnd: string | null;
+}) {
+  if (
+    input.baselineStart != null &&
+    input.baselineEnd != null &&
+    input.baselineStart > input.baselineEnd
+  ) {
+    throw new HttpError(
+      400,
+      "nutrition_experiment_baseline_window_invalid",
+      "The baseline end date must be on or after its start date."
+    );
+  }
+  if (
+    input.interventionStart != null &&
+    input.interventionEnd != null &&
+    input.interventionStart > input.interventionEnd
+  ) {
+    throw new HttpError(
+      400,
+      "nutrition_experiment_intervention_window_invalid",
+      "The intervention end date must be on or after its start date."
+    );
+  }
+  if (
+    input.baselineEnd != null &&
+    input.interventionStart != null &&
+    input.baselineEnd >= input.interventionStart
+  ) {
+    throw new HttpError(
+      409,
+      "nutrition_experiment_windows_overlap",
+      "The baseline must end before the intervention starts."
+    );
+  }
+}
+
+function assertNutritionExperimentCompletion(input: {
+  status: string;
+  conclusion: string;
+  baselineScheduled: boolean;
+  adherence: z.infer<typeof nutritionExperimentAdherenceSchema>;
+}) {
+  if (input.status !== "completed") {
+    return;
+  }
+  if (!input.conclusion.trim()) {
+    throw new HttpError(
+      409,
+      "nutrition_experiment_conclusion_required",
+      "A completed experiment requires an explicit conclusion."
+    );
+  }
+  const plannedExposures = input.adherence.plannedExposures ?? 0;
+  const completedExposures = input.adherence.completedExposures ?? 0;
+  const interventionObservations =
+    input.adherence.interventionObservationCount ?? 0;
+  const baselineObservations = input.adherence.baselineObservationCount ?? 0;
+  if (
+    plannedExposures < 1 ||
+    completedExposures < 1 ||
+    interventionObservations < 2 ||
+    (input.baselineScheduled && baselineObservations < 2)
+  ) {
+    throw new HttpError(
+      409,
+      "nutrition_experiment_evidence_insufficient",
+      "Completion requires at least one planned exposure, one completed exposure, two intervention observations, and two baseline observations when a baseline window was scheduled.",
+      {
+        plannedExposures,
+        completedExposures,
+        interventionObservations,
+        baselineObservations,
+        baselineScheduled: input.baselineScheduled
+      }
+    );
+  }
+}
 
 export const nutritionParseRequestSchema = z.object({
   text: z.string().trim().min(1),
@@ -2331,6 +2462,23 @@ export function createNutritionExperiment(input: unknown) {
       ? { confounders: parsed.confounders }
       : {})
   };
+  const interventionStart =
+    parsed.interventionStart ?? parsed.experimentStart ?? null;
+  const interventionEnd =
+    parsed.interventionEnd ?? parsed.experimentEnd ?? null;
+  assertNutritionExperimentMethod({
+    baselineStart: parsed.baselineStart ?? null,
+    baselineEnd: parsed.baselineEnd ?? null,
+    interventionStart,
+    interventionEnd
+  });
+  assertNutritionExperimentCompletion({
+    status: normalizeExperimentStatus(parsed.status),
+    conclusion: parsed.resultSummary,
+    baselineScheduled:
+      parsed.baselineStart != null || parsed.baselineEnd != null,
+    adherence: parsed.adherence
+  });
   getDatabase()
     .prepare(
       `INSERT INTO nutrition_experiments (
@@ -2347,8 +2495,8 @@ export function createNutritionExperiment(input: unknown) {
       normalizeExperimentStatus(parsed.status),
       parsed.baselineStart ?? null,
       parsed.baselineEnd ?? null,
-      parsed.interventionStart ?? parsed.experimentStart ?? null,
-      parsed.interventionEnd ?? parsed.experimentEnd ?? null,
+      interventionStart,
+      interventionEnd,
       jsonString(trackedOutcomes),
       jsonString(protocol),
       jsonString(parsed.adherence),
@@ -2402,6 +2550,56 @@ export function patchNutritionExperiment(experimentId: string, input: unknown) {
       : parsed.metricKey !== undefined
         ? [parsed.metricKey]
         : existingTrackedOutcomes;
+  const nextStatus =
+    parsed.status !== undefined
+      ? normalizeExperimentStatus(parsed.status)
+      : normalizeExperimentStatus(existing.status);
+  const nextBaselineStart =
+    parsed.baselineStart !== undefined
+      ? parsed.baselineStart
+      : existing.baseline_start;
+  const nextBaselineEnd =
+    parsed.baselineEnd !== undefined
+      ? parsed.baselineEnd
+      : existing.baseline_end;
+  const nextInterventionStart =
+    parsed.interventionStart !== undefined
+      ? parsed.interventionStart
+      : parsed.experimentStart !== undefined
+        ? parsed.experimentStart
+        : existing.intervention_start;
+  const nextInterventionEnd =
+    parsed.interventionEnd !== undefined
+      ? parsed.interventionEnd
+      : parsed.experimentEnd !== undefined
+        ? parsed.experimentEnd
+        : existing.intervention_end;
+  const existingAdherence = nutritionExperimentAdherenceSchema.parse(
+    parseJson<JsonRecord>(existing.adherence_json, {})
+  );
+  const nextAdherence =
+    parsed.adherence !== undefined
+      ? nutritionExperimentAdherenceSchema.parse({
+          ...existingAdherence,
+          ...parsed.adherence
+        })
+      : existingAdherence;
+  const nextConclusion =
+    parsed.conclusion !== undefined
+      ? (parsed.conclusion ?? "")
+      : (parsed.resultSummary ?? existing.result_summary);
+  assertNutritionExperimentMethod({
+    baselineStart: nextBaselineStart,
+    baselineEnd: nextBaselineEnd,
+    interventionStart: nextInterventionStart,
+    interventionEnd: nextInterventionEnd
+  });
+  assertNutritionExperimentCompletion({
+    status: nextStatus,
+    conclusion: nextConclusion,
+    baselineScheduled: nextBaselineStart != null || nextBaselineEnd != null,
+    adherence: nextAdherence
+  });
   getDatabase()
     .prepare(
       `UPDATE nutrition_experiments
@@ -2416,31 +2614,15 @@ export function patchNutritionExperiment(experimentId: string, input: unknown) {
         ? parsed.hypothesisId
         : existing.hypothesis_id,
       parsed.title ?? existing.title,
-      parsed.status !== undefined
-        ? normalizeExperimentStatus(parsed.status)
-        : normalizeExperimentStatus(existing.status),
-      parsed.baselineStart !== undefined
-        ? parsed.baselineStart
-        : existing.baseline_start,
-      parsed.baselineEnd !== undefined
-        ? parsed.baselineEnd
-        : existing.baseline_end,
-      parsed.interventionStart !== undefined
-        ? parsed.interventionStart
-        : parsed.experimentStart !== undefined
-          ? parsed.experimentStart
-          : existing.intervention_start,
-      parsed.interventionEnd !== undefined
-        ? parsed.interventionEnd
-        : parsed.experimentEnd !== undefined
-          ? parsed.experimentEnd
-          : existing.intervention_end,
+      nextStatus,
+      nextBaselineStart,
+      nextBaselineEnd,
+      nextInterventionStart,
+      nextInterventionEnd,
       jsonString(trackedOutcomes),
       jsonString(protocol),
-      parsed.adherence ? jsonString(parsed.adherence) : existing.adherence_json,
-      parsed.conclusion !== undefined
-        ? (parsed.conclusion ?? "")
-        : (parsed.resultSummary ?? existing.result_summary),
+      jsonString(nextAdherence),
+      nextConclusion,
       nowIso(),
       experimentId
     );

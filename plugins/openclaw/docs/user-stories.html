@@ -46,8 +46,8 @@
           <a class="story-metric metric-all" href="./user-stories.html" data-metric-scope="all"><strong>203</strong><span>All stories</span></a>
           <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>193</strong><span>Current product</span></a>
           <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>10</strong><span>Planned</span></a>
-          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>21</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>154</strong><span>In review</span></a>
+          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>22</strong><span>Verified</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>153</strong><span>In review</span></a>
           <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>18</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
@@ -2189,17 +2189,17 @@
                   </div>
                 </details>
 
-                <details class="story-card" id="story-nutr-04" data-story-id="NUTR-04" data-lifecycle="current" data-readiness="In review" data-family="NUTR">
+                <details class="story-card" id="story-nutr-04" data-story-id="NUTR-04" data-lifecycle="current" data-readiness="Verified" data-family="NUTR">
                   <summary class="story-summary">
                     <span class="story-id">NUTR-04</span>
                     <span class="story-summary-outcome">As a user, I can define and review an N-of-1 nutrition or body experiment with hypothesis, exposure, outcomes, confounders, and uncertainty.</span>
-                    <span class="story-state state-in-review">In review</span>
+                    <span class="story-state state-verified">Verified</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a user, I can define and review an N-of-1 nutrition or body experiment with hypothesis, exposure, outcomes, confounders, and uncertainty.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Weight Loss experiments.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>the API now preserves hypothesis, intervention, primary metric, dates, success criteria, confounders, status, and conclusion across OpenAPI, MCP, OpenClaw, Hermes, and web. A three-step guided modal works at phone and desktop sizes. Finish adherence, overlap, minimum-evidence, and conclusion-review flows.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the guided experiment flow preserves hypothesis, intervention, outcome, dates, confounders, adherence, and conclusion across web and API contracts. Baseline and intervention windows cannot overlap. Completion requires an explicit conclusion, planned and completed exposure counts, at least two intervention observations, and at least two baseline observations when a baseline was scheduled; partial adherence updates preserve existing evidence. These minimums support an honest review workflow but do not establish statistical or causal certainty.</dd></div>
                     </dl>
                   </div>
                 </details>

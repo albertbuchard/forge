@@ -91,6 +91,13 @@ export function validateExperimentDraft(draft: WeightLossExperimentDraft) {
       return `The ${label} end date must be on or after its start date.`;
     }
   }
+  if (
+    draft.baselineEnd &&
+    draft.experimentStart &&
+    draft.baselineEnd >= draft.experimentStart
+  ) {
+    return "The baseline must end before the experiment starts; the two windows cannot overlap.";
+  }
   return null;
 }
 
@@ -294,15 +301,45 @@ export function WeightLossExperimentDialog({
 export type WeightLossExperimentReviewDraft = {
   status: NutritionExperiment["status"];
   conclusion: string;
+  plannedExposures: string;
+  completedExposures: string;
+  baselineObservationCount: string;
+  interventionObservationCount: string;
+  adherenceNotes: string;
 };
+
+function countDraftValue(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? String(value)
+    : "";
+}
 
 export function buildExperimentReviewDraft(
   experiment: NutritionExperiment
 ): WeightLossExperimentReviewDraft {
   return {
     status: experiment.status,
-    conclusion: experiment.conclusion ?? ""
+    conclusion: experiment.conclusion ?? "",
+    plannedExposures: countDraftValue(experiment.adherence.plannedExposures),
+    completedExposures: countDraftValue(
+      experiment.adherence.completedExposures
+    ),
+    baselineObservationCount: countDraftValue(
+      experiment.adherence.baselineObservationCount
+    ),
+    interventionObservationCount: countDraftValue(
+      experiment.adherence.interventionObservationCount
+    ),
+    adherenceNotes:
+      typeof experiment.adherence.notes === "string"
+        ? experiment.adherence.notes
+        : ""
   };
+}
+
+function optionalCount(value: string) {
+  const normalized = value.trim();
+  return normalized ? Number(normalized) : undefined;
 }
 
 export function buildExperimentReviewPatch(
@@ -310,18 +347,69 @@ export function buildExperimentReviewPatch(
 ): NutritionExperimentPatchInput {
   return {
     status: draft.status,
-    conclusion: nullable(draft.conclusion)
+    conclusion: nullable(draft.conclusion),
+    adherence: {
+      plannedExposures: optionalCount(draft.plannedExposures),
+      completedExposures: optionalCount(draft.completedExposures),
+      baselineObservationCount: optionalCount(draft.baselineObservationCount),
+      interventionObservationCount: optionalCount(
+        draft.interventionObservationCount
+      ),
+      notes: draft.adherenceNotes.trim()
+    }
   };
 }
 
 export function validateExperimentReviewDraft(
-  draft: WeightLossExperimentReviewDraft
+  draft: WeightLossExperimentReviewDraft,
+  experiment?: NutritionExperiment | null
 ) {
   if (
     (draft.status === "completed" || draft.status === "abandoned") &&
     !draft.conclusion.trim()
   ) {
     return `Record a ${draft.status === "completed" ? "conclusion" : "reason"} before marking the experiment ${draft.status}.`;
+  }
+  const countFields = [
+    [draft.plannedExposures, "Planned exposures"],
+    [draft.completedExposures, "Completed exposures"],
+    [draft.baselineObservationCount, "Baseline observations"],
+    [draft.interventionObservationCount, "Intervention observations"]
+  ] as const;
+  for (const [value, label] of countFields) {
+    if (
+      value.trim() &&
+      (!Number.isInteger(Number(value)) ||
+        Number(value) < 0 ||
+        Number(value) > 1_000)
+    ) {
+      return `${label} must be a whole number from 0 to 1,000.`;
+    }
+  }
+  const planned = optionalCount(draft.plannedExposures);
+  const completed = optionalCount(draft.completedExposures);
+  if (planned != null && completed != null && completed > planned) {
+    return "Completed exposures cannot exceed planned exposures.";
+  }
+  if (draft.status === "completed") {
+    if ((planned ?? 0) < 1) {
+      return "Record at least one planned exposure before completing the experiment.";
+    }
+    if ((completed ?? 0) < 1) {
+      return "Record at least one completed exposure before completing the experiment.";
+    }
+    if ((optionalCount(draft.interventionObservationCount) ?? 0) < 2) {
+      return "Record at least two intervention observations before completing the experiment.";
+    }
+    const baselineScheduled = Boolean(
+      experiment?.baselineStart || experiment?.baselineEnd
+    );
+    if (
+      baselineScheduled &&
+      (optionalCount(draft.baselineObservationCount) ?? 0) < 2
+    ) {
+      return "Record at least two baseline observations before completing this scheduled-baseline experiment.";
+    }
   }
   return null;
 }
@@ -396,6 +484,17 @@ export function WeightLossExperimentReviewDialog({
                   ? experiment.confounders.join(", ")
                   : "None recorded"}
               </div>
+              <div>
+                <span className="text-[var(--ui-ink-strong)]">
+                  Existing adherence:
+                </span>{" "}
+                {experiment.adherence.completedExposures ?? "n/a"} completed of{" "}
+                {experiment.adherence.plannedExposures ?? "n/a"} planned;
+                baseline observations{" "}
+                {experiment.adherence.baselineObservationCount ?? "n/a"};
+                intervention observations{" "}
+                {experiment.adherence.interventionObservationCount ?? "n/a"}
+              </div>
             </SurfacePanel>
           </div>
         ) : null
@@ -453,6 +552,53 @@ export function WeightLossExperimentReviewDialog({
               value={draft.conclusion}
               onChange={(event) => setDraft({ conclusion: event.target.value })}
               placeholder="The result, uncertainty, adherence limits, and next decision."
+            />
+          </FlowField>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FlowField label="Planned exposures">
+              <Input
+                inputMode="numeric"
+                value={draft.plannedExposures}
+                onChange={(event) =>
+                  setDraft({ plannedExposures: event.target.value })
+                }
+              />
+            </FlowField>
+            <FlowField label="Completed exposures">
+              <Input
+                inputMode="numeric"
+                value={draft.completedExposures}
+                onChange={(event) =>
+                  setDraft({ completedExposures: event.target.value })
+                }
+              />
+            </FlowField>
+            <FlowField label="Baseline observations">
+              <Input
+                inputMode="numeric"
+                value={draft.baselineObservationCount}
+                onChange={(event) =>
+                  setDraft({ baselineObservationCount: event.target.value })
+                }
+              />
+            </FlowField>
+            <FlowField label="Intervention observations">
+              <Input
+                inputMode="numeric"
+                value={draft.interventionObservationCount}
+                onChange={(event) =>
+                  setDraft({ interventionObservationCount: event.target.value })
+                }
+              />
+            </FlowField>
+          </div>
+          <FlowField label="Adherence limits">
+            <Textarea
+              value={draft.adherenceNotes}
+              onChange={(event) =>
+                setDraft({ adherenceNotes: event.target.value })
+              }
+              placeholder="Missed exposures, protocol deviations, measurement gaps..."
             />
           </FlowField>
         </div>

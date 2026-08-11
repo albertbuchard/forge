@@ -587,7 +587,12 @@ export function WeightLossPage() {
   const [experimentReviewDraft, setExperimentReviewDraft] =
     useState<WeightLossExperimentReviewDraft>({
       status: "planned",
-      conclusion: ""
+      conclusion: "",
+      plannedExposures: "",
+      completedExposures: "",
+      baselineObservationCount: "",
+      interventionObservationCount: "",
+      adherenceNotes: ""
     });
 
   const viewQuery = useQuery({
@@ -1474,7 +1479,8 @@ export function WeightLossPage() {
         }
         onSubmit={async () => {
           const validationError = validateExperimentReviewDraft(
-            experimentReviewDraft
+            experimentReviewDraft,
+            experimentToReview
           );
           if (validationError) {
             setExperimentReviewError(validationError);

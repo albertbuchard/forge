@@ -215,6 +215,16 @@ export type NutritionExperimentInput = {
   status?: "planned" | "running" | "paused" | "completed" | "abandoned";
   successCriteria?: string | null;
   confounders?: string[];
+  adherence?: NutritionExperimentAdherence;
+};
+
+export type NutritionExperimentAdherence = {
+  plannedExposures?: number;
+  completedExposures?: number;
+  baselineObservationCount?: number;
+  interventionObservationCount?: number;
+  notes?: string;
+  [key: string]: unknown;
 };
 
 export type NutritionExperimentPatchInput =
@@ -241,7 +251,7 @@ export type NutritionExperiment = {
   confounders: string[];
   trackedOutcomes: string[];
   protocol: Record<string, unknown>;
-  adherence: Record<string, unknown>;
+  adherence: NutritionExperimentAdherence;
   resultSummary: string;
   conclusion: string | null;
   createdAt: string;
