@@ -47,8 +47,8 @@
           <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>193</strong><span>Current product</span></a>
           <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>10</strong><span>Planned</span></a>
           <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>14</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>159</strong><span>In review</span></a>
-          <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>20</strong><span>Needs audit</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>160</strong><span>In review</span></a>
+          <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>19</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
 
@@ -1961,17 +1961,17 @@
                   </div>
                 </details>
 
-                <details class="story-card" id="story-psy-18" data-story-id="PSY-18" data-lifecycle="current" data-readiness="Needs audit" data-family="PSY">
+                <details class="story-card" id="story-psy-18" data-story-id="PSY-18" data-lifecycle="current" data-readiness="In review" data-family="PSY">
                   <summary class="story-summary">
                     <span class="story-id">PSY-18</span>
                     <span class="story-summary-outcome">As a user, I can review Psyche metrics such as mood, urges, self-regulation, and conversation-derived signals with clear provenance.</span>
-                    <span class="story-state state-needs-audit">Needs audit</span>
+                    <span class="story-state state-in-review">In review</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a user, I can review Psyche metrics such as mood, urges, self-regulation, and conversation-derived signals with clear provenance.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>psyche-metrics</code>.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>verify metric definitions, missingness, confidence, filters, and source links.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the metrics workspace distinguishes mood, urges, self-regulation, and conversation families; defines every available calculation, interpretation limit, confidence status, sample unit, missingness rule, owner scope, freshness state, and source; preserves measured zeroes while leaving absent days missing; and links attributable trigger-report readings to their records. Mixed-quality legacy emotion arrays now retain valid numeric 0-100 intensities while counting and disclosing every missing, non-numeric, or out-of-range entry as aggregate data-quality evidence rather than silently treating <code>null</code> as zero or presenting the metric as complete. The focused API case, all ten workspace cases, the full TypeScript check, and live route reachability pass. Complete calibrated-confidence research, scanner owner attribution, and fresh desktop and 390-by-844-pixel visual and keyboard verification before promotion.</dd></div>
                     </dl>
                   </div>
                 </details>

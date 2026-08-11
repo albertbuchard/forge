@@ -171,6 +171,17 @@ test("psyche metrics API returns stored devrage daily metrics", async () => {
       intensity: 85,
       userId: "user_second"
     });
+    getDatabase()
+      .prepare("UPDATE trigger_reports SET emotions_json = ? WHERE id = ?")
+      .run(
+        JSON.stringify([
+          { label: "Tension", intensity: 65 },
+          { label: "Out of range", intensity: 140 },
+          { label: "Null intensity", intensity: null },
+          { label: "Missing intensity" }
+        ]),
+        triggerReport.id
+      );
 
     const response = await app.inject({
       method: "GET",
@@ -203,6 +214,7 @@ test("psyche metrics API returns stored devrage daily metrics", async () => {
             }>;
           };
           sources: Array<{ sourceId: string; label: string }>;
+          dataQualityWarnings: string[];
         };
         metrics: Array<{
           metric: string;
@@ -247,6 +259,9 @@ test("psyche metrics API returns stored devrage daily metrics", async () => {
     assert.deepEqual(body.metrics.context.ownerScope.effectiveUserIds, []);
     assert.equal(body.metrics.context.ownerScope.filterMode, "all_data");
     assert.equal(body.metrics.context.ownerScope.serverEnforced, false);
+    assert.deepEqual(body.metrics.context.dataQualityWarnings, [
+      "3 emotion entries have a missing, non-numeric, or out-of-range intensity and were excluded from the metric."
+    ]);
     assert.deepEqual(
       body.metrics.context.ownerScope.availableOwners.map(
         (owner) => owner.userId

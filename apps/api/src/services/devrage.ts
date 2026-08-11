@@ -747,6 +747,7 @@ function buildReportedEmotionIntensityMetric(
   let sourceRecordCount = 0;
   let unattributedRecordCount = 0;
   let malformedEmotionRecords = 0;
+  let invalidEmotionEntries = 0;
   let undatedEmotionRecords = 0;
   let invalidDateRecords = 0;
 
@@ -754,11 +755,13 @@ function buildReportedEmotionIntensityMetric(
     if (ownerUserIds && (!row.user_id || !ownerUserIds.has(row.user_id))) {
       continue;
     }
-    const intensities = parseEmotionIntensities(row.emotions_json);
-    if (intensities === null) {
+    const parsedIntensities = parseEmotionIntensities(row.emotions_json);
+    if (parsedIntensities === null) {
       malformedEmotionRecords += 1;
       continue;
     }
+    const intensities = parsedIntensities.values;
+    invalidEmotionEntries += parsedIntensities.invalidEntryCount;
     if (intensities.length === 0) {
       continue;
     }
@@ -825,6 +828,11 @@ function buildReportedEmotionIntensityMetric(
     ...(malformedEmotionRecords > 0
       ? [
           `${malformedEmotionRecords} trigger report${malformedEmotionRecords === 1 ? " has" : "s have"} malformed emotion data and was excluded.`
+        ]
+      : []),
+    ...(invalidEmotionEntries > 0
+      ? [
+          `${invalidEmotionEntries} emotion ${invalidEmotionEntries === 1 ? "entry has" : "entries have"} a missing, non-numeric, or out-of-range intensity and ${invalidEmotionEntries === 1 ? "was" : "were"} excluded from the metric.`
         ]
       : []),
     ...(undatedEmotionRecords > 0
@@ -932,7 +940,9 @@ function finalizePsycheMetric(
   };
 }
 
-function parseEmotionIntensities(value: string): number[] | null {
+function parseEmotionIntensities(
+  value: string
+): { values: number[]; invalidEntryCount: number } | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(value);
@@ -942,15 +952,26 @@ function parseEmotionIntensities(value: string): number[] | null {
   if (!Array.isArray(parsed)) {
     return null;
   }
-  return parsed.flatMap((entry) => {
+  const intensities: number[] = [];
+  let invalidEntryCount = 0;
+  for (const entry of parsed) {
     if (!entry || typeof entry !== "object" || !("intensity" in entry)) {
-      return [];
+      invalidEntryCount += 1;
+      continue;
     }
-    const intensity = Number((entry as { intensity: unknown }).intensity);
-    return Number.isFinite(intensity) && intensity >= 0 && intensity <= 100
-      ? [intensity]
-      : [];
-  });
+    const intensity = (entry as { intensity: unknown }).intensity;
+    if (
+      typeof intensity !== "number" ||
+      !Number.isFinite(intensity) ||
+      intensity < 0 ||
+      intensity > 100
+    ) {
+      invalidEntryCount += 1;
+      continue;
+    }
+    intensities.push(intensity);
+  }
+  return { values: intensities, invalidEntryCount };
 }
 
 function dateKeyInTimeZone(value: string, timeZone: string): string | null {

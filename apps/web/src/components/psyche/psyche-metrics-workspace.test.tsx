@@ -658,6 +658,22 @@ describe("PsycheMetricsWorkspace", () => {
     ).toHaveTextContent("May 14, 2026");
   });
 
+  it("surfaces excluded emotion entries as metric data-quality evidence", () => {
+    renderWorkspace({
+      ...populatedMetrics,
+      context: {
+        ...populatedMetrics.context,
+        dataQualityWarnings: [
+          "3 emotion entries have a missing, non-numeric, or out-of-range intensity and were excluded from the metric."
+        ]
+      }
+    });
+
+    expect(
+      screen.getByText(/3 emotion entries have a missing.*out-of-range/i)
+    ).toBeInTheDocument();
+  });
+
   it("renders a truthful empty state without triggering a scan", () => {
     renderWorkspace(emptyMetrics);
 
