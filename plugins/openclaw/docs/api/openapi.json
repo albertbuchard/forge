@@ -25025,7 +25025,8 @@
                   "type": "string"
                 }
               }
-            }
+            },
+            "description": "Server-derived candidate interpretations. The array is populated only when the answers contain exactly one interpretation_stance of fits. Partly accepted, uncertain, declined, and unreviewed interpretations remain absent from results."
           },
           "createdAt": {
             "type": "string",

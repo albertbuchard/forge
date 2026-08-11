@@ -144,18 +144,45 @@ export const modeProfileSchema = z.object({
   userId: ownedUserId
 });
 
-export const modeGuideSessionSchema = z.object({
-  summary: nonEmpty,
-  answers: z
-    .array(
-      z.object({
-        questionKey: nonEmpty,
-        value: nonEmpty
-      })
-    )
-    .min(1),
-  userId: ownedUserId
-});
+export const modeGuideSessionSchema = z
+  .object({
+    summary: nonEmpty,
+    answers: z
+      .array(
+        z.object({
+          questionKey: nonEmpty,
+          value: nonEmpty
+        })
+      )
+      .min(1),
+    userId: ownedUserId
+  })
+  .superRefine((input, context) => {
+    const interpretationStances = input.answers.filter(
+      (answer) => answer.questionKey === "interpretation_stance"
+    );
+    if (interpretationStances.length > 1) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["answers"],
+        message: "Use exactly one interpretation stance."
+      });
+    }
+    if (
+      interpretationStances[0]?.value === "partly" &&
+      !input.answers.some(
+        (answer) =>
+          answer.questionKey === "user_correction" && answer.value.trim()
+      )
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["answers"],
+        message:
+          "A partly accepted interpretation requires the user's correction."
+      });
+    }
+  });
 
 export const flashcardSchema = z.object({
   title: trimmed.default(""),

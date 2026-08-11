@@ -15462,7 +15462,8 @@ test("psyche behaviors, beliefs, modes, and custom taxonomies persist through th
           { questionKey: "coping_response", value: "freeze" },
           { questionKey: "child_state", value: "vulnerable" },
           { questionKey: "critic_style", value: "punitive" },
-          { questionKey: "healthy_contact", value: "present" }
+          { questionKey: "healthy_contact", value: "present" },
+          { questionKey: "interpretation_stance", value: "fits" }
         ]
       }
     });

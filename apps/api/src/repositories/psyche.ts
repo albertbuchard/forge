@@ -1124,6 +1124,9 @@ function scoreModeGuideSession(
   const answers = new Map(
     input.answers.map((answer) => [answer.questionKey, answer.value])
   );
+  if (answers.get("interpretation_stance") !== "fits") {
+    return [];
+  }
   const results: ModeGuideSession["results"] = [];
 
   const coping = answers.get("coping_response");

@@ -2903,7 +2903,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
       "Search by summary when revisiting a prior guided mode session."
     ],
     examples: [
-      '{"summary":"Mapping the part that takes over under criticism","answers":[{"questionKey":"felt_shift","value":"I go cold and rigid"}],"results":[{"family":"coping","archetype":"detached_protector","label":"Cold controller","confidence":0.74,"reasoning":"It distances from shame and tries to stay untouchable."}]}'
+      '{"summary":"Mapping the part that takes over under criticism","answers":[{"questionKey":"felt_shift","value":"I go cold and rigid"},{"questionKey":"coping_response","value":"detach"},{"questionKey":"interpretation_stance","value":"fits"}]}'
     ],
     fieldGuide: [
       {
@@ -2924,7 +2924,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
         type: "array",
         required: false,
         description:
-          "List of { family, archetype, label, confidence 0-1, reasoning } candidate mode interpretations."
+          "Server-derived candidate interpretations. Results remain empty unless answers contain exactly one explicit interpretation_stance of fits; partly accepted, uncertain, declined, or unreviewed readings are never persisted as results."
       }
     ]
   },

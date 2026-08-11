@@ -132,6 +132,13 @@ export function getModeGuideStepError(stepId: string, draft: ModeGuideDraft) {
   if (stepId === "check" && !draft.interpretationStance) {
     return "Choose whether the working hypothesis fits, partly fits, remains uncertain, or should be declined.";
   }
+  if (
+    stepId === "check" &&
+    draft.interpretationStance === "partly" &&
+    !draft.correction.trim()
+  ) {
+    return "Say what needs correction before saving a partly accepted interpretation.";
+  }
   if (stepId === "next-response" && !draft.nextResponse) {
     return "Choose the smallest response that feels useful now, including pausing without action.";
   }

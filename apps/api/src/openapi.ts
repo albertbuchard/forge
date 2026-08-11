@@ -8076,27 +8076,31 @@ export function buildOpenApiDocument() {
           value: { type: "string" }
         }
       }),
-      results: arrayOf({
-        type: "object",
-        additionalProperties: false,
-        required: ["family", "archetype", "label", "confidence", "reasoning"],
-        properties: {
-          family: {
-            type: "string",
-            enum: [
-              "coping",
-              "child",
-              "critic_parent",
-              "healthy_adult",
-              "happy_child"
-            ]
-          },
-          archetype: { type: "string" },
-          label: { type: "string" },
-          confidence: { type: "number" },
-          reasoning: { type: "string" }
-        }
-      }),
+      results: {
+        ...arrayOf({
+          type: "object",
+          additionalProperties: false,
+          required: ["family", "archetype", "label", "confidence", "reasoning"],
+          properties: {
+            family: {
+              type: "string",
+              enum: [
+                "coping",
+                "child",
+                "critic_parent",
+                "healthy_adult",
+                "happy_child"
+              ]
+            },
+            archetype: { type: "string" },
+            label: { type: "string" },
+            confidence: { type: "number" },
+            reasoning: { type: "string" }
+          }
+        }),
+        description:
+          "Server-derived candidate interpretations. The array is populated only when the answers contain exactly one interpretation_stance of fits. Partly accepted, uncertain, declined, and unreviewed interpretations remain absent from results."
+      },
       createdAt: { type: "string", format: "date-time" },
       updatedAt: { type: "string", format: "date-time" }
     }

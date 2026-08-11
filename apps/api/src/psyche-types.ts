@@ -690,14 +690,53 @@ export const createModeProfileSchema = z.object({
 
 export const updateModeProfileSchema = createModeProfileSchema.partial();
 
-export const createModeGuideSessionSchema = z.object({
+const modeGuideSessionInputBaseSchema = z.object({
   summary: nonEmptyTrimmedString,
   answers: z.array(modeGuideAnswerSchema).min(1),
   userId: optionalOwnedUserIdSchema
 });
 
-export const updateModeGuideSessionSchema =
-  createModeGuideSessionSchema.partial();
+function validateModeGuideInterpretationControl(
+  input: { answers?: Array<z.infer<typeof modeGuideAnswerSchema>> },
+  context: z.RefinementCtx
+) {
+  if (!input.answers) {
+    return;
+  }
+  const interpretationStances = input.answers.filter(
+    (answer) => answer.questionKey === "interpretation_stance"
+  );
+  if (interpretationStances.length > 1) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["answers"],
+      message: "Use exactly one interpretation stance."
+    });
+  }
+  if (
+    interpretationStances[0]?.value === "partly" &&
+    !input.answers.some(
+      (answer) =>
+        answer.questionKey === "user_correction" && answer.value.trim()
+    )
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["answers"],
+      message:
+        "A partly accepted interpretation requires the user's correction."
+    });
+  }
+}
+
+export const createModeGuideSessionSchema =
+  modeGuideSessionInputBaseSchema.superRefine(
+    validateModeGuideInterpretationControl
+  );
+
+export const updateModeGuideSessionSchema = modeGuideSessionInputBaseSchema
+  .partial()
+  .superRefine(validateModeGuideInterpretationControl);
 
 export const createFlashcardSchema = z.object({
   title: trimmedString.default(""),

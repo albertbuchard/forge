@@ -77,5 +77,17 @@ describe("mode guide model", () => {
     expect(
       getModeGuideStepError("consent", DEFAULT_MODE_GUIDE_DRAFT)
     ).toContain("save");
+    expect(
+      getModeGuideStepError(
+        "check",
+        createDraft({ interpretationStance: "partly", correction: "" })
+      )
+    ).toContain("needs correction");
+    expect(
+      getModeGuideStepError(
+        "check",
+        createDraft({ interpretationStance: "decline", correction: "" })
+      )
+    ).toBeUndefined();
   });
 });
