@@ -687,7 +687,7 @@
                     <p class="story-expanded-outcome">As a user, I can inspect the full execution hierarchy from goals through strategies, projects, issues, tasks, and subtasks.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>project-hierarchy</code>.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>hierarchy construction now preserves every project work item exactly once even when parent references are missing or cyclic, with focused mixed orphan/cycle coverage. Complete persisted collapse state, dense-tree performance, and live corrupted-data fixtures.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>hierarchy construction preserves every project work item exactly once across missing parents, cycles, cross-project references, and dense fixtures. One-pass indexes replace repeated global scans; the accepted 20,801-node fixture retained all 20,801 identities while median preparation improved from 202.39 ms to 23.74 ms, about 8.5 times faster. A bounded local open-state map survives reloads with corrupt-storage fallback and debounced writes; touched toggles meet the 44 px target and phone rows expose a direct detail link. Complete live desktop, phone, keyboard, and corrupted-storage verification.</dd></div>
                     </dl>
                   </div>
                 </details>
