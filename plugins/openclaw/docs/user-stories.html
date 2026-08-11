@@ -1677,7 +1677,7 @@
                     <p class="story-expanded-outcome">As a user, I can add an existing Forge entity to a preference workspace without duplicating its identity.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Preferences enqueue-from-entity action and general links.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>enqueue uses a partial unique linked-identity index and atomic upsert, including deterministic repair of legacy duplicates. Missing, deleted, or out-of-scope sources are rejected before any item or link is written, including through shared batch routes. A linked candidate has exactly one general <code>source</code> backlink; replay reuses it, relinking updates it atomically, and deletion removes it. Complete live workspace navigation and backlink presentation checks.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>enqueue uses a partial unique linked-identity index and atomic upsert, including deterministic repair of legacy duplicates. Missing, deleted, or out-of-scope sources are rejected before any item or link is written, including through shared batch routes. A linked candidate has exactly one general <code>source</code> backlink; replay reuses it, relinking updates it atomically, and deletion removes it. The workspace uses Forge&#039;s canonical entity routes and a keyboard-focusable 44-pixel source link instead of exposing only a raw identifier. Complete the retained live desktop and phone promotion gate.</dd></div>
                     </dl>
                   </div>
                 </details>
