@@ -3336,6 +3336,18 @@ export async function runAiConnector(
       return replayExisting(existing);
     }
   }
+  if (effectiveRequest.conversationId) {
+    const conversation = getAiConnectorConversationById(
+      effectiveRequest.conversationId
+    );
+    if (!conversation || conversation.connectorId !== connectorId) {
+      throw new HttpError(
+        404,
+        "workbench_conversation_not_found",
+        "The Workbench conversation is unavailable for this flow."
+      );
+    }
+  }
   const activeRun = getRunningAiConnectorRunRow(connectorId, mode);
   if (activeRun) {
     throw new HttpError(

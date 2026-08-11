@@ -2466,7 +2466,7 @@
                     <p class="story-expanded-outcome">As a user, I can continue a saved flow through a chat follow-up while preserving the flow and run context used.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Workbench <code>chatFlow</code>.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>mock chat preserves conversation continuity, validates required inputs, and persists bounded run evidence. Finish no-model, long-context, retry, and attribution cases.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>mock chat preserves conversation continuity, validates required inputs, and persists bounded run evidence. Missing and foreign-flow conversation identifiers now fail identically before any run write, while exact completed idempotent replay remains stable. Finish no-model, long-context, retry attribution, and live desktop/phone cases.</dd></div>
                     </dl>
                   </div>
                 </details>
