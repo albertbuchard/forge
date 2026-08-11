@@ -52,10 +52,10 @@ test("the authoritative contract has the expected current and planned inventory"
 
   assert.equal(stories.length, 203);
   assert.equal(new Set(stories.map((story) => story.id)).size, 203);
-  assert.equal(count("lifecycle", "current"), 183);
-  assert.equal(count("lifecycle", "planned"), 20);
+  assert.equal(count("lifecycle", "current"), 184);
+  assert.equal(count("lifecycle", "planned"), 19);
   assert.equal(count("readiness", "Verified"), 12);
-  assert.equal(count("readiness", "In review"), 140);
+  assert.equal(count("readiness", "In review"), 141);
   assert.equal(count("readiness", "Needs audit"), 31);
   assert.equal(count("readiness", "Limited"), 0);
   assert.equal(count("readiness", "Externally blocked"), 0);
@@ -189,7 +189,7 @@ test("the client restores filters, canonicalizes contradictory URLs, and keeps m
   assert.equal(location.search, "?scope=planned");
   assert.equal(document.querySelector("#readiness-filter").value, "all");
   assert.equal(document.querySelector("#readiness-filter").disabled, true);
-  assert.equal(visibleStories(document).length, 20);
+  assert.equal(visibleStories(document).length, 19);
   assert.equal(document.querySelector("[data-collapse-all]").hidden, true);
   assert.equal(document.querySelector("[data-expand-all]").hidden, true);
   assert.equal(document.querySelector("[data-filter-panel]").open, true);
@@ -247,7 +247,7 @@ test("the client supports search, empty recovery, reset focus, and safe anchors"
     '[data-metric-readiness="In review"]'
   );
   inReviewMetric.click();
-  assert.equal(visibleStories(defaultDom.window.document).length, 140);
+  assert.equal(visibleStories(defaultDom.window.document).length, 141);
   assert.equal(inReviewMetric.getAttribute("aria-current"), "true");
   assert.equal(defaultDom.window.location.search, "?readiness=In+review");
   defaultDom.window.document.querySelector('[data-metric-scope="all"]').click();
@@ -311,7 +311,7 @@ test("the client supports search, empty recovery, reset focus, and safe anchors"
   assert.equal(dom.window.location.search, "");
   document.querySelector('[data-metric-scope="current"]').click();
   assert.equal(dom.window.location.hash, "");
-  assert.equal(visibleStories(document).length, 183);
+  assert.equal(visibleStories(document).length, 184);
 
   const search = document.querySelector("#story-search");
   search.focus();
