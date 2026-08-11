@@ -2154,7 +2154,7 @@
                     <p class="story-expanded-outcome">As a user, I can log food quickly, search or create reusable foods, and preserve serving, nutrient, source, and confidence details.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>weight-loss-index</code>, dedicated nutrition actions.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>custom, search, ChatGPT, quantity conversion, edit, history, selected-day, selected-user, and committed-response-loss retry flows pass; stable idempotency keys prevent duplicate writes. Finish duplicate-catalog and fully offline queue cases.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>custom, search, ChatGPT, quantity conversion, edit, history, selected-day, and selected-user flows pass. The food-log form now preserves one idempotency key across an uncertain response; exact replay returns the original meal, item, and custom catalog food, while changed content conflicts instead of duplicating data. Finish semantically equivalent duplicate-catalog and fully offline queue cases.</dd></div>
                     </dl>
                   </div>
                 </details>

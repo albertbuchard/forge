@@ -12409,7 +12409,7 @@ export function buildOpenApiDocument() {
     required: false,
     schema: { type: "string", minLength: 1, maxLength: 128 },
     description:
-      "Stable retry key for this check-in domain. An exact replay returns the original check-in with Idempotency-Replayed: true; reuse with a different payload returns 409."
+      "Stable retry key for one nutrition creation. An exact replay returns the original record with Idempotency-Replayed: true; reuse with a different payload returns 409."
   };
 
   const movementIdParameter = {
@@ -14620,7 +14620,12 @@ export function buildOpenApiDocument() {
         post: {
           tags: ["Health"],
           summary: "Create a nutrition food log",
-          parameters: [nutritionMutationUserIdsParameter],
+          description:
+            "Creates one food log atomically. Supply a stable Idempotency-Key when a client may retry after a timeout or lost response; exact replay returns the original log with status 200 and Idempotency-Replayed: true, while changed content with the same key returns 409.",
+          parameters: [
+            nutritionMutationUserIdsParameter,
+            nutritionIdempotencyKeyParameter
+          ],
           requestBody: {
             content: {
               "application/json": {
@@ -14629,6 +14634,16 @@ export function buildOpenApiDocument() {
             }
           },
           responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["log"],
+                properties: {
+                  log: { $ref: "#/components/schemas/NutritionFoodLog" }
+                }
+              },
+              "Exact replay of a previously created nutrition food log"
+            ),
             "201": jsonResponse(
               {
                 type: "object",

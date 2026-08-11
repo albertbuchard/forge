@@ -51255,6 +51255,7 @@
           "Health"
         ],
         "summary": "Create a nutrition food log",
+        "description": "Creates one food log atomically. Supply a stable Idempotency-Key when a client may retry after a timeout or lost response; exact replay returns the original log with status 200 and Idempotency-Replayed: true, while changed content with the same key returns 409.",
         "parameters": [
           {
             "name": "userIds",
@@ -51268,6 +51269,17 @@
             "style": "form",
             "explode": true,
             "description": "Select exactly one Forge user for this mutation. A body userId must match this selection. Scoped tokens may select only an allowed user and default to their sole allowed user."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Stable retry key for one nutrition creation. An exact replay returns the original record with Idempotency-Replayed: true; reuse with a different payload returns 409."
           }
         ],
         "requestBody": {
@@ -51280,6 +51292,24 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Exact replay of a previously created nutrition food log",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "log"
+                  ],
+                  "properties": {
+                    "log": {
+                      "$ref": "#/components/schemas/NutritionFoodLog"
+                    }
+                  }
+                }
+              }
+            }
+          },
           "201": {
             "description": "Created nutrition food log",
             "content": {
@@ -51578,7 +51608,7 @@
               "minLength": 1,
               "maxLength": 128
             },
-            "description": "Stable retry key for this check-in domain. An exact replay returns the original check-in with Idempotency-Replayed: true; reuse with a different payload returns 409."
+            "description": "Stable retry key for one nutrition creation. An exact replay returns the original record with Idempotency-Replayed: true; reuse with a different payload returns 409."
           }
         ],
         "requestBody": {
@@ -51643,7 +51673,7 @@
               "minLength": 1,
               "maxLength": 128
             },
-            "description": "Stable retry key for this check-in domain. An exact replay returns the original check-in with Idempotency-Replayed: true; reuse with a different payload returns 409."
+            "description": "Stable retry key for one nutrition creation. An exact replay returns the original record with Idempotency-Replayed: true; reuse with a different payload returns 409."
           }
         ],
         "requestBody": {
@@ -51708,7 +51738,7 @@
               "minLength": 1,
               "maxLength": 128
             },
-            "description": "Stable retry key for this check-in domain. An exact replay returns the original check-in with Idempotency-Replayed: true; reuse with a different payload returns 409."
+            "description": "Stable retry key for one nutrition creation. An exact replay returns the original record with Idempotency-Replayed: true; reuse with a different payload returns 409."
           }
         ],
         "requestBody": {
@@ -51773,7 +51803,7 @@
               "minLength": 1,
               "maxLength": 128
             },
-            "description": "Stable retry key for this check-in domain. An exact replay returns the original check-in with Idempotency-Replayed: true; reuse with a different payload returns 409."
+            "description": "Stable retry key for one nutrition creation. An exact replay returns the original record with Idempotency-Replayed: true; reuse with a different payload returns 409."
           }
         ],
         "requestBody": {

@@ -1828,6 +1828,22 @@ export function createNutritionFoodLog(input: unknown) {
   return getNutritionFoodLogById(id)!;
 }
 
+export function createNutritionFoodLogWithIdempotency(
+  input: unknown,
+  idempotencyKey?: string | null
+) {
+  const parsed = nutritionFoodLogCreateSchema.parse(input);
+  const userId = resolveWriteUser(parsed.userId);
+  const result = runNutritionCreateWithIdempotency({
+    operation: "food_log.create",
+    userId,
+    payload: parsed,
+    idempotencyKey,
+    create: () => createNutritionFoodLog({ ...parsed, userId })
+  });
+  return { log: result.value, replayed: result.replayed };
+}
+
 export function patchNutritionFoodLog(logId: string, input: unknown) {
   const parsed = nutritionFoodLogPatchSchema.parse(input);
   const existing = getNutritionFoodLogById(logId);

@@ -5320,7 +5320,8 @@ export function lookupNutritionBarcode(input: {
 
 export function createNutritionFoodLog(
   input: NutritionFoodLogInput,
-  userIds?: string[] | unknown
+  userIds?: string[] | unknown,
+  idempotencyKey?: string
 ) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
@@ -5329,9 +5330,20 @@ export function createNutritionFoodLog(
     `/api/v1/health/weight-loss/food-logs${suffix}`,
     {
       method: "POST",
+      headers: idempotencyKey
+        ? { "Idempotency-Key": idempotencyKey }
+        : undefined,
       body: JSON.stringify(input)
     }
   );
+}
+
+export function createNutritionFoodLogMutationKey() {
+  const suffix =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `weight-loss-food-log-${suffix}`;
 }
 
 export function patchNutritionFoodLog(

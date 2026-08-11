@@ -921,6 +921,7 @@ import {
   createNutritionBodyCheckinWithIdempotency,
   createNutritionExperiment,
   createNutritionFoodLog,
+  createNutritionFoodLogWithIdempotency,
   createNutritionGutCheckinWithIdempotency,
   createNutritionSubjectiveCheckinWithIdempotency,
   deleteNutritionFoodLog,
@@ -15532,9 +15533,15 @@ export async function buildServer(
       auth,
       input.userId
     );
-    const foodLog = createNutritionFoodLog({ ...input, userId });
-    reply.code(201);
-    return { log: foodLog };
+    const result = createNutritionFoodLogWithIdempotency(
+      { ...input, userId },
+      parseIdempotencyKey(request.headers as Record<string, unknown>)
+    );
+    reply.code(result.replayed ? 200 : 201);
+    if (result.replayed) {
+      reply.header("Idempotency-Replayed", "true");
+    }
+    return { log: result.log };
   });
   app.patch(
     "/api/v1/health/weight-loss/food-logs/:id",

@@ -74,6 +74,7 @@ import {
   createNutritionBodyCheckin,
   createNutritionCheckinMutationKey,
   createNutritionFoodLog,
+  createNutritionFoodLogMutationKey,
   createNutritionGutCheckin,
   createNutritionExperiment,
   createNutritionSubjectiveCheckin,
@@ -568,6 +569,9 @@ export function WeightLossPage() {
   const [foodDraft, setFoodDraft] = useState<WeightLossFoodDraft>(() =>
     buildInitialFoodDraft()
   );
+  const [foodLogMutationKey, setFoodLogMutationKey] = useState(() =>
+    createNutritionFoodLogMutationKey()
+  );
   const [checkinDraft, setCheckinDraft] = useState<WeightLossCheckinDraft>(() =>
     buildInitialCheckinDraft()
   );
@@ -672,6 +676,7 @@ export function WeightLossPage() {
         dayKey: currentDateKey,
         timeZone: runtimeTimeZone
       });
+      setFoodLogMutationKey(createNutritionFoodLogMutationKey());
       setFoodParseFeedback({
         status: "success",
         summary: parseSummary
@@ -692,10 +697,12 @@ export function WeightLossPage() {
           dateKey: currentDateKey,
           timeZone: runtimeTimeZone
         }),
-        selectedUserIds
+        selectedUserIds,
+        foodLogMutationKey
       ),
     onSuccess: () => {
       setFoodDraft(buildInitialFoodDraft());
+      setFoodLogMutationKey(createNutritionFoodLogMutationKey());
       setFoodParseFeedback(null);
       setFoodOpen(false);
       void refresh();
@@ -1086,6 +1093,7 @@ export function WeightLossPage() {
       dayKey: currentDateKey,
       timeZone: runtimeTimeZone
     });
+    setFoodLogMutationKey(createNutritionFoodLogMutationKey());
     setFoodOpen(true);
   };
 
@@ -1356,7 +1364,10 @@ export function WeightLossPage() {
           }
         }}
         value={foodDraft}
-        onChange={setFoodDraft}
+        onChange={(nextDraft) => {
+          setFoodDraft(nextDraft);
+          setFoodLogMutationKey(createNutritionFoodLogMutationKey());
+        }}
         foodResults={foodSearchMutation.data ?? []}
         searchPending={foodSearchMutation.isPending}
         chatGptPending={chatGptFoodParseMutation.isPending}
