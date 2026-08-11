@@ -46,8 +46,8 @@
           <a class="story-metric metric-all" href="./user-stories.html" data-metric-scope="all"><strong>203</strong><span>All stories</span></a>
           <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>193</strong><span>Current product</span></a>
           <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>10</strong><span>Planned</span></a>
-          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>23</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>152</strong><span>In review</span></a>
+          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>24</strong><span>Verified</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>151</strong><span>In review</span></a>
           <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>18</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
@@ -2213,17 +2213,17 @@
               </summary>
               <div class="story-list">
 
-                <details class="story-card" id="story-move-01" data-story-id="MOVE-01" data-lifecycle="current" data-readiness="In review" data-family="MOVE">
+                <details class="story-card" id="story-move-01" data-story-id="MOVE-01" data-lifecycle="current" data-readiness="Verified" data-family="MOVE">
                   <summary class="story-summary">
                     <span class="story-id">MOVE-01</span>
                     <span class="story-summary-outcome">As a user, I can review movement by day, month, all time, and arbitrary timeline range without treating mobility records as generic CRUD.</span>
-                    <span class="story-state state-in-review">In review</span>
+                    <span class="story-state state-verified">Verified</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a user, I can review movement by day, month, all time, and arbitrary timeline range without treating mobility records as generic CRUD.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>movement-index</code>, dedicated <code>movement</code> reads.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>all four dedicated views remain available; the initial Life view now issues one bounded timeline read instead of two, avoiding one roughly 271 KB transfer. Finish empty and 10,000-box benchmarks.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>all four dedicated views remain available and the Life view uses one bounded timeline read. Timeline decoration now uses linear forward/reverse lane indexes instead of rescanning the full segment array for every box, and clean reads skip redundant override writes. The exact empty response and a 10,000-box fixture pass; its 360-segment page completed in 186.29-201.34 ms across three local samples under a 1,000 ms acceptance cap.</dd></div>
                     </dl>
                   </div>
                 </details>

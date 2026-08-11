@@ -3894,20 +3894,41 @@ function recomputeMovementBoxOverrideState(userId: string) {
   );
   const newerRows: MovementBoxRow[] = [];
 
-  for (const row of automaticRows) {
-    updateMovementBoxOverrideState(row.id, {
-      overrideCount: 0,
-      overriddenAutomaticBoxIds: [],
-      overriddenUserBoxIds: [],
-      trueStartedAt: row.started_at,
-      trueEndedAt: row.ended_at,
-      overriddenStartedAt: null,
-      overriddenEndedAt: null,
-      overriddenByBoxId: null,
-      overrideRanges: [],
-      isOverridden: false,
-      isFullyHidden: false
-    });
+  const automaticStateNeedsReset = automaticRows.some(
+    (row) =>
+      row.override_count !== 0 ||
+      row.overridden_automatic_box_ids_json !== "[]" ||
+      row.overridden_user_box_ids_json !== "[]" ||
+      row.override_ranges_json !== "[]" ||
+      row.overridden_started_at !== null ||
+      row.overridden_ended_at !== null ||
+      row.overridden_by_box_id !== null ||
+      row.is_overridden !== 0 ||
+      row.is_fully_hidden !== 0 ||
+      (row.true_started_at !== null &&
+        row.true_started_at !== row.started_at) ||
+      (row.true_ended_at !== null && row.true_ended_at !== row.ended_at)
+  );
+  if (userRows.length > 0 || automaticStateNeedsReset) {
+    getDatabase()
+      .prepare(
+        `UPDATE movement_boxes
+         SET override_count = 0,
+             overridden_automatic_box_ids_json = '[]',
+             true_started_at = started_at,
+             true_ended_at = ended_at,
+             overridden_started_at = NULL,
+             overridden_ended_at = NULL,
+             overridden_by_box_id = NULL,
+             overridden_user_box_ids_json = '[]',
+             override_ranges_json = '[]',
+             is_overridden = 0,
+             is_fully_hidden = 0
+         WHERE user_id = ?
+           AND source_kind = 'automatic'
+           AND deleted_at IS NULL`
+      )
+      .run(userId);
   }
 
   for (const row of orderedUserRows) {
@@ -4807,18 +4828,31 @@ function buildProjectedMovementTimelineSegments(userIds: string[]) {
     }
   }
 
+  const previousStayLaneByIndex: Array<
+    MovementTimelineLaneSide | undefined
+  > = new Array(projected.length);
+  let previousStayLane: MovementTimelineLaneSide | undefined;
+  for (let index = 0; index < projected.length; index += 1) {
+    previousStayLaneByIndex[index] = previousStayLane;
+    const segment = projected[index]!;
+    if (segment.kind === "stay") {
+      previousStayLane = stayLaneById.get(segment.id);
+    }
+  }
+  const nextStayLaneByIndex: Array<MovementTimelineLaneSide | undefined> =
+    new Array(projected.length);
+  let followingStayLane: MovementTimelineLaneSide | undefined;
+  for (let index = projected.length - 1; index >= 0; index -= 1) {
+    nextStayLaneByIndex[index] = followingStayLane;
+    const segment = projected[index]!;
+    if (segment.kind === "stay") {
+      followingStayLane = stayLaneById.get(segment.id);
+    }
+  }
+
   const decorated = projected.map((segment, index) => {
-    const previousStayId = [...projected.slice(0, index)]
-      .reverse()
-      .find((candidate) => candidate.kind === "stay")?.id;
-    const previousStayLane = previousStayId
-      ? stayLaneById.get(previousStayId)
-      : undefined;
-    const nextStayLaneId = projected
-      .slice(index + 1)
-      .find((candidate) => candidate.kind === "stay")?.id;
-    const nextStayLane =
-      nextStayLaneId ? stayLaneById.get(nextStayLaneId) : undefined;
+    const previousStayLane = previousStayLaneByIndex[index];
+    const nextStayLane = nextStayLaneByIndex[index];
     const cursor = {
       id: segment.id,
       kind: segment.kind,
