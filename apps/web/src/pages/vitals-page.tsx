@@ -225,6 +225,15 @@ export function VitalsPage() {
   const categoryBreakdown = vitals.summary.categoryBreakdown;
   const metricsByCategory = groupDailyMetrics(dailyMetrics, categoryBreakdown);
   const evidenceStatus = getVitalsEvidenceStatus(vitals);
+  const sourceQuality = vitals.summary.sourceQuality;
+  const sourceLabel = [
+    sourceQuality.sourceSystems
+      .map((source) => (source === "apple_health" ? "Apple Health" : source))
+      .join(", "),
+    sourceQuality.sourceDevices.join(", ")
+  ]
+    .filter(Boolean)
+    .join(" via ");
   const psycheMetrics =
     !psycheMetricsQuery.isError && psycheMetricsQuery.data?.summary.hasData
       ? psycheMetricsQuery.data
@@ -240,8 +249,8 @@ export function VitalsPage() {
 
       {vitals.provenance ? (
         <ProvenanceSummary provenance={vitals.provenance} />
-      ) : (
-        <Card className="grid gap-3 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 sm:grid-cols-3">
+      ) : null}
+      <Card className="grid gap-3 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 sm:grid-cols-3">
         <div>
           <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
             Freshness
@@ -268,13 +277,16 @@ export function VitalsPage() {
             Source quality
           </div>
           <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
-            This view exposes daily aggregates, units, sample counts, and sample
-            times. Raw provider identity and duplicate-source decisions are not
-            available here.
+            {sourceLabel || "Stored daily health aggregates"}. {" "}
+            {sourceQuality.convertedMetricDays} metric-day
+            {sourceQuality.convertedMetricDays === 1 ? " was" : "s were"} converted
+            to canonical units. {sourceQuality.outlierMetricDays} outlier metric-day
+            {sourceQuality.outlierMetricDays === 1 ? " remains" : "s remain"} visible
+            but excluded from baselines and deltas. Duplicate metric keys are
+            rejected rather than silently merged.
           </div>
         </div>
-        </Card>
-      )}
+      </Card>
 
       {vitals.summary.metricCount === 0 ? (
         <Card className="border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-6">

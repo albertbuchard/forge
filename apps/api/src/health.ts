@@ -840,7 +840,30 @@ type DailySummaryRow = {
   updated_at: string;
 };
 
-type StoredVitalMetricSummary = z.infer<typeof vitalMetricSummarySchema>;
+type VitalMetricNormalization =
+  | "canonical"
+  | "converted"
+  | "unrecognized_metric";
+
+type StoredVitalMetricSummary = z.infer<typeof vitalMetricSummarySchema> & {
+  sourceSystem: string;
+  sourceDevice: string;
+  inputUnit: string;
+  unitNormalization: VitalMetricNormalization;
+  qualityFlags: string[];
+};
+
+type VitalSourceContext = {
+  sourceSystem: string;
+  sourceDevice: string;
+};
+
+type VitalUnitConversion = {
+  canonicalUnit: string;
+  aggregation: "discrete" | "cumulative";
+  expectedRange: readonly [number, number];
+  convert: (value: number) => number;
+};
 
 type HealthImportRunRow = {
   id: string;
@@ -3459,7 +3482,8 @@ function upsertDailySummary(
   dateKey: string,
   summaryType: string,
   metrics: Record<string, unknown>,
-  derived: Record<string, unknown> = {}
+  derived: Record<string, unknown> = {},
+  source = "derived"
 ) {
   const existing = getDatabase()
     .prepare(
@@ -3473,10 +3497,16 @@ function upsertDailySummary(
     getDatabase()
       .prepare(
         `UPDATE health_daily_summaries
-         SET metrics_json = ?, derived_json = ?, updated_at = ?
+         SET metrics_json = ?, derived_json = ?, source = ?, updated_at = ?
          WHERE id = ?`
       )
-      .run(JSON.stringify(metrics), JSON.stringify(derived), now, existing.id);
+      .run(
+        JSON.stringify(metrics),
+        JSON.stringify(derived),
+        source,
+        now,
+        existing.id
+      );
     return;
   }
   getDatabase()
@@ -3484,7 +3514,7 @@ function upsertDailySummary(
       `INSERT INTO health_daily_summaries (
          id, user_id, date_key, summary_type, metrics_json, derived_json, source, created_at, updated_at
        )
-       VALUES (?, ?, ?, ?, ?, ?, 'derived', ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       `hds_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
@@ -3493,45 +3523,418 @@ function upsertDailySummary(
       summaryType,
       JSON.stringify(metrics),
       JSON.stringify(derived),
+      source,
       now,
       now
     );
 }
 
+const vitalSummaryValueKeys = [
+  "average",
+  "minimum",
+  "maximum",
+  "latest",
+  "total"
+] as const;
+
+function normalizedVitalUnitToken(unit: string) {
+  return unit
+    .trim()
+    .toLowerCase()
+    .replaceAll("°", "deg")
+    .replaceAll(" ", "");
+}
+
+function linearVitalConversion(
+  canonicalUnit: string,
+  aggregation: "discrete" | "cumulative",
+  expectedRange: readonly [number, number],
+  aliases: readonly string[],
+  factor = 1,
+  offset = 0
+) {
+  return Object.fromEntries(
+    aliases.map((alias) => [
+      normalizedVitalUnitToken(alias),
+      {
+        canonicalUnit,
+        aggregation,
+        expectedRange,
+        convert: (value: number) => value * factor + offset
+      } satisfies VitalUnitConversion
+    ])
+  );
+}
+
+const vitalMetricUnitConversions: Record<
+  string,
+  Record<string, VitalUnitConversion>
+> = {
+  // These deliberately broad limits identify malformed or exceptional input;
+  // they are data-quality boundaries, not clinical reference ranges.
+  restingHeartRate: {
+    ...linearVitalConversion("bpm", "discrete", [20, 300], [
+      "bpm",
+      "beat/min",
+      "beats/min",
+      "count/min",
+      "counts/min"
+    ])
+  },
+  heartRateVariabilitySDNN: {
+    ...linearVitalConversion("ms", "discrete", [0, 1_000], [
+      "ms",
+      "millisecond",
+      "milliseconds"
+    ]),
+    ...linearVitalConversion("ms", "discrete", [0, 1_000], [
+      "s",
+      "sec",
+      "second",
+      "seconds"
+    ], 1_000)
+  },
+  walkingHeartRateAverage: {
+    ...linearVitalConversion("bpm", "discrete", [20, 300], [
+      "bpm",
+      "beat/min",
+      "beats/min",
+      "count/min",
+      "counts/min"
+    ])
+  },
+  heartRateRecoveryOneMinute: {
+    ...linearVitalConversion("bpm", "discrete", [-100, 250], [
+      "bpm",
+      "beat/min",
+      "beats/min",
+      "count/min",
+      "counts/min"
+    ])
+  },
+  vo2Max: {
+    ...linearVitalConversion("ml/kg/min", "discrete", [0, 200], [
+      "ml/kg/min",
+      "ml/(kg*min)",
+      "ml/(kg·min)"
+    ])
+  },
+  respiratoryRate: {
+    ...linearVitalConversion("br/min", "discrete", [1, 100], [
+      "br/min",
+      "breath/min",
+      "breaths/min",
+      "count/min",
+      "counts/min"
+    ])
+  },
+  oxygenSaturation: {
+    ...linearVitalConversion("%", "discrete", [0, 100], [
+      "%",
+      "percent",
+      "pct"
+    ]),
+    ...linearVitalConversion("%", "discrete", [0, 100], [
+      "1",
+      "fraction",
+      "ratio"
+    ], 100)
+  },
+  bodyTemperature: {
+    ...linearVitalConversion("°C", "discrete", [20, 50], [
+      "°C",
+      "C",
+      "celsius",
+      "degC"
+    ]),
+    ...linearVitalConversion("°C", "discrete", [20, 50], [
+      "°F",
+      "F",
+      "fahrenheit",
+      "degF"
+    ], 5 / 9, (-32 * 5) / 9),
+    ...linearVitalConversion("°C", "discrete", [20, 50], [
+      "K",
+      "kelvin"
+    ], 1, -273.15)
+  },
+  appleSleepingWristTemperature: {
+    ...linearVitalConversion("°C", "discrete", [20, 50], [
+      "°C",
+      "C",
+      "celsius",
+      "degC"
+    ]),
+    ...linearVitalConversion("°C", "discrete", [20, 50], [
+      "°F",
+      "F",
+      "fahrenheit",
+      "degF"
+    ], 5 / 9, (-32 * 5) / 9),
+    ...linearVitalConversion("°C", "discrete", [20, 50], [
+      "K",
+      "kelvin"
+    ], 1, -273.15)
+  },
+  bodyMass: {
+    ...linearVitalConversion("kg", "discrete", [1, 1_000], [
+      "kg",
+      "kilogram",
+      "kilograms"
+    ]),
+    ...linearVitalConversion("kg", "discrete", [1, 1_000], [
+      "g",
+      "gram",
+      "grams"
+    ], 0.001),
+    ...linearVitalConversion("kg", "discrete", [1, 1_000], [
+      "lb",
+      "lbs",
+      "pound",
+      "pounds"
+    ], 0.453_592_37),
+    ...linearVitalConversion("kg", "discrete", [1, 1_000], [
+      "oz",
+      "ounce",
+      "ounces"
+    ], 0.028_349_523_125)
+  },
+  bodyFatPercentage: {
+    ...linearVitalConversion("%", "discrete", [0, 100], [
+      "%",
+      "percent",
+      "pct"
+    ]),
+    ...linearVitalConversion("%", "discrete", [0, 100], [
+      "1",
+      "fraction",
+      "ratio"
+    ], 100)
+  },
+  leanBodyMass: {
+    ...linearVitalConversion("kg", "discrete", [0, 1_000], [
+      "kg",
+      "kilogram",
+      "kilograms"
+    ]),
+    ...linearVitalConversion("kg", "discrete", [0, 1_000], [
+      "g",
+      "gram",
+      "grams"
+    ], 0.001),
+    ...linearVitalConversion("kg", "discrete", [0, 1_000], [
+      "lb",
+      "lbs",
+      "pound",
+      "pounds"
+    ], 0.453_592_37)
+  },
+  activeEnergyBurned: {
+    ...linearVitalConversion("kcal", "cumulative", [0, 100_000], [
+      "kcal",
+      "calorie",
+      "calories"
+    ]),
+    ...linearVitalConversion("kcal", "cumulative", [0, 100_000], [
+      "kj",
+      "kilojoule",
+      "kilojoules"
+    ], 0.239_005_736)
+  },
+  basalEnergyBurned: {
+    ...linearVitalConversion("kcal", "cumulative", [0, 100_000], [
+      "kcal",
+      "calorie",
+      "calories"
+    ]),
+    ...linearVitalConversion("kcal", "cumulative", [0, 100_000], [
+      "kj",
+      "kilojoule",
+      "kilojoules"
+    ], 0.239_005_736)
+  },
+  appleExerciseTime: {
+    ...linearVitalConversion("min", "cumulative", [0, 1_440], [
+      "min",
+      "minute",
+      "minutes"
+    ]),
+    ...linearVitalConversion("min", "cumulative", [0, 1_440], [
+      "s",
+      "sec",
+      "second",
+      "seconds"
+    ], 1 / 60),
+    ...linearVitalConversion("min", "cumulative", [0, 1_440], [
+      "h",
+      "hr",
+      "hour",
+      "hours"
+    ], 60)
+  },
+  stepCount: {
+    ...linearVitalConversion("steps", "cumulative", [0, 1_000_000], [
+      "step",
+      "steps",
+      "count",
+      "counts"
+    ])
+  },
+  flightsClimbed: {
+    ...linearVitalConversion("flights", "cumulative", [0, 100_000], [
+      "flight",
+      "flights",
+      "count",
+      "counts"
+    ])
+  }
+};
+
+function vitalConversionFor(
+  metric: string,
+  unit: string
+): VitalUnitConversion | null {
+  const conversions = vitalMetricUnitConversions[metric];
+  if (!conversions) {
+    return null;
+  }
+  const conversion = conversions[normalizedVitalUnitToken(unit)];
+  if (!conversion) {
+    throw new HttpError(
+      400,
+      "vital_metric_unit_unsupported",
+      `Metric ${metric} cannot be interpreted in unit ${unit}.`,
+      {
+        metric,
+        unit,
+        acceptedUnits: [...new Set(Object.values(conversions).map((item) => item.canonicalUnit))]
+      }
+    );
+  }
+  return conversion;
+}
+
 function normalizeVitalMetricSummary(
-  input: z.infer<typeof vitalMetricSummarySchema>
+  input: z.infer<typeof vitalMetricSummarySchema>,
+  source: VitalSourceContext
 ): StoredVitalMetricSummary {
+  const conversion = vitalConversionFor(input.metric, input.unit);
+  if (conversion && input.aggregation !== conversion.aggregation) {
+    throw new HttpError(
+      400,
+      "vital_metric_aggregation_invalid",
+      `Metric ${input.metric} must use ${conversion.aggregation} aggregation.`,
+      {
+        metric: input.metric,
+        expectedAggregation: conversion.aggregation,
+        receivedAggregation: input.aggregation
+      }
+    );
+  }
+  const convertedValues = Object.fromEntries(
+    vitalSummaryValueKeys.map((key) => {
+      const value = input[key] ?? null;
+      return [
+        key,
+        value == null || !conversion
+          ? value
+          : round(conversion.convert(value), 6)
+      ];
+    })
+  ) as Record<(typeof vitalSummaryValueKeys)[number], number | null>;
+  const qualityFlags: string[] = [];
+  if (!conversion) {
+    qualityFlags.push("unrecognized_metric");
+  } else if (
+    vitalSummaryValueKeys.some((key) => {
+      const value = convertedValues[key];
+      return (
+        value != null &&
+        (value < conversion.expectedRange[0] || value > conversion.expectedRange[1])
+      );
+    })
+  ) {
+    qualityFlags.push("outside_expected_range");
+  }
+  const canonicalUnit = conversion?.canonicalUnit ?? input.unit;
+  const unitNormalization: VitalMetricNormalization = !conversion
+    ? "unrecognized_metric"
+    : normalizedVitalUnitToken(input.unit) ===
+        normalizedVitalUnitToken(canonicalUnit)
+      ? "canonical"
+      : "converted";
   return {
     metric: input.metric,
     label: input.label,
     category: input.category,
-    unit: input.unit,
-    displayUnit: input.displayUnit || input.unit,
+    unit: canonicalUnit,
+    displayUnit: canonicalUnit,
     aggregation: input.aggregation,
-    average: input.average ?? null,
-    minimum: input.minimum ?? null,
-    maximum: input.maximum ?? null,
-    latest: input.latest ?? null,
-    total: input.total ?? null,
+    average: convertedValues.average,
+    minimum: convertedValues.minimum,
+    maximum: convertedValues.maximum,
+    latest: convertedValues.latest,
+    total: convertedValues.total,
     sampleCount: input.sampleCount,
-    latestSampleAt: input.latestSampleAt ?? null
+    latestSampleAt: input.latestSampleAt ?? null,
+    sourceSystem: source.sourceSystem,
+    sourceDevice: source.sourceDevice,
+    inputUnit: input.unit,
+    unitNormalization,
+    qualityFlags
   };
 }
 
 function upsertVitalDaySummary(
   userId: string,
-  input: z.infer<typeof vitalDaySummarySchema>
+  input: z.infer<typeof vitalDaySummarySchema>,
+  source: VitalSourceContext
 ) {
+  const metricKeys = new Set<string>();
   const metrics = input.metrics.reduce<
     Record<string, StoredVitalMetricSummary>
   >((accumulator, metric) => {
-    accumulator[metric.metric] = normalizeVitalMetricSummary(metric);
+    if (metricKeys.has(metric.metric)) {
+      throw new HttpError(
+        400,
+        "vital_metric_duplicate",
+        `Metric ${metric.metric} appears more than once for ${input.dateKey}; Forge cannot safely infer whether the entries are duplicate sources.`,
+        { dateKey: input.dateKey, metric: metric.metric }
+      );
+    }
+    metricKeys.add(metric.metric);
+    accumulator[metric.metric] = normalizeVitalMetricSummary(metric, source);
     return accumulator;
   }, {});
   upsertDailySummary(userId, input.dateKey, "vitals", metrics, {
     sourceTimezone: resolveTimeZone(input.sourceTimezone),
-    metricCount: input.metrics.length
-  });
+    metricCount: input.metrics.length,
+    sourceSystem: source.sourceSystem,
+    sourceDevice: source.sourceDevice,
+    duplicatePolicy: "reject_same_metric_per_day"
+  }, source.sourceSystem);
+}
+
+function upsertVitalDaySummaries(
+  userId: string,
+  daySummaries: Array<z.infer<typeof vitalDaySummarySchema>>,
+  source: VitalSourceContext
+) {
+  const dateKeys = new Set<string>();
+  for (const daySummary of daySummaries) {
+    if (dateKeys.has(daySummary.dateKey)) {
+      throw new HttpError(
+        400,
+        "vital_day_summary_duplicate",
+        `Vitals include more than one summary for ${daySummary.dateKey}; Forge cannot safely infer which aggregate is authoritative.`,
+        { dateKey: daySummary.dateKey }
+      );
+    }
+    dateKeys.add(daySummary.dateKey);
+  }
+  for (const daySummary of daySummaries) {
+    upsertVitalDaySummary(userId, daySummary, source);
+  }
 }
 
 function nextUtcDateKey(dateKeyValue: string) {
@@ -5701,9 +6104,17 @@ function applyVitalsChunkImmediately(
     return false;
   }
   const pairing = mobileSyncSessionPairing(session);
-  for (const daySummary of payload.vitals.daySummaries) {
-    upsertVitalDaySummary(pairing.user_id, daySummary);
-  }
+  const metadata = mobileSyncSessionMetadata(session);
+  const source = {
+    sourceSystem: "apple_health",
+    sourceDevice:
+      metadata.device?.sourceDevice ?? pairing.device_name ?? "Apple Health"
+  };
+  upsertVitalDaySummaries(
+    pairing.user_id,
+    payload.vitals.daySummaries,
+    source
+  );
   return true;
 }
 
@@ -6731,9 +7142,14 @@ export function ingestMobileHealthSync(
       summarizeUserHealthDay(pairing.user_id, dateKeyValue);
     }
 
-    for (const daySummary of parsed.vitals.daySummaries) {
-      upsertVitalDaySummary(pairing.user_id, daySummary);
-    }
+    upsertVitalDaySummaries(
+      pairing.user_id,
+      parsed.vitals.daySummaries,
+      {
+        sourceSystem: "apple_health",
+        sourceDevice: parsed.device.sourceDevice
+      }
+    );
 
     const permissionStatus =
       parsed.permissions.healthKitAuthorized === false
@@ -9309,6 +9725,33 @@ export function getVitalsViewData(userIds?: string[]) {
       const days = [...bucket.days.entries()]
         .sort((left, right) => left[0].localeCompare(right[0]))
         .map(([dateKey, entries]) => {
+          const qualityFlags = [
+            ...new Set(entries.flatMap((entry) => entry.qualityFlags ?? []))
+          ].sort();
+          const sourceSystems = [
+            ...new Set(
+              entries.map((entry) => entry.sourceSystem).filter(Boolean)
+            )
+          ].sort();
+          const sourceDevices = [
+            ...new Set(
+              entries.map((entry) => entry.sourceDevice).filter(Boolean)
+            )
+          ].sort();
+          const inputUnits = [
+            ...new Set(
+              entries
+                .map((entry) => entry.inputUnit ?? entry.unit)
+                .filter(Boolean)
+            )
+          ].sort();
+          const unitNormalizations = [
+            ...new Set(
+              entries
+                .map((entry) => entry.unitNormalization ?? "canonical")
+                .filter(Boolean)
+            )
+          ].sort();
           const aggregated = {
             dateKey,
             average: averageNullable(entries.map((entry) => entry.average)),
@@ -9330,7 +9773,12 @@ export function getVitalsViewData(userIds?: string[]) {
                 .map((entry) => entry.latestSampleAt)
                 .filter((value): value is string => Boolean(value))
                 .sort()
-                .at(-1) ?? null
+                .at(-1) ?? null,
+            qualityFlags,
+            sourceSystems,
+            sourceDevices,
+            inputUnits,
+            unitNormalizations
           };
           return aggregated;
         });
@@ -9345,7 +9793,12 @@ export function getVitalsViewData(userIds?: string[]) {
               maximum: day.maximum
             }) !== null
         ) ?? null;
-      const recentValues = days
+      const baselineValues = days
+        .filter(
+          (day) =>
+            day.dateKey !== latestDay?.dateKey &&
+            !day.qualityFlags.includes("outside_expected_range")
+        )
         .map((day) =>
           vitalMetricPrimaryValue({
             aggregation: bucket.aggregation,
@@ -9355,15 +9808,12 @@ export function getVitalsViewData(userIds?: string[]) {
             maximum: day.maximum
           })
         )
-        .filter((value): value is number => value != null);
-      const baselineValues = recentValues.slice(
-        Math.max(0, recentValues.length - 8),
-        recentValues.length - 1
-      );
+        .filter((value): value is number => value != null)
+        .slice(-7);
       const baselineValue =
         baselineValues.length > 0
           ? average(baselineValues)
-          : (recentValues.at(-2) ?? null);
+          : null;
       const latestValue = latestDay
         ? vitalMetricPrimaryValue({
             aggregation: bucket.aggregation,
@@ -9373,6 +9823,17 @@ export function getVitalsViewData(userIds?: string[]) {
             maximum: latestDay.maximum
           })
         : null;
+      const latestIsOutlier =
+        latestDay?.qualityFlags.includes("outside_expected_range") ?? false;
+      const convertedDayCount = days.filter((day) =>
+        day.unitNormalizations.includes("converted")
+      ).length;
+      const outlierDayCount = days.filter((day) =>
+        day.qualityFlags.includes("outside_expected_range")
+      ).length;
+      const unrecognizedDayCount = days.filter((day) =>
+        day.qualityFlags.includes("unrecognized_metric")
+      ).length;
       return {
         metric,
         label: bucket.label,
@@ -9389,13 +9850,26 @@ export function getVitalsViewData(userIds?: string[]) {
             ? null
             : round(baselineValue, bucket.aggregation === "cumulative" ? 0 : 1),
         deltaValue:
-          latestValue != null && baselineValue != null
+          latestValue != null && baselineValue != null && !latestIsOutlier
             ? round(
                 latestValue - baselineValue,
                 bucket.aggregation === "cumulative" ? 0 : 1
               )
             : null,
         coverageDays: days.filter((day) => day.sampleCount > 0).length,
+        sourceQuality: {
+          sourceSystems: [
+            ...new Set(days.flatMap((day) => day.sourceSystems))
+          ].sort(),
+          sourceDevices: [
+            ...new Set(days.flatMap((day) => day.sourceDevices))
+          ].sort(),
+          inputUnits: [...new Set(days.flatMap((day) => day.inputUnits))].sort(),
+          convertedDayCount,
+          outlierDayCount,
+          unrecognizedDayCount,
+          duplicatePolicy: "reject_same_metric_per_day" as const
+        },
         days
       };
     })
@@ -9435,13 +9909,39 @@ export function getVitalsViewData(userIds?: string[]) {
   const sourceLabels = [
     ...new Set(rows.map((row) => row.source).filter(Boolean))
   ];
+  const sourceQuality = {
+    sourceSystems: [
+      ...new Set(
+        metrics.flatMap((metric) => metric.sourceQuality.sourceSystems)
+      )
+    ].sort(),
+    sourceDevices: [
+      ...new Set(
+        metrics.flatMap((metric) => metric.sourceQuality.sourceDevices)
+      )
+    ].sort(),
+    convertedMetricDays: metrics.reduce(
+      (sum, metric) => sum + metric.sourceQuality.convertedDayCount,
+      0
+    ),
+    outlierMetricDays: metrics.reduce(
+      (sum, metric) => sum + metric.sourceQuality.outlierDayCount,
+      0
+    ),
+    unrecognizedMetricDays: metrics.reduce(
+      (sum, metric) => sum + metric.sourceQuality.unrecognizedDayCount,
+      0
+    ),
+    duplicatePolicy: "reject_same_metric_per_day" as const
+  };
   return {
     summary: {
       trackedDays: dayCount,
       metricCount: metrics.length,
       latestDateKey,
       latestMetricCount,
-      categoryBreakdown
+      categoryBreakdown,
+      sourceQuality
     },
     metrics,
     provenance: buildDerivedDataProvenance({

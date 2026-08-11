@@ -2954,6 +2954,13 @@ export interface VitalMetricDayRecord {
   total: number | null;
   sampleCount: number;
   latestSampleAt: string | null;
+  qualityFlags: string[];
+  sourceSystems: string[];
+  sourceDevices: string[];
+  inputUnits: string[];
+  unitNormalizations: Array<
+    "canonical" | "converted" | "unrecognized_metric"
+  >;
 }
 
 export interface VitalsViewData {
@@ -2967,6 +2974,14 @@ export interface VitalsViewData {
       metricCount: number;
       coverageDays: number;
     }>;
+    sourceQuality: {
+      sourceSystems: string[];
+      sourceDevices: string[];
+      convertedMetricDays: number;
+      outlierMetricDays: number;
+      unrecognizedMetricDays: number;
+      duplicatePolicy: "reject_same_metric_per_day";
+    };
   };
   metrics: Array<{
     metric: string;
@@ -2979,6 +2994,15 @@ export interface VitalsViewData {
     baselineValue: number | null;
     deltaValue: number | null;
     coverageDays: number;
+    sourceQuality: {
+      sourceSystems: string[];
+      sourceDevices: string[];
+      inputUnits: string[];
+      convertedDayCount: number;
+      outlierDayCount: number;
+      unrecognizedDayCount: number;
+      duplicatePolicy: "reject_same_metric_per_day";
+    };
     days: VitalMetricDayRecord[];
   }>;
   provenance?: DerivedDataProvenance;

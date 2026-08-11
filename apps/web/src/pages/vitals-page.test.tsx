@@ -76,7 +76,15 @@ describe("VitalsPage", () => {
             { category: "recovery", metricCount: 2, coverageDays: 12 },
             { category: "cardio", metricCount: 1, coverageDays: 7 },
             { category: "composition", metricCount: 2, coverageDays: 10 }
-          ]
+          ],
+          sourceQuality: {
+            sourceSystems: ["apple_health"],
+            sourceDevices: ["Apple Watch Ultra"],
+            convertedMetricDays: 2,
+            outlierMetricDays: 1,
+            unrecognizedMetricDays: 0,
+            duplicatePolicy: "reject_same_metric_per_day"
+          }
         },
         metrics: [
           {
@@ -225,6 +233,11 @@ describe("VitalsPage", () => {
     expect(await screen.findByText("5 tracked metrics")).toBeInTheDocument();
     expect(screen.getAllByText("Stale evidence").length).toBeGreaterThan(0);
     expect(screen.getByText("Source quality")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Apple Health via Apple Watch Ultra/)
+    ).toHaveTextContent(
+      "2 metric-days were converted to canonical units. 1 outlier metric-day remains visible but excluded from baselines and deltas. Duplicate metric keys are rejected rather than silently merged."
+    );
     expect(screen.getByText("Recovery pulse")).toBeInTheDocument();
     expect(screen.getAllByText("53.0 bpm").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Resting heart rate").length).toBeGreaterThan(0);
@@ -250,7 +263,15 @@ describe("VitalsPage", () => {
           metricCount: 0,
           latestDateKey: null,
           latestMetricCount: 0,
-          categoryBreakdown: []
+          categoryBreakdown: [],
+          sourceQuality: {
+            sourceSystems: [],
+            sourceDevices: [],
+            convertedMetricDays: 0,
+            outlierMetricDays: 0,
+            unrecognizedMetricDays: 0,
+            duplicatePolicy: "reject_same_metric_per_day"
+          }
         },
         metrics: []
       }
