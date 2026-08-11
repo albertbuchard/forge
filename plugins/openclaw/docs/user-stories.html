@@ -573,7 +573,7 @@
                     <p class="story-expanded-outcome">As a user, I can close a week by reviewing outcomes and evidence, then choose the next execution focus.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>weekly-review</code>, planning/health summaries.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>empty and data-rich responsive states plus idempotent finalization and one-time reward evidence pass; complete explicit cross-week boundary fixtures.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>empty and data-rich responsive states plus idempotent finalization and one-time reward evidence remain available. Weekly outcomes now select work by its <code>completedAt</code> instant, not a later unrelated <code>updatedAt</code>, using exact UTC start and end-exclusive instants derived from the selected IANA timezone&#039;s Monday-through-Sunday local week. Activity evidence receives those bounds before its four-row limit. Focused Europe/Zurich fixtures cover immediately before and exactly at both week boundaries, in-week completion updated outside the week, and out-of-week completion updated inside it. Complete live desktop, phone, keyboard, and finalization-comprehension verification.</dd></div>
                     </dl>
                   </div>
                 </details>
