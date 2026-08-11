@@ -1675,8 +1675,97 @@ function scanPdf(buffer: Buffer, findings: ArtifactScanFinding[]) {
   );
 }
 
-function scanDelimitedText(text: string, findings: ArtifactScanFinding[]) {
-  if (/^[=+\-@]/m.test(text) || /[,;\t][=+\-@]/.test(text)) {
+function countUnquotedDelimiter(text: string, delimiter: string) {
+  let count = 0;
+  let inQuotes = false;
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] === '"') {
+      if (inQuotes && text[index + 1] === '"') {
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (!inQuotes && text[index] === delimiter) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function delimiterForArtifactText(extension: string, text: string) {
+  if (extension === "tsv") {
+    return "\t";
+  }
+  const firstLine = text.split(/\r?\n/, 1)[0] ?? "";
+  return countUnquotedDelimiter(firstLine, ";") >
+    countUnquotedDelimiter(firstLine, ",")
+    ? ";"
+    : ",";
+}
+
+function hasFormulaLikeDelimitedCell(text: string, delimiter: string) {
+  let cellStart = 0;
+  while (cellStart <= text.length) {
+    let contentStart = cellStart;
+    if (cellStart === 0 && text.charCodeAt(contentStart) === 0xfeff) {
+      contentStart += 1;
+    }
+    while (
+      text[contentStart] === " " ||
+      (delimiter !== "\t" && text[contentStart] === "\t")
+    ) {
+      contentStart += 1;
+    }
+    let inQuotes = text[contentStart] === '"';
+    if (inQuotes) {
+      contentStart += 1;
+      while (
+        text[contentStart] === " " ||
+        (delimiter !== "\t" && text[contentStart] === "\t")
+      ) {
+        contentStart += 1;
+      }
+    }
+    if (/[=+\-@]/.test(text[contentStart] ?? "")) {
+      return true;
+    }
+
+    let cursor = contentStart;
+    while (cursor < text.length) {
+      const character = text[cursor];
+      if (inQuotes && character === '"') {
+        if (text[cursor + 1] === '"') {
+          cursor += 2;
+          continue;
+        }
+        inQuotes = false;
+      } else if (
+        !inQuotes &&
+        (character === delimiter || character === "\n" || character === "\r")
+      ) {
+        break;
+      }
+      cursor += 1;
+    }
+    if (cursor >= text.length) {
+      return false;
+    }
+    if (text[cursor] === "\r" && text[cursor + 1] === "\n") {
+      cursor += 1;
+    }
+    cellStart = cursor + 1;
+  }
+  return false;
+}
+
+function scanDelimitedText(
+  extension: string,
+  text: string,
+  findings: ArtifactScanFinding[]
+) {
+  if (
+    hasFormulaLikeDelimitedCell(text, delimiterForArtifactText(extension, text))
+  ) {
     addFinding(
       findings,
       "moderate",
@@ -1815,13 +1904,12 @@ export function scanArtifactBytes(input: {
       );
     } else {
       extractedTextSample = safeUtf8(input.buffer);
-      scanDelimitedText(extractedTextSample, findings);
+      scanDelimitedText(detectedExtension, extractedTextSample, findings);
     }
   } else if (formatFamily === "pdf") {
     extractedTextSample = scanPdf(input.buffer, findings);
   } else if (formatFamily === "text" || formatFamily === "structured_text") {
     extractedTextSample = safeUtf8(input.buffer);
-    scanDelimitedText(extractedTextSample, findings);
     scanStructuredText(
       detectedExtension,
       extractedTextSample,

@@ -219,6 +219,48 @@ test("ART-05 classifies malformed, macro, unsafe-archive, and unsupported files"
     );
     assert.ok(findingCodes(validImageHeader).has("static_scan_clean"));
   }
+
+  for (const fixture of [
+    {
+      fileName: "quoted-formula.csv",
+      text: 'name,value\nrow,"=SUM(1,2)"'
+    },
+    {
+      fileName: "spaced-formula.csv",
+      text: "name,value\nrow,   =1+1"
+    },
+    {
+      fileName: "semicolon-formula.csv",
+      text: "name;value\nrow;  +1"
+    },
+    {
+      fileName: "tab-formula.tsv",
+      text: 'name\tvalue\nrow\t  "@IMPORT"'
+    }
+  ]) {
+    const formulaLikeText = scanArtifactBytes({
+      buffer: Buffer.from(fixture.text, "utf8"),
+      originalFileName: fixture.fileName
+    });
+    assert.ok(
+      findingCodes(formulaLikeText).has("spreadsheet_formula_like_text")
+    );
+    assert.equal(formulaLikeText.dangerLevel, "moderate");
+    assert.equal(formulaLikeText.artifactState, "active");
+  }
+
+  const safeDelimitedProse = scanArtifactBytes({
+    buffer: Buffer.from(
+      'name,note\nrow,"A plain sentence, = is equality in the middle."',
+      "utf8"
+    ),
+    originalFileName: "safe-prose.csv"
+  });
+  assert.equal(
+    findingCodes(safeDelimitedProse).has("spreadsheet_formula_like_text"),
+    false
+  );
+  assert.ok(findingCodes(safeDelimitedProse).has("static_scan_clean"));
 });
 
 test("ART-05 preserves the previous scan result when rescan integrity fails", async () => {
