@@ -324,7 +324,7 @@
                     <p class="story-expanded-outcome">As a user, I can pin important records and return to recently viewed records without unbounded lists.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Action Bar pins, recent records, <code>entity_navigation</code>.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>recent resolution now scans 250-row batches within a hard 1,000-row budget, so a stale first batch no longer hides valid recents; the 5,000-row bound remains fast. Complete pin stale-target, cross-actor, touch restriction, and UI return-path matrices.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>recent resolution scans 250-row batches within a hard 1,000-row budget, so a stale first batch no longer hides valid recents; the 5,000-row bound remains fast. Soft-deleted pins retain a Bin return path, while genuinely missing pins stay visible and removable without exposing a false destination or closing the Action Bar on keyboard selection. Complete cross-actor, touch-restriction, and retained live desktop/phone return-path verification.</dd></div>
                     </dl>
                   </div>
                 </details>
