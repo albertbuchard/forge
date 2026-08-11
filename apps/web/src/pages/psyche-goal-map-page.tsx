@@ -19,8 +19,8 @@ export function PsycheGoalMapPage() {
   const shell = useForgeShell();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const overviewQuery = useQuery({
-    queryKey: ["forge-psyche-overview"],
-    queryFn: getPsycheOverview
+    queryKey: ["forge-psyche-overview", ...shell.selectedUserIds],
+    queryFn: () => getPsycheOverview(shell.selectedUserIds)
   });
 
   const overview = overviewQuery.data?.overview;
@@ -112,7 +112,7 @@ export function PsycheGoalMapPage() {
       <PageHero
         title="Goal Map"
         titleText="Goal Map"
-        description="Values orbit each goal. Habits, reports, beliefs, behaviors, and projects reveal where the orbit gets disrupted and how execution reconnects."
+        description="Review stored direct links and shared-value associations among goals, values, habits, reports, beliefs, behaviors, and projects."
         badge={`${clusters.length} goal${clusters.length === 1 ? "" : "s"}`}
         actions={
           <>
@@ -134,11 +134,20 @@ export function PsycheGoalMapPage() {
 
       <PsycheSectionNav />
 
+      <Card
+        role="note"
+        className="min-w-0 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] text-sm leading-6 text-[var(--ui-ink-soft)]"
+      >
+        This map describes stored relationships, not correlation or causation.
+        Solid lines are explicit links. Dashed lines are indirect associations
+        through a shared value.
+      </Card>
+
       <section className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <PsycheGraphCanvas
           testId="goal-gravity-graph"
           title="Life direction, value orbit, and execution field"
-          hint="Drag to inspect the whole field. Select any goal, value, belief, behavior, project, or report to see what it means and where to act next."
+          hint="Drag to inspect the whole field. Select a node for its stored relationship details; line proximity and layout never imply cause or strength."
           nodes={scene.nodes}
           edges={scene.edges}
           fields={scene.fields}

@@ -27,6 +27,7 @@ export interface PsycheGraphEdge {
   id: string;
   from: string;
   to: string;
+  label?: string;
   tone?: PsycheGraphTone;
   dashed?: boolean;
   strength?: "low" | "medium" | "high";
@@ -587,7 +588,7 @@ export function PsycheGraphCanvas({
           </div>
         ) : null}
 
-        <svg className="relative z-[1] h-full w-full overflow-hidden" viewBox={`0 0 ${frameSize.width || 1200} ${frameSize.height || 760}`} role="img" aria-label={title} style={{ overflow: "hidden" }}>
+        <svg className="relative z-[1] h-full w-full overflow-hidden" viewBox={`0 0 ${frameSize.width || 1200} ${frameSize.height || 760}`} role="group" aria-label={title} style={{ overflow: "hidden" }}>
           <defs>
             <filter id="forge-graph-blur">
               <feGaussianBlur stdDeviation="34" />
@@ -826,6 +827,23 @@ export function PsycheGraphCanvas({
             })}
           </g>
         </svg>
+        {edges.length > 0 ? (
+          <ul className="sr-only" aria-label="Graph relationships">
+            {edges.map((edge) => {
+              const from = nodeMap.get(edge.from);
+              const to = nodeMap.get(edge.to);
+              if (!from || !to) {
+                return null;
+              }
+              return (
+                <li key={`${edge.id}-accessible-description`}>
+                  {from.label} to {to.label}: {edge.label ?? "Stored relationship"}.{" "}
+                  {edge.dashed ? "Indirect association." : "Direct stored link."}
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
       </div>
     </section>
   );

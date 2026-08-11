@@ -272,6 +272,7 @@ export function buildGoalGravityScene(clusters: GoalGravityCluster[], { compact 
         id: `${goalNodeId}->${nodeId}`,
         from: goalNodeId,
         to: nodeId,
+        label: "Explicit value-to-goal link",
         tone: "mint",
         strength: "medium"
       });
@@ -323,6 +324,7 @@ export function buildGoalGravityScene(clusters: GoalGravityCluster[], { compact 
         id: `${goalNodeId}->${nodeId}`,
         from: goalNodeId,
         to: nodeId,
+        label: "Project assigned to goal",
         tone: "sky",
         strength: "medium"
       });
@@ -357,12 +359,21 @@ export function buildGoalGravityScene(clusters: GoalGravityCluster[], { compact 
         meta: habit.polarity,
         href: "/habits"
       });
+      const directlyLinkedToGoal = habit.linkedGoalIds.includes(cluster.goal.id);
       edges.push({
         id: `${goalNodeId}->${nodeId}`,
         from: goalNodeId,
         to: nodeId,
+        label: directlyLinkedToGoal
+          ? "Explicit habit-to-goal link"
+          : "Habit and goal share a linked value",
         tone: "mint",
-        strength: habit.dueToday ? "high" : "medium"
+        dashed: !directlyLinkedToGoal,
+        strength: directlyLinkedToGoal
+          ? habit.dueToday
+            ? "high"
+            : "medium"
+          : "low"
       });
       inspectors[nodeId] = {
         id: nodeId,
@@ -399,9 +410,10 @@ export function buildGoalGravityScene(clusters: GoalGravityCluster[], { compact 
         id: `${goalNodeId}->${nodeId}`,
         from: goalNodeId,
         to: nodeId,
+        label: "Behavior and goal share a linked value",
         tone: "orange",
-        dashed: behavior.kind !== "committed",
-        strength: behavior.kind === "committed" ? "medium" : "low"
+        dashed: true,
+        strength: "low"
       });
       inspectors[nodeId] = {
         id: nodeId,
@@ -442,6 +454,7 @@ export function buildGoalGravityScene(clusters: GoalGravityCluster[], { compact 
         id: `${goalNodeId}->${nodeId}`,
         from: goalNodeId,
         to: nodeId,
+        label: "Belief and goal share a linked value",
         tone: "violet",
         dashed: true,
         strength: "low"
@@ -491,6 +504,7 @@ export function buildGoalGravityScene(clusters: GoalGravityCluster[], { compact 
         id: `${goalNodeId}->${nodeId}`,
         from: goalNodeId,
         to: nodeId,
+        label: "Explicit report-to-goal link",
         tone: "sky",
         strength: "medium"
       });
