@@ -605,6 +605,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
       longitude: number;
       radiusMeters: number;
       categoryTags: string[];
+      visibility: "personal" | "shared";
     }) => {
       const { segment, ...placeInput } = input;
       const response = await createMovementPlace(placeInput, userIds);

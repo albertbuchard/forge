@@ -63,6 +63,23 @@ type MovementViewMode = "life" | "day" | "month" | "all_time";
 type MonthMetric = "distanceMeters" | "movingSeconds" | "idleSeconds" | "caloriesKcal";
 const DEFAULT_VISIBLE_PLACE_COUNT = 8;
 
+function movementPlaceSourceLabel(source: string) {
+  const normalized = source.trim().toLowerCase();
+  if (normalized === "companion") {
+    return "Companion";
+  }
+  if (normalized === "user") {
+    return "User-defined";
+  }
+  if (normalized === "system") {
+    return "Forge";
+  }
+  return source
+    .trim()
+    .replaceAll(/[_-]+/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase()) || "Unknown";
+}
+
 type MovementPointDraft = {
   recordedAt: string;
   latitude: string;
@@ -587,6 +604,7 @@ export function MovementPage() {
       longitude: number;
       radiusMeters: number;
       categoryTags: string[];
+      visibility: "personal" | "shared";
     }) => {
       if (input.id) {
         return patchMovementPlace(input.id, input, selectedUserIds);
@@ -1593,9 +1611,19 @@ export function MovementPage() {
                 <div>
                   <div className="text-lg text-[var(--ui-ink-strong)]">{place.label}</div>
                   <div className="mt-1 text-sm text-[var(--ui-ink-muted)]">
-                    {place.latitude.toFixed(4)}, {place.longitude.toFixed(4)} · radius {Math.round(place.radiusMeters)} m
+                    {place.visibility === "personal"
+                      ? "Exact coordinates hidden in overview"
+                      : `${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)}`} · radius {Math.round(place.radiusMeters)} m
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
+                    <Badge tone="default" className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
+                      {place.visibility === "personal"
+                        ? "Personal location"
+                        : "Shared location"}
+                    </Badge>
+                    <Badge tone="default" className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
+                      Source: {movementPlaceSourceLabel(place.source)}
+                    </Badge>
                     {place.categoryTags.map((tag) => (
                       <Badge key={tag} tone="default" className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                         {tag}

@@ -1,4 +1,11 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -45,6 +52,7 @@ const {
   getMovementSelectionAggregateMock,
   getMovementSettingsMock,
   listMovementPlacesMock,
+  patchMovementPlaceMock,
   patchMovementSettingsMock
 } = vi.hoisted(() => ({
   useForgeShellMock: vi.fn(),
@@ -55,6 +63,7 @@ const {
   getMovementSelectionAggregateMock: vi.fn(),
   getMovementSettingsMock: vi.fn(),
   listMovementPlacesMock: vi.fn(),
+  patchMovementPlaceMock: vi.fn(),
   patchMovementSettingsMock: vi.fn()
 }));
 
@@ -114,7 +123,7 @@ vi.mock("@/lib/api", () => ({
   getMovementTripDetail: vi.fn(),
   getMovementSettings: getMovementSettingsMock,
   listMovementPlaces: listMovementPlacesMock,
-  patchMovementPlace: vi.fn(),
+  patchMovementPlace: patchMovementPlaceMock,
   patchMovementSettings: patchMovementSettingsMock
 }));
 
@@ -313,6 +322,7 @@ describe("Movement page Life Force integration", () => {
         publishMode: "workspace_only"
       }
     });
+    patchMovementPlaceMock.mockResolvedValue({ place: {} });
   });
 
   afterEach(() => {
@@ -392,5 +402,136 @@ describe("Movement page Life Force integration", () => {
     expect(
       await screen.findByText(/from all-time movement records/i)
     ).toBeInTheDocument();
+  });
+
+  it("labels place provenance, protects personal coordinates, and saves visibility changes", async () => {
+    listMovementPlacesMock.mockResolvedValueOnce({
+      places: [
+        {
+          id: "place_personal",
+          externalUid: "personal-home",
+          userId: "user_operator",
+          label: "Quiet home",
+          aliases: [],
+          latitude: 47.1111,
+          longitude: 8.2222,
+          radiusMeters: 25,
+          categoryTags: ["home"],
+          visibility: "personal",
+          wikiNoteId: null,
+          linkedEntities: [],
+          linkedPeople: [],
+          metadata: {},
+          source: "companion",
+          createdAt: "2026-04-11T10:00:00.000Z",
+          updatedAt: "2026-04-11T10:00:00.000Z",
+          wikiNote: null
+        },
+        {
+          id: "place_shared",
+          externalUid: "shared-studio",
+          userId: "user_operator",
+          label: "Shared studio",
+          aliases: [],
+          latitude: 46.3333,
+          longitude: 7.4444,
+          radiusMeters: 80,
+          categoryTags: ["work"],
+          visibility: "shared",
+          wikiNoteId: null,
+          linkedEntities: [],
+          linkedPeople: [],
+          metadata: {},
+          source: "user",
+          createdAt: "2026-04-11T10:00:00.000Z",
+          updatedAt: "2026-04-11T10:00:00.000Z",
+          wikiNote: null
+        }
+      ]
+    });
+
+    renderWithProviders();
+
+    const personalPlace = await screen.findByRole("button", {
+      name: /Quiet home/i
+    });
+    expect(
+      within(personalPlace).getByText(/Exact coordinates hidden in overview/i)
+    ).toBeInTheDocument();
+    expect(within(personalPlace).queryByText(/47\.1111/)).not.toBeInTheDocument();
+    expect(within(personalPlace).getByText("Personal location")).toBeInTheDocument();
+    expect(within(personalPlace).getByText("Source: Companion")).toBeInTheDocument();
+
+    const sharedPlace = screen.getByRole("button", { name: /Shared studio/i });
+    expect(within(sharedPlace).getByText(/46\.3333, 7\.4444/)).toBeInTheDocument();
+    expect(within(sharedPlace).getByText("Shared location")).toBeInTheDocument();
+    expect(within(sharedPlace).getByText("Source: User-defined")).toBeInTheDocument();
+
+    fireEvent.click(personalPlace);
+    const personalVisibility = screen.getByRole("radio", { name: /Personal/i });
+    const sharedVisibility = screen.getByRole("radio", { name: /Shared/i });
+    expect(personalVisibility).toBeChecked();
+    fireEvent.click(sharedVisibility);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    fireEvent.click(personalPlace);
+    expect(screen.getByRole("radio", { name: /Personal/i })).toBeChecked();
+    fireEvent.click(screen.getByRole("radio", { name: /Shared/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Save place" }));
+
+    await waitFor(() =>
+      expect(patchMovementPlaceMock).toHaveBeenCalledWith(
+        "place_personal",
+        expect.objectContaining({
+          id: "place_personal",
+          visibility: "shared"
+        }),
+        ["user_operator"]
+      )
+    );
+  });
+
+  it("keeps the place editor open and explains a failed visibility save", async () => {
+    listMovementPlacesMock.mockResolvedValueOnce({
+      places: [
+        {
+          id: "place_shared",
+          externalUid: "shared-studio",
+          userId: "user_operator",
+          label: "Shared studio",
+          aliases: [],
+          latitude: 46.3333,
+          longitude: 7.4444,
+          radiusMeters: 80,
+          categoryTags: ["work"],
+          visibility: "shared",
+          wikiNoteId: null,
+          linkedEntities: [],
+          linkedPeople: [],
+          metadata: {},
+          source: "user",
+          createdAt: "2026-04-11T10:00:00.000Z",
+          updatedAt: "2026-04-11T10:00:00.000Z",
+          wikiNote: null
+        }
+      ]
+    });
+    patchMovementPlaceMock.mockRejectedValueOnce(new Error("network interrupted"));
+
+    renderWithProviders();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Shared studio/i })
+    );
+    fireEvent.click(screen.getByRole("radio", { name: /Personal/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Save place" }));
+
+    expect(
+      await screen.findByText(
+        "Place changes could not be saved. Review the fields and try again."
+      )
+    ).toHaveAttribute("role", "alert");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Personal/i })).toBeChecked();
   });
 });

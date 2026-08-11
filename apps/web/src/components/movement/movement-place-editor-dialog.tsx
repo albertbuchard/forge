@@ -31,6 +31,7 @@ export function MovementPlaceEditorDialog({
     longitude: number;
     radiusMeters: number;
     categoryTags: string[];
+    visibility: "personal" | "shared";
   }) => Promise<void>;
 }) {
   const [draft, setDraft] = useState({
@@ -38,8 +39,11 @@ export function MovementPlaceEditorDialog({
     latitude: String(place?.latitude ?? seed?.latitude ?? ""),
     longitude: String(place?.longitude ?? seed?.longitude ?? ""),
     radiusMeters: String(place?.radiusMeters ?? seed?.radiusMeters ?? 100),
-    categoryTags: (place?.categoryTags ?? seed?.categoryTags ?? []).join(", ")
+    categoryTags: (place?.categoryTags ?? seed?.categoryTags ?? []).join(", "),
+    visibility: place?.visibility ?? ("shared" as const)
   });
+  const [savePending, setSavePending] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     setDraft({
@@ -47,12 +51,45 @@ export function MovementPlaceEditorDialog({
       latitude: String(place?.latitude ?? seed?.latitude ?? ""),
       longitude: String(place?.longitude ?? seed?.longitude ?? ""),
       radiusMeters: String(place?.radiusMeters ?? seed?.radiusMeters ?? 100),
-      categoryTags: (place?.categoryTags ?? seed?.categoryTags ?? []).join(", ")
+      categoryTags: (place?.categoryTags ?? seed?.categoryTags ?? []).join(", "),
+      visibility: place?.visibility ?? ("shared" as const)
     });
-  }, [place, seed]);
+    setSaveError(null);
+  }, [open, place, seed]);
+
+  const savePlace = async () => {
+    setSavePending(true);
+    setSaveError(null);
+    try {
+      await onSave({
+        id: place?.id,
+        label: draft.label,
+        latitude: Number(draft.latitude),
+        longitude: Number(draft.longitude),
+        radiusMeters: Number(draft.radiusMeters),
+        categoryTags: draft.categoryTags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+        visibility: draft.visibility
+      });
+      onOpenChange(false);
+    } catch {
+      setSaveError("Place changes could not be saved. Review the fields and try again.");
+    } finally {
+      setSavePending(false);
+    }
+  };
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+    <Dialog.Root
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!savePending) {
+          onOpenChange(nextOpen);
+        }
+      }}
+    >
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-[var(--ui-overlay-backdrop)] backdrop-blur-sm" />
         <Dialog.Content className="fixed left-1/2 top-[8vh] z-50 w-[min(32rem,calc(100vw-1.25rem))] -translate-x-1/2 rounded-[30px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-modal)] p-5 shadow-[var(--ui-shadow-floating)]">
@@ -68,7 +105,9 @@ export function MovementPlaceEditorDialog({
             <Dialog.Close asChild>
               <button
                 type="button"
-                className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-2 text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                aria-label="Close place editor"
+                disabled={savePending}
+                className="flex size-11 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <X className="size-4" />
               </button>
@@ -127,30 +166,73 @@ export function MovementPlaceEditorDialog({
                 placeholder="home, gym, holiday, parents-house"
               />
             </div>
+            <fieldset className="grid gap-2 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
+              <legend className="px-1 text-sm font-semibold text-[var(--ui-ink-strong)]">
+                Location visibility
+              </legend>
+              <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-[14px] px-2 text-sm text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)]">
+                <input
+                  type="radio"
+                  name="movement-place-visibility"
+                  value="personal"
+                  checked={draft.visibility === "personal"}
+                  onChange={() =>
+                    setDraft((current) => ({
+                      ...current,
+                      visibility: "personal"
+                    }))
+                  }
+                  className="size-4 accent-[var(--primary)]"
+                />
+                <span>
+                  <strong className="text-[var(--ui-ink-strong)]">Personal</strong>
+                  <span className="ml-1 text-[var(--ui-ink-muted)]">
+                    Hide exact coordinates on the Movement overview.
+                  </span>
+                </span>
+              </label>
+              <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-[14px] px-2 text-sm text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)]">
+                <input
+                  type="radio"
+                  name="movement-place-visibility"
+                  value="shared"
+                  checked={draft.visibility === "shared"}
+                  onChange={() =>
+                    setDraft((current) => ({
+                      ...current,
+                      visibility: "shared"
+                    }))
+                  }
+                  className="size-4 accent-[var(--primary)]"
+                />
+                <span>
+                  <strong className="text-[var(--ui-ink-strong)]">Shared</strong>
+                  <span className="ml-1 text-[var(--ui-ink-muted)]">
+                    Show exact coordinates on the Movement overview.
+                  </span>
+                </span>
+              </label>
+            </fieldset>
+            {saveError ? (
+              <div role="alert" className="text-sm text-[var(--danger)]">
+                {saveError}
+              </div>
+            ) : null}
           </div>
 
           <div className="mt-5 flex justify-end gap-2">
             <Button
               variant="ghost"
+              disabled={savePending}
               onClick={() => onOpenChange(false)}
               className="border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]"
             >
               Cancel
             </Button>
             <Button
-              onClick={() =>
-                void onSave({
-                  id: place?.id,
-                  label: draft.label,
-                  latitude: Number(draft.latitude),
-                  longitude: Number(draft.longitude),
-                  radiusMeters: Number(draft.radiusMeters),
-                  categoryTags: draft.categoryTags
-                    .split(",")
-                    .map((tag) => tag.trim())
-                    .filter(Boolean)
-                }).then(() => onOpenChange(false))
-              }
+              pending={savePending}
+              pendingLabel="Saving place"
+              onClick={() => void savePlace()}
             >
               Save place
             </Button>
