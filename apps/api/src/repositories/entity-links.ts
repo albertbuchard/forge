@@ -1,4 +1,5 @@
 import { getDatabase } from "../db.js";
+import { HttpError } from "../errors.js";
 
 export type EntityLinkInput = {
   entityType: string;
@@ -66,6 +67,25 @@ export function normalizeEntityLinks(links: EntityLinkInput[]) {
     });
 }
 
+function assertNoSelfLink(
+  sourceEntityType: string,
+  sourceEntityId: string,
+  links: ReturnType<typeof normalizeEntityLinks>
+) {
+  if (
+    links.some(
+      (link) =>
+        link.entityType === sourceEntityType && link.entityId === sourceEntityId
+    )
+  ) {
+    throw new HttpError(
+      400,
+      "entity_link_self_reference",
+      "A Forge record cannot link to itself."
+    );
+  }
+}
+
 export function listEntityLinksForSources(
   sourceEntityType: string,
   sourceEntityIds: string[]
@@ -126,6 +146,7 @@ export function replaceEntityLinksForSource(input: {
 }) {
   const createdAt = (input.now ?? new Date()).toISOString();
   const normalized = normalizeEntityLinks(input.links);
+  assertNoSelfLink(input.sourceEntityType, input.sourceEntityId, normalized);
   getDatabase()
     .prepare(
       `DELETE FROM entity_links
@@ -170,6 +191,7 @@ export function replaceEntityLinksForSourceRelationships(input: {
   ];
   const managedRelationships = new Set(relationships);
   const normalized = normalizeEntityLinks(input.links);
+  assertNoSelfLink(input.sourceEntityType, input.sourceEntityId, normalized);
   const unmanagedLink = normalized.find(
     (link) => !managedRelationships.has(link.relationship)
   );
