@@ -41,10 +41,18 @@ function findTagByNormalizedName(
   const normalizedName = normalizeTagName(name);
   return getDatabase()
     .prepare(
-      `SELECT id, name, kind, color, description
+      `SELECT tags.id, tags.name, tags.kind, tags.color, tags.description
        FROM tags
-       WHERE forge_tag_key(name) = forge_tag_key(?)
-         AND (? IS NULL OR id != ?)`
+       LEFT JOIN deleted_entities
+         ON deleted_entities.entity_type = 'tag'
+        AND deleted_entities.entity_id = tags.id
+       WHERE forge_tag_key(tags.name) = forge_tag_key(?)
+         AND (? IS NULL OR tags.id != ?)
+       ORDER BY
+         CASE WHEN deleted_entities.entity_id IS NULL THEN 0 ELSE 1 END,
+         tags.created_at ASC,
+         tags.id ASC
+       LIMIT 1`
     )
     .get(normalizedName, excludingTagId ?? null, excludingTagId ?? null) as
     | Record<string, unknown>
@@ -88,7 +96,16 @@ export function createTag(
     const existing = findTagByNormalizedName(normalizedName);
 
     if (existing) {
-      return mapTag(existing);
+      const existingTag = mapTag(existing);
+      if (isEntityDeleted("tag", existingTag.id)) {
+        throw new HttpError(
+          409,
+          "tag_duplicate_in_bin",
+          `A matching tag named '${existingTag.name}' is in the Bin. Restore it instead of creating a duplicate.`,
+          { existingId: existingTag.id }
+        );
+      }
+      return existingTag;
     }
 
     const tag: Tag = tagSchema.parse({
