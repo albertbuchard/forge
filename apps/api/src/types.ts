@@ -5624,6 +5624,7 @@ export const runAiConnectorSchema = z.object({
   boxSnapshots: z.record(z.string(), z.unknown()).default({}),
   conversationId: trimmedString.nullable().default(null),
   retryOfRunId: trimmedString.nullable().default(null),
+  idempotencyKey: nonEmptyTrimmedString.max(128).nullable().default(null),
   debug: z.boolean().default(false)
 });
 

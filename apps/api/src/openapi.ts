@@ -12117,6 +12117,36 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const workbenchRunRequest = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      userInput: { type: "string" },
+      inputs: { type: "object", additionalProperties: true },
+      context: { type: "object", additionalProperties: true },
+      boxSnapshots: { type: "object", additionalProperties: true },
+      conversationId: nullable({ type: "string" }),
+      retryOfRunId: nullable({ type: "string" }),
+      idempotencyKey: nullable({
+        type: "string",
+        minLength: 1,
+        maxLength: 128,
+        description:
+          "Stable browser or client key. Exact completed replays return the original run; changed-payload reuse is rejected."
+      }),
+      debug: { type: "boolean", default: false }
+    }
+  };
+
+  const workbenchOneOffRunRequest = {
+    ...workbenchRunRequest,
+    required: ["flowId"],
+    properties: {
+      ...workbenchRunRequest.properties,
+      flowId: { type: "string", minLength: 1 }
+    }
+  };
+
   const workbenchRunSummary = {
     type: "object",
     additionalProperties: false,
@@ -12791,6 +12821,8 @@ export function buildOpenApiDocument() {
         ArtifactVersionPage: artifactVersionPage,
         ArtifactAuditEventPage: artifactAuditEventPage,
         WorkbenchRun: workbenchRun,
+        WorkbenchRunRequest: workbenchRunRequest,
+        WorkbenchOneOffRunRequest: workbenchOneOffRunRequest,
         WorkbenchRunSummary: workbenchRunSummary,
         WorkbenchRunPage: workbenchRunPage,
         WorkbenchFlowVersionSummary: workbenchFlowVersionSummary,
@@ -16437,6 +16469,16 @@ export function buildOpenApiDocument() {
       "/api/v1/workbench/flows/{id}/run": {
         post: {
           summary: "Run one Workbench flow by id",
+          description:
+            "Only one run per flow and mode may be active. A stable idempotency key replays the exact completed receipt, while changed input conflicts. Failed runs retain their input and may be retried explicitly without input drift.",
+          requestBody: {
+            required: false,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/WorkbenchRunRequest" }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
@@ -16456,13 +16498,27 @@ export function buildOpenApiDocument() {
               },
               "Workbench flow execution"
             ),
-            "404": { $ref: "#/components/responses/Error" }
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" },
+            "422": { $ref: "#/components/responses/Error" }
           }
         }
       },
       "/api/v1/workbench/run": {
         post: {
           summary: "Run one Workbench flow by payload with flowId",
+          description:
+            "Uses the same single-flight and durable idempotency contract as the saved-flow run route.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/WorkbenchOneOffRunRequest"
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
@@ -16482,13 +16538,25 @@ export function buildOpenApiDocument() {
               },
               "Workbench flow execution"
             ),
-            "404": { $ref: "#/components/responses/Error" }
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" },
+            "422": { $ref: "#/components/responses/Error" }
           }
         }
       },
       "/api/v1/workbench/flows/{id}/chat": {
         post: {
           summary: "Continue or start one Workbench chat flow",
+          description:
+            "Only one chat run per flow may be active. Stable idempotency keys replay exact completed receipts, and failed chat retries reuse stored input.",
+          requestBody: {
+            required: false,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/WorkbenchRunRequest" }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
@@ -16497,7 +16565,9 @@ export function buildOpenApiDocument() {
               },
               "Workbench chat response"
             ),
-            "404": { $ref: "#/components/responses/Error" }
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" },
+            "422": { $ref: "#/components/responses/Error" }
           }
         }
       },

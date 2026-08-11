@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { HttpError } from "../errors.js";
 import type { SecretsManager } from "../managers/platform/secrets-manager.js";
@@ -142,6 +142,9 @@ type AiConnectorRunRow = {
   error: string | null;
   created_at: string;
   completed_at: string | null;
+  idempotency_key: string | null;
+  request_fingerprint: string | null;
+  request_json: string | null;
 };
 
 type AiConnectorRunSummaryRow = Omit<
@@ -180,7 +183,17 @@ type ConnectorExecutionResult = {
   connector: AiConnector;
   run: AiConnectorRun;
   conversation: AiConnectorConversation | null;
+  replayed: boolean;
 };
+
+type AiConnectorRunReceipt = {
+  idempotencyKey: string | null;
+  requestFingerprint: string | null;
+  requestJson: string | null;
+};
+
+const INTERRUPTED_WORKBENCH_RUN_ERROR =
+  "Forge restarted before this Workbench run completed.";
 
 type ConnectorNodeValue = {
   text: string;
@@ -245,6 +258,91 @@ function parseJson<T>(value: string | null, fallback: T) {
   } catch {
     return fallback;
   }
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === undefined) {
+    return "null";
+  }
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value) ?? "null";
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
+  }
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`)
+    .join(",")}}`;
+}
+
+function readStoredRunRequest(row: AiConnectorRunRow) {
+  const stored = parseJson<Record<string, unknown> | null>(
+    row.request_json,
+    null
+  );
+  const parsed = runAiConnectorSchema.safeParse({
+    ...(stored ?? {}),
+    retryOfRunId: null,
+    idempotencyKey: null
+  });
+  if (stored && parsed.success) {
+    return buildStoredRunRequest(parsed.data);
+  }
+  return buildStoredRunRequest(
+    runAiConnectorSchema.parse({
+      userInput: row.user_input,
+      inputs: parseJson(row.inputs_json, {}),
+      context: parseJson(row.context_json, {}),
+      conversationId: row.conversation_id
+    })
+  );
+}
+
+function assertRetryDoesNotOverrideStoredInput(
+  requested: RunAiConnectorInput,
+  stored: ReturnType<typeof buildStoredRunRequest>
+) {
+  const conflicting =
+    (requested.userInput.length > 0 &&
+      requested.userInput !== stored.userInput) ||
+    (Object.keys(requested.inputs).length > 0 &&
+      canonicalJson(requested.inputs) !== canonicalJson(stored.inputs)) ||
+    (Object.keys(requested.context).length > 0 &&
+      canonicalJson(requested.context) !== canonicalJson(stored.context)) ||
+    (Object.keys(requested.boxSnapshots).length > 0 &&
+      canonicalJson(requested.boxSnapshots) !==
+        canonicalJson(stored.boxSnapshots)) ||
+    (requested.conversationId !== null &&
+      requested.conversationId !== stored.conversationId) ||
+    (requested.debug && requested.debug !== stored.debug);
+  if (conflicting) {
+    throw new HttpError(
+      409,
+      "workbench_retry_input_conflict",
+      "A Workbench retry must reuse the failed run's stored input. Start a new run to use changed input."
+    );
+  }
+}
+
+function buildStoredRunRequest(input: RunAiConnectorInput) {
+  return {
+    userInput: input.userInput,
+    inputs: input.inputs,
+    context: input.context,
+    boxSnapshots: input.boxSnapshots,
+    conversationId: input.conversationId,
+    debug: input.debug
+  };
+}
+
+function buildRunRequestFingerprint(input: {
+  connectorId: string;
+  mode: "run" | "chat";
+  request: ReturnType<typeof buildStoredRunRequest>;
+  retryOfRunId: string | null;
+}) {
+  return createHash("sha256").update(canonicalJson(input)).digest("hex");
 }
 
 function slugifySegment(value: string) {
@@ -725,13 +823,79 @@ export function listAiConnectorRuns(
   return listAiConnectorRunsPage(connectorId, input).runs;
 }
 
-export function getAiConnectorRunById(connectorId: string, runId: string) {
-  const row = getDatabase()
+function getAiConnectorRunRowById(connectorId: string, runId: string) {
+  return getDatabase()
     .prepare(
       `SELECT * FROM ai_connector_runs WHERE connector_id = ? AND id = ?`
     )
     .get(connectorId, runId) as AiConnectorRunRow | undefined;
+}
+
+export function getAiConnectorRunById(connectorId: string, runId: string) {
+  const row = getAiConnectorRunRowById(connectorId, runId);
   return row ? mapRun(row) : null;
+}
+
+function getAiConnectorRunRowByIdempotency(input: {
+  connectorId: string;
+  mode: "run" | "chat";
+  idempotencyKey: string;
+}) {
+  return getDatabase()
+    .prepare(
+      `SELECT * FROM ai_connector_runs
+       WHERE connector_id = ? AND mode = ? AND idempotency_key = ?`
+    )
+    .get(input.connectorId, input.mode, input.idempotencyKey) as
+    | AiConnectorRunRow
+    | undefined;
+}
+
+function getRunningAiConnectorRunRow(
+  connectorId: string,
+  mode: "run" | "chat"
+) {
+  return getDatabase()
+    .prepare(
+      `SELECT * FROM ai_connector_runs
+       WHERE connector_id = ? AND mode = ? AND status = 'running'
+       ORDER BY created_at ASC, id ASC
+       LIMIT 1`
+    )
+    .get(connectorId, mode) as AiConnectorRunRow | undefined;
+}
+
+export function recoverInterruptedAiConnectorRuns() {
+  const database = getDatabase();
+  const now = new Date().toISOString();
+  const recovered = database
+    .prepare(
+      `UPDATE ai_connector_runs
+       SET status = 'failed', error = ?, completed_at = ?
+       WHERE status = 'running'`
+    )
+    .run(INTERRUPTED_WORKBENCH_RUN_ERROR, now).changes;
+  const affectedConnectorRows = database
+    .prepare(
+      `SELECT DISTINCT connector_id
+       FROM ai_connector_runs
+       WHERE error = ?`
+    )
+    .all(INTERRUPTED_WORKBENCH_RUN_ERROR) as Array<{ connector_id: string }>;
+  for (const { connector_id: connectorId } of affectedConnectorRows) {
+    const latest = database
+      .prepare(
+        `SELECT * FROM ai_connector_runs
+         WHERE connector_id = ?
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1`
+      )
+      .get(connectorId) as AiConnectorRunRow | undefined;
+    if (latest) {
+      updateConnectorLastRun(connectorId, mapRun(latest));
+    }
+  }
+  return recovered;
 }
 
 export function getAiConnectorRunDetail(connectorId: string, runId: string) {
@@ -997,7 +1161,14 @@ function updateConnectorLastRun(connectorId: string, run: AiConnectorRun) {
     .run(JSON.stringify(buildConnectorLastRunSummary(run)), connectorId);
 }
 
-function insertRun(input: AiConnectorRun) {
+function insertRun(
+  input: AiConnectorRun,
+  receipt: AiConnectorRunReceipt = {
+    idempotencyKey: null,
+    requestFingerprint: null,
+    requestJson: null
+  }
+) {
   const database = getDatabase();
   runInTransaction(() => {
     database
@@ -1005,8 +1176,9 @@ function insertRun(input: AiConnectorRun) {
         `INSERT INTO ai_connector_runs (
         id, connector_id, mode, status, user_input, inputs_json, context_json,
         conversation_id, retry_of_run_id, flow_snapshot_json, flow_updated_at,
-        result_json, error, created_at, completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        result_json, error, created_at, completed_at, idempotency_key,
+        request_fingerprint, request_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         connector_id = excluded.connector_id,
         mode = excluded.mode,
@@ -1021,7 +1193,10 @@ function insertRun(input: AiConnectorRun) {
         result_json = excluded.result_json,
         error = excluded.error,
         created_at = excluded.created_at,
-        completed_at = excluded.completed_at`
+        completed_at = excluded.completed_at,
+        idempotency_key = COALESCE(excluded.idempotency_key, ai_connector_runs.idempotency_key),
+        request_fingerprint = COALESCE(excluded.request_fingerprint, ai_connector_runs.request_fingerprint),
+        request_json = COALESCE(excluded.request_json, ai_connector_runs.request_json)`
       )
       .run(
         input.id,
@@ -1038,7 +1213,10 @@ function insertRun(input: AiConnectorRun) {
         input.result ? JSON.stringify(input.result) : null,
         input.error,
         input.createdAt,
-        input.completedAt
+        input.completedAt,
+        receipt.idempotencyKey,
+        receipt.requestFingerprint,
+        receipt.requestJson
       );
     if (input.result) {
       const insertNodeResult = database.prepare(
@@ -3036,31 +3214,109 @@ export async function runAiConnector(
     throw new Error(`Connector ${connectorId} was not found.`);
   }
 
-  const retryRun = input.retryOfRunId
-    ? getAiConnectorRunById(connectorId, input.retryOfRunId)
+  const parsedInput = runAiConnectorSchema.parse(input);
+  const retryRow = parsedInput.retryOfRunId
+    ? getAiConnectorRunRowById(connectorId, parsedInput.retryOfRunId)
     : null;
-  if (input.retryOfRunId && !retryRun) {
-    throw new Error(`Workbench retry run ${input.retryOfRunId} was not found.`);
+  if (parsedInput.retryOfRunId && !retryRow) {
+    throw new HttpError(
+      404,
+      "workbench_retry_not_found",
+      "The failed Workbench run could not be found."
+    );
   }
+  const retryRun = retryRow ? mapRun(retryRow) : null;
   if (retryRun && retryRun.status !== "failed") {
-    throw new Error("Only a failed Workbench run can be retried.");
+    throw new HttpError(
+      409,
+      "workbench_retry_status_conflict",
+      "Only a failed Workbench run can be retried."
+    );
   }
   if (retryRun && retryRun.mode !== mode) {
-    throw new Error("Workbench retry mode must match the failed run mode.");
+    throw new HttpError(
+      409,
+      "workbench_retry_mode_conflict",
+      "Workbench retry mode must match the failed run mode."
+    );
   }
-  const effectiveInput: RunAiConnectorInput = retryRun
-    ? {
-        ...input,
-        userInput: input.userInput || retryRun.userInput,
-        inputs:
-          Object.keys(input.inputs).length > 0 ? input.inputs : retryRun.inputs,
-        context:
-          Object.keys(input.context).length > 0
-            ? input.context
-            : retryRun.context,
-        conversationId: input.conversationId ?? retryRun.conversationId
-      }
-    : input;
+  const effectiveRequest = retryRow
+    ? readStoredRunRequest(retryRow)
+    : buildStoredRunRequest(parsedInput);
+  if (retryRow) {
+    assertRetryDoesNotOverrideStoredInput(parsedInput, effectiveRequest);
+  }
+  const effectiveInput = runAiConnectorSchema.parse({
+    ...effectiveRequest,
+    retryOfRunId: parsedInput.retryOfRunId,
+    idempotencyKey: parsedInput.idempotencyKey
+  });
+  const requestFingerprint = buildRunRequestFingerprint({
+    connectorId,
+    mode,
+    request: effectiveRequest,
+    retryOfRunId: parsedInput.retryOfRunId
+  });
+  const receipt: AiConnectorRunReceipt = {
+    idempotencyKey: parsedInput.idempotencyKey,
+    requestFingerprint,
+    requestJson: canonicalJson(effectiveRequest)
+  };
+
+  const replayExisting = (row: AiConnectorRunRow): ConnectorExecutionResult => {
+    if (row.request_fingerprint !== requestFingerprint) {
+      throw new HttpError(
+        409,
+        "workbench_run_idempotency_conflict",
+        "This Workbench idempotency key was already used with different input."
+      );
+    }
+    const run = mapRun(row);
+    if (run.status === "running") {
+      throw new HttpError(
+        409,
+        "workbench_run_in_progress",
+        "This Workbench flow already has a run in progress for this mode.",
+        { runId: run.id }
+      );
+    }
+    if (run.status === "failed") {
+      throw new HttpError(
+        422,
+        "workbench_run_failed",
+        "The Workbench run failed. Open run history for its node evidence, then retry it explicitly.",
+        { runId: run.id, replayed: true, retryable: true }
+      );
+    }
+    return {
+      connector: getAiConnectorById(connectorId)!,
+      run,
+      conversation: run.conversationId
+        ? getAiConnectorConversationById(run.conversationId)
+        : null,
+      replayed: true
+    };
+  };
+
+  if (parsedInput.idempotencyKey) {
+    const existing = getAiConnectorRunRowByIdempotency({
+      connectorId,
+      mode,
+      idempotencyKey: parsedInput.idempotencyKey
+    });
+    if (existing) {
+      return replayExisting(existing);
+    }
+  }
+  const activeRun = getRunningAiConnectorRunRow(connectorId, mode);
+  if (activeRun) {
+    throw new HttpError(
+      409,
+      "workbench_run_in_progress",
+      "This Workbench flow already has a run in progress for this mode.",
+      { runId: activeRun.id }
+    );
+  }
 
   const pendingRun = aiConnectorRunSchema.parse({
     id: `aicr_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
@@ -3071,7 +3327,7 @@ export async function runAiConnector(
     inputs: effectiveInput.inputs ?? {},
     context: effectiveInput.context ?? {},
     conversationId: effectiveInput.conversationId ?? null,
-    retryOfRunId: input.retryOfRunId ?? null,
+    retryOfRunId: parsedInput.retryOfRunId,
     flowSnapshot: {
       title: connector.title,
       updatedAt: connector.updatedAt,
@@ -3084,7 +3340,30 @@ export async function runAiConnector(
     createdAt: new Date().toISOString(),
     completedAt: null
   });
-  insertRun(pendingRun);
+  try {
+    insertRun(pendingRun, receipt);
+  } catch (error) {
+    if (parsedInput.idempotencyKey) {
+      const existing = getAiConnectorRunRowByIdempotency({
+        connectorId,
+        mode,
+        idempotencyKey: parsedInput.idempotencyKey
+      });
+      if (existing) {
+        return replayExisting(existing);
+      }
+    }
+    const competing = getRunningAiConnectorRunRow(connectorId, mode);
+    if (competing) {
+      throw new HttpError(
+        409,
+        "workbench_run_in_progress",
+        "This Workbench flow already has a run in progress for this mode.",
+        { runId: competing.id }
+      );
+    }
+    throw error;
+  }
 
   try {
     const execution = await executeConnector(
@@ -3099,11 +3378,12 @@ export async function runAiConnector(
       conversationId: execution.conversation?.id ?? pendingRun.conversationId,
       completedAt: new Date().toISOString()
     });
-    insertRun(completedRun);
+    insertRun(completedRun, receipt);
     return {
       connector: getAiConnectorById(connectorId)!,
       run: completedRun,
-      conversation: execution.conversation
+      conversation: execution.conversation,
+      replayed: false
     };
   } catch (error) {
     const failedRun = aiConnectorRunSchema.parse({
@@ -3112,7 +3392,12 @@ export async function runAiConnector(
       error: error instanceof Error ? error.message : "Connector run failed",
       completedAt: new Date().toISOString()
     });
-    insertRun(failedRun);
-    throw error;
+    insertRun(failedRun, receipt);
+    throw new HttpError(
+      422,
+      "workbench_run_failed",
+      "The Workbench run failed. Open run history for its node evidence, then retry it explicitly.",
+      { runId: failedRun.id, replayed: false, retryable: true }
+    );
   }
 }

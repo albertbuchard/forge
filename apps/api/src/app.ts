@@ -66,6 +66,7 @@ import {
   ensureLegacyProcessorsMigrated,
   listAiConnectorVersionsPage,
   listAiConnectorRunsPage,
+  recoverInterruptedAiConnectorRuns,
   restoreAiConnectorVersion,
   runAiConnector,
   updateAiConnector
@@ -12419,6 +12420,7 @@ export async function buildServer(
   getSettings();
   ensureDefaultRewardRules();
   ensureLegacyProcessorsMigrated();
+  recoverInterruptedAiConnectorRuns();
   ensureBuiltInCourses();
   const app = Fastify({
     logger: false,
@@ -24539,6 +24541,10 @@ export async function buildServer(
         execution.connector.id,
         execution.run.id
       );
+      reply.header(
+        "Idempotency-Replayed",
+        execution.replayed ? "true" : "false"
+      );
       return {
         [singularKey]: execution.connector,
         run: detail?.run ?? execution.run,
@@ -24580,6 +24586,10 @@ export async function buildServer(
       const detail = getAiConnectorRunDetail(
         execution.connector.id,
         execution.run.id
+      );
+      reply.header(
+        "Idempotency-Replayed",
+        execution.replayed ? "true" : "false"
       );
       return {
         [singularKey]: execution.connector,
@@ -24787,6 +24797,7 @@ export async function buildServer(
       execution.connector.id,
       execution.run.id
     );
+    reply.header("Idempotency-Replayed", execution.replayed ? "true" : "false");
     return {
       flow: execution.connector,
       run: detail?.run ?? execution.run,

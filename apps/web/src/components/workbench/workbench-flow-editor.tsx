@@ -103,6 +103,20 @@ const WORKBENCH_VALUE_TYPES = [
 const workbenchCanvasButtonClassName =
   "inline-flex h-11 items-center gap-2 rounded-full bg-[color-mix(in_srgb,var(--surface-glass)_94%,transparent)] px-4 text-sm font-medium text-[var(--ui-ink-strong)] shadow-[var(--ui-shadow-soft)] transition hover:bg-[var(--ui-surface-hover)]";
 
+type WorkbenchRunRequest = {
+  userInput?: string;
+  inputs?: Record<string, unknown>;
+  context?: Record<string, unknown>;
+  conversationId?: string | null;
+  retryOfRunId?: string | null;
+  idempotencyKey?: string | null;
+  debug?: boolean;
+};
+
+function createWorkbenchRunKey() {
+  return `workbench_${globalThis.crypto.randomUUID()}`;
+}
+
 function saveStateClassName(saveState: WorkbenchSaveState) {
   if (saveState === "error") {
     return "border-[color-mix(in_srgb,var(--danger)_28%,transparent)] bg-[var(--ui-danger-soft)] text-[var(--danger)]";
@@ -138,22 +152,8 @@ export function WorkbenchFlowEditor({
   runs: AiConnectorRunSummary[];
   onSave: (patch: Partial<AiConnector>) => Promise<void>;
   onDelete: () => Promise<void>;
-  onRun: (input: {
-    userInput?: string;
-    inputs?: Record<string, unknown>;
-    context?: Record<string, unknown>;
-    conversationId?: string | null;
-    retryOfRunId?: string | null;
-    debug?: boolean;
-  }) => Promise<void>;
-  onChat: (input: {
-    userInput?: string;
-    inputs?: Record<string, unknown>;
-    context?: Record<string, unknown>;
-    conversationId?: string | null;
-    retryOfRunId?: string | null;
-    debug?: boolean;
-  }) => Promise<void>;
+  onRun: (input: WorkbenchRunRequest) => Promise<void>;
+  onChat: (input: WorkbenchRunRequest) => Promise<void>;
 }) {
   const [title, setTitle] = useState(flow.title);
   const [description, setDescription] = useState(flow.description);
@@ -206,6 +206,24 @@ export function WorkbenchFlowEditor({
   const [historyOffset, setHistoryOffset] = useState(0);
   const [retryPending, setRetryPending] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const runAttemptRef = useRef<
+    Record<"run" | "chat", { fingerprint: string; key: string } | null>
+  >({ run: null, chat: null });
+
+  function withStableRunKey(
+    mode: "run" | "chat",
+    request: WorkbenchRunRequest
+  ) {
+    const { idempotencyKey: _ignored, ...fingerprintInput } = request;
+    const fingerprint = JSON.stringify(fingerprintInput);
+    const current = runAttemptRef.current[mode];
+    const attempt =
+      current?.fingerprint === fingerprint
+        ? current
+        : { fingerprint, key: createWorkbenchRunKey() };
+    runAttemptRef.current[mode] = attempt;
+    return { ...request, idempotencyKey: attempt.key };
+  }
 
   const flowSnapshot = useMemo(
     () =>
@@ -1014,18 +1032,23 @@ export function WorkbenchFlowEditor({
         }
       }
       if (mode === "run") {
-        await onRun({
-          userInput: shouldShowLegacyUserInput ? userInput : "",
-          inputs: nextInputs,
-          debug: debugEnabled
-        });
+        await onRun(
+          withStableRunKey(mode, {
+            userInput: shouldShowLegacyUserInput ? userInput : "",
+            inputs: nextInputs,
+            debug: debugEnabled
+          })
+        );
       } else {
-        await onChat({
-          userInput: shouldShowLegacyUserInput ? userInput : "",
-          inputs: nextInputs,
-          debug: debugEnabled
-        });
+        await onChat(
+          withStableRunKey(mode, {
+            userInput: shouldShowLegacyUserInput ? userInput : "",
+            inputs: nextInputs,
+            debug: debugEnabled
+          })
+        );
       }
+      runAttemptRef.current[mode] = null;
       setRunOpen(false);
     } catch (error) {
       setRunError(formatWorkbenchRunError(error));
@@ -1047,14 +1070,17 @@ export function WorkbenchFlowEditor({
     setRetryPending(true);
     setRetryError(null);
     try {
-      await onChat({
-        userInput: failedRun.userInput,
-        inputs: failedRun.inputs,
-        context: failedRun.context,
-        conversationId: failedRun.conversationId,
-        retryOfRunId: failedRun.id,
-        debug: Boolean(failedRun.result?.debugTrace)
-      });
+      await onChat(
+        withStableRunKey("chat", {
+          userInput: failedRun.userInput,
+          inputs: failedRun.inputs,
+          context: failedRun.context,
+          conversationId: failedRun.conversationId,
+          retryOfRunId: failedRun.id,
+          debug: Boolean(failedRun.result?.debugTrace)
+        })
+      );
+      runAttemptRef.current.chat = null;
     } catch (error) {
       setRetryError(formatWorkbenchRunError(error));
     } finally {

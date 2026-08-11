@@ -355,12 +355,38 @@ describe("WorkbenchFlowEditor", () => {
     await waitFor(() =>
       expect(onRun).toHaveBeenCalledWith(
         expect.objectContaining({
+          idempotencyKey: expect.stringMatching(/^workbench_/),
           inputs: {
             topic: "missed habits"
           }
         })
       )
     );
+  });
+
+  it("reuses one browser idempotency key after an uncertain failure and rotates it when input changes", async () => {
+    const onRun = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("connection interrupted"))
+      .mockRejectedValueOnce(new Error("connection interrupted again"))
+      .mockResolvedValue(undefined);
+    renderEditor({ onRun });
+
+    fireEvent.click(screen.getByRole("button", { name: "Run flow" }));
+    const topicInput = await screen.findByPlaceholderText("Topic");
+    fireEvent.change(topicInput, { target: { value: "stable payload" } });
+    fireEvent.click(screen.getByRole("button", { name: "Run" }));
+    await waitFor(() => expect(onRun).toHaveBeenCalledTimes(1));
+    const firstKey = onRun.mock.calls[0]?.[0].idempotencyKey as string;
+
+    fireEvent.click(screen.getByRole("button", { name: "Run" }));
+    await waitFor(() => expect(onRun).toHaveBeenCalledTimes(2));
+    expect(onRun.mock.calls[1]?.[0].idempotencyKey).toBe(firstKey);
+
+    fireEvent.change(topicInput, { target: { value: "changed payload" } });
+    fireEvent.click(screen.getByRole("button", { name: "Run" }));
+    await waitFor(() => expect(onRun).toHaveBeenCalledTimes(3));
+    expect(onRun.mock.calls[2]?.[0].idempotencyKey).not.toBe(firstKey);
   });
 
   it("surfaces required public input validation before running", async () => {

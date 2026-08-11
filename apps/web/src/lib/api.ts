@@ -5088,6 +5088,7 @@ export function runWorkbenchFlow(
     boxSnapshots?: Record<string, unknown>;
     conversationId?: string | null;
     retryOfRunId?: string | null;
+    idempotencyKey?: string | null;
     debug?: boolean;
   }
 ) {
@@ -5111,6 +5112,7 @@ export function chatWorkbenchFlow(
     boxSnapshots?: Record<string, unknown>;
     conversationId?: string | null;
     retryOfRunId?: string | null;
+    idempotencyKey?: string | null;
     debug?: boolean;
   }
 ) {
