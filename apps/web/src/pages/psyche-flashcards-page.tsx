@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Image, Plus, Search, Sparkles, X } from "lucide-react";
+import {
+  EntityLinkMultiSelect,
+  type EntityLinkOption
+} from "@/components/psyche/entity-link-multiselect";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
 import {
   psycheFocusClass,
@@ -19,12 +23,14 @@ import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import {
   createFlashcard,
   deleteFlashcard,
+  getPsycheOverview,
   listFlashcards,
   patchFlashcard
 } from "@/lib/api";
+import { getEntityRoute } from "@/lib/note-helpers";
 import { flashcardSchema, type FlashcardInput } from "@/lib/psyche-schemas";
-import type { Flashcard } from "@/lib/psyche-types";
-import type { UserSummary } from "@/lib/types";
+import type { Flashcard, PsycheOverviewPayload } from "@/lib/psyche-types";
+import type { CrudEntityType, UserSummary } from "@/lib/types";
 import {
   formatOwnerSelectDefaultLabel,
   getSingleSelectedUserId
@@ -69,6 +75,148 @@ const STYLE_LABELS: Record<Flashcard["visualStyle"], string> = {
   playful: "Playful"
 };
 
+export const MAX_FLASHCARD_MESSAGE_CHARACTERS = 600;
+const flashcardWithoutMessageSchema = flashcardSchema.omit({ message: true });
+
+type FlashcardRelationshipField =
+  | "linkedValueIds"
+  | "linkedBehaviorIds"
+  | "linkedPatternIds"
+  | "linkedBeliefIds"
+  | "linkedModeIds"
+  | "linkedReportIds";
+
+type FlashcardRelationshipDefinition = {
+  field: FlashcardRelationshipField;
+  entityType: CrudEntityType;
+  label: string;
+  placeholder: string;
+  emptyMessage: string;
+};
+
+const FLASHCARD_RELATIONSHIPS: FlashcardRelationshipDefinition[] = [
+  {
+    field: "linkedValueIds",
+    entityType: "psyche_value",
+    label: "Values",
+    placeholder: "Link values…",
+    emptyMessage: "No values are available in this owner scope."
+  },
+  {
+    field: "linkedBehaviorIds",
+    entityType: "behavior",
+    label: "Behaviors",
+    placeholder: "Link behaviors…",
+    emptyMessage: "No behaviors are available in this owner scope."
+  },
+  {
+    field: "linkedPatternIds",
+    entityType: "behavior_pattern",
+    label: "Patterns",
+    placeholder: "Link patterns…",
+    emptyMessage: "No patterns are available in this owner scope."
+  },
+  {
+    field: "linkedBeliefIds",
+    entityType: "belief_entry",
+    label: "Beliefs",
+    placeholder: "Link beliefs…",
+    emptyMessage: "No beliefs are available in this owner scope."
+  },
+  {
+    field: "linkedModeIds",
+    entityType: "mode_profile",
+    label: "Modes",
+    placeholder: "Link modes…",
+    emptyMessage: "No modes are available in this owner scope."
+  },
+  {
+    field: "linkedReportIds",
+    entityType: "trigger_report",
+    label: "Trigger reports",
+    placeholder: "Link trigger reports…",
+    emptyMessage: "No recent reports are available in this owner scope."
+  }
+];
+
+type FlashcardRelationshipCatalog = Record<
+  FlashcardRelationshipField,
+  EntityLinkOption[]
+>;
+
+function buildFlashcardRelationshipCatalog(
+  overview: PsycheOverviewPayload | undefined
+): FlashcardRelationshipCatalog {
+  return {
+    linkedValueIds: (overview?.values ?? []).map((value) => ({
+      value: value.id,
+      label: value.title,
+      description: value.valuedDirection,
+      kind: "value"
+    })),
+    linkedBehaviorIds: (overview?.behaviors ?? []).map((behavior) => ({
+      value: behavior.id,
+      label: behavior.title,
+      description: behavior.replacementMove || behavior.description,
+      kind: "behavior"
+    })),
+    linkedPatternIds: (overview?.patterns ?? []).map((pattern) => ({
+      value: pattern.id,
+      label: pattern.title,
+      description: pattern.preferredResponse || pattern.description,
+      kind: "pattern"
+    })),
+    linkedBeliefIds: (overview?.beliefs ?? []).map((belief) => ({
+      value: belief.id,
+      label: belief.statement,
+      description: belief.flexibleAlternative || belief.originNote,
+      kind: "belief"
+    })),
+    linkedModeIds: (overview?.modes ?? []).map((mode) => ({
+      value: mode.id,
+      label: mode.title,
+      description: mode.archetype || mode.family,
+      kind: "mode"
+    })),
+    linkedReportIds: (overview?.reports ?? []).map((report) => ({
+      value: report.id,
+      label: report.title,
+      description: report.eventSituation,
+      kind: "report"
+    }))
+  };
+}
+
+function withUnavailableRelationshipOptions(
+  options: EntityLinkOption[],
+  selectedValues: string[]
+) {
+  const known = new Set(options.map((option) => option.value));
+  return [
+    ...options,
+    ...selectedValues
+      .filter((value) => !known.has(value))
+      .map((value) => ({
+        value,
+        label: "Unavailable linked record"
+      }))
+  ];
+}
+
+export function getFlashcardMessageClassName(message: string, compact = false) {
+  const length = message.trim().length;
+  if (compact) {
+    if (length > 320) return "text-base leading-6";
+    if (length > 180) return "text-lg leading-7";
+    if (length > 90) return "text-xl leading-7";
+    return "text-2xl leading-[1.12]";
+  }
+  if (length > 320) return "text-lg leading-7 sm:text-xl sm:leading-8";
+  if (length > 180) return "text-xl leading-8 sm:text-2xl";
+  if (length > 90) return "text-2xl leading-8 sm:text-3xl";
+  return "text-[clamp(1.9rem,4vw,3.45rem)] leading-[1.12]";
+}
+
 function splitList(value: string) {
   return value
     .split(",")
@@ -101,7 +249,7 @@ function flashcardToInput(card: Flashcard): FlashcardInput {
   };
 }
 
-function FlashcardPreview({
+export function FlashcardPreview({
   card,
   compact = false,
   focused = false,
@@ -115,7 +263,8 @@ function FlashcardPreview({
   const hasImage = card.imageUrl.trim().length > 0;
   const layout = card.layout;
   const title = card.title.trim();
-  const trigger = card.triggerSentence.trim() || card.triggerSituation.trim();
+  const triggerSentence = card.triggerSentence.trim();
+  const triggerSituation = card.triggerSituation.trim();
 
   return (
     <button
@@ -170,15 +319,31 @@ function FlashcardPreview({
           />
           <div
             className={cn(
-              "max-w-[24rem] text-balance leading-[1.12]",
-              compact ? "text-2xl" : "text-[clamp(1.9rem,4vw,3.45rem)]"
+              "max-w-[24rem] whitespace-pre-wrap break-words text-balance [overflow-wrap:anywhere]",
+              getFlashcardMessageClassName(card.message, compact)
             )}
           >
             {card.message || "Write the sentence that should meet you in the hard moment."}
           </div>
-          {trigger ? (
-            <div className="mt-6 max-w-md rounded-full border px-3 py-1.5 text-xs font-medium opacity-75" style={{ borderColor: card.accentColor }}>
-              {trigger}
+          {triggerSentence ? (
+            <div
+              className="mt-6 max-w-md rounded-[16px] border px-3 py-2 text-xs font-medium opacity-80"
+              style={{ borderColor: card.accentColor }}
+            >
+              <span className="font-semibold">Urge or cue:</span>{" "}
+              {triggerSentence}
+            </div>
+          ) : null}
+          {triggerSituation ? (
+            <div
+              className={cn(
+                "max-w-md rounded-[16px] border px-3 py-2 text-xs font-medium opacity-80",
+                triggerSentence ? "mt-2" : "mt-6"
+              )}
+              style={{ borderColor: card.accentColor }}
+            >
+              <span className="font-semibold">Situation:</span>{" "}
+              {triggerSituation}
             </div>
           ) : null}
         </div>
@@ -211,10 +376,65 @@ function FlashcardPreview({
   );
 }
 
+function FlashcardLinkedRecords({
+  card,
+  catalog
+}: {
+  card: Flashcard;
+  catalog: FlashcardRelationshipCatalog;
+}) {
+  const visible = FLASHCARD_RELATIONSHIPS.flatMap((relationship) => {
+    const optionsById = new Map(
+      catalog[relationship.field].map((option) => [option.value, option])
+    );
+    return card[relationship.field].flatMap((id) => {
+      const option = optionsById.get(id);
+      const href = option ? getEntityRoute(relationship.entityType, id) : null;
+      return option && href
+        ? [{ id, label: option.label, href, relationship: relationship.label }]
+        : [];
+    });
+  });
+  const selectedCount = FLASHCARD_RELATIONSHIPS.reduce(
+    (total, relationship) => total + card[relationship.field].length,
+    0
+  );
+  const unavailableCount = selectedCount - visible.length;
+
+  if (selectedCount === 0) return null;
+
+  return (
+    <div className="mt-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-3">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+        Linked recovery context
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {visible.map((link) => (
+          <Link
+            key={`${link.relationship}:${link.id}`}
+            to={link.href}
+            className="inline-flex min-h-11 items-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2 text-sm font-medium text-[var(--ui-ink-medium)] hover:text-[var(--ui-ink-strong)]"
+          >
+            {link.relationship}: {link.label}
+          </Link>
+        ))}
+        {unavailableCount > 0 ? (
+          <span className="inline-flex min-h-11 items-center rounded-full border border-[var(--ui-border-subtle)] px-3 py-2 text-sm text-[var(--ui-ink-soft)]">
+            {unavailableCount} linked{" "}
+            {unavailableCount === 1 ? "record is" : "records are"} unavailable
+            in this view
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function FlashcardDialog({
   open,
   editingCard,
   draft,
+  relationshipCatalog,
   users,
   suggestedOwner,
   submitError,
@@ -227,6 +447,7 @@ function FlashcardDialog({
   open: boolean;
   editingCard: Flashcard | null;
   draft: FlashcardInput;
+  relationshipCatalog: FlashcardRelationshipCatalog;
   users: UserSummary[];
   suggestedOwner: UserSummary | null;
   submitError: string | null;
@@ -270,11 +491,20 @@ function FlashcardDialog({
               <Textarea
                 className="mt-2 min-h-28"
                 value={draft.message}
+                maxLength={MAX_FLASHCARD_MESSAGE_CHARACTERS}
+                aria-describedby="flashcard-message-limit"
                 placeholder="This urge is a wave. You do not have to obey it."
                 onChange={(event) =>
                   onDraftChange({ ...draft, message: event.target.value })
                 }
               />
+              <div
+                id="flashcard-message-limit"
+                className="mt-1.5 flex justify-between gap-3 text-xs text-[var(--ui-ink-faint)]"
+              >
+                <span>Keep the card concise enough to retrieve under stress.</span>
+                <span>{draft.message.length}/{MAX_FLASHCARD_MESSAGE_CHARACTERS}</span>
+              </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
@@ -322,6 +552,42 @@ function FlashcardDialog({
                   })
                 }
               />
+            </div>
+            <div className="grid gap-4 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+                  Retrieval context
+                </div>
+                <p className="mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                  Link the records that explain when this card helps and what
+                  action it supports. Unavailable links stay attached without
+                  exposing their identifiers.
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {FLASHCARD_RELATIONSHIPS.map((relationship) => (
+                  <div key={relationship.field} className="grid min-w-0 gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+                      {relationship.label}
+                    </span>
+                    <EntityLinkMultiSelect
+                      options={withUnavailableRelationshipOptions(
+                        relationshipCatalog[relationship.field],
+                        draft[relationship.field]
+                      )}
+                      selectedValues={draft[relationship.field]}
+                      placeholder={relationship.placeholder}
+                      emptyMessage={relationship.emptyMessage}
+                      onChange={(values) =>
+                        onDraftChange({
+                          ...draft,
+                          [relationship.field]: values
+                        })
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
             <div>
               <label className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
@@ -500,6 +766,15 @@ export function PsycheFlashcardsPage() {
     queryKey: ["forge-psyche-flashcards", shell.selectedUserIds],
     queryFn: () => listFlashcards(shell.selectedUserIds)
   });
+  const overviewQuery = useQuery({
+    queryKey: ["forge-psyche-overview", shell.selectedUserIds],
+    queryFn: async () =>
+      (await getPsycheOverview(shell.selectedUserIds)).overview
+  });
+  const relationshipCatalog = useMemo(
+    () => buildFlashcardRelationshipCatalog(overviewQuery.data),
+    [overviewQuery.data]
+  );
 
   useEffect(() => {
     if (searchParams.get("create") === "1") {
@@ -514,11 +789,18 @@ export function PsycheFlashcardsPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (input: FlashcardInput) => {
-      const parsed = flashcardSchema.parse(input);
       if (editingCard) {
-        return patchFlashcard(editingCard.id, parsed);
+        const messageUnchanged =
+          input.message.trim() === editingCard.message.trim();
+        if (messageUnchanged) {
+          return patchFlashcard(
+            editingCard.id,
+            flashcardWithoutMessageSchema.parse(input)
+          );
+        }
+        return patchFlashcard(editingCard.id, flashcardSchema.parse(input));
       }
-      return createFlashcard(parsed);
+      return createFlashcard(flashcardSchema.parse(input));
     },
     onSuccess: async () => {
       setDialogOpen(false);
@@ -642,6 +924,7 @@ export function PsycheFlashcardsPage() {
                   setDialogOpen(true);
                 }}
               />
+              <FlashcardLinkedRecords card={card} catalog={relationshipCatalog} />
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 px-1">
                 <div className="flex min-w-0 items-center gap-2">
                   {card.user ? <UserBadge user={card.user} compact /> : null}
@@ -684,6 +967,7 @@ export function PsycheFlashcardsPage() {
         open={dialogOpen}
         editingCard={editingCard}
         draft={draft}
+        relationshipCatalog={relationshipCatalog}
         users={shell.snapshot.users}
         suggestedOwner={suggestedOwner}
         submitError={submitError}

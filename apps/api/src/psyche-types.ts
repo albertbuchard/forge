@@ -701,7 +701,7 @@ export const updateModeGuideSessionSchema =
 
 export const createFlashcardSchema = z.object({
   title: trimmedString.default(""),
-  message: nonEmptyTrimmedString,
+  message: nonEmptyTrimmedString.max(600),
   triggerSentence: trimmedString.default(""),
   triggerSituation: trimmedString.default(""),
   tags: z.array(trimmedString).default([]),

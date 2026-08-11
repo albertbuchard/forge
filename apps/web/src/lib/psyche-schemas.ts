@@ -159,7 +159,7 @@ export const modeGuideSessionSchema = z.object({
 
 export const flashcardSchema = z.object({
   title: trimmed.default(""),
-  message: nonEmpty,
+  message: nonEmpty.max(600),
   triggerSentence: trimmed.default(""),
   triggerSituation: trimmed.default(""),
   tags: z.array(trimmed).default([]),
