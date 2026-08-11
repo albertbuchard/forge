@@ -129,6 +129,13 @@ const extensionToFormatFamily: Record<string, ArtifactFormatFamily> = {
   webp: "image"
 };
 
+const imageMimeTypeByExtension = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp"
+} as const;
+
 export const artifactStateSchema = z.enum([
   "active",
   "quarantined",
@@ -1779,6 +1786,18 @@ export function scanArtifactBytes(input: {
       "high",
       "pdf_header_invalid",
       "The file has a .pdf extension but does not begin with a PDF signature."
+    );
+  }
+  const expectedImageMimeType =
+    imageMimeTypeByExtension[
+      detectedExtension as keyof typeof imageMimeTypeByExtension
+    ];
+  if (expectedImageMimeType && detectedMimeType !== expectedImageMimeType) {
+    addFinding(
+      findings,
+      "high",
+      "image_header_invalid",
+      `The file has a .${detectedExtension} extension but does not begin with the expected ${expectedImageMimeType} signature.`
     );
   }
 

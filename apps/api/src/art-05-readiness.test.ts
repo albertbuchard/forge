@@ -178,6 +178,47 @@ test("ART-05 classifies malformed, macro, unsafe-archive, and unsupported files"
   });
   assert.equal(findingCodes(validPdfHeader).has("pdf_header_invalid"), false);
   assert.ok(findingCodes(validPdfHeader).has("static_scan_clean"));
+
+  for (const extension of ["png", "jpg", "jpeg", "webp"] as const) {
+    const malformedImage = scanArtifactBytes({
+      buffer: Buffer.from("plain text disguised as an image", "utf8"),
+      originalFileName: `malformed.${extension}`
+    });
+    assert.ok(findingCodes(malformedImage).has("image_header_invalid"));
+    assert.equal(malformedImage.dangerLevel, "high");
+    assert.equal(malformedImage.artifactState, "quarantined");
+  }
+
+  for (const fixture of [
+    {
+      extension: "png",
+      bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47])
+    },
+    {
+      extension: "jpg",
+      bytes: Buffer.from([0xff, 0xd8, 0xff])
+    },
+    {
+      extension: "jpeg",
+      bytes: Buffer.from([0xff, 0xd8, 0xff])
+    },
+    {
+      extension: "webp",
+      bytes: Buffer.from([
+        0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50
+      ])
+    }
+  ] as const) {
+    const validImageHeader = scanArtifactBytes({
+      buffer: fixture.bytes,
+      originalFileName: `valid-header.${fixture.extension}`
+    });
+    assert.equal(
+      findingCodes(validImageHeader).has("image_header_invalid"),
+      false
+    );
+    assert.ok(findingCodes(validImageHeader).has("static_scan_clean"));
+  }
 });
 
 test("ART-05 preserves the previous scan result when rescan integrity fails", async () => {
