@@ -46,8 +46,8 @@
           <a class="story-metric metric-all" href="./user-stories.html" data-metric-scope="all"><strong>203</strong><span>All stories</span></a>
           <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>184</strong><span>Current product</span></a>
           <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>19</strong><span>Planned</span></a>
-          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>13</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>141</strong><span>In review</span></a>
+          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>14</strong><span>Verified</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>140</strong><span>In review</span></a>
           <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>30</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
@@ -2723,17 +2723,17 @@
                   </div>
                 </details>
 
-                <details class="story-card" id="story-ops-04" data-story-id="OPS-04" data-lifecycle="current" data-readiness="In review" data-family="OPS">
+                <details class="story-card" id="story-ops-04" data-story-id="OPS-04" data-lifecycle="current" data-readiness="Verified" data-family="OPS">
                   <summary class="story-summary">
                     <span class="story-id">OPS-04</span>
                     <span class="story-summary-outcome">As an operator, I can inspect bounded diagnostic logs and errors with enough context to recover without exposing secrets.</span>
-                    <span class="story-state state-in-review">In review</span>
+                    <span class="story-state state-verified">Verified</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As an operator, I can inspect bounded diagnostic logs and errors with enough context to recover without exposing secrets.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>settings-logs</code>.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>diagnostics use bounded API filters, local OR filters, retryable older pages, and focus-stable search; complete download, retention, and redaction matrices.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>diagnostic reads are operator-only and redact credential-shaped values from every displayed context field, including legacy rows; storage enforces the published 14-day and 5,000-record limits, and the accessible export downloads only the currently loaded matching redacted rows with truthful partial-result feedback.</dd></div>
                     </dl>
                   </div>
                 </details>
