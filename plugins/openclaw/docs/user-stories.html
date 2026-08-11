@@ -792,7 +792,7 @@
                     <p class="story-expanded-outcome">As a user, I can define a recurring positive habit, see due days and streaks, and record Done or Missed with optional evidence.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>habits-index</code>, <code>habit</code>, web and watch decisions.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>recurrence uses explicit fixed-home or travel-local day boundaries, rejects future or unscheduled backfill, and deduplicates concurrent receipts across web and Watch. Finish positive-habit DST and long-window weekly acceptance plus true multi-process concurrency.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>recurrence uses explicit fixed-home or travel-local day boundaries, including spring daylight-saving transitions, rejects future or unscheduled backfill, and deduplicates concurrent receipts across web and Watch. The API retains a bounded 14-entry visible history while calculating the true current daily or weekly streak from the full aligned history; a deterministic 40-week target-two fixture remains exact beyond that window and stops at the preceding gap. Two independent Forge processes released through a barrier collapse one outcome into exactly one check-in, reward, and Activity record. Complete live desktop, phone, watch, correction, and long-label verification.</dd></div>
                     </dl>
                   </div>
                 </details>
