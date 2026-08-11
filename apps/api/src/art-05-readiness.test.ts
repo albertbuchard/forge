@@ -190,10 +190,20 @@ test("ART-05 classifies malformed, macro, unsafe-archive, and unsupported files"
     assert.equal(malformedImage.artifactState, "quarantined");
   }
 
+  const truncatedPngSignature = scanArtifactBytes({
+    buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+    originalFileName: "truncated-signature.png"
+  });
+  assert.ok(findingCodes(truncatedPngSignature).has("image_header_invalid"));
+  assert.equal(truncatedPngSignature.dangerLevel, "high");
+  assert.equal(truncatedPngSignature.artifactState, "quarantined");
+
   for (const fixture of [
     {
       extension: "png",
-      bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47])
+      bytes: Buffer.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a
+      ])
     },
     {
       extension: "jpg",
