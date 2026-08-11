@@ -7,6 +7,21 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase } from "./db.js";
+import { createGoal } from "./repositories/goals.js";
+
+function createArtifactLinkGoal(title: string) {
+  return createGoal({
+    title,
+    description: "",
+    horizon: "year",
+    status: "active",
+    targetPoints: 100,
+    themeColor: "#336699",
+    tagIds: [],
+    notes: [],
+    userId: "user_operator"
+  });
+}
 
 function getArtifactStoragePath(artifactId: string): string {
   const row = getDatabase()
@@ -46,6 +61,7 @@ test("artifact store uses trusted upload, static scan, generic links, and human-
 
   try {
     const cookie = await issueOperatorSessionCookie(app);
+    const linkedGoal = createArtifactLinkGoal("Artifact API link target");
     const untrustedToken = await createAgentToken({
       app,
       cookie,
@@ -111,7 +127,7 @@ test("artifact store uses trusted upload, static scan, generic links, and human-
         links: [
           {
             entityType: "goal",
-            entityId: "goal_artifact_test",
+            entityId: linkedGoal.id,
             relationship: "evidence"
           }
         ]
@@ -152,10 +168,7 @@ test("artifact store uses trusted upload, static scan, generic links, and human-
       uploadBody.artifact.id
     );
     assert.equal(uploadBody.artifact.links[0]?.targetEntityType, "goal");
-    assert.equal(
-      uploadBody.artifact.links[0]?.targetEntityId,
-      "goal_artifact_test"
-    );
+    assert.equal(uploadBody.artifact.links[0]?.targetEntityId, linkedGoal.id);
     assert.equal(uploadBody.artifact.links[0]?.anchorKey, null);
     assert.equal(uploadBody.artifact.links[0]?.relationship, "evidence");
     assert.equal(
@@ -168,7 +181,7 @@ test("artifact store uses trusted upload, static scan, generic links, and human-
 
     const linkedList = await app.inject({
       method: "GET",
-      url: "/api/v1/artifacts?linkedEntityType=goal&linkedEntityId=goal_artifact_test",
+      url: `/api/v1/artifacts?linkedEntityType=goal&linkedEntityId=${linkedGoal.id}`,
       headers: { authorization: `Bearer ${trustedToken}` }
     });
     assert.equal(linkedList.statusCode, 200);
@@ -231,7 +244,7 @@ test("artifact store uses trusted upload, static scan, generic links, and human-
 
     const afterSoftDeleteList = await app.inject({
       method: "GET",
-      url: "/api/v1/artifacts?linkedEntityType=goal&linkedEntityId=goal_artifact_test",
+      url: `/api/v1/artifacts?linkedEntityType=goal&linkedEntityId=${linkedGoal.id}`,
       headers: { cookie }
     });
     assert.equal(afterSoftDeleteList.statusCode, 200);
@@ -569,6 +582,7 @@ test("artifact listing is paginated and keeps filters bounded for large stores",
 
   try {
     const cookie = await issueOperatorSessionCookie(app);
+    const linkedGoal = createArtifactLinkGoal("Artifact scale link target");
     for (let index = 0; index < 65; index += 1) {
       const upload = await app.inject({
         method: "POST",
@@ -589,7 +603,7 @@ test("artifact listing is paginated and keeps filters bounded for large stores",
               ? [
                   {
                     entityType: "goal",
-                    entityId: "goal_artifact_scale",
+                    entityId: linkedGoal.id,
                     relationship: "evidence"
                   }
                 ]
@@ -642,7 +656,7 @@ test("artifact listing is paginated and keeps filters bounded for large stores",
 
     const linkedPage = await app.inject({
       method: "GET",
-      url: "/api/v1/artifacts?linkedEntityType=goal&linkedEntityId=goal_artifact_scale&limit=10&offset=0",
+      url: `/api/v1/artifacts?linkedEntityType=goal&linkedEntityId=${linkedGoal.id}&limit=10&offset=0`,
       headers: { cookie }
     });
     assert.equal(linkedPage.statusCode, 200);
@@ -659,7 +673,7 @@ test("artifact listing is paginated and keeps filters bounded for large stores",
     assert.equal(linkedBody.hasMore, false);
     assert.equal(
       linkedBody.artifacts[0]?.links[0]?.targetEntityId,
-      "goal_artifact_scale"
+      linkedGoal.id
     );
 
     const oversizedLinkReplacement = await app.inject({

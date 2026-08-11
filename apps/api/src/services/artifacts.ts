@@ -33,7 +33,11 @@ import {
 import { resolveUserForMutation } from "../repositories/users.js";
 import { listWikiLlmProfiles } from "../repositories/wiki-memory.js";
 import type { LlmManager } from "../managers/platform/llm-manager.js";
-import type { ActivitySource, CrudEntityType } from "../types.js";
+import {
+  crudEntityTypeSchema,
+  type ActivitySource,
+  type CrudEntityType
+} from "../types.js";
 import {
   ArtifactDecryptionError,
   decryptArtifactBytes,
@@ -51,6 +55,40 @@ const MAX_ZIP_ENTRY_COUNT = 5000;
 const MAX_ZIP_UNCOMPRESSED_BYTES = 250 * 1024 * 1024;
 const MAX_ZIP_RATIO = 100;
 const MAX_PENDING_ARTIFACT_BLOB_CLEANUPS = 25;
+
+const ARTIFACT_LINK_TARGET_TABLES = {
+  goal: "goals",
+  project: "projects",
+  task: "tasks",
+  strategy: "strategies",
+  habit: "habits",
+  tag: "tags",
+  note: "notes",
+  person: "people",
+  insight: "insights",
+  calendar_event: "calendar_events",
+  work_block_template: "work_block_templates",
+  task_timebox: "task_timeboxes",
+  life_event: "life_events",
+  artifact: "artifacts",
+  psyche_value: "psyche_values",
+  behavior_pattern: "behavior_patterns",
+  behavior: "psyche_behaviors",
+  belief_entry: "belief_entries",
+  mode_profile: "mode_profiles",
+  mode_guide_session: "mode_guide_sessions",
+  flashcard: "psyche_flashcards",
+  event_type: "event_types",
+  emotion_definition: "emotion_definitions",
+  trigger_report: "trigger_reports",
+  preference_catalog: "preference_catalogs",
+  preference_catalog_item: "preference_catalog_items",
+  preference_context: "preference_contexts",
+  preference_item: "preference_items",
+  questionnaire_instrument: "questionnaire_instruments",
+  sleep_session: "health_sleep_sessions",
+  workout_session: "health_workout_sessions"
+} as const satisfies Record<CrudEntityType, string>;
 
 const ALLOWED_EXTENSIONS = [
   "xlsx",
@@ -2052,14 +2090,52 @@ function replaceEntityLinksForArtifact(
       "One artifact link target was not found in the allowed scope."
     );
   for (const link of links) {
-    if (link.entityType === "project" || link.entityType === "tag") {
-      const table = link.entityType === "project" ? "projects" : "tags";
-      const exists = getDatabase()
-        .prepare(`SELECT 1 FROM ${table} WHERE id = ? LIMIT 1`)
-        .get(link.entityId);
-      if (!exists || isEntityDeleted(link.entityType, link.entityId)) {
-        throw scopedTargetMissing();
+    const crudEntityType = crudEntityTypeSchema.safeParse(link.entityType);
+    let targetExists = false;
+    if (crudEntityType.success) {
+      targetExists = Boolean(
+        getDatabase()
+          .prepare(
+            `SELECT 1
+             FROM ${ARTIFACT_LINK_TARGET_TABLES[crudEntityType.data]}
+             WHERE id = ?
+             LIMIT 1`
+          )
+          .get(link.entityId)
+      );
+      if (targetExists && isEntityDeleted(crudEntityType.data, link.entityId)) {
+        targetExists = false;
       }
+    } else if (link.entityType === "wiki_space") {
+      targetExists = Boolean(
+        getDatabase()
+          .prepare("SELECT 1 FROM wiki_spaces WHERE id = ? LIMIT 1")
+          .get(link.entityId)
+      );
+    } else if (link.entityType === "workbench_flow") {
+      targetExists = Boolean(
+        getDatabase()
+          .prepare("SELECT 1 FROM ai_connectors WHERE id = ? LIMIT 1")
+          .get(link.entityId)
+      );
+    } else if (link.entityType === "workbench_surface") {
+      targetExists =
+        link.entityId === "workbench" ||
+        Boolean(
+          getDatabase()
+            .prepare(
+              `SELECT 1
+               FROM ai_connectors
+               WHERE home_surface_id = ?
+               LIMIT 1`
+            )
+            .get(link.entityId)
+        );
+    }
+    if (!targetExists) {
+      throw scopedTargetMissing();
+    }
+    if (link.entityType === "project" || link.entityType === "tag") {
       const allowedIds =
         link.entityType === "project" ? allowedProjectIds : allowedTagIds;
       if (allowedIds.size > 0 && !allowedIds.has(link.entityId)) {

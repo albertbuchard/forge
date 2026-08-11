@@ -8,6 +8,7 @@ import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase } from "./db.js";
 import { getEntityOwnerId } from "./repositories/entity-ownership.js";
+import { createGoal } from "./repositories/goals.js";
 
 type TestApp = Awaited<ReturnType<typeof buildServer>>;
 
@@ -154,6 +155,17 @@ test("Artifact routes enforce owner scope and redact physical paths and plaintex
     assert.equal(getEntityOwnerId("artifact", foreign.id), "user_forge_bot");
     assertArtifactPayloadIsPublic(own.artifact);
     assertArtifactPayloadIsPublic(foreign.artifact);
+    const operatorLinkGoal = createGoal({
+      title: "ARTSEC operator link target",
+      description: "",
+      horizon: "year",
+      status: "active",
+      targetPoints: 100,
+      themeColor: "#336699",
+      tagIds: [],
+      notes: [],
+      userId: "user_operator"
+    });
     assert.equal(
       (own.artifact.scanResults as Record<string, unknown>)
         .extractedTextAvailable,
@@ -353,7 +365,7 @@ test("Artifact routes enforce owner scope and redact physical paths and plaintex
           links: [
             {
               entityType: "goal",
-              entityId: "goal_artifact_security",
+              entityId: operatorLinkGoal.id,
               relationship: "evidence"
             }
           ]
