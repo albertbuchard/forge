@@ -44,10 +44,10 @@
 
         <section class="story-metrics" aria-label="Story totals">
           <a class="story-metric metric-all" href="./user-stories.html" data-metric-scope="all"><strong>203</strong><span>All stories</span></a>
-          <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>191</strong><span>Current product</span></a>
-          <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>12</strong><span>Planned</span></a>
+          <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>192</strong><span>Current product</span></a>
+          <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>11</strong><span>Planned</span></a>
           <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>14</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>147</strong><span>In review</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>148</strong><span>In review</span></a>
           <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>30</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
@@ -469,7 +469,7 @@
             <details class="story-family" data-family-group="HOME">
               <summary>
                 <span class="family-title"><span class="family-code">HOME</span>Overview, attention, and review</span>
-                <span class="family-counts"><span data-family-visible>9</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 7 current · 2 planned</span></span>
+                <span class="family-counts"><span data-family-visible>9</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 8 current · 1 planned</span></span>
               </summary>
               <div class="story-list">
 
@@ -578,6 +578,21 @@
                   </div>
                 </details>
 
+                <details class="story-card" id="story-home-09" data-story-id="HOME-09" data-lifecycle="current" data-readiness="In review" data-family="HOME">
+                  <summary class="story-summary">
+                    <span class="story-id">HOME-09</span>
+                    <span class="story-summary-outcome">As a user, I can open a concise daily briefing that explains what matters now using current work, schedule, health context, and recent evidence without inventing conclusions.</span>
+                    <span class="story-state state-in-review">In review</span>
+                  </summary>
+                  <div class="story-expanded">
+                    <p class="story-expanded-outcome">As a user, I can open a concise daily briefing that explains what matters now using current work, schedule, health context, and recent evidence without inventing conclusions.</p>
+                    <dl class="story-details">
+                      <div><dt>Where it lives</dt><dd>Overview, Today, calendar, Life Force context, activity, provenance.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>Today now leads with an owner-scoped, read-only daily briefing and Overview links directly to it. Four deterministic lanes cover current work, schedule, persisted same-day Life Force capacity, and recent evidence; every statement carries source and freshness evidence or is omitted with a reason. Permission-first bounded selectors, 23-hour and 25-hour local-day boundaries, stale and future evidence, conflicts, partial data, response-size limits, and no-write Life Force reads have focused coverage. Active runs with missing or older-than-24-hour heartbeats cannot become the headline or a current-work conflict. Complete live desktop, phone, keyboard, and first-pass comprehension verification.</dd></div>
+                    </dl>
+                  </div>
+                </details>
+
                 <details class="story-card" id="story-home-08" data-story-id="HOME-08" data-lifecycle="planned" data-readiness="planned" data-family="HOME">
                   <summary class="story-summary">
                     <span class="story-id">HOME-08</span>
@@ -589,21 +604,6 @@
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Attention Inbox, action routes, resolution receipts, activity evidence.</dd></div>
                       <div><dt>First evidence needed</dt><dd>audit every attention kind, allowed action, authorization rule, stale-item condition, and verifiable resolution signal.</dd></div>
-                    </dl>
-                  </div>
-                </details>
-
-                <details class="story-card" id="story-home-09" data-story-id="HOME-09" data-lifecycle="planned" data-readiness="planned" data-family="HOME">
-                  <summary class="story-summary">
-                    <span class="story-id">HOME-09</span>
-                    <span class="story-summary-outcome">As a user, I can open a concise daily briefing that explains what matters now using current work, schedule, health context, and recent evidence without inventing conclusions.</span>
-                    <span class="story-state state-planned">Planned</span>
-                  </summary>
-                  <div class="story-expanded">
-                    <p class="story-expanded-outcome">As a user, I can open a concise daily briefing that explains what matters now using current work, schedule, health context, and recent evidence without inventing conclusions.</p>
-                    <dl class="story-details">
-                      <div><dt>Where it lives</dt><dd>Overview, Today, calendar, health context, activity, provenance.</dd></div>
-                      <div><dt>First evidence needed</dt><dd>define source freshness and omission rules, test empty and conflicting evidence, and compare comprehension with the existing Overview and Today surfaces.</dd></div>
                     </dl>
                   </div>
                 </details>
