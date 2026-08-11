@@ -2283,7 +2283,7 @@
                     <p class="story-expanded-outcome">As a user, I can update or delete a manual movement box, invalidate a wrong automatic box, and correct stay, trip, or route points with an audit trail.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Movement repair action routes.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>place, stay, trip, point, detail, and user-box repair routes enforce selected-user ownership and document it in OpenAPI. Finish downstream aggregate, retry, and undo/recovery cases.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>place, stay, trip, point, detail, and user-box repair routes enforce selected-user ownership and document it in OpenAPI. Stay and trip corrections now reject equal or inverted ranges before durable mutation, and each accepted correction commits its override, tombstone recovery, primary row, downstream overlap reconciliation, place learning, and Activity evidence in one transaction. Complete exact retry plus explicit undo/recovery cases.</dd></div>
                     </dl>
                   </div>
                 </details>

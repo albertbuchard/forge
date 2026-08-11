@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { getDatabase } from "./db.js";
+import { getDatabase, runInTransaction } from "./db.js";
 import { HttpError } from "./errors.js";
 import { recordActivityEvent } from "./repositories/activity-events.js";
 import { getNoteById, updateNote } from "./repositories/notes.js";
@@ -5725,6 +5725,17 @@ export function updateMovementStay(
   context: ActivityContext,
   options: { userId?: string } = {}
 ) {
+  return runInTransaction(() =>
+    updateMovementStayInTransaction(stayId, patch, context, options)
+  );
+}
+
+function updateMovementStayInTransaction(
+  stayId: string,
+  patch: z.input<typeof movementStayPatchSchema>,
+  context: ActivityContext,
+  options: { userId?: string }
+) {
   const existing = getDatabase()
     .prepare(
       `SELECT *
@@ -5739,6 +5750,15 @@ export function updateMovementStay(
     return undefined;
   }
   const parsed = movementStayPatchSchema.parse(patch);
+  const startedAt = parsed.startedAt ?? existing.started_at;
+  const endedAt = parsed.endedAt ?? existing.ended_at;
+  if (Date.parse(endedAt) <= Date.parse(startedAt)) {
+    throw new HttpError(
+      400,
+      "invalid_movement_stay_range",
+      "Movement stay end time must be after the start time."
+    );
+  }
   const now = nowIso();
   getDatabase()
     .prepare(
@@ -5765,15 +5785,6 @@ export function updateMovementStay(
          AND stay_external_uid = ?`
     )
     .run(existing.user_id, existing.external_uid);
-  const startedAt = parsed.startedAt ?? existing.started_at;
-  const endedAt = parsed.endedAt ?? existing.ended_at;
-  if (Date.parse(endedAt) < Date.parse(startedAt)) {
-    throw new HttpError(
-      400,
-      "invalid_movement_stay_range",
-      "Movement stay end time must be after the start time."
-    );
-  }
   const resolvedPlace =
     resolvePlaceForPatch({
       userId: existing.user_id,
@@ -5893,6 +5904,17 @@ export function updateMovementTrip(
   context: ActivityContext,
   options: { userId?: string } = {}
 ) {
+  return runInTransaction(() =>
+    updateMovementTripInTransaction(tripId, patch, context, options)
+  );
+}
+
+function updateMovementTripInTransaction(
+  tripId: string,
+  patch: z.input<typeof movementTripPatchSchema>,
+  context: ActivityContext,
+  options: { userId?: string }
+) {
   const existing = getDatabase()
     .prepare(
       `SELECT *
@@ -5907,6 +5929,15 @@ export function updateMovementTrip(
     return undefined;
   }
   const parsed = movementTripPatchSchema.parse(patch);
+  const startedAt = parsed.startedAt ?? existing.started_at;
+  const endedAt = parsed.endedAt ?? existing.ended_at;
+  if (Date.parse(endedAt) <= Date.parse(startedAt)) {
+    throw new HttpError(
+      400,
+      "invalid_movement_trip_range",
+      "Movement trip end time must be after the start time."
+    );
+  }
   const now = nowIso();
   getDatabase()
     .prepare(
@@ -5933,15 +5964,6 @@ export function updateMovementTrip(
          AND trip_external_uid = ?`
     )
     .run(existing.user_id, existing.external_uid);
-  const startedAt = parsed.startedAt ?? existing.started_at;
-  const endedAt = parsed.endedAt ?? existing.ended_at;
-  if (Date.parse(endedAt) < Date.parse(startedAt)) {
-    throw new HttpError(
-      400,
-      "invalid_movement_trip_range",
-      "Movement trip end time must be after the start time."
-    );
-  }
   const tripPoints = listTripPoints([tripId]);
   const fallbackStartPoint = tripPoints[0]
     ? {
