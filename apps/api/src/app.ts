@@ -20993,8 +20993,8 @@ export async function buildServer(
       parseIdempotencyKey(request.headers as Record<string, unknown>)
     );
     const score = getPreferenceItemScoreForContext(
-      input.itemId,
-      input.contextId
+      submission.signal.itemId,
+      submission.signal.contextId
     );
     if (!score) {
       throw new HttpError(

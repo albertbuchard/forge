@@ -793,6 +793,82 @@ test("preference context merge rejects a self-merge without changing evidence", 
   }
 });
 
+test("exact signal retry follows evidence into its merged target context", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-pref-context-merge-retry-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+  try {
+    const cookie = await issueOperatorSessionCookie(app);
+    const base = refreshPreferenceWorkspace({
+      userId: "user_operator",
+      domain: "projects"
+    });
+    const targetContext = createPreferenceContext({
+      userId: "user_operator",
+      domain: "projects",
+      name: "Merged retry target",
+      description: "Receives idempotent signal evidence.",
+      shareMode: "isolated",
+      active: true,
+      isDefault: false,
+      decayDays: 90
+    });
+    const item = createPreferenceItem(
+      itemInput("projects", "Merged retry signal item")
+    );
+    const payload = {
+      userId: "user_operator",
+      domain: "projects",
+      contextId: base.selectedContext.id,
+      itemId: item.id,
+      signalType: "favorite",
+      strength: 1
+    } as const;
+    const first = await app.inject({
+      method: "POST",
+      url: "/api/v1/preferences/signals",
+      headers: { cookie, "idempotency-key": "merge-retry-signal" },
+      payload
+    });
+    assert.equal(first.statusCode, 201, first.body);
+    const signalId = (first.json() as { signal: { id: string } }).signal.id;
+
+    mergePreferenceContexts({
+      sourceContextId: base.selectedContext.id,
+      targetContextId: targetContext.id
+    });
+
+    const replay = await app.inject({
+      method: "POST",
+      url: "/api/v1/preferences/signals",
+      headers: { cookie, "idempotency-key": "merge-retry-signal" },
+      payload
+    });
+    assert.equal(replay.statusCode, 200, replay.body);
+    assert.equal(replay.headers["idempotency-replayed"], "true");
+    assert.equal(replay.json().signal.id, signalId);
+    assert.equal(replay.json().signal.contextId, targetContext.id);
+    assert.equal(replay.json().score.contextId, targetContext.id);
+    assert.equal(
+      (
+        getDatabase()
+          .prepare(
+            `SELECT COUNT(*) AS count
+             FROM absolute_signals
+             WHERE id = ?`
+          )
+          .get(signalId) as { count: number }
+      ).count,
+      1
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test(
   "concurrent identical preference signals converge on one row",
   { timeout: 30_000 },
