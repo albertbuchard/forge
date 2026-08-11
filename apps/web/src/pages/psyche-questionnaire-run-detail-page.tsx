@@ -10,6 +10,7 @@ import {
   LoadingState
 } from "@/components/ui/page-state";
 import { getQuestionnaireRun } from "@/lib/api";
+import { getQuestionnaireVisibilityState } from "@/lib/questionnaire-flow";
 import { cn } from "@/lib/utils";
 
 const sectionLabelClass =
@@ -22,6 +23,19 @@ const selectedBadgeClass =
   "border border-[color-mix(in_srgb,var(--success)_36%,var(--ui-border-subtle)_64%)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_70%,var(--ui-ink-strong)_30%)]";
 const idleBadgeClass =
   "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]";
+
+function safeSourceHref(value: string) {
+  try {
+    const url = new URL(value);
+    return (url.protocol === "https:" || url.protocol === "http:") &&
+      !url.username &&
+      !url.password
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 export function PsycheQuestionnaireRunDetailPage() {
   const { runId = "" } = useParams();
@@ -55,6 +69,10 @@ export function PsycheQuestionnaireRunDetailPage() {
   const answersById = new Map(
     detail.answers.map((answer) => [answer.itemId, answer])
   );
+  const visibility = getQuestionnaireVisibilityState(
+    detail.version.definition,
+    detail.answers
+  );
 
   return (
     <div className="grid gap-5">
@@ -74,6 +92,96 @@ export function PsycheQuestionnaireRunDetailPage() {
           </>
         }
       />
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <Card className={panelCardClass}>
+          <div className={sectionLabelClass}>Recorded version</div>
+          <div className="mt-4 grid gap-3">
+            <div className={ledgerCardClass}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="break-words text-sm font-medium text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
+                    Version {detail.version.versionNumber}
+                  </div>
+                  <div className="mt-1 break-words text-sm text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
+                    {detail.version.label || "Unlabelled version"}
+                  </div>
+                </div>
+                <Badge className={selectedBadgeClass}>
+                  {detail.version.status}
+                </Badge>
+              </div>
+            </div>
+            <dl className="grid gap-2 text-sm sm:grid-cols-2">
+              <div>
+                <dt className={sectionLabelClass}>Started</dt>
+                <dd className="mt-1 break-words text-[var(--ui-ink-medium)] [overflow-wrap:anywhere]">
+                  <time dateTime={detail.run.startedAt}>{detail.run.startedAt}</time>
+                </dd>
+              </div>
+              <div>
+                <dt className={sectionLabelClass}>Completed</dt>
+                <dd className="mt-1 break-words text-[var(--ui-ink-medium)] [overflow-wrap:anywhere]">
+                  {detail.run.completedAt ? (
+                    <time dateTime={detail.run.completedAt}>
+                      {detail.run.completedAt}
+                    </time>
+                  ) : (
+                    "Not completed"
+                  )}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </Card>
+
+        <Card className={panelCardClass}>
+          <div className={sectionLabelClass}>Scoring provenance</div>
+          <div className="mt-4 grid gap-3">
+            <div className={ledgerCardClass}>
+              <div className="break-words text-sm leading-6 text-[var(--ui-ink-medium)] [overflow-wrap:anywhere]">
+                {detail.version.provenance.scoringNotes ||
+                  "No scoring note was stored for this version."}
+              </div>
+              <div className="mt-2 text-xs text-[var(--ui-ink-soft)]">
+                Retrieved {detail.version.provenance.retrievalDate} ·{" "}
+                {detail.version.provenance.sourceClass.replaceAll("_", " ")}
+              </div>
+            </div>
+            <div className="grid gap-2">
+              {detail.version.provenance.sources.map((source, index) => {
+                const href = safeSourceHref(source.url);
+                return (
+                  <div
+                    key={`${source.label}-${index}`}
+                    className={ledgerCardClass}
+                  >
+                    {href ? (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="break-words text-sm font-medium text-[var(--primary)] underline-offset-4 hover:underline [overflow-wrap:anywhere]"
+                      >
+                        {source.label}
+                      </a>
+                    ) : (
+                      <div className="break-words text-sm font-medium text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
+                        {source.label}
+                      </div>
+                    )}
+                    {source.citation ? (
+                      <div className="mt-1 break-words text-xs text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
+                        {source.citation}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </Card>
+      </section>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(18rem,1.1fr)]">
         <Card className={panelCardClass}>
@@ -116,27 +224,46 @@ export function PsycheQuestionnaireRunDetailPage() {
           <div className="mt-4 grid gap-3">
             {detail.version.definition.items.map((item) => {
               const answer = answersById.get(item.id);
+              const wasShown = visibility.visibleItemIds.has(item.id);
               return (
                 <div key={item.id} className={ledgerCardClass}>
                   <div className="break-words text-sm font-medium leading-6 text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
                     {item.prompt}
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {item.options.map((option) => {
-                      const selected = answer?.optionKey === option.key;
-                      return (
-                        <Badge
-                          key={`${item.id}-${option.key}`}
-                          className={cn(
-                            "max-w-full break-words [overflow-wrap:anywhere]",
-                            selected ? selectedBadgeClass : idleBadgeClass
-                          )}
-                        >
-                          {option.label}
-                        </Badge>
-                      );
-                    })}
-                  </div>
+                  {!wasShown ? (
+                    <Badge className={cn("mt-3 w-fit", idleBadgeClass)}>
+                      Not shown by questionnaire flow
+                    </Badge>
+                  ) : !answer ? (
+                    <Badge className={cn("mt-3 w-fit", idleBadgeClass)}>
+                      No answer stored
+                    </Badge>
+                  ) : (
+                    <>
+                      <div className="mt-3 break-words text-sm text-[var(--ui-ink-medium)] [overflow-wrap:anywhere]">
+                        Stored answer: {answer.valueText || answer.optionKey || "Recorded"}
+                        {answer.numericValue !== null
+                          ? ` · Numeric value ${answer.numericValue}`
+                          : ""}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {item.options.map((option) => {
+                          const selected = answer.optionKey === option.key;
+                          return (
+                            <Badge
+                              key={`${item.id}-${option.key}`}
+                              className={cn(
+                                "max-w-full break-words [overflow-wrap:anywhere]",
+                                selected ? selectedBadgeClass : idleBadgeClass
+                              )}
+                            >
+                              {option.label}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
                 </div>
               );
             })}
