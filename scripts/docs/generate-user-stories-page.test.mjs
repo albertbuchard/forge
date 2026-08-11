@@ -54,9 +54,9 @@ test("the authoritative contract has the expected current and planned inventory"
   assert.equal(new Set(stories.map((story) => story.id)).size, 203);
   assert.equal(count("lifecycle", "current"), 184);
   assert.equal(count("lifecycle", "planned"), 19);
-  assert.equal(count("readiness", "Verified"), 12);
+  assert.equal(count("readiness", "Verified"), 13);
   assert.equal(count("readiness", "In review"), 141);
-  assert.equal(count("readiness", "Needs audit"), 31);
+  assert.equal(count("readiness", "Needs audit"), 30);
   assert.equal(count("readiness", "Limited"), 0);
   assert.equal(count("readiness", "Externally blocked"), 0);
   assert.equal(new Set(stories.map((story) => story.prefix)).size, 23);
@@ -203,7 +203,7 @@ test("the client restores filters, canonicalizes contradictory URLs, and keeps m
   readiness.value = "Verified";
   readiness.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
 
-  assert.equal(visibleStories(document).length, 12);
+  assert.equal(visibleStories(document).length, 13);
   assert.equal(
     visibleStories(document).every(
       (story) => story.dataset.readiness === "Verified"
