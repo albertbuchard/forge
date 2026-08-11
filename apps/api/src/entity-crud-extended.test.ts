@@ -287,7 +287,13 @@ test("batch entity routes handle preferences CRUD and questionnaire instrument C
       results: Array<{
         ok: boolean;
         clientRef?: string;
-        entity?: { id: string; title?: string; name?: string; label?: string };
+        entity?: {
+          id: string;
+          title?: string;
+          name?: string;
+          label?: string;
+          draftVersion?: { id: string; updatedAt: string } | null;
+        };
       }>;
     };
     assert.equal(
@@ -304,13 +310,15 @@ test("batch entity routes handle preferences CRUD and questionnaire instrument C
     const itemId = createBody.results.find(
       (entry) => entry.clientRef === "item-a"
     )?.entity?.id;
-    const questionnaireId = createBody.results.find(
+    const questionnaire = createBody.results.find(
       (entry) => entry.clientRef === "questionnaire-a"
-    )?.entity?.id;
+    )?.entity;
+    const questionnaireId = questionnaire?.id;
     assert.ok(catalogId);
     assert.ok(contextId);
     assert.ok(itemId);
     assert.ok(questionnaireId);
+    assert.ok(questionnaire?.draftVersion);
 
     const createCatalogItemResponse = await app.inject({
       method: "POST",
@@ -378,7 +386,11 @@ test("batch entity routes handle preferences CRUD and questionnaire instrument C
           {
             entityType: "questionnaire_instrument",
             id: questionnaireId,
-            patch: { title: "Tiny weekly check-in" }
+            patch: {
+              expectedDraftVersionId: questionnaire.draftVersion.id,
+              expectedDraftUpdatedAt: questionnaire.draftVersion.updatedAt,
+              title: "Tiny weekly check-in"
+            }
           }
         ]
       }

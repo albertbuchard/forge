@@ -196,8 +196,7 @@ export interface QuestionnaireInstrumentSummary {
   updatedAt: string;
 }
 
-export interface QuestionnaireInstrumentDetail
-  extends QuestionnaireInstrumentSummary {
+export interface QuestionnaireInstrumentDetail extends QuestionnaireInstrumentSummary {
   status: "active" | "archived";
   currentVersion: QuestionnaireVersion | null;
   draftVersion: QuestionnaireVersion | null;
@@ -274,6 +273,8 @@ export interface CreateQuestionnaireInstrumentInput {
 }
 
 export interface UpdateQuestionnaireVersionInput {
+  expectedDraftVersionId: string;
+  expectedDraftUpdatedAt: string;
   title: string;
   subtitle: string;
   description: string;
@@ -287,4 +288,10 @@ export interface UpdateQuestionnaireVersionInput {
   definition: QuestionnaireDefinition;
   scoring: QuestionnaireScoring;
   provenance: QuestionnaireProvenance;
+}
+
+export interface PublishQuestionnaireVersionInput {
+  expectedDraftVersionId: string;
+  expectedDraftUpdatedAt: string;
+  label?: string;
 }

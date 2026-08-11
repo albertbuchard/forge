@@ -19840,15 +19840,23 @@ test("direct preferences list and get routes work, and questionnaire instruments
       }
     });
     assert.equal(createQuestionnaire.statusCode, 201);
-    const questionnaireId = (
-      createQuestionnaire.json() as { instrument: { id: string } }
-    ).instrument.id;
+    const createdQuestionnaire = createQuestionnaire.json() as {
+      instrument: {
+        id: string;
+        draftVersion: { id: string; updatedAt: string } | null;
+      };
+    };
+    const questionnaireId = createdQuestionnaire.instrument.id;
+    assert.ok(createdQuestionnaire.instrument.draftVersion);
 
     const patchQuestionnaire = await app.inject({
       method: "PATCH",
       url: `/api/v1/psyche/questionnaires/${questionnaireId}`,
       headers: { cookie: operatorCookie },
       payload: {
+        expectedDraftVersionId: createdQuestionnaire.instrument.draftVersion.id,
+        expectedDraftUpdatedAt:
+          createdQuestionnaire.instrument.draftVersion.updatedAt,
         title: "Tiny weekly check-in"
       }
     });

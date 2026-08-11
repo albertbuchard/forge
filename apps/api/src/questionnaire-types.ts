@@ -411,6 +411,8 @@ export const createQuestionnaireInstrumentSchema = z.object({
 });
 
 export const updateQuestionnaireVersionSchema = z.object({
+  expectedDraftVersionId: nonEmptyTrimmedString,
+  expectedDraftUpdatedAt: z.string().datetime({ offset: true }),
   title: nonEmptyTrimmedString,
   subtitle: trimmedString.default(""),
   description: trimmedString.default(""),
@@ -427,6 +429,8 @@ export const updateQuestionnaireVersionSchema = z.object({
 });
 
 export const publishQuestionnaireVersionSchema = z.object({
+  expectedDraftVersionId: nonEmptyTrimmedString,
+  expectedDraftUpdatedAt: z.string().datetime({ offset: true }),
   label: trimmedString.default("")
 });
 
@@ -434,10 +438,16 @@ export type QuestionnaireOption = z.infer<typeof questionnaireOptionSchema>;
 export type QuestionnaireFlowRule = z.infer<typeof questionnaireFlowRuleSchema>;
 export type QuestionnaireItem = z.infer<typeof questionnaireItemSchema>;
 export type QuestionnaireSection = z.infer<typeof questionnaireSectionSchema>;
-export type QuestionnaireDefinition = z.infer<typeof questionnaireDefinitionSchema>;
+export type QuestionnaireDefinition = z.infer<
+  typeof questionnaireDefinitionSchema
+>;
 export type QuestionnaireScoring = z.infer<typeof questionnaireScoringSchema>;
-export type QuestionnaireScoreDefinition = z.infer<typeof questionnaireScoreDefinitionSchema>;
-export type QuestionnaireProvenance = z.infer<typeof questionnaireProvenanceSchema>;
+export type QuestionnaireScoreDefinition = z.infer<
+  typeof questionnaireScoreDefinitionSchema
+>;
+export type QuestionnaireProvenance = z.infer<
+  typeof questionnaireProvenanceSchema
+>;
 export type QuestionnaireVersion = z.infer<typeof questionnaireVersionSchema>;
 export type QuestionnaireInstrumentSummary = z.infer<
   typeof questionnaireInstrumentSummarySchema
@@ -447,8 +457,12 @@ export type QuestionnaireInstrumentDetail = z.infer<
 >;
 export type QuestionnaireRun = z.infer<typeof questionnaireRunSchema>;
 export type QuestionnaireRunScore = z.infer<typeof questionnaireRunScoreSchema>;
-export type QuestionnaireRunDetail = z.infer<typeof questionnaireRunDetailSchema>;
-export type QuestionnaireAnswerInput = z.infer<typeof questionnaireAnswerInputSchema>;
+export type QuestionnaireRunDetail = z.infer<
+  typeof questionnaireRunDetailSchema
+>;
+export type QuestionnaireAnswerInput = z.infer<
+  typeof questionnaireAnswerInputSchema
+>;
 export type CreateQuestionnaireInstrumentInput = z.infer<
   typeof createQuestionnaireInstrumentSchema
 >;

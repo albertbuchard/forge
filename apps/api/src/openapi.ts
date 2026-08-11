@@ -9752,6 +9752,107 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const questionnaireRevisionProperties = {
+    expectedDraftVersionId: {
+      type: "string",
+      description: "The exact draft version returned by the latest read."
+    },
+    expectedDraftUpdatedAt: {
+      type: "string",
+      format: "date-time",
+      description:
+        "The exact draft revision timestamp returned by the latest read. A stale value returns questionnaire_draft_revision_conflict."
+    }
+  };
+
+  const questionnaireEditableProperties = {
+    title: { type: "string", minLength: 1 },
+    subtitle: { type: "string" },
+    description: { type: "string" },
+    aliases: arrayOf({ type: "string" }),
+    symptomDomains: arrayOf({ type: "string" }),
+    tags: arrayOf({ type: "string" }),
+    sourceClass: {
+      type: "string",
+      enum: [
+        "public_domain",
+        "free_use",
+        "open_access",
+        "open_noncommercial",
+        "free_clinician",
+        "secondary_verified"
+      ]
+    },
+    availability: {
+      type: "string",
+      enum: ["open", "free_clinician", "custom"]
+    },
+    isSelfReport: { type: "boolean" },
+    definition: { type: "object", additionalProperties: true },
+    scoring: { type: "object", additionalProperties: true },
+    provenance: { type: "object", additionalProperties: true }
+  };
+
+  const questionnaireInstrumentUpdateInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["expectedDraftVersionId", "expectedDraftUpdatedAt"],
+    properties: {
+      ...questionnaireRevisionProperties,
+      ...questionnaireEditableProperties
+    },
+    description:
+      "One or more questionnaire fields to update plus the exact draft revision returned by the latest read."
+  };
+
+  const questionnaireDraftUpdateInput = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "expectedDraftVersionId",
+      "expectedDraftUpdatedAt",
+      "title",
+      "subtitle",
+      "description",
+      "aliases",
+      "symptomDomains",
+      "tags",
+      "sourceClass",
+      "availability",
+      "isSelfReport",
+      "label",
+      "definition",
+      "scoring",
+      "provenance"
+    ],
+    properties: {
+      ...questionnaireRevisionProperties,
+      ...questionnaireEditableProperties,
+      label: { type: "string" }
+    },
+    description:
+      "The complete editable questionnaire draft plus its required optimistic-concurrency identity."
+  };
+
+  const questionnaireDraftPublishInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["expectedDraftVersionId", "expectedDraftUpdatedAt"],
+    properties: {
+      expectedDraftVersionId: {
+        type: "string",
+        description: "The exact draft version to publish."
+      },
+      expectedDraftUpdatedAt: {
+        type: "string",
+        format: "date-time",
+        description:
+          "The exact revision timestamp of the reviewed draft. A stale value returns questionnaire_draft_revision_conflict."
+      },
+      label: { type: "string" }
+    }
+  };
+
   const nutritionFoodLog = {
     type: "object",
     additionalProperties: true,
@@ -12589,6 +12690,9 @@ export function buildOpenApiDocument() {
         NutritionExperiment: nutritionExperiment,
         WeightLossViewData: weightLossViewData,
         QuestionnaireAnswerInput: questionnaireAnswerInput,
+        QuestionnaireInstrumentUpdateInput: questionnaireInstrumentUpdateInput,
+        QuestionnaireDraftUpdateInput: questionnaireDraftUpdateInput,
+        QuestionnaireDraftPublishInput: questionnaireDraftPublishInput,
         QuestionnaireRunStartInput: questionnaireRunStartInput,
         QuestionnaireRunUpdateInput: questionnaireRunUpdateInput,
         PsycheMetricsViewData: psycheMetricsViewData,
@@ -17775,7 +17879,17 @@ export function buildOpenApiDocument() {
         },
         patch: {
           summary:
-            "Update one questionnaire instrument through the direct route",
+            "Update one questionnaire instrument through the direct route using its exact draft revision",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/QuestionnaireInstrumentUpdateInput"
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
@@ -17858,6 +17972,16 @@ export function buildOpenApiDocument() {
         },
         patch: {
           summary: "Update the current questionnaire draft version",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/QuestionnaireDraftUpdateInput"
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
@@ -17879,6 +18003,16 @@ export function buildOpenApiDocument() {
       "/api/v1/psyche/questionnaires/{id}/publish": {
         post: {
           summary: "Publish the current questionnaire draft as a new version",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/QuestionnaireDraftPublishInput"
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {

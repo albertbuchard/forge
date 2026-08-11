@@ -42,7 +42,11 @@ test("PSY-13 starts runs only from a published version owned by the selected que
     const clone = cloned.json() as {
       instrument: {
         id: string;
-        draftVersion: { id: string; versionNumber: number } | null;
+        draftVersion: {
+          id: string;
+          versionNumber: number;
+          updatedAt: string;
+        } | null;
       };
     };
     const instrumentId = clone.instrument.id;
@@ -93,7 +97,11 @@ test("PSY-13 starts runs only from a published version owned by the selected que
       method: "POST",
       url: `/api/v1/psyche/questionnaires/${instrumentId}/publish`,
       headers: { cookie },
-      payload: { label: "Published v1" }
+      payload: {
+        label: "Published v1",
+        expectedDraftVersionId: clone.instrument.draftVersion!.id,
+        expectedDraftUpdatedAt: clone.instrument.draftVersion!.updatedAt
+      }
     });
     assert.equal(published.statusCode, 200, published.body);
 
@@ -159,11 +167,14 @@ test("PSY-13 starts runs only from a published version owned by the selected que
       published_status: string;
       draft_status: string;
     };
-    assert.deepEqual({ ...stored }, {
-      version_id: firstVersionId,
-      published_status: "published",
-      draft_status: "draft"
-    });
+    assert.deepEqual(
+      { ...stored },
+      {
+        version_id: firstVersionId,
+        published_status: "published",
+        draft_status: "draft"
+      }
+    );
 
     const legacyRunId = "questionnaire_run_legacy_draft";
     const legacyStartedAt = "2026-08-11T12:00:00.000Z";
@@ -188,6 +199,8 @@ test("PSY-13 starts runs only from a published version owned by the selected que
       url: `/api/v1/psyche/questionnaires/${instrumentId}/draft`,
       headers: { cookie },
       payload: {
+        expectedDraftVersionId: secondVersion.id,
+        expectedDraftUpdatedAt: secondVersion.updatedAt,
         title: `${nextInstrument.title} overwritten`,
         subtitle: nextInstrument.subtitle,
         description: nextInstrument.description,

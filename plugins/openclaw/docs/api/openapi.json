@@ -37486,6 +37486,208 @@
           }
         }
       },
+      "QuestionnaireInstrumentUpdateInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedDraftVersionId",
+          "expectedDraftUpdatedAt"
+        ],
+        "properties": {
+          "expectedDraftVersionId": {
+            "type": "string",
+            "description": "The exact draft version returned by the latest read."
+          },
+          "expectedDraftUpdatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The exact draft revision timestamp returned by the latest read. A stale value returns questionnaire_draft_revision_conflict."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "subtitle": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "symptomDomains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sourceClass": {
+            "type": "string",
+            "enum": [
+              "public_domain",
+              "free_use",
+              "open_access",
+              "open_noncommercial",
+              "free_clinician",
+              "secondary_verified"
+            ]
+          },
+          "availability": {
+            "type": "string",
+            "enum": [
+              "open",
+              "free_clinician",
+              "custom"
+            ]
+          },
+          "isSelfReport": {
+            "type": "boolean"
+          },
+          "definition": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "scoring": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "provenance": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "description": "One or more questionnaire fields to update plus the exact draft revision returned by the latest read."
+      },
+      "QuestionnaireDraftUpdateInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedDraftVersionId",
+          "expectedDraftUpdatedAt",
+          "title",
+          "subtitle",
+          "description",
+          "aliases",
+          "symptomDomains",
+          "tags",
+          "sourceClass",
+          "availability",
+          "isSelfReport",
+          "label",
+          "definition",
+          "scoring",
+          "provenance"
+        ],
+        "properties": {
+          "expectedDraftVersionId": {
+            "type": "string",
+            "description": "The exact draft version returned by the latest read."
+          },
+          "expectedDraftUpdatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The exact draft revision timestamp returned by the latest read. A stale value returns questionnaire_draft_revision_conflict."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "subtitle": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "symptomDomains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sourceClass": {
+            "type": "string",
+            "enum": [
+              "public_domain",
+              "free_use",
+              "open_access",
+              "open_noncommercial",
+              "free_clinician",
+              "secondary_verified"
+            ]
+          },
+          "availability": {
+            "type": "string",
+            "enum": [
+              "open",
+              "free_clinician",
+              "custom"
+            ]
+          },
+          "isSelfReport": {
+            "type": "boolean"
+          },
+          "definition": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "scoring": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "provenance": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "description": "The complete editable questionnaire draft plus its required optimistic-concurrency identity."
+      },
+      "QuestionnaireDraftPublishInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedDraftVersionId",
+          "expectedDraftUpdatedAt"
+        ],
+        "properties": {
+          "expectedDraftVersionId": {
+            "type": "string",
+            "description": "The exact draft version to publish."
+          },
+          "expectedDraftUpdatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The exact revision timestamp of the reviewed draft. A stale value returns questionnaire_draft_revision_conflict."
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      },
       "QuestionnaireRunStartInput": {
         "type": "object",
         "additionalProperties": false,
@@ -57230,7 +57432,17 @@
         "operationId": "getpsyche_questionnaires_id"
       },
       "patch": {
-        "summary": "Update one questionnaire instrument through the direct route",
+        "summary": "Update one questionnaire instrument through the direct route using its exact draft revision",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionnaireInstrumentUpdateInput"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Updated questionnaire instrument",
@@ -57363,6 +57575,16 @@
       },
       "patch": {
         "summary": "Update the current questionnaire draft version",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionnaireDraftUpdateInput"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Questionnaire instrument with updated draft",
@@ -57397,6 +57619,16 @@
     "/api/v1/psyche/questionnaires/{id}/publish": {
       "post": {
         "summary": "Publish the current questionnaire draft as a new version",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionnaireDraftPublishInput"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Published questionnaire instrument",

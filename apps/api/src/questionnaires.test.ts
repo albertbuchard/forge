@@ -10,7 +10,9 @@ import { closeDatabase, getDatabase } from "./db.js";
 const issueOperatorSessionCookie = issueTestOperatorSessionCookie;
 
 test("questionnaire seeds are present in the psyche library", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-questionnaire-library-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-questionnaire-library-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -22,12 +24,28 @@ test("questionnaire seeds are present in the psyche library", async () => {
     });
     assert.equal(response.statusCode, 200);
     const payload = response.json() as {
-      instruments: Array<{ key: string; title: string; currentVersionNumber: number }>;
+      instruments: Array<{
+        key: string;
+        title: string;
+        currentVersionNumber: number;
+      }>;
     };
 
     const keys = payload.instruments.map((instrument) => instrument.key);
-    assert.deepEqual(keys, ["audit", "gad_7", "pcl_5", "phq_9", "srq_20", "who_5", "ysq_r"]);
-    assert.ok(payload.instruments.every((instrument) => instrument.currentVersionNumber === 1));
+    assert.deepEqual(keys, [
+      "audit",
+      "gad_7",
+      "pcl_5",
+      "phq_9",
+      "srq_20",
+      "who_5",
+      "ysq_r"
+    ]);
+    assert.ok(
+      payload.instruments.every(
+        (instrument) => instrument.currentVersionNumber === 1
+      )
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -36,7 +54,9 @@ test("questionnaire seeds are present in the psyche library", async () => {
 });
 
 test("completing a PHQ-9 run stores answers, score rows, and history", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-questionnaire-run-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-questionnaire-run-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -49,7 +69,9 @@ test("completing a PHQ-9 run stores answers, score rows, and history", async () 
     const library = libraryResponse.json() as {
       instruments: Array<{ id: string; key: string }>;
     };
-    const phq = library.instruments.find((instrument) => instrument.key === "phq_9");
+    const phq = library.instruments.find(
+      (instrument) => instrument.key === "phq_9"
+    );
     assert.ok(phq);
 
     const startResponse = await app.inject({
@@ -65,7 +87,14 @@ test("completing a PHQ-9 run stores answers, score rows, and history", async () 
     assert.equal(startResponse.statusCode, 201);
     const started = startResponse.json() as {
       run: { id: string };
-      version: { definition: { items: Array<{ id: string; options: Array<{ key: string; label: string; value: number }> }> } };
+      version: {
+        definition: {
+          items: Array<{
+            id: string;
+            options: Array<{ key: string; label: string; value: number }>;
+          }>;
+        };
+      };
     };
 
     const answers = started.version.definition.items.map((item) => {
@@ -103,15 +132,27 @@ test("completing a PHQ-9 run stores answers, score rows, and history", async () 
     assert.equal(completeResponse.statusCode, 200);
     const completed = completeResponse.json() as {
       run: { status: string; completedAt: string | null; versionId: string };
-      scores: Array<{ scoreKey: string; valueNumeric: number | null; bandLabel: string }>;
+      scores: Array<{
+        scoreKey: string;
+        valueNumeric: number | null;
+        bandLabel: string;
+      }>;
       answers: Array<{ itemId: string }>;
-      history: Array<{ runId: string; primaryScore: number | null; bandLabel: string }>;
+      history: Array<{
+        runId: string;
+        primaryScore: number | null;
+        bandLabel: string;
+      }>;
     };
     assert.equal(completed.run.status, "completed");
     assert.ok(completed.run.completedAt);
     assert.equal(completed.answers.length, 9);
     assert.deepEqual(
-      completed.scores.map((score) => [score.scoreKey, score.valueNumeric, score.bandLabel]),
+      completed.scores.map((score) => [
+        score.scoreKey,
+        score.valueNumeric,
+        score.bandLabel
+      ]),
       [
         ["phq9_total", 27, "Severe"],
         ["phq9_item9", 3, ""]
@@ -139,7 +180,10 @@ test("completing a PHQ-9 run stores answers, score rows, and history", async () 
     assert.ok(noteRow);
     assert.match(noteRow.title, /PHQ-9/i);
     assert.deepEqual(JSON.parse(noteRow.tags_json), ["Self-observation"]);
-    const frontmatter = JSON.parse(noteRow.frontmatter_json) as Record<string, unknown>;
+    const frontmatter = JSON.parse(noteRow.frontmatter_json) as Record<
+      string,
+      unknown
+    >;
     assert.equal(frontmatter.questionnaireRunId, started.run.id);
     assert.equal(frontmatter.questionnaireVersionId, completed.run.versionId);
     assert.ok(typeof frontmatter.observedAt === "string");
@@ -151,7 +195,9 @@ test("completing a PHQ-9 run stores answers, score rows, and history", async () 
 });
 
 test("AUDIT hides downstream alcohol questions when drinking frequency is never", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-questionnaire-audit-flow-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-questionnaire-audit-flow-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -164,7 +210,9 @@ test("AUDIT hides downstream alcohol questions when drinking frequency is never"
     const library = libraryResponse.json() as {
       instruments: Array<{ id: string; key: string }>;
     };
-    const audit = library.instruments.find((instrument) => instrument.key === "audit");
+    const audit = library.instruments.find(
+      (instrument) => instrument.key === "audit"
+    );
     assert.ok(audit);
 
     const startResponse = await app.inject({
@@ -216,11 +264,19 @@ test("AUDIT hides downstream alcohol questions when drinking frequency is never"
     assert.equal(completeResponse.statusCode, 200);
     const completed = completeResponse.json() as {
       run: { status: string };
-      scores: Array<{ scoreKey: string; valueNumeric: number | null; bandLabel: string }>;
+      scores: Array<{
+        scoreKey: string;
+        valueNumeric: number | null;
+        bandLabel: string;
+      }>;
     };
     assert.equal(completed.run.status, "completed");
     assert.deepEqual(
-      completed.scores.map((score) => [score.scoreKey, score.valueNumeric, score.bandLabel]),
+      completed.scores.map((score) => [
+        score.scoreKey,
+        score.valueNumeric,
+        score.bandLabel
+      ]),
       [["audit_total", 0, "Zone I · Low risk"]]
     );
   } finally {
@@ -231,7 +287,9 @@ test("AUDIT hides downstream alcohol questions when drinking frequency is never"
 });
 
 test("custom questionnaire drafts can publish new versions without mutating past runs", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-questionnaire-versioning-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-questionnaire-versioning-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -323,7 +381,11 @@ test("custom questionnaire drafts can publish new versions without mutating past
     const created = createResponse.json() as {
       instrument: {
         id: string;
-        draftVersion: { id: string; versionNumber: number } | null;
+        draftVersion: {
+          id: string;
+          versionNumber: number;
+          updatedAt: string;
+        } | null;
       };
     };
     const instrumentId = created.instrument.id;
@@ -333,7 +395,11 @@ test("custom questionnaire drafts can publish new versions without mutating past
       method: "POST",
       url: `/api/v1/psyche/questionnaires/${instrumentId}/publish`,
       headers: { cookie: operatorCookie },
-      payload: { label: "v1" }
+      payload: {
+        label: "v1",
+        expectedDraftVersionId: created.instrument.draftVersion!.id,
+        expectedDraftUpdatedAt: created.instrument.draftVersion!.updatedAt
+      }
     });
     assert.equal(publishV1.statusCode, 200);
 
@@ -384,106 +450,190 @@ test("custom questionnaire drafts can publish new versions without mutating past
       payload: {}
     });
     assert.equal(draftAgain.statusCode, 200);
+    const draftAgainPayload = draftAgain.json() as {
+      instrument: { draftVersion: { id: string; updatedAt: string } | null };
+    };
+    assert.ok(draftAgainPayload.instrument.draftVersion);
 
+    const draftUpdatePayload = {
+      expectedDraftVersionId: draftAgainPayload.instrument.draftVersion!.id,
+      expectedDraftUpdatedAt:
+        draftAgainPayload.instrument.draftVersion!.updatedAt,
+      title: "Tiny check-in revised",
+      subtitle: "Custom",
+      description: "Updated copy.",
+      aliases: [],
+      symptomDomains: ["check-in"],
+      tags: ["custom"],
+      sourceClass: "secondary_verified",
+      availability: "custom",
+      isSelfReport: true,
+      label: "v2 draft",
+      definition: {
+        locale: "en",
+        instructions: "Rate how present this feels right now.",
+        completionNote: "",
+        presentationMode: "single_question",
+        responseStyle: "four_point_frequency",
+        itemIds: ["check_1"],
+        items: [
+          {
+            id: "check_1",
+            prompt: "I feel grounded right now.",
+            shortLabel: "",
+            description: "",
+            helperText: "",
+            required: true,
+            tags: [],
+            options: [
+              { key: "0", label: "Not at all", value: 0, description: "" },
+              { key: "1", label: "A little", value: 1, description: "" },
+              { key: "2", label: "Mostly", value: 2, description: "" },
+              { key: "3", label: "Strongly", value: 3, description: "" }
+            ]
+          }
+        ],
+        sections: [
+          {
+            id: "check",
+            title: "Check",
+            description: "",
+            itemIds: ["check_1"]
+          }
+        ],
+        pageSize: null
+      },
+      scoring: {
+        scores: [
+          {
+            key: "total",
+            label: "Grounding total v2",
+            description: "",
+            valueType: "number",
+            expression: { kind: "sum", itemIds: ["check_1"] },
+            dependsOnItemIds: ["check_1"],
+            missingPolicy: { mode: "require_all" },
+            bands: [{ label: "Strong", min: 3, max: 3, severity: "" }],
+            roundTo: null,
+            unitLabel: ""
+          }
+        ]
+      },
+      provenance: {
+        retrievalDate: "2026-04-06",
+        sourceClass: "secondary_verified",
+        scoringNotes: "Sum the one item.",
+        sources: [
+          {
+            label: "Local draft",
+            url: "https://example.com/draft",
+            citation: "Local draft questionnaire",
+            notes: ""
+          }
+        ]
+      }
+    };
     const updateDraft = await app.inject({
       method: "PATCH",
       url: `/api/v1/psyche/questionnaires/${instrumentId}/draft`,
       headers: { cookie: operatorCookie },
-      payload: {
-        title: "Tiny check-in revised",
-        subtitle: "Custom",
-        description: "Updated copy.",
-        aliases: [],
-        symptomDomains: ["check-in"],
-        tags: ["custom"],
-        sourceClass: "secondary_verified",
-        availability: "custom",
-        isSelfReport: true,
-        label: "v2 draft",
-        definition: {
-          locale: "en",
-          instructions: "Rate how present this feels right now.",
-          completionNote: "",
-          presentationMode: "single_question",
-          responseStyle: "four_point_frequency",
-          itemIds: ["check_1"],
-          items: [
-            {
-              id: "check_1",
-              prompt: "I feel grounded right now.",
-              shortLabel: "",
-              description: "",
-              helperText: "",
-              required: true,
-              tags: [],
-              options: [
-                { key: "0", label: "Not at all", value: 0, description: "" },
-                { key: "1", label: "A little", value: 1, description: "" },
-                { key: "2", label: "Mostly", value: 2, description: "" },
-                { key: "3", label: "Strongly", value: 3, description: "" }
-              ]
-            }
-          ],
-          sections: [
-            {
-              id: "check",
-              title: "Check",
-              description: "",
-              itemIds: ["check_1"]
-            }
-          ],
-          pageSize: null
-        },
-        scoring: {
-          scores: [
-            {
-              key: "total",
-              label: "Total",
-              description: "",
-              valueType: "number",
-              expression: { kind: "sum", itemIds: ["check_1"] },
-              dependsOnItemIds: ["check_1"],
-              missingPolicy: { mode: "require_all" },
-              bands: [{ label: "Strong", min: 3, max: 3, severity: "" }],
-              roundTo: null,
-              unitLabel: ""
-            }
-          ]
-        },
-        provenance: {
-          retrievalDate: "2026-04-06",
-          sourceClass: "secondary_verified",
-          scoringNotes: "Sum the one item.",
-          sources: [
-            {
-              label: "Local draft",
-              url: "https://example.com/draft",
-              citation: "Local draft questionnaire",
-              notes: ""
-            }
-          ]
-        }
-      }
+      payload: draftUpdatePayload
     });
     assert.equal(updateDraft.statusCode, 200);
+    const updatedDraft = updateDraft.json() as {
+      instrument: { draftVersion: { id: string; updatedAt: string } | null };
+    };
+    assert.ok(updatedDraft.instrument.draftVersion);
+    const effectsBeforeStaleAttempts = getDatabase()
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM activity_events
+         WHERE entity_type = 'questionnaire_instrument'
+           AND entity_id = ?
+           AND event_type IN (
+             'questionnaire_draft_updated',
+             'questionnaire_version_published'
+           )`
+      )
+      .get(instrumentId) as { count: number };
+
+    const staleUpdate = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/psyche/questionnaires/${instrumentId}/draft`,
+      headers: { cookie: operatorCookie },
+      payload: {
+        ...draftUpdatePayload,
+        title: "Stale editor overwrite"
+      }
+    });
+    assert.equal(staleUpdate.statusCode, 409);
+    assert.equal(
+      staleUpdate.json().code,
+      "questionnaire_draft_revision_conflict"
+    );
+
+    const stalePublish = await app.inject({
+      method: "POST",
+      url: `/api/v1/psyche/questionnaires/${instrumentId}/publish`,
+      headers: { cookie: operatorCookie },
+      payload: {
+        label: "stale v2",
+        expectedDraftVersionId: draftUpdatePayload.expectedDraftVersionId,
+        expectedDraftUpdatedAt: draftUpdatePayload.expectedDraftUpdatedAt
+      }
+    });
+    assert.equal(stalePublish.statusCode, 409);
+    assert.equal(
+      stalePublish.json().code,
+      "questionnaire_draft_revision_conflict"
+    );
+    const effectsAfterStaleAttempts = getDatabase()
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM activity_events
+         WHERE entity_type = 'questionnaire_instrument'
+           AND entity_id = ?
+           AND event_type IN (
+             'questionnaire_draft_updated',
+             'questionnaire_version_published'
+           )`
+      )
+      .get(instrumentId) as { count: number };
+    assert.equal(
+      effectsAfterStaleAttempts.count,
+      effectsBeforeStaleAttempts.count,
+      "stale save and publish attempts must not record successful activity"
+    );
 
     const publishV2 = await app.inject({
       method: "POST",
       url: `/api/v1/psyche/questionnaires/${instrumentId}/publish`,
       headers: { cookie: operatorCookie },
-      payload: { label: "v2" }
+      payload: {
+        label: "v2",
+        expectedDraftVersionId: updatedDraft.instrument.draftVersion!.id,
+        expectedDraftUpdatedAt: updatedDraft.instrument.draftVersion!.updatedAt
+      }
     });
     assert.equal(publishV2.statusCode, 200);
     const published = publishV2.json() as {
       instrument: {
         currentVersionNumber: number;
-        currentVersion: { versionNumber: number; definition: { items: Array<{ prompt: string }> } } | null;
+        currentVersion: {
+          versionNumber: number;
+          definition: { items: Array<{ prompt: string }> };
+          scoring: { scores: Array<{ label: string }> };
+        } | null;
       };
     };
     assert.equal(published.instrument.currentVersionNumber, 2);
     assert.equal(
       published.instrument.currentVersion?.definition.items[0]?.prompt,
       "I feel grounded right now."
+    );
+    assert.equal(
+      published.instrument.currentVersion?.scoring.scores[0]?.label,
+      "Grounding total v2"
     );
 
     const runDetail = await app.inject({
@@ -493,13 +643,18 @@ test("custom questionnaire drafts can publish new versions without mutating past
     });
     assert.equal(runDetail.statusCode, 200);
     const preserved = runDetail.json() as {
-      version: { versionNumber: number; definition: { items: Array<{ prompt: string }> } };
+      version: {
+        versionNumber: number;
+        definition: { items: Array<{ prompt: string }> };
+        scoring: { scores: Array<{ label: string }> };
+      };
     };
     assert.equal(preserved.version.versionNumber, 1);
     assert.equal(
       preserved.version.definition.items[0]?.prompt,
       "I feel grounded."
     );
+    assert.equal(preserved.version.scoring.scores[0]?.label, "Total");
   } finally {
     await app.close();
     closeDatabase();

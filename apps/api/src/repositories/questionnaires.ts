@@ -129,6 +129,14 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function nextRevisionIso(previous: string) {
+  const previousTime = Date.parse(previous);
+  const nextTime = Number.isFinite(previousTime)
+    ? Math.max(Date.now(), previousTime + 1)
+    : Date.now();
+  return new Date(nextTime).toISOString();
+}
+
 function parseJson<T>(value: string): T {
   return JSON.parse(value) as T;
 }
@@ -223,7 +231,9 @@ function mapVersion(row: VersionRow): QuestionnaireVersion {
     status: row.status,
     label: row.label,
     isReadOnly: row.is_read_only === 1,
-    definition: questionnaireDefinitionSchema.parse(parseJson(row.definition_json)),
+    definition: questionnaireDefinitionSchema.parse(
+      parseJson(row.definition_json)
+    ),
     scoring: questionnaireScoringSchema.parse(parseJson(row.scoring_json)),
     provenance: parseJson(row.provenance_json),
     createdBy: row.created_by,
@@ -239,13 +249,16 @@ function selectPrimaryVersion(
 ) {
   if (instrument.current_published_version_id) {
     return (
-      versions.find((version) => version.id === instrument.current_published_version_id) ??
-      null
+      versions.find(
+        (version) => version.id === instrument.current_published_version_id
+      ) ?? null
     );
   }
   if (instrument.current_draft_version_id) {
     return (
-      versions.find((version) => version.id === instrument.current_draft_version_id) ?? null
+      versions.find(
+        (version) => version.id === instrument.current_draft_version_id
+      ) ?? null
     );
   }
   return versions[0] ?? null;
@@ -278,7 +291,10 @@ function getHistoryForInstrument(instrumentId: string, userIds?: string[]) {
         LIMIT 40
       `
     )
-    .all(instrumentId, ...(userIds?.map((entry) => entry ?? "") ?? [])) as HistoryRow[];
+    .all(
+      instrumentId,
+      ...(userIds?.map((entry) => entry ?? "") ?? [])
+    ) as HistoryRow[];
 
   return rows.map((row) => ({
     runId: row.run_id,
@@ -311,9 +327,11 @@ function getLatestDraftRunId(
         LIMIT 1
       `
     )
-    .get(instrumentId, versionId, ...(userIds?.map((entry) => entry ?? "") ?? [])) as
-    | { id: string }
-    | undefined;
+    .get(
+      instrumentId,
+      versionId,
+      ...(userIds?.map((entry) => entry ?? "") ?? [])
+    ) as { id: string } | undefined;
   return row?.id ?? null;
 }
 
@@ -329,7 +347,9 @@ function getSummaryStats(instrumentId: string, userIds?: string[]) {
           ${userIds && userIds.length > 0 ? `AND COALESCE(user_id, '') IN (${userIds.map(() => "?").join(",")})` : ""}
       `
     )
-    .get(instrumentId, ...(userIds?.map((entry) => entry ?? "") ?? [])) as { count: number };
+    .get(instrumentId, ...(userIds?.map((entry) => entry ?? "") ?? [])) as {
+    count: number;
+  };
   const latestRow = database
     .prepare(
       `
@@ -353,7 +373,11 @@ function getSummaryStats(instrumentId: string, userIds?: string[]) {
   };
 }
 
-function mapSummary(row: InstrumentRow, versions: QuestionnaireVersion[], userIds?: string[]) {
+function mapSummary(
+  row: InstrumentRow,
+  versions: QuestionnaireVersion[],
+  userIds?: string[]
+) {
   const currentVersion = selectPrimaryVersion(row, versions);
   const stats = getSummaryStats(row.id, userIds);
   const primarySourceUrl = currentVersion?.provenance.sources[0]?.url ?? "";
@@ -376,8 +400,7 @@ function mapSummary(row: InstrumentRow, versions: QuestionnaireVersion[], userId
     itemCount: currentVersion?.definition.items.length ?? 0,
     isSelfReport: row.is_self_report === 1,
     isSystem: row.is_system === 1,
-    isReadOnly:
-      row.is_system === 1 || currentVersion?.status !== "draft",
+    isReadOnly: row.is_system === 1 || currentVersion?.status !== "draft",
     ownerUserId: row.owner_user_id,
     currentVersionId: currentVersion?.id ?? null,
     currentVersionNumber: currentVersion?.versionNumber ?? null,
@@ -390,7 +413,9 @@ function mapSummary(row: InstrumentRow, versions: QuestionnaireVersion[], userId
   });
 }
 
-function assertValidQuestionnaireDefinition(definition: QuestionnaireDefinition) {
+function assertValidQuestionnaireDefinition(
+  definition: QuestionnaireDefinition
+) {
   validateQuestionnaireFlow(definition);
 }
 
@@ -427,7 +452,8 @@ function getRunRow(id: string) {
 
 function getCurrentPublishedOrDraftVersion(instrument: InstrumentRow) {
   const versionId =
-    instrument.current_published_version_id ?? instrument.current_draft_version_id;
+    instrument.current_published_version_id ??
+    instrument.current_draft_version_id;
   if (!versionId) {
     throw createHttpError({
       statusCode: 404,
@@ -495,7 +521,9 @@ function evaluateExpression(
     case "const":
       return expression.value;
     case "answer":
-      return answerMap.get(expression.itemId) ?? expression.defaultValue ?? null;
+      return (
+        answerMap.get(expression.itemId) ?? expression.defaultValue ?? null
+      );
     case "score":
       return scoreMap.get(expression.scoreKey) ?? null;
     case "add": {
@@ -505,7 +533,9 @@ function evaluateExpression(
       if (numbers.some((value) => value === null)) {
         return null;
       }
-      const present = numbers.filter((value): value is number => value !== null);
+      const present = numbers.filter(
+        (value): value is number => value !== null
+      );
       return present.reduce((sum, value) => sum + value, 0);
     }
     case "multiply": {
@@ -515,29 +545,43 @@ function evaluateExpression(
       if (numbers.some((value) => value === null)) {
         return null;
       }
-      const present = numbers.filter((value): value is number => value !== null);
+      const present = numbers.filter(
+        (value): value is number => value !== null
+      );
       return present.reduce((product, value) => product * value, 1);
     }
     case "min": {
       const numbers = expression.values
-        .map((value) => coerceNumber(evaluateExpression(value, answerMap, scoreMap)))
+        .map((value) =>
+          coerceNumber(evaluateExpression(value, answerMap, scoreMap))
+        )
         .filter((value): value is number => value !== null);
       return numbers.length > 0 ? Math.min(...numbers) : null;
     }
     case "max": {
       const numbers = expression.values
-        .map((value) => coerceNumber(evaluateExpression(value, answerMap, scoreMap)))
+        .map((value) =>
+          coerceNumber(evaluateExpression(value, answerMap, scoreMap))
+        )
         .filter((value): value is number => value !== null);
       return numbers.length > 0 ? Math.max(...numbers) : null;
     }
     case "subtract": {
-      const left = coerceNumber(evaluateExpression(expression.left, answerMap, scoreMap));
-      const right = coerceNumber(evaluateExpression(expression.right, answerMap, scoreMap));
+      const left = coerceNumber(
+        evaluateExpression(expression.left, answerMap, scoreMap)
+      );
+      const right = coerceNumber(
+        evaluateExpression(expression.right, answerMap, scoreMap)
+      );
       return left === null || right === null ? null : left - right;
     }
     case "divide": {
-      const left = coerceNumber(evaluateExpression(expression.left, answerMap, scoreMap));
-      const right = coerceNumber(evaluateExpression(expression.right, answerMap, scoreMap));
+      const left = coerceNumber(
+        evaluateExpression(expression.left, answerMap, scoreMap)
+      );
+      const right = coerceNumber(
+        evaluateExpression(expression.right, answerMap, scoreMap)
+      );
       if (left === null || right === null) {
         return null;
       }
@@ -549,13 +593,19 @@ function evaluateExpression(
     case "sum": {
       const values = expression.itemIds
         .map((itemId) => answerMap.get(itemId))
-        .filter((value): value is number => value !== null && value !== undefined);
-      return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) : null;
+        .filter(
+          (value): value is number => value !== null && value !== undefined
+        );
+      return values.length > 0
+        ? values.reduce((sum, value) => sum + value, 0)
+        : null;
     }
     case "average": {
       const values = expression.itemIds
         .map((itemId) => answerMap.get(itemId))
-        .filter((value): value is number => value !== null && value !== undefined);
+        .filter(
+          (value): value is number => value !== null && value !== undefined
+        );
       return values.length > 0
         ? values.reduce((sum, value) => sum + value, 0) / values.length
         : null;
@@ -563,7 +613,9 @@ function evaluateExpression(
     case "weighted_sum": {
       const values = expression.terms.map((term) => {
         const current = answerMap.get(term.itemId);
-        return current === null || current === undefined ? null : current * term.weight;
+        return current === null || current === undefined
+          ? null
+          : current * term.weight;
       });
       if (values.some((value) => value === null)) {
         return null;
@@ -574,29 +626,49 @@ function evaluateExpression(
     case "count_if": {
       const values = expression.itemIds
         .map((itemId) => answerMap.get(itemId))
-        .filter((value): value is number => value !== null && value !== undefined);
-      return values.filter((value) => compare(value, expression.comparator, expression.target)).length;
+        .filter(
+          (value): value is number => value !== null && value !== undefined
+        );
+      return values.filter((value) =>
+        compare(value, expression.comparator, expression.target)
+      ).length;
     }
     case "filtered_mean": {
       const values = expression.itemIds
         .map((itemId) => answerMap.get(itemId))
-        .filter((value): value is number => value !== null && value !== undefined)
-        .filter((value) => compare(value, expression.comparator, expression.target));
+        .filter(
+          (value): value is number => value !== null && value !== undefined
+        )
+        .filter((value) =>
+          compare(value, expression.comparator, expression.target)
+        );
       return values.length > 0
         ? values.reduce((sum, value) => sum + value, 0) / values.length
         : null;
     }
     case "compare": {
-      const left = coerceNumber(evaluateExpression(expression.left, answerMap, scoreMap));
-      const right = coerceNumber(evaluateExpression(expression.right, answerMap, scoreMap));
+      const left = coerceNumber(
+        evaluateExpression(expression.left, answerMap, scoreMap)
+      );
+      const right = coerceNumber(
+        evaluateExpression(expression.right, answerMap, scoreMap)
+      );
       return compare(left, expression.comparator, right);
     }
     case "if": {
-      const condition = evaluateExpression(expression.condition, answerMap, scoreMap);
-      return condition ? evaluateExpression(expression.then, answerMap, scoreMap) : evaluateExpression(expression.else, answerMap, scoreMap);
+      const condition = evaluateExpression(
+        expression.condition,
+        answerMap,
+        scoreMap
+      );
+      return condition
+        ? evaluateExpression(expression.then, answerMap, scoreMap)
+        : evaluateExpression(expression.else, answerMap, scoreMap);
     }
     case "round": {
-      const value = coerceNumber(evaluateExpression(expression.value, answerMap, scoreMap));
+      const value = coerceNumber(
+        evaluateExpression(expression.value, answerMap, scoreMap)
+      );
       if (value === null) {
         return null;
       }
@@ -608,7 +680,9 @@ function evaluateExpression(
   }
 }
 
-function collectDependentItemIds(expression: QuestionnaireScoreExpression): string[] {
+function collectDependentItemIds(
+  expression: QuestionnaireScoreExpression
+): string[] {
   switch (expression.kind) {
     case "answer":
       return [expression.itemId];
@@ -623,7 +697,9 @@ function collectDependentItemIds(expression: QuestionnaireScoreExpression): stri
     case "multiply":
     case "min":
     case "max":
-      return expression.values.flatMap((value) => collectDependentItemIds(value));
+      return expression.values.flatMap((value) =>
+        collectDependentItemIds(value)
+      );
     case "subtract":
     case "divide":
     case "compare":
@@ -683,8 +759,10 @@ function resolveBand(
     return { bandLabel: "", severity: "" };
   }
   const band = definition.bands.find((entry) => {
-    const minOk = entry.min === null || entry.min === undefined || numeric >= entry.min;
-    const maxOk = entry.max === null || entry.max === undefined || numeric <= entry.max;
+    const minOk =
+      entry.min === null || entry.min === undefined || numeric >= entry.min;
+    const maxOk =
+      entry.max === null || entry.max === undefined || numeric <= entry.max;
     return minOk && maxOk;
   });
   return {
@@ -701,7 +779,9 @@ function formatScoreForNote(score: {
 }) {
   const value =
     score.valueText ??
-    (typeof score.valueNumeric === "number" ? String(score.valueNumeric) : "Not scored");
+    (typeof score.valueNumeric === "number"
+      ? String(score.valueNumeric)
+      : "Not scored");
   return score.bandLabel ? `${value} (${score.bandLabel})` : value;
 }
 
@@ -728,7 +808,8 @@ function buildCompletionNoteContent(options: {
       const answer = answerRowsByItemId.get(item.id);
       const label =
         answer?.value_text ||
-        item.options.find((option) => option.key === answer?.option_key)?.label ||
+        item.options.find((option) => option.key === answer?.option_key)
+          ?.label ||
         "No answer";
       const numeric =
         typeof answer?.numeric_value === "number"
@@ -755,7 +836,10 @@ function buildCompletionNoteContent(options: {
 }
 
 function scoreRun(version: QuestionnaireVersion, answers: AnswerRow[]) {
-  const visibility = getQuestionnaireVisibilityState(version.definition, answers);
+  const visibility = getQuestionnaireVisibilityState(
+    version.definition,
+    answers
+  );
   const answerMap = new Map<string, number | null>();
   for (const item of version.definition.items) {
     answerMap.set(item.id, null);
@@ -763,7 +847,9 @@ function scoreRun(version: QuestionnaireVersion, answers: AnswerRow[]) {
   for (const answer of answers) {
     answerMap.set(
       answer.item_id,
-      visibility.visibleItemIds.has(answer.item_id) ? answer.numeric_value : null
+      visibility.visibleItemIds.has(answer.item_id)
+        ? answer.numeric_value
+        : null
     );
   }
 
@@ -779,7 +865,11 @@ function scoreRun(version: QuestionnaireVersion, answers: AnswerRow[]) {
       ? null
       : evaluateExpression(definition.expression, answerMap, scoreValueMap);
 
-    if (typeof value === "number" && definition.roundTo !== null && definition.roundTo !== undefined) {
+    if (
+      typeof value === "number" &&
+      definition.roundTo !== null &&
+      definition.roundTo !== undefined
+    ) {
       const factor = 10 ** definition.roundTo;
       value = Math.round(value * factor) / factor;
     }
@@ -808,19 +898,25 @@ function scoreRun(version: QuestionnaireVersion, answers: AnswerRow[]) {
         dependsOnItemIds:
           definition.dependsOnItemIds.length > 0
             ? definition.dependsOnItemIds
-            : Array.from(new Set(collectDependentItemIds(definition.expression)))
+            : Array.from(
+                new Set(collectDependentItemIds(definition.expression))
+              )
       }
     };
   });
 }
 
-function hydrateInstrumentDetail(row: InstrumentRow, userIds?: string[]): QuestionnaireInstrumentDetail {
+function hydrateInstrumentDetail(
+  row: InstrumentRow,
+  userIds?: string[]
+): QuestionnaireInstrumentDetail {
   const versions = getVersionRowsForInstrument(row.id).map(mapVersion);
   const currentVersion = selectPrimaryVersion(row, versions);
-  const draftVersion =
-    row.current_draft_version_id
-      ? versions.find((version) => version.id === row.current_draft_version_id) ?? null
-      : null;
+  const draftVersion = row.current_draft_version_id
+    ? (versions.find(
+        (version) => version.id === row.current_draft_version_id
+      ) ?? null)
+    : null;
   const summary = mapSummary(row, versions, userIds);
   return questionnaireInstrumentDetailSchema.parse({
     ...summary,
@@ -829,7 +925,11 @@ function hydrateInstrumentDetail(row: InstrumentRow, userIds?: string[]): Questi
     draftVersion,
     versions,
     history: getHistoryForInstrument(row.id, userIds),
-    latestDraftRunId: getLatestDraftRunId(row.id, currentVersion?.id ?? null, userIds)
+    latestDraftRunId: getLatestDraftRunId(
+      row.id,
+      currentVersion?.id ?? null,
+      userIds
+    )
   });
 }
 
@@ -988,7 +1088,9 @@ export function ensureQuestionnaireSeeds() {
   });
 }
 
-export function listQuestionnaireInstruments(options: { userIds?: string[] } = {}) {
+export function listQuestionnaireInstruments(
+  options: { userIds?: string[] } = {}
+) {
   const rows = getDatabase()
     .prepare(
       `
@@ -1119,15 +1221,22 @@ export function createQuestionnaireInstrument(
   });
 }
 
-export const updateQuestionnaireInstrumentSchema = createQuestionnaireInstrumentSchema
-  .omit({ versionLabel: true })
-  .partial();
+export const updateQuestionnaireInstrumentSchema =
+  createQuestionnaireInstrumentSchema
+    .omit({ versionLabel: true, userId: true })
+    .partial()
+    .extend({
+      expectedDraftVersionId: z.string().trim().min(1),
+      expectedDraftUpdatedAt: z.string().datetime({ offset: true })
+    });
 
 export type UpdateQuestionnaireInstrumentInput = z.infer<
   typeof updateQuestionnaireInstrumentSchema
 >;
 
-export function listQuestionnaireInstrumentEntities(options: { userIds?: string[] } = {}) {
+export function listQuestionnaireInstrumentEntities(
+  options: { userIds?: string[] } = {}
+) {
   return listQuestionnaireInstruments(options).instruments;
 }
 
@@ -1146,8 +1255,7 @@ export function updateQuestionnaireInstrument(
   const parsed = updateQuestionnaireInstrumentSchema.parse(patch);
   const detail = getQuestionnaireInstrumentDetail(instrumentId);
   const currentVersion =
-    detail.instrument.draftVersion ??
-    detail.instrument.currentVersion;
+    detail.instrument.draftVersion ?? detail.instrument.currentVersion;
   if (!currentVersion) {
     throw createHttpError({
       statusCode: 404,
@@ -1158,6 +1266,8 @@ export function updateQuestionnaireInstrument(
   return updateQuestionnaireDraftVersion(
     instrumentId,
     {
+      expectedDraftVersionId: parsed.expectedDraftVersionId,
+      expectedDraftUpdatedAt: parsed.expectedDraftUpdatedAt,
       title: parsed.title ?? detail.instrument.title,
       subtitle: parsed.subtitle ?? detail.instrument.subtitle,
       description: parsed.description ?? detail.instrument.description,
@@ -1234,7 +1344,9 @@ export function cloneQuestionnaireInstrument(
       description: row.description,
       aliases: parseJson<string[]>(row.aliases_json),
       symptomDomains: parseJson<string[]>(row.symptom_domains_json),
-      tags: Array.from(new Set([...parseJson<string[]>(row.tags_json), "custom-copy"])),
+      tags: Array.from(
+        new Set([...parseJson<string[]>(row.tags_json), "custom-copy"])
+      ),
       sourceClass: row.source_class,
       availability: "custom",
       isSelfReport: row.is_self_report === 1,
@@ -1270,7 +1382,9 @@ export function ensureQuestionnaireDraftVersion(
     const nextVersionNumber =
       Math.max(
         0,
-        ...getVersionRowsForInstrument(instrumentId).map((entry) => entry.version_number)
+        ...getVersionRowsForInstrument(instrumentId).map(
+          (entry) => entry.version_number
+        )
       ) + 1;
     const versionId = buildId("questionnaire_version");
     insertVersion({
@@ -1316,13 +1430,31 @@ export function updateQuestionnaireDraftVersion(
       });
     }
     assertEditableInstrument(row);
-    const detail = ensureQuestionnaireDraftVersion(instrumentId, context);
-    const draftVersionId = detail.instrument.draftVersion?.id;
+    const draftVersionId = row.current_draft_version_id;
     if (!draftVersionId) {
       throw createHttpError({
         statusCode: 400,
         code: "questionnaire_draft_missing",
-        message: "No editable draft version is available."
+        message:
+          "No editable draft version is available. Create a draft before updating it."
+      });
+    }
+    const draftRow = getVersionRow(draftVersionId);
+    if (
+      !draftRow ||
+      draftRow.status !== "draft" ||
+      parsed.expectedDraftVersionId !== draftRow.id ||
+      parsed.expectedDraftUpdatedAt !== draftRow.updated_at
+    ) {
+      throw createHttpError({
+        statusCode: 409,
+        code: "questionnaire_draft_revision_conflict",
+        message:
+          "This questionnaire draft changed after it was opened. Reload the current draft before saving again.",
+        details: {
+          currentDraftVersionId: draftRow?.id ?? draftVersionId,
+          currentDraftUpdatedAt: draftRow?.updated_at ?? null
+        }
       });
     }
     const linkedRun = getDatabase()
@@ -1341,6 +1473,40 @@ export function updateQuestionnaireDraftVersion(
           "This questionnaire version already has answer runs and cannot be changed. Publish it before creating another draft."
       });
     }
+    const updatedAt = nextRevisionIso(draftRow.updated_at);
+    const versionUpdate = getDatabase()
+      .prepare(
+        `
+          UPDATE questionnaire_versions
+          SET
+            label = ?,
+            definition_json = ?,
+            scoring_json = ?,
+            provenance_json = ?,
+            updated_at = ?
+          WHERE id = ?
+            AND status = 'draft'
+            AND updated_at = ?
+        `
+      )
+      .run(
+        parsed.label,
+        JSON.stringify(parsed.definition),
+        JSON.stringify(parsed.scoring),
+        JSON.stringify(parsed.provenance),
+        updatedAt,
+        draftVersionId,
+        parsed.expectedDraftUpdatedAt
+      );
+    if (versionUpdate.changes !== 1) {
+      throw createHttpError({
+        statusCode: 409,
+        code: "questionnaire_draft_revision_conflict",
+        message:
+          "This questionnaire draft changed while it was being saved. Reload the current draft before saving again."
+      });
+    }
+
     getDatabase()
       .prepare(
         `
@@ -1369,31 +1535,8 @@ export function updateQuestionnaireDraftVersion(
         parsed.sourceClass,
         parsed.availability,
         parsed.isSelfReport ? 1 : 0,
-        nowIso(),
+        updatedAt,
         instrumentId
-      );
-
-    getDatabase()
-      .prepare(
-        `
-          UPDATE questionnaire_versions
-          SET
-            label = ?,
-            definition_json = ?,
-            scoring_json = ?,
-            provenance_json = ?,
-            updated_at = ?
-          WHERE id = ?
-            AND status = 'draft'
-        `
-      )
-      .run(
-        parsed.label,
-        JSON.stringify(parsed.definition),
-        JSON.stringify(parsed.scoring),
-        JSON.stringify(parsed.provenance),
-        nowIso(),
-        draftVersionId
       );
 
     recordActivityEvent({
@@ -1437,17 +1580,51 @@ export function publishQuestionnaireDraftVersion(
         message: "No draft version is available to publish."
       });
     }
-    const publishedAt = nowIso();
-    getDatabase()
+    const draftRow = getVersionRow(draftVersionId);
+    if (
+      !draftRow ||
+      draftRow.status !== "draft" ||
+      parsed.expectedDraftVersionId !== draftRow.id ||
+      parsed.expectedDraftUpdatedAt !== draftRow.updated_at
+    ) {
+      throw createHttpError({
+        statusCode: 409,
+        code: "questionnaire_draft_revision_conflict",
+        message:
+          "This questionnaire draft changed before it could be published. Reload and review the current draft before publishing.",
+        details: {
+          currentDraftVersionId: draftRow?.id ?? draftVersionId,
+          currentDraftUpdatedAt: draftRow?.updated_at ?? null
+        }
+      });
+    }
+    const publishedAt = nextRevisionIso(draftRow.updated_at);
+    const versionUpdate = getDatabase()
       .prepare(
         `
           UPDATE questionnaire_versions
           SET status = 'published', label = ?, published_at = ?, updated_at = ?
           WHERE id = ?
+            AND status = 'draft'
+            AND updated_at = ?
         `
       )
-      .run(parsed.label || "Published", publishedAt, publishedAt, draftVersionId);
-    getDatabase()
+      .run(
+        parsed.label || "Published",
+        publishedAt,
+        publishedAt,
+        draftVersionId,
+        parsed.expectedDraftUpdatedAt
+      );
+    if (versionUpdate.changes !== 1) {
+      throw createHttpError({
+        statusCode: 409,
+        code: "questionnaire_draft_revision_conflict",
+        message:
+          "This questionnaire draft changed while it was being published. Reload and review the current draft before publishing."
+      });
+    }
+    const instrumentUpdate = getDatabase()
       .prepare(
         `
           UPDATE questionnaire_instruments
@@ -1456,9 +1633,18 @@ export function publishQuestionnaireDraftVersion(
             current_draft_version_id = NULL,
             updated_at = ?
           WHERE id = ?
+            AND current_draft_version_id = ?
         `
       )
-      .run(draftVersionId, publishedAt, instrumentId);
+      .run(draftVersionId, publishedAt, instrumentId, draftVersionId);
+    if (instrumentUpdate.changes !== 1) {
+      throw createHttpError({
+        statusCode: 409,
+        code: "questionnaire_draft_revision_conflict",
+        message:
+          "The selected questionnaire draft is no longer current. Reload and review the current draft before publishing."
+      });
+    }
 
     recordActivityEvent({
       entityType: "questionnaire_instrument",
@@ -1477,7 +1663,12 @@ export function publishQuestionnaireDraftVersion(
   });
 }
 
-function upsertRunAnswers(runId: string, answers: Array<ReturnType<typeof updateQuestionnaireRunSchema.parse>["answers"][number]>) {
+function upsertRunAnswers(
+  runId: string,
+  answers: Array<
+    ReturnType<typeof updateQuestionnaireRunSchema.parse>["answers"][number]
+  >
+) {
   const database = getDatabase();
   const now = nowIso();
   const statement = database.prepare(
@@ -1693,7 +1884,10 @@ export function updateQuestionnaireRun(
   });
 }
 
-export function completeQuestionnaireRun(runId: string, context: QuestionnaireContext) {
+export function completeQuestionnaireRun(
+  runId: string,
+  context: QuestionnaireContext
+) {
   return runInTransaction(() => {
     const run = getRunRow(runId);
     if (!run) {
@@ -1717,7 +1911,10 @@ export function completeQuestionnaireRun(runId: string, context: QuestionnaireCo
     }
     const version = mapVersion(versionRow);
     const answers = listAnswerRows(runId);
-    const visibility = getQuestionnaireVisibilityState(version.definition, answers);
+    const visibility = getQuestionnaireVisibilityState(
+      version.definition,
+      answers
+    );
     const answerIds = new Set(
       answers
         .filter((entry) => visibility.visibleItemIds.has(entry.item_id))
@@ -1732,7 +1929,8 @@ export function completeQuestionnaireRun(runId: string, context: QuestionnaireCo
       throw createHttpError({
         statusCode: 400,
         code: "questionnaire_missing_answers",
-        message: "Complete all required questionnaire items before finishing the run.",
+        message:
+          "Complete all required questionnaire items before finishing the run.",
         details: {
           missingItems: missingRequired
         }
@@ -1881,7 +2079,9 @@ export function getQuestionnaireRunDetail(
     });
   }
 
-  const versions = getVersionRowsForInstrument(instrumentRow.id).map(mapVersion);
+  const versions = getVersionRowsForInstrument(instrumentRow.id).map(
+    mapVersion
+  );
   const instrument = mapSummary(instrumentRow, versions, options.userIds);
   const version = mapVersion(versionRow);
   const answers = listAnswerRows(runId).map((row) => ({
@@ -1912,6 +2112,9 @@ export function getQuestionnaireRunDetail(
     version,
     answers,
     scores,
-    history: getHistoryForInstrument(run.instrument_id, run.user_id ? [run.user_id] : undefined)
+    history: getHistoryForInstrument(
+      run.instrument_id,
+      run.user_id ? [run.user_id] : undefined
+    )
   });
 }

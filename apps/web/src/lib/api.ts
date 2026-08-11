@@ -225,6 +225,7 @@ import type {
   QuestionnaireInstrumentSummary,
   QuestionnaireRunDetail,
   QuestionnaireAnswerInput,
+  PublishQuestionnaireVersionInput,
   UpdateQuestionnaireVersionInput
 } from "./questionnaire-types";
 import type {
@@ -2241,7 +2242,7 @@ export function updateQuestionnaireDraft(
 
 export function publishQuestionnaireDraft(
   instrumentId: string,
-  input: { label?: string } = {}
+  input: PublishQuestionnaireVersionInput
 ) {
   return request<{ instrument: QuestionnaireInstrumentDetail }>(
     `/api/v1/psyche/questionnaires/${instrumentId}/publish`,

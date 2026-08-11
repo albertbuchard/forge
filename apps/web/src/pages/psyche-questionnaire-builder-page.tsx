@@ -34,11 +34,14 @@ import type {
   QuestionnaireScoring,
   QuestionnaireSourceClass
 } from "@/lib/questionnaire-types";
+import { ForgeApiError } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
 
 type BuilderStep = "metadata" | "structure" | "scoring" | "publish";
 
 type BuilderState = {
+  draftVersionId: string;
+  draftUpdatedAt: string;
   title: string;
   subtitle: string;
   description: string;
@@ -132,6 +135,8 @@ function toBuilderState(
 ): BuilderState {
   const version = detail?.draftVersion ?? detail?.currentVersion;
   return {
+    draftVersionId: detail?.draftVersion?.id ?? "",
+    draftUpdatedAt: detail?.draftVersion?.updatedAt ?? "",
     title: detail?.title ?? "",
     subtitle: detail?.subtitle ?? "",
     description: detail?.description ?? "",
@@ -295,6 +300,7 @@ export function PsycheQuestionnaireBuilderPage() {
   const [step, setStep] = useState<BuilderStep>("metadata");
   const [state, setState] = useState<BuilderState>(() => toBuilderState(null));
   const [jsonError, setJsonError] = useState<string | null>(null);
+  const [revisionConflict, setRevisionConflict] = useState(false);
 
   const detailQuery = useQuery({
     queryKey: ["forge-psyche-questionnaire-builder", instrumentId],
@@ -341,17 +347,35 @@ export function PsycheQuestionnaireBuilderPage() {
       const payload = parseState(state);
       return updateQuestionnaireDraft(instrumentId, {
         ...payload,
+        expectedDraftVersionId: state.draftVersionId,
+        expectedDraftUpdatedAt: state.draftUpdatedAt,
         label: payload.versionLabel
       });
+    },
+    onSuccess: (payload) => {
+      const draft = payload.instrument.draftVersion;
+      if (!draft) return;
+      setState((current) => ({
+        ...current,
+        draftVersionId: draft.id,
+        draftUpdatedAt: draft.updatedAt
+      }));
     }
   });
 
   const publishMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (revision: {
+      draftVersionId: string;
+      draftUpdatedAt: string;
+    }) => {
       if (!instrumentId) {
         throw new Error("Missing questionnaire id");
       }
-      return publishQuestionnaireDraft(instrumentId, { label: state.label });
+      return publishQuestionnaireDraft(instrumentId, {
+        label: state.label,
+        expectedDraftVersionId: revision.draftVersionId,
+        expectedDraftUpdatedAt: revision.draftUpdatedAt
+      });
     },
     onSuccess: (payload) => {
       navigate(`/psyche/questionnaires/${payload.instrument.id}`);
@@ -423,17 +447,59 @@ export function PsycheQuestionnaireBuilderPage() {
   const save = async () => {
     try {
       setJsonError(null);
+      setRevisionConflict(false);
       if (instrumentId) {
         await updateMutation.mutateAsync();
       } else {
         await createMutation.mutateAsync();
       }
     } catch (error) {
+      setRevisionConflict(
+        error instanceof ForgeApiError &&
+          error.code === "questionnaire_draft_revision_conflict"
+      );
       setJsonError(
         error instanceof Error
           ? error.message
           : "Unable to save questionnaire draft."
       );
+    }
+  };
+
+  const publish = async () => {
+    try {
+      setJsonError(null);
+      setRevisionConflict(false);
+      const saved = await updateMutation.mutateAsync();
+      const draft = saved.instrument.draftVersion;
+      if (!draft) {
+        throw new Error(
+          "The saved questionnaire no longer has a draft to publish."
+        );
+      }
+      await publishMutation.mutateAsync({
+        draftVersionId: draft.id,
+        draftUpdatedAt: draft.updatedAt
+      });
+    } catch (error) {
+      setRevisionConflict(
+        error instanceof ForgeApiError &&
+          error.code === "questionnaire_draft_revision_conflict"
+      );
+      setJsonError(
+        error instanceof Error
+          ? error.message
+          : "Unable to publish this questionnaire draft."
+      );
+    }
+  };
+
+  const reloadCurrentDraft = async () => {
+    const result = await detailQuery.refetch();
+    if (result.data?.instrument) {
+      setState(toBuilderState(result.data.instrument));
+      setJsonError(null);
+      setRevisionConflict(false);
     }
   };
 
@@ -821,15 +887,32 @@ export function PsycheQuestionnaireBuilderPage() {
               {instrumentId ? (
                 <Button
                   variant="secondary"
-                  onClick={() => publishMutation.mutate()}
-                  disabled={isBusy || Boolean(jsonError)}
+                  onClick={() => void publish()}
+                  disabled={
+                    isBusy ||
+                    state.draftVersionId.length === 0 ||
+                    state.draftUpdatedAt.length === 0
+                  }
                 >
-                  Publish version
+                  Save and publish version
                 </Button>
               ) : null}
               {jsonError ? (
-                <div className="break-words rounded-[8px] border border-[var(--danger)]/20 bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
-                  {jsonError}
+                <div
+                  role="alert"
+                  className="grid gap-3 break-words rounded-[8px] border border-[var(--danger)]/20 bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]"
+                >
+                  <span>{jsonError}</span>
+                  {revisionConflict ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="lg"
+                      onClick={() => void reloadCurrentDraft()}
+                    >
+                      Reload current draft and discard my unsaved changes
+                    </Button>
+                  ) : null}
                 </div>
               ) : null}
             </div>

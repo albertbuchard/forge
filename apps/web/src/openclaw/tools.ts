@@ -2965,9 +2965,11 @@ export function registerForgePluginTools(
     name: "forge_publish_questionnaire_draft",
     label: "Forge Publish Questionnaire Draft",
     description:
-      "Publish the current questionnaire draft as the live readable version.",
+      "Publish an exact questionnaire draft revision as the live readable version. Read the questionnaire first and pass the returned draft id and update timestamp; stale revisions are rejected.",
     parameters: Type.Object({
       questionnaireId: Type.String({ minLength: 1 }),
+      expectedDraftVersionId: Type.String({ minLength: 1 }),
+      expectedDraftUpdatedAt: Type.String({ minLength: 1 }),
       label: optionalString()
     }),
     async execute(_toolCallId, params) {
@@ -2976,7 +2978,11 @@ export function registerForgePluginTools(
         await runWrite(config, {
           method: "POST",
           path: `/api/v1/psyche/questionnaires/${typed.questionnaireId as string}/publish`,
-          body: { label: typed.label }
+          body: {
+            label: typed.label,
+            expectedDraftVersionId: typed.expectedDraftVersionId,
+            expectedDraftUpdatedAt: typed.expectedDraftUpdatedAt
+          }
         })
       );
     }
@@ -3163,7 +3169,7 @@ export function registerForgePluginTools(
     name: "forge_update_entities",
     label: "Update Forge Entities",
     description:
-      "Update one or more Forge entities through the ordered batch workflow. Pass `operations` as an array. Each operation must include `entityType`, `id`, and `patch`. This is the preferred update path for calendar_event, work_block_template, task_timebox, preferences basic CRUD entities, questionnaire_instrument, and official habit outcome logging through `habit.patch.checkIn`.",
+      "Update one or more Forge entities through the ordered batch workflow. Pass `operations` as an array. Each operation must include `entityType`, `id`, and `patch`. Questionnaire instrument patches must include the exact `expectedDraftVersionId` and `expectedDraftUpdatedAt` returned by the latest read; stale revisions are rejected. This is the preferred update path for calendar_event, work_block_template, task_timebox, preferences basic CRUD entities, questionnaire_instrument, and official habit outcome logging through `habit.patch.checkIn`.",
     parameters: Type.Object({
       atomic: Type.Optional(Type.Boolean()),
       operations: Type.Array(
