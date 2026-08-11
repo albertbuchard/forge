@@ -852,7 +852,7 @@
                     <p class="story-expanded-outcome">As a user, I can classify and find records with reusable tags without creating duplicate or case-variant taxonomies.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>tag</code>, tag selectors, search.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>board search includes tag names and descriptions. Tag creation and rename now serialize normalized identity checks with their writes; Unicode compatibility forms, case differences, surrounding whitespace, and repeated internal whitespace resolve to one existing tag, including legacy rows. A colliding rename returns 409 and preserves the original tag. Complete merge, delete, cross-domain filter, and retained live desktop/phone verification.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>board search includes tag names and descriptions. Tag creation and rename serialize normalized identity checks with their writes; Unicode compatibility forms, case differences, surrounding whitespace, and repeated internal whitespace resolve to one identity, including legacy rows. A colliding rename returns 409 and preserves the original tag. A Bin-only match now returns <code>tag_duplicate_in_bin</code> with its existing ID instead of falsely succeeding with an invisible tag; if a live legacy equivalent also exists, the live tag wins deterministically. Complete merge, hard-delete, cross-domain filter, and retained live desktop/phone verification.</dd></div>
                     </dl>
                   </div>
                 </details>
