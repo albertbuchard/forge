@@ -309,7 +309,7 @@
                     <p class="story-expanded-outcome">As a user, I can link any compatible Forge entity to another through the general relationship model and inspect the connection from both sides.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>General entity links, link pickers, backlinks, Knowledge Graph.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>batch <code>linkedTo</code> search now includes indexed general relationships in both directions while preserving ownership filters and response bounds. Complete every entity family, duplicate prevention, unlink, permission, and deleted-target matrix.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>batch <code>linkedTo</code> search includes indexed general relationships in both directions while preserving ownership filters and response bounds. Full and relationship-scoped replacements now reject a source linked to itself with a stable 400 before deleting any valid prior relationship. Complete every entity family, duplicate prevention, unlink, permission, deleted-target, and retained live desktop/phone matrix.</dd></div>
                     </dl>
                   </div>
                 </details>
