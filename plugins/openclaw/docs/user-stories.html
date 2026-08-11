@@ -2451,7 +2451,7 @@
                     <p class="story-expanded-outcome">As a user, I can retrieve the stable published output and latest output for one node separately from raw run traces.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Workbench published/latest output reads.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>published and latest output compatibility remains stable with bounded run summaries and durable run evidence. Finish no-publish, stale-publish, failed-latest, and content-type cases.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>published and latest output reads remain bounded and separate from raw traces; completed-node evidence retained by a failed or interrupted run cannot replace the latest successfully published node output, while the latest failed attempt remains visible in summary metadata. Finish no-publish, stale-publish, and content-type cases plus live desktop/phone inspection.</dd></div>
                     </dl>
                   </div>
                 </details>

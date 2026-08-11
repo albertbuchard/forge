@@ -984,9 +984,15 @@ export function getLatestAiConnectorNodeOutput(
     .get(connectorId) as AiConnectorRunRow | undefined;
   const nodeRow = getDatabase()
     .prepare(
-      `SELECT * FROM ai_connector_node_results
-       WHERE connector_id = ? AND node_id = ?
-       ORDER BY created_at DESC, run_id DESC
+      `SELECT node_results.*
+       FROM ai_connector_node_results AS node_results
+       INNER JOIN ai_connector_runs AS runs
+         ON runs.id = node_results.run_id
+        AND runs.connector_id = node_results.connector_id
+       WHERE node_results.connector_id = ?
+         AND node_results.node_id = ?
+         AND runs.status = 'completed'
+       ORDER BY node_results.created_at DESC, node_results.run_id DESC
        LIMIT 1`
     )
     .get(connectorId, nodeId) as AiConnectorNodeResultRow | undefined;
