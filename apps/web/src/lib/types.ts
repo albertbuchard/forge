@@ -220,6 +220,57 @@ export interface LocalSearchResponse {
     truncated: false;
   };
 }
+export type RelationshipProposalRelation = "supports" | "informs" | "related";
+export interface RelationshipProposalEndpoint {
+  entityType: CrudEntityType;
+  entityId: string;
+  title: string;
+  detail: string;
+  sourceHref: string;
+  graphHref: string | null;
+}
+export interface RelationshipProposal {
+  id: string;
+  ownerUserId: string;
+  source: RelationshipProposalEndpoint;
+  target: RelationshipProposalEndpoint;
+  relationship: RelationshipProposalRelation;
+  evidence: Array<{
+    sourceField: string;
+    targetField: string;
+    matchedTerms: string[];
+  }>;
+  explanation: string;
+  confidence: number;
+  generator: { id: string; version: string };
+  status: "pending" | "accepted" | "rejected" | "expired";
+  revision: number;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface RelationshipProposalList {
+  proposals: RelationshipProposal[];
+  total: number;
+  shown: number;
+  limit: number;
+  generatedAt: string;
+  generation?: {
+    generator: { id: string; version: string };
+    consideredDocuments: number;
+    comparisons: number;
+    created: number;
+    unauthorizedCandidateCount: number;
+    truncated: boolean;
+  };
+}
+export interface RelationshipProposalDecision {
+  status: "accepted" | "rejected";
+  proposalId: string;
+  revision: number;
+  linkCreated: boolean;
+  replayed: boolean;
+}
 export type RewardableEntityType =
   | "system"
   | "goal"

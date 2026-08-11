@@ -154,6 +154,21 @@ vi.mock("@/components/knowledge-graph/knowledge-graph-hierarchy-view", () => ({
   KnowledgeGraphHierarchyView: () => <div>Hierarchy view</div>
 }));
 
+vi.mock("@/components/knowledge-graph/relationship-proposal-review", () => ({
+  RelationshipProposalReview: ({
+    open,
+    ownerUserId
+  }: {
+    open: boolean;
+    ownerUserId: string | null;
+  }) =>
+    open ? (
+      <div role="dialog" aria-label="Suggested links review">
+        {`Proposal owner: ${ownerUserId ?? "none"}`}
+      </div>
+    ) : null
+}));
+
 vi.mock("@/components/knowledge-graph/knowledge-graph-focus-drawer", () => ({
   KnowledgeGraphFocusDrawer: ({
     focus,
@@ -897,6 +912,24 @@ describe("KnowledgeGraphPage", () => {
 
     await waitFor(() =>
       expect(screen.getByText("physics:3.10:2.60")).toBeInTheDocument()
+    );
+  });
+
+  it("opens the owner-scoped suggested-links review without changing graph route state", async () => {
+    renderPage("/knowledge-graph?q=North%20Star&focus=goal%3Agoal-1");
+    await screen.findByPlaceholderText(
+      "Type a graph search, then press Enter or the search button"
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Suggested links" }));
+    expect(
+      screen.getByRole("dialog", { name: "Suggested links review" })
+    ).toHaveTextContent("Proposal owner: user_operator");
+    expect(getKnowledgeGraphMock).toHaveBeenLastCalledWith(
+      ["user_operator"],
+      expect.objectContaining({
+        q: "North Star",
+        focusNodeId: "goal:goal-1"
+      })
     );
   });
 

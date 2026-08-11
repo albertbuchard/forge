@@ -1,5 +1,6 @@
 import Fastify, {
   type FastifyInstance,
+  type FastifyReply,
   type FastifyRequest
 } from "fastify";
 import { randomUUID } from "node:crypto";
@@ -278,6 +279,11 @@ import {
   listSupplementalLocalSearchDocuments,
   searchLocalDocuments
 } from "./services/local-search.js";
+import {
+  createOwnerRelationshipProposals,
+  decideRelationshipProposal,
+  listOwnerRelationshipProposals
+} from "./services/relationship-proposals.js";
 import {
   comparisonScopeUnavailable,
   getComparison,
@@ -624,6 +630,9 @@ import {
   entityNavigationQuerySchema,
   entityNavigationTouchInputSchema,
   localSearchQuerySchema,
+  relationshipProposalDecisionInputSchema,
+  relationshipProposalListQuerySchema,
+  relationshipProposalOwnerInputSchema,
   savedViewCreateSchema,
   savedViewListQuerySchema,
   defaultAgentBootstrapPolicy,
@@ -15006,6 +15015,107 @@ export async function buildServer(
       limit: query.limit
     });
   });
+  app.get("/api/v1/relationship-proposals", async (request) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/relationship-proposals"
+    });
+    const query = relationshipProposalListQuerySchema.parse(request.query ?? {});
+    if (!getUserById(query.ownerUserId)) {
+      throw new HttpError(
+        404,
+        "relationship_proposal_scope_unavailable",
+        "The selected person is unavailable."
+      );
+    }
+    return listOwnerRelationshipProposals(query.ownerUserId, query.limit);
+  });
+  app.post("/api/v1/relationship-proposals/generate", async (request) => {
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/relationship-proposals/generate" }
+    );
+    const input = relationshipProposalOwnerInputSchema.parse(request.body ?? {});
+    if (!getUserById(input.ownerUserId)) {
+      throw new HttpError(
+        404,
+        "relationship_proposal_scope_unavailable",
+        "The selected person is unavailable."
+      );
+    }
+    const graph = buildKnowledgeGraph(
+      [input.ownerUserId],
+      {},
+      {
+        includePeople: true,
+        noteScope: noteReadScopeForAuth(auth, [input.ownerUserId])
+      }
+    );
+    return createOwnerRelationshipProposals({
+      ownerUserId: input.ownerUserId,
+      documents: [
+        ...buildGraphLocalSearchDocuments(graph.nodes),
+        ...listSupplementalLocalSearchDocuments([input.ownerUserId])
+      ]
+    });
+  });
+  const decideRelationshipProposalRoute = (
+    action: "accept" | "reject"
+  ) =>
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const auth = requireOperatorSession(
+        request.headers as Record<string, unknown>,
+        { route: `/api/v1/relationship-proposals/:id/${action}` }
+      );
+      const { id } = request.params as { id: string };
+      const input = relationshipProposalDecisionInputSchema.parse(
+        request.body ?? {}
+      );
+      const result = decideRelationshipProposal({
+        proposalId: id,
+        ownerUserId: input.ownerUserId,
+        expectedRevision: input.expectedRevision,
+        action,
+        actor: auth.session?.actorLabel ?? auth.actor ?? "Forge operator"
+      });
+      if (result.status === "not_found") {
+        throw new HttpError(
+          404,
+          "relationship_proposal_unavailable",
+          "The suggestion is unavailable."
+        );
+      }
+      if (result.status === "unavailable" || result.status === "expired") {
+        throw new HttpError(
+          409,
+          "relationship_proposal_stale",
+          "The suggestion is no longer current. No relationship was changed."
+        );
+      }
+      if (result.status === "conflict") {
+        throw new HttpError(
+          409,
+          "relationship_proposal_conflict",
+          "The suggestion was already decided or changed. Refresh before continuing."
+        );
+      }
+      if (result.status === "accepted" || result.status === "rejected") {
+        if (result.replayed) reply.header("Idempotency-Replayed", "true");
+        return { decision: result };
+      }
+      throw new HttpError(
+        409,
+        "relationship_proposal_conflict",
+        "The suggestion changed. Refresh before continuing."
+      );
+    };
+  app.post(
+    "/api/v1/relationship-proposals/:id/accept",
+    decideRelationshipProposalRoute("accept")
+  );
+  app.post(
+    "/api/v1/relationship-proposals/:id/reject",
+    decideRelationshipProposalRoute("reject")
+  );
   app.get("/api/v1/health/overview", async (request) => ({
     overview: getCompanionOverview(
       resolveScopedUserIds(request.query as Record<string, unknown>)

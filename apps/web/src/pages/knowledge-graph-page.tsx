@@ -14,6 +14,7 @@ import {
   ArrowLeft,
   Bug,
   Crosshair,
+  Link2,
   Minus,
   Network,
   Plus,
@@ -30,6 +31,7 @@ import {
   type KnowledgeGraphForceViewHandle
 } from "@/components/knowledge-graph/knowledge-graph-force-view";
 import { KnowledgeGraphHierarchyView } from "@/components/knowledge-graph/knowledge-graph-hierarchy-view";
+import { RelationshipProposalReview } from "@/components/knowledge-graph/relationship-proposal-review";
 import {
   getKnowledgeGraphSemanticGroup,
   KNOWLEDGE_GRAPH_SEMANTIC_GROUPS
@@ -247,6 +249,7 @@ export function KnowledgeGraphPage() {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [appearanceDialogOpen, setAppearanceDialogOpen] = useState(false);
+  const [relationshipReviewOpen, setRelationshipReviewOpen] = useState(false);
   const [draftQueryText, setDraftQueryText] = useState("");
   const [explorationAnchorNodeIds, setExplorationAnchorNodeIds] = useState<
     string[]
@@ -1493,6 +1496,16 @@ export function KnowledgeGraphPage() {
                   variant="secondary"
                   size="sm"
                   className={`size-10 p-0 ${graphFloatingButtonClass}`}
+                  onClick={() => setRelationshipReviewOpen(true)}
+                  aria-label="Review suggested links"
+                  title="Review suggested links"
+                >
+                  <Link2 className="size-3" />
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className={`size-10 p-0 ${graphFloatingButtonClass}`}
                   onClick={() => setAppearanceDialogOpen(true)}
                   aria-label="Open graph appearance settings"
                   title="Graph appearance settings"
@@ -1571,6 +1584,16 @@ export function KnowledgeGraphPage() {
                   placeholder="Type a graph search, then press Enter or the search button"
                 />
               </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                className={`h-11 px-3 text-xs ${graphFloatingButtonClass}`}
+                onClick={() => setRelationshipReviewOpen(true)}
+                title="Review suggested links before Forge writes them"
+              >
+                <Link2 className="size-3.5" aria-hidden="true" />
+                Suggested links
+              </Button>
               <Button
                 variant="secondary"
                 size="sm"
@@ -2185,6 +2208,17 @@ export function KnowledgeGraphPage() {
           </div>
         </div>
       </SheetScaffold>
+
+      <RelationshipProposalReview
+        open={relationshipReviewOpen}
+        onOpenChange={setRelationshipReviewOpen}
+        ownerUserId={
+          shell.selectedUserIds.length === 1 ? shell.selectedUserIds[0]! : null
+        }
+        onAccepted={async () => {
+          await refetchGraph();
+        }}
+      />
 
       <Dialog.Root
         open={appearanceDialogOpen}

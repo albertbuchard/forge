@@ -180,6 +180,8 @@ import type {
   CrudEntityType,
   LocalSearchEntityKind,
   LocalSearchResponse,
+  RelationshipProposalDecision,
+  RelationshipProposalList,
   DeleteMode
 } from "./types";
 import type {
@@ -1794,6 +1796,44 @@ export function getKnowledgeGraph(
   return request<{ graph: KnowledgeGraphPayload }>(
     `/api/v1/knowledge-graph${suffix}`
   ).then((response) => response.graph);
+}
+
+export function getRelationshipProposals(ownerUserId: string, limit = 20) {
+  const search = new URLSearchParams({
+    ownerUserId,
+    limit: String(limit)
+  });
+  return request<RelationshipProposalList>(
+    `/api/v1/relationship-proposals?${search.toString()}`
+  );
+}
+
+export function generateRelationshipProposals(ownerUserId: string) {
+  return request<RelationshipProposalList>(
+    "/api/v1/relationship-proposals/generate",
+    {
+      method: "POST",
+      body: JSON.stringify({ ownerUserId })
+    }
+  );
+}
+
+export function decideRelationshipProposal(input: {
+  proposalId: string;
+  ownerUserId: string;
+  expectedRevision: number;
+  action: "accept" | "reject";
+}) {
+  return request<{ decision: RelationshipProposalDecision }>(
+    `/api/v1/relationship-proposals/${encodeURIComponent(input.proposalId)}/${input.action}`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        ownerUserId: input.ownerUserId,
+        expectedRevision: input.expectedRevision
+      })
+    }
+  );
 }
 
 export function getKnowledgeGraphFocus(

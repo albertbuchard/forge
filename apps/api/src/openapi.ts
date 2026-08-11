@@ -247,6 +247,11 @@ const API_TAGS = [
       "Permission-first local lexical and released-relationship search across eligible Forge record families."
   },
   {
+    name: "Relationship Proposals",
+    description:
+      "Owner-scoped, human-reviewed suggestions that never write a relationship before acceptance."
+  },
+  {
     name: "Entity Batch",
     description:
       "Batch create, update, delete, restore, and search operations across entity types."
@@ -398,6 +403,7 @@ const API_TAG_GROUPS = [
       "People",
       "Wiki",
       "Artifacts",
+      "Relationship Proposals",
       "Preferences",
       "Comparisons",
       "Psyche",
@@ -474,6 +480,9 @@ function resolveTagsForPath(path: string) {
   }
   if (path.startsWith("/api/v1/local-search")) {
     return ["Search"];
+  }
+  if (path.startsWith("/api/v1/relationship-proposals")) {
+    return ["Relationship Proposals"];
   }
   if (
     path.startsWith("/api/v1/agents") ||
@@ -975,6 +984,177 @@ export function buildOpenApiDocument() {
         items: { $ref: "#/components/schemas/LocalSearchResult" }
       },
       coverage: { $ref: "#/components/schemas/LocalSearchCoverage" }
+    }
+  };
+  const relationshipProposalEndpoint = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "entityType",
+      "entityId",
+      "title",
+      "detail",
+      "sourceHref",
+      "graphHref"
+    ],
+    properties: {
+      entityType: {
+        type: "string",
+        enum: [...crudEntityTypeSchema.options]
+      },
+      entityId: { type: "string", minLength: 1, maxLength: 256 },
+      title: { type: "string", minLength: 1, maxLength: 500 },
+      detail: { type: "string", maxLength: 1000 },
+      sourceHref: { type: "string", minLength: 1, maxLength: 2048 },
+      graphHref: nullable({ type: "string", minLength: 1, maxLength: 2048 })
+    }
+  };
+  const relationshipProposalEvidence = {
+    type: "object",
+    additionalProperties: false,
+    required: ["sourceField", "targetField", "matchedTerms"],
+    properties: {
+      sourceField: { type: "string", minLength: 1, maxLength: 80 },
+      targetField: { type: "string", minLength: 1, maxLength: 80 },
+      matchedTerms: {
+        type: "array",
+        minItems: 1,
+        maxItems: 8,
+        uniqueItems: true,
+        items: { type: "string", minLength: 2, maxLength: 80 }
+      }
+    }
+  };
+  const relationshipProposal = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "ownerUserId",
+      "source",
+      "target",
+      "relationship",
+      "evidence",
+      "explanation",
+      "confidence",
+      "generator",
+      "status",
+      "revision",
+      "expiresAt",
+      "createdAt",
+      "updatedAt"
+    ],
+    properties: {
+      id: { type: "string", minLength: 1, maxLength: 80 },
+      ownerUserId: { type: "string", minLength: 1 },
+      source: { $ref: "#/components/schemas/RelationshipProposalEndpoint" },
+      target: { $ref: "#/components/schemas/RelationshipProposalEndpoint" },
+      relationship: {
+        type: "string",
+        enum: ["supports", "informs", "related"]
+      },
+      evidence: {
+        type: "array",
+        minItems: 1,
+        maxItems: 3,
+        items: { $ref: "#/components/schemas/RelationshipProposalEvidence" }
+      },
+      explanation: { type: "string", minLength: 1, maxLength: 800 },
+      confidence: { type: "number", minimum: 0, maximum: 1 },
+      generator: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "version"],
+        properties: {
+          id: { type: "string", minLength: 1, maxLength: 80 },
+          version: { type: "string", minLength: 1, maxLength: 80 }
+        }
+      },
+      status: { type: "string", enum: ["pending"] },
+      revision: { type: "integer", minimum: 1 },
+      expiresAt: { type: "string", format: "date-time" },
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+  const relationshipProposalGeneration = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "generator",
+      "consideredDocuments",
+      "comparisons",
+      "created",
+      "unauthorizedCandidateCount",
+      "truncated"
+    ],
+    properties: {
+      generator: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "version"],
+        properties: {
+          id: { type: "string" },
+          version: { type: "string" }
+        }
+      },
+      consideredDocuments: { type: "integer", minimum: 0, maximum: 750 },
+      comparisons: { type: "integer", minimum: 0, maximum: 2000 },
+      created: { type: "integer", minimum: 0, maximum: 120 },
+      unauthorizedCandidateCount: { type: "integer", minimum: 0, maximum: 0 },
+      truncated: { type: "boolean" }
+    }
+  };
+  const relationshipProposalList = {
+    type: "object",
+    additionalProperties: false,
+    required: ["proposals", "total", "shown", "limit", "generatedAt"],
+    properties: {
+      proposals: {
+        type: "array",
+        maxItems: 20,
+        items: { $ref: "#/components/schemas/RelationshipProposal" }
+      },
+      total: { type: "integer", minimum: 0, maximum: 120 },
+      shown: { type: "integer", minimum: 0, maximum: 20 },
+      limit: { type: "integer", minimum: 1, maximum: 20 },
+      generatedAt: { type: "string", format: "date-time" },
+      generation: { $ref: "#/components/schemas/RelationshipProposalGeneration" }
+    }
+  };
+  const relationshipProposalOwnerInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["ownerUserId"],
+    properties: {
+      ownerUserId: { type: "string", minLength: 1 }
+    }
+  };
+  const relationshipProposalDecisionInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["ownerUserId", "expectedRevision"],
+    properties: {
+      ownerUserId: { type: "string", minLength: 1 },
+      expectedRevision: { type: "integer", minimum: 1 }
+    }
+  };
+  const relationshipProposalDecision = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "status",
+      "proposalId",
+      "revision",
+      "linkCreated",
+      "replayed"
+    ],
+    properties: {
+      status: { type: "string", enum: ["accepted", "rejected"] },
+      proposalId: { type: "string", minLength: 1 },
+      revision: { type: "integer", minimum: 1 },
+      linkCreated: { type: "boolean" },
+      replayed: { type: "boolean" }
     }
   };
   const preferenceErrorResponses = (
@@ -11807,6 +11987,14 @@ export function buildOpenApiDocument() {
         LocalSearchResult: localSearchResult,
         LocalSearchCoverage: localSearchCoverage,
         LocalSearchResponse: localSearchResponse,
+        RelationshipProposalEndpoint: relationshipProposalEndpoint,
+        RelationshipProposalEvidence: relationshipProposalEvidence,
+        RelationshipProposal: relationshipProposal,
+        RelationshipProposalGeneration: relationshipProposalGeneration,
+        RelationshipProposalList: relationshipProposalList,
+        RelationshipProposalOwnerInput: relationshipProposalOwnerInput,
+        RelationshipProposalDecisionInput: relationshipProposalDecisionInput,
+        RelationshipProposalDecision: relationshipProposalDecision,
         UserSummary: userSummary,
         Tag: tag,
         Goal: goal,
@@ -12377,6 +12565,202 @@ export function buildOpenApiDocument() {
             "413": {
               description:
                 "The request exceeds the transient local-search envelope of 750 source records, 3 MiB of authorized indexable record text, or 750 authorized relationships. Forge refuses the search before indexing records.",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/relationship-proposals": {
+        get: {
+          tags: ["Relationship Proposals"],
+          summary: "List one owner's pending relationship suggestions",
+          description:
+            "Requires a trusted local operator session and one explicit owner. Forge reauthorizes both ordered endpoints before returning a suggestion, omits and expires stale suggestions without exposing their titles, and returns at most 20 of at most 120 pending suggestions with exact shown and total counts. Reading does not generate suggestions or write graph relationships.",
+          security: [{ operatorSession: [] }],
+          parameters: [
+            {
+              name: "ownerUserId",
+              in: "query",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            },
+            {
+              name: "limit",
+              in: "query",
+              required: false,
+              schema: { type: "integer", minimum: 1, maximum: 20, default: 20 }
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              { $ref: "#/components/schemas/RelationshipProposalList" },
+              "Owner-scoped pending suggestions with current authorized source routes"
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": {
+              description:
+                "Agent tokens and other non-operator principals cannot inspect relationship proposals.",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" }
+                }
+              }
+            },
+            "404": {
+              description: "Generic unavailable response for an unknown owner.",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/relationship-proposals/generate": {
+        post: {
+          tags: ["Relationship Proposals"],
+          summary: "Find bounded relationship suggestions for one owner",
+          description:
+            "Requires a trusted local operator session. Authorization and exact ownership checks run before record selection, counting, tokenization, comparison, evidence collection, or persistence. The deterministic local generator accepts at most 750 authorized source records and 3 MiB of authorized source text, considers at most 2,000 pairs, and retains at most 120 pending suggestions for the owner. It supports ordered `supports` and `informs` relationships and symmetric `related` relationships with deterministic stored endpoint order. Suggestions expire after seven days. Generation saves only a private review queue; it never writes an entity link. Retained accepted or rejected history is never reopened by the same generator version, and resolved content is scrubbed before bounded 90-day retention.",
+          security: [{ operatorSession: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/RelationshipProposalOwnerInput"
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              { $ref: "#/components/schemas/RelationshipProposalList" },
+              "Current pending suggestions and bounded generation receipt"
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "413": {
+              description:
+                "The authorized transient source set exceeds the local-search record, text-byte, or relationship envelope before proposal comparison begins.",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/relationship-proposals/{id}/accept": {
+        post: {
+          tags: ["Relationship Proposals"],
+          summary: "Accept one current relationship suggestion",
+          description:
+            "Requires a trusted local operator session. The first pending decision compares the expected revision, reauthorizes both ordered current endpoints for the proposal owner, inserts the one proposed entity link, and commits the accepted state atomically. An exact accept replay returns the stored terminal result without revalidating or writing again. Reject-after-accept, stale, expired, unavailable, or revision-conflicting decisions return a stable conflict and do not change another relationship.",
+          security: [{ operatorSession: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/RelationshipProposalDecisionInput"
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["decision"],
+                properties: {
+                  decision: {
+                    $ref: "#/components/schemas/RelationshipProposalDecision"
+                  }
+                }
+              },
+              "Atomic acceptance or exact idempotent replay"
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": {
+              description:
+                "The suggestion expired, became unavailable, changed revision, or was already rejected. No relationship was changed by this request.",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/relationship-proposals/{id}/reject": {
+        post: {
+          tags: ["Relationship Proposals"],
+          summary: "Reject one current relationship suggestion",
+          description:
+            "Requires a trusted local operator session. The first pending decision compares the expected revision, records rejection, and scrubs stored evidence and explanation content without writing an entity link. An exact reject replay returns the stored terminal result without writing again. Accept-after-reject, expired, or revision-conflicting decisions return a stable conflict.",
+          security: [{ operatorSession: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/RelationshipProposalDecisionInput"
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["decision"],
+                properties: {
+                  decision: {
+                    $ref: "#/components/schemas/RelationshipProposalDecision"
+                  }
+                }
+              },
+              "Rejection with no entity-link write, or exact idempotent replay"
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": {
+              description:
+                "The suggestion expired, changed revision, or was already accepted. No relationship was changed by this request.",
               content: {
                 "application/json": {
                   schema: { $ref: "#/components/schemas/ErrorResponse" }

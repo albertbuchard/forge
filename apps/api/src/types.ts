@@ -3557,6 +3557,66 @@ export const localSearchQuerySchema = z
     }
   });
 
+export const relationshipProposalRelationSchema = z.enum([
+  "supports",
+  "informs",
+  "related"
+]);
+export const relationshipProposalStatusSchema = z.enum([
+  "pending",
+  "accepted",
+  "rejected",
+  "expired"
+]);
+export const relationshipProposalEvidenceSchema = z.object({
+  sourceField: z.string().trim().min(1).max(80),
+  targetField: z.string().trim().min(1).max(80),
+  matchedTerms: z
+    .array(z.string().trim().min(2).max(80))
+    .min(1)
+    .max(8)
+});
+export const relationshipProposalEndpointSchema = z.object({
+  entityType: crudEntityTypeSchema,
+  entityId: nonEmptyTrimmedString.max(256),
+  title: z.string().trim().min(1).max(500),
+  detail: z.string().trim().max(1_000),
+  sourceHref: z.string().trim().min(1).max(2_048),
+  graphHref: z.string().trim().min(1).max(2_048).nullable()
+});
+export const relationshipProposalSchema = z.object({
+  id: nonEmptyTrimmedString.max(80),
+  ownerUserId: nonEmptyTrimmedString,
+  source: relationshipProposalEndpointSchema,
+  target: relationshipProposalEndpointSchema,
+  relationship: relationshipProposalRelationSchema,
+  evidence: z.array(relationshipProposalEvidenceSchema).min(1).max(3),
+  explanation: z.string().trim().min(1).max(800),
+  confidence: z.number().min(0).max(1),
+  generator: z.object({
+    id: z.string().trim().min(1).max(80),
+    version: z.string().trim().min(1).max(80)
+  }),
+  status: relationshipProposalStatusSchema,
+  revision: z.number().int().positive(),
+  expiresAt: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+export const relationshipProposalOwnerInputSchema = z
+  .object({ ownerUserId: nonEmptyTrimmedString })
+  .strict();
+export const relationshipProposalListQuerySchema = z.object({
+  ownerUserId: nonEmptyTrimmedString,
+  limit: z.coerce.number().int().positive().max(20).default(20)
+});
+export const relationshipProposalDecisionInputSchema = z
+  .object({
+    ownerUserId: nonEmptyTrimmedString,
+    expectedRevision: z.number().int().positive()
+  })
+  .strict();
+
 export const currentSavedViewSchemaVersion = 1;
 export const savedViewScopeModeSchema = z.enum(["all", "selected"]);
 export const savedViewCompatibilitySchema = z.enum(["ready", "unsupported"]);
@@ -6182,6 +6242,22 @@ export type EntityNavigationPayload = z.infer<
 export type ActionBarFilterId = z.infer<typeof actionBarFilterIdSchema>;
 export type LocalSearchEntityKind = z.infer<typeof localSearchEntityKindSchema>;
 export type LocalSearchQuery = z.infer<typeof localSearchQuerySchema>;
+export type RelationshipProposalRelation = z.infer<
+  typeof relationshipProposalRelationSchema
+>;
+export type RelationshipProposalStatus = z.infer<
+  typeof relationshipProposalStatusSchema
+>;
+export type RelationshipProposalEvidence = z.infer<
+  typeof relationshipProposalEvidenceSchema
+>;
+export type RelationshipProposal = z.infer<typeof relationshipProposalSchema>;
+export type RelationshipProposalOwnerInput = z.infer<
+  typeof relationshipProposalOwnerInputSchema
+>;
+export type RelationshipProposalDecisionInput = z.infer<
+  typeof relationshipProposalDecisionInputSchema
+>;
 export type SavedView = z.infer<typeof savedViewSchema>;
 export type SavedViewCreateInput = z.infer<typeof savedViewCreateSchema>;
 export type AgentAction = z.infer<typeof agentActionSchema>;
