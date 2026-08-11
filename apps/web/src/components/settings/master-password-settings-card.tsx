@@ -135,7 +135,9 @@ export function MasterPasswordSettingsCard() {
           <p className="text-sm leading-6 text-[var(--ui-ink-muted)]">
             Use at least {minimumLength} characters. A long, unique passphrase
             is stronger than forced symbol rules. Common, Forge-derived, and
-            owner-derived passwords are rejected.
+            owner-derived passwords are rejected, as are repeated characters,
+            repeated short patterns, and obvious alphabet, number, or keyboard
+            sequences.
           </p>
           {configured ? (
             <label className="grid gap-1.5 text-sm text-[var(--ui-ink-medium)]">

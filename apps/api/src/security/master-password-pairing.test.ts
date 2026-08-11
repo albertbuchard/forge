@@ -101,6 +101,26 @@ test("master password is opt-in, locally configured, and pairs one sender-bound 
       "master_password_common"
     );
 
+    for (const password of [
+      "aaaaaaaaaaaaaaaa",
+      "abcabcabcabcabc",
+      "abcdefghijklmno",
+      "Password-password-2026",
+      "user_operator-secure-2026"
+    ]) {
+      const weak = await app.inject({
+        method: "PUT",
+        url: "/api/v1/auth/master-password",
+        headers: { host: "127.0.0.1", cookie: operatorCookie },
+        payload: { password, confirmation: password }
+      });
+      assert.equal(weak.statusCode, 400, `${password}: ${weak.body}`);
+      assert.match(
+        weak.json<{ code: string }>().code,
+        /^master_password_(?:common|weak)$/u
+      );
+    }
+
     const remoteSetup = await app.inject({
       method: "PUT",
       url: "/api/v1/auth/master-password",

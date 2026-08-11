@@ -54,6 +54,9 @@ describe("MasterPasswordSettingsCard", () => {
     expect(
       screen.getByText(/optional and unset by default/i)
     ).toBeInTheDocument();
+    expect(
+      await screen.findByText(/repeated short patterns.*keyboard sequences/i)
+    ).toBeInTheDocument();
     const save = await screen.findByRole("button", {
       name: "Set master password"
     });
