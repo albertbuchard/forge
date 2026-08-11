@@ -1329,7 +1329,7 @@
                     <p class="story-expanded-outcome">As an operator, I can change trust state, rescan, inspect versions and audit history, update metadata, delete, restore, and deliberately hard-delete metadata.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Artifact trust/scan/version/audit routes plus batch metadata actions.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>a guided trust flow requires a reason and uses the dedicated audited route while preserving scanner evidence; version/audit cards expose ordering facts, checksums, actors, timestamps, protection, and event metadata; shared soft delete remains restore-compatible. Finish stale-client, explicit restore, and deliberate hard-delete UI matrices.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>a guided trust flow requires a reason and uses the dedicated audited route while preserving scanner evidence; version/audit cards expose ordering facts, checksums, actors, timestamps, protection, and event metadata; shared soft delete remains restore-compatible. Rescan completion now uses an atomic scan-start snapshot covering storage, protection, trust state, download policy, danger evidence, scan evidence, and deletion liveness, so a stale scan returns a stable conflict without overwriting a newer human restriction, resurrecting a deleted Artifact, or appending false audit evidence. Finish explicit restore and deliberate hard-delete UI matrices.</dd></div>
                     </dl>
                   </div>
                 </details>
