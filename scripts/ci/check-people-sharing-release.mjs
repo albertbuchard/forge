@@ -161,6 +161,12 @@ const groups = Object.freeze({
       "node",
       ["./plugins/hermes/scripts/build-package-runtime.mjs"],
       { id: "plugin-runtime-build" }
+    ),
+    command(
+      "Agent onboarding generated and installed runtime parity",
+      "npm",
+      ["run", "test:agent-onboarding-parity"],
+      { id: "agent-onboarding-parity" }
     )
   ],
   runtimeParity: [

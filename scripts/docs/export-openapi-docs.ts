@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -127,6 +128,9 @@ registerForgePluginTools(
 const documentedToolNames = new Set(
   AGENT_ONBOARDING_TOOL_INPUT_CATALOG.flatMap(splitCatalogToolNames)
 );
+const onboardingCatalogSha256 = createHash("sha256")
+  .update(JSON.stringify(AGENT_ONBOARDING_TOOL_INPUT_CATALOG))
+  .digest("hex");
 const generatedAt = process.env.FORGE_DOCS_GENERATED_AT?.trim()
   ? new Date(process.env.FORGE_DOCS_GENERATED_AT).toISOString()
   : new Date().toISOString();
@@ -134,7 +138,11 @@ const agentToolsPayload = {
   generatedAt,
   source: {
     manifest: "plugins/openclaw/openclaw.plugin.json",
-    onboardingCatalog: "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
+    onboardingCatalog:
+      "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG",
+    catalogEntryCount: AGENT_ONBOARDING_TOOL_INPUT_CATALOG.length,
+    documentedToolCount: documentedToolNames.size,
+    catalogSha256: onboardingCatalogSha256
   },
   groups: [
     ...toolGroups.map(({ id, title }) => ({ id, title })),

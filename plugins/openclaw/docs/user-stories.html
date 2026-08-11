@@ -2559,7 +2559,7 @@
                     <p class="story-expanded-outcome">As an agent, I can bootstrap against live Forge onboarding and learn the exact entity catalog, fields, question flows, scopes, and route families.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>/api/v1/agents/onboarding</code>, OpenAPI, adapter bootstrap.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>OpenClaw, Hermes, and Codex now require a live-onboarding handshake and treat its 47-entry catalog and specialized route maps as authoritative; contract tests reject missing playbooks, adapter drift, invalid issue/subtask entity types, and route-family guessing. Finish generated-doc and installed-runtime parity fixtures.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>OpenClaw, Hermes, and Codex require a live-onboarding handshake and treat its 87-entry catalog and specialized route maps as authoritative. Generated agent documentation now records the exact catalog entry count, expanded tool count, and SHA-256 identity; the release gate compares every documented field and manifest tool, then proves both packaged OpenClaw and Codex server runtimes contain the byte-equivalent catalog. Existing contract tests reject missing playbooks, adapter drift, invalid issue/subtask entity types, and route-family guessing. Complete clean-install handshake verification against the published packages.</dd></div>
                     </dl>
                   </div>
                 </details>

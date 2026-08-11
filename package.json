@@ -24,6 +24,7 @@
     "docs:user-stories": "node scripts/docs/generate-user-stories-page.mjs",
     "docs:user-stories:check": "node scripts/docs/generate-user-stories-page.mjs --check",
     "test:docs:user-stories": "node --test scripts/docs/generate-user-stories-page.test.mjs scripts/docs/user-stories-page.browser.test.mjs",
+    "test:agent-onboarding-parity": "node --import tsx --test scripts/ci/agent-onboarding-parity.test.ts",
     "icons:generate": "node ./scripts/assets/generate-app-icons.mjs",
     "cropper:gamification": "node scripts/assets/serve-atlas-cropper.mjs",
     "smoke:published-openclaw-plugin": "bash ./scripts/smoke/smoke-test-published-openclaw-plugin.sh",

@@ -1,8 +1,11 @@
 {
-  "generatedAt": "2026-08-11T20:53:05.709Z",
+  "generatedAt": "2026-08-11T22:26:51.860Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
-    "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
+    "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG",
+    "catalogEntryCount": 87,
+    "documentedToolCount": 87,
+    "catalogSha256": "fd7d407b6ae93008ef17d79e99f1dc5da97b6a55840b29f03840343fc734d08d"
   },
   "groups": [
     {
