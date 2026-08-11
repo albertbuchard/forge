@@ -34848,6 +34848,7 @@
           "monthlyPattern",
           "stageAverages",
           "linkBreakdown",
+          "sessionRelations",
           "sessions"
         ],
         "properties": {
@@ -34947,6 +34948,40 @@
             "items": {
               "type": "object",
               "additionalProperties": true
+            }
+          },
+          "sessionRelations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sleepId",
+                "representativeSleepId",
+                "role",
+                "overlapRatio"
+              ],
+              "properties": {
+                "sleepId": {
+                  "type": "string"
+                },
+                "representativeSleepId": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "representative",
+                    "overlapping_record",
+                    "additional_session"
+                  ]
+                },
+                "overlapRatio": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              }
             }
           },
           "sessions": {

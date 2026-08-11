@@ -6789,6 +6789,26 @@ test("sleep view keeps same-day sessions inspectable while trends use the strong
             annotations: {
               qualitySummary: "Nap-like duplicate day row"
             }
+          },
+          {
+            externalUid: "night_overlap",
+            startedAt: "2026-04-04T22:30:00.000Z",
+            endedAt: "2026-04-05T06:30:00.000Z",
+            sourceTimezone: "Europe/Zurich",
+            localDateKey: "2026-04-05",
+            timeInBedSeconds: 28_800,
+            asleepSeconds: 27_000,
+            awakeSeconds: 1_800,
+            rawSegmentCount: 3,
+            stageBreakdown: [
+              { stage: "core", seconds: 15_000 },
+              { stage: "deep", seconds: 5_000 },
+              { stage: "rem", seconds: 7_000 }
+            ],
+            recoveryMetrics: {},
+            sourceMetrics: {},
+            links: [],
+            annotations: {}
           }
         ],
         sleepSegments: [],
@@ -6796,6 +6816,13 @@ test("sleep view keeps same-day sessions inspectable while trends use the strong
       }
     });
     assert.equal(syncResponse.statusCode, 200);
+    getDatabase()
+      .prepare(
+        `UPDATE health_sleep_sessions
+         SET source = 'oura', source_device = 'Oura Ring'
+         WHERE external_uid = 'night_overlap'`
+      )
+      .run();
 
     const sleepResponse = await app.inject({
       method: "GET",
@@ -6820,11 +6847,20 @@ test("sleep view keeps same-day sessions inspectable while trends use the strong
             externalUid: string;
             asleepSeconds: number;
           }>;
+          sessionRelations: Array<{
+            sleepId: string;
+            representativeSleepId: string;
+            role:
+              | "representative"
+              | "overlapping_record"
+              | "additional_session";
+            overlapRatio: number;
+          }>;
         };
       }
     ).sleep;
 
-    assert.equal(sleep.sessions.length, 2);
+    assert.equal(sleep.sessions.length, 3);
     assert.equal(sleep.calendarDays.length, 1);
     assert.equal(sleep.calendarDays[0]?.dateKey, "2026-04-05");
     assert.equal(sleep.latestNight?.dateKey, "2026-04-05");
@@ -6839,6 +6875,27 @@ test("sleep view keeps same-day sessions inspectable while trends use the strong
         ?.asleepSeconds,
       4_200
     );
+    const representative = sleep.sessionRelations.find(
+      (relation) => relation.role === "representative"
+    );
+    const overlapSession = sleep.sessions.find(
+      (session) => session.externalUid === "night_overlap"
+    );
+    const overlapRelation = sleep.sessionRelations.find(
+      (relation) => relation.sleepId === overlapSession?.id
+    );
+    const napSession = sleep.sessions.find(
+      (session) => session.externalUid === "night_short"
+    );
+    const napRelation = sleep.sessionRelations.find(
+      (relation) => relation.sleepId === napSession?.id
+    );
+    assert.equal(representative?.sleepId, sleep.latestNight?.sleepId);
+    assert.equal(overlapRelation?.representativeSleepId, representative?.sleepId);
+    assert.equal(overlapRelation?.role, "overlapping_record");
+    assert.equal(overlapRelation?.overlapRatio, 1);
+    assert.equal(napRelation?.role, "additional_session");
+    assert.equal(napRelation?.overlapRatio, 0);
     assert.equal(sleep.latestNight?.sleepId, sleep.calendarDays[0]?.sleepId);
   } finally {
     await app.close();

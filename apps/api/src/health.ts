@@ -2232,6 +2232,57 @@ function pickDisplaySleepSessions(sessions: MappedSleepSession[]) {
   });
 }
 
+function sleepSessionOverlapRatio(
+  left: MappedSleepSession,
+  right: MappedSleepSession
+) {
+  const leftStart = Date.parse(left.startedAt);
+  const leftEnd = Date.parse(left.endedAt);
+  const rightStart = Date.parse(right.startedAt);
+  const rightEnd = Date.parse(right.endedAt);
+  const shorterDuration = Math.min(
+    leftEnd - leftStart,
+    rightEnd - rightStart
+  );
+  if (
+    [leftStart, leftEnd, rightStart, rightEnd].some(Number.isNaN) ||
+    shorterDuration <= 0
+  ) {
+    return 0;
+  }
+  const overlap = Math.max(
+    0,
+    Math.min(leftEnd, rightEnd) - Math.max(leftStart, rightStart)
+  );
+  return round(overlap / shorterDuration, 3);
+}
+
+function buildSleepSessionRelations(
+  sessions: MappedSleepSession[],
+  representatives: MappedSleepSession[]
+) {
+  const representativeByDate = new Map(
+    representatives.map((session) => [session.localDateKey, session] as const)
+  );
+  return sessions.map((session) => {
+    const representative = representativeByDate.get(session.localDateKey);
+    const overlapRatio = representative
+      ? sleepSessionOverlapRatio(session, representative)
+      : 0;
+    return {
+      sleepId: session.id,
+      representativeSleepId: representative?.id ?? session.id,
+      role:
+        !representative || representative.id === session.id
+          ? ("representative" as const)
+          : overlapRatio >= 0.5
+            ? ("overlapping_record" as const)
+            : ("additional_session" as const),
+      overlapRatio
+    };
+  });
+}
+
 function buildLatestSleepNightFreshness(
   latestNight: MappedSleepSession | null,
   now: Date = new Date()
@@ -7007,6 +7058,10 @@ export function getSleepViewData(
     !recentSessions.some((session) => session.id === latestNight.id)
       ? [latestNight, ...recentSessions.slice(0, 29)]
       : recentSessions;
+  const sessionRelations = buildSleepSessionRelations(
+    inspectableSessions,
+    displaySessions
+  );
   const latestNightFreshness = buildLatestSleepNightFreshness(
     latestNight,
     options.now
@@ -7142,6 +7197,7 @@ export function getSleepViewData(
     linkBreakdown: [...linkTotals.entries()]
       .map(([entityType, count]) => ({ entityType, count }))
       .sort((left, right) => right.count - left.count),
+    sessionRelations,
     sessions: inspectableSessions
   };
 }

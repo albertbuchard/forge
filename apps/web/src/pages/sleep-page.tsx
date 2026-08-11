@@ -39,6 +39,7 @@ import type {
   SleepPhaseTimelineBlock,
   SleepRawLogRecord,
   SleepSegmentRecord,
+  SleepSessionRelation,
   SleepSessionDetailPayload,
   SleepSessionRecord,
   SleepSourceRecord,
@@ -842,11 +843,13 @@ function WeekBaselineCard({
 
 function SameWakeDateSessions({
   sessions,
+  relations,
   representativeId,
   selectedSleepId,
   onSelect
 }: {
   sessions: SleepSessionRecord[];
+  relations: SleepSessionRelation[];
   representativeId: string | null;
   selectedSleepId: string | null;
   onSelect: (sleepId: string) => void;
@@ -860,6 +863,9 @@ function SameWakeDateSessions({
     if (right.id === representativeId) return 1;
     return Date.parse(right.endedAt) - Date.parse(left.endedAt);
   });
+  const relationBySleepId = new Map(
+    relations.map((relation) => [relation.sleepId, relation])
+  );
 
   return (
     <Card className="border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
@@ -867,20 +873,29 @@ function SameWakeDateSessions({
         Same wake date
       </div>
       <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-muted)]">
-        The calendar and trends use one representative night. Every stored
-        session remains available here, including naps and overlapping source
-        records.
+        The calendar and trends use one representative night. Each recent
+        session returned for this wake date remains available here, including
+        naps and overlapping source records.
       </div>
       <div className="mt-3 grid gap-2">
         {orderedSessions.map((session) => {
-          const isRepresentative = session.id === representativeId;
+          const relation = relationBySleepId.get(session.id);
+          const isRepresentative =
+            relation?.role === "representative" ||
+            session.id === representativeId;
+          const isOverlapping = relation?.role === "overlapping_record";
           const isSelected = session.id === selectedSleepId;
+          const label = isRepresentative
+            ? "Calendar night"
+            : isOverlapping
+              ? "Overlapping record"
+              : "Additional sleep";
           return (
             <button
               key={session.id}
               type="button"
               aria-pressed={isSelected}
-              aria-label={`Select ${isRepresentative ? "calendar night" : "additional sleep"} ${session.id}`}
+              aria-label={`Select ${label.toLowerCase()} ${session.id}`}
               onClick={() => onSelect(session.id)}
               className={cn(
                 "min-h-11 rounded-[14px] border px-3 py-2 text-left transition",
@@ -891,11 +906,19 @@ function SameWakeDateSessions({
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm font-medium text-[var(--ui-ink-strong)]">
-                  {isRepresentative ? "Calendar night" : "Additional sleep"}
+                  {label}
                 </span>
-                <Badge tone="meta">
-                  {formatDurationCompact(session.asleepSeconds)}
-                </Badge>
+                <div className="flex flex-wrap items-center gap-2">
+                  {isOverlapping ? (
+                    <Badge tone="meta">
+                      {Math.round((relation?.overlapRatio ?? 0) * 100)}%
+                      overlap
+                    </Badge>
+                  ) : null}
+                  <Badge tone="meta">
+                    {formatDurationCompact(session.asleepSeconds)}
+                  </Badge>
+                </div>
               </div>
               <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
                 {formatSleepWindow(
@@ -1919,6 +1942,7 @@ export function SleepPage() {
             <div className="grid gap-4">
               <SameWakeDateSessions
                 sessions={activeDateSessions}
+                relations={sleep.sessionRelations}
                 representativeId={activeDateRepresentativeId}
                 selectedSleepId={activeSession.id}
                 onSelect={selectSleep}

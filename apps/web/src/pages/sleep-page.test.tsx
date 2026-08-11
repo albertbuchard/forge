@@ -261,6 +261,18 @@ describe("SleepPage", () => {
       recoveryState: "stable"
     }
   });
+  const overlappingSession = createSleepSession({
+    id: "sleep_overlap",
+    externalUid: "oura_latest_day",
+    source: "oura",
+    sourceDevice: "Oura Ring",
+    localDateKey: latestSession.localDateKey,
+    startedAt: "2026-04-13T21:55:00.000Z",
+    endedAt: "2026-04-14T05:40:00.000Z",
+    timeInBedSeconds: 27_900,
+    asleepSeconds: 26_100,
+    awakeSeconds: 1_800
+  });
   const outsideWindowSession = createSleepSession({
     ...olderSession,
     id: "sleep_outside_window",
@@ -363,7 +375,33 @@ describe("SleepPage", () => {
       { stage: "rem", averageSeconds: 7_200 }
     ],
     linkBreakdown: [],
-    sessions: [napSession, latestSession, olderSession]
+    sessionRelations: [
+      {
+        sleepId: latestSession.id,
+        representativeSleepId: latestSession.id,
+        role: "representative",
+        overlapRatio: 1
+      },
+      {
+        sleepId: overlappingSession.id,
+        representativeSleepId: latestSession.id,
+        role: "overlapping_record",
+        overlapRatio: 0.97
+      },
+      {
+        sleepId: napSession.id,
+        representativeSleepId: latestSession.id,
+        role: "additional_session",
+        overlapRatio: 0
+      },
+      {
+        sleepId: olderSession.id,
+        representativeSleepId: olderSession.id,
+        role: "representative",
+        overlapRatio: 1
+      }
+    ],
+    sessions: [napSession, overlappingSession, latestSession, olderSession]
   };
 
   const rawDetails = new Map<string, SleepSessionDetailPayload>([
@@ -632,7 +670,9 @@ describe("SleepPage", () => {
     await waitForCondition(() => {
       expect(container.textContent).toContain("Same wake date");
       expect(container.textContent).toContain("Additional sleep");
-      expect(container.textContent).toContain("2 nights · 1 additional");
+      expect(container.textContent).toContain("Overlapping record");
+      expect(container.textContent).toContain("97% overlap");
+      expect(container.textContent).toContain("2 nights · 2 additional");
       expect(
         requireButton("Select calendar night sleep_latest").getAttribute(
           "aria-pressed"

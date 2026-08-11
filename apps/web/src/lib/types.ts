@@ -2290,6 +2290,13 @@ export interface SleepSessionRecord {
   updatedAt: string;
 }
 
+export interface SleepSessionRelation {
+  sleepId: string;
+  representativeSleepId: string;
+  role: "representative" | "overlapping_record" | "additional_session";
+  overlapRatio: number;
+}
+
 export interface SleepSegmentRecord {
   id: string;
   externalUid: string;
@@ -2625,6 +2632,7 @@ export interface SleepViewData {
     entityType: string;
     count: number;
   }>;
+  sessionRelations: SleepSessionRelation[];
   sessions: SleepSessionRecord[];
 }
 

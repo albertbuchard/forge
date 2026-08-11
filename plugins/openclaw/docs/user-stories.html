@@ -46,8 +46,8 @@
           <a class="story-metric metric-all" href="./user-stories.html" data-metric-scope="all"><strong>203</strong><span>All stories</span></a>
           <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>193</strong><span>Current product</span></a>
           <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>10</strong><span>Planned</span></a>
-          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>14</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>161</strong><span>In review</span></a>
+          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>15</strong><span>Verified</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>160</strong><span>In review</span></a>
           <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>18</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
@@ -2030,17 +2030,17 @@
               </summary>
               <div class="story-list">
 
-                <details class="story-card" id="story-health-01" data-story-id="HEALTH-01" data-lifecycle="current" data-readiness="In review" data-family="HEALTH">
+                <details class="story-card" id="story-health-01" data-story-id="HEALTH-01" data-lifecycle="current" data-readiness="Verified" data-family="HEALTH">
                   <summary class="story-summary">
                     <span class="story-id">HEALTH-01</span>
                     <span class="story-summary-outcome">As a user, I can inspect sleep sessions, stages, recovery context, annotations, and trends by wake date.</span>
-                    <span class="story-state state-in-review">In review</span>
+                    <span class="story-state state-verified">Verified</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a user, I can inspect sleep sessions, stages, recovery context, annotations, and trends by wake date.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>sleep-index</code>, <code>sleep_overview</code>, <code>sleep_session</code>.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>the live mobile flow exposes wake-date freshness, calendar trends, normalized stages, source records, and raw provider evidence without overflow. After-midnight regularity and manual daylight-saving edits preserve the right wake date. Same-day naps and overlapping source records remain individually inspectable while the calendar and trends use one strongest representative; finish explicit cross-provider identity reconciliation.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>wake-date freshness, daylight-saving edits, circular after-midnight regularity, calendar trends, normalized stages, annotations, source records, and raw provider evidence are preserved. Same-day naps remain individually inspectable, while records overlapping at least half of the shorter interval are identified against one strongest calendar representative without merging or deleting their provider evidence.</dd></div>
                     </dl>
                   </div>
                 </details>

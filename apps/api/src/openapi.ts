@@ -9411,6 +9411,7 @@ export function buildOpenApiDocument() {
       "monthlyPattern",
       "stageAverages",
       "linkBreakdown",
+      "sessionRelations",
       "sessions"
     ],
     properties: {
@@ -9447,6 +9448,29 @@ export function buildOpenApiDocument() {
       monthlyPattern: arrayOf({ type: "object", additionalProperties: true }),
       stageAverages: arrayOf({ type: "object", additionalProperties: true }),
       linkBreakdown: arrayOf({ type: "object", additionalProperties: true }),
+      sessionRelations: arrayOf({
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "sleepId",
+          "representativeSleepId",
+          "role",
+          "overlapRatio"
+        ],
+        properties: {
+          sleepId: { type: "string" },
+          representativeSleepId: { type: "string" },
+          role: {
+            type: "string",
+            enum: [
+              "representative",
+              "overlapping_record",
+              "additional_session"
+            ]
+          },
+          overlapRatio: { type: "number", minimum: 0, maximum: 1 }
+        }
+      }),
       sessions: arrayOf({ $ref: "#/components/schemas/SleepSession" })
     }
   };
