@@ -53,7 +53,7 @@ test("ART-05 classifies malformed, macro, unsafe-archive, and unsupported files"
   );
   unsafeArchive.addFile(
     "xl/worksheets/sheet1.xml",
-    Buffer.alloc(2 * 1024 * 1024)
+    Buffer.alloc(2 * 1024 * 1024, 0x41)
   );
   const compressedOffice = scanArtifactBytes({
     buffer: unsafeArchive.toBuffer(),
@@ -64,6 +64,7 @@ test("ART-05 classifies malformed, macro, unsafe-archive, and unsupported files"
   assert.ok(findingCodes(compressedOffice).has("zip_bomb_indicator"));
   assert.equal(compressedOffice.dangerLevel, "blocked");
   assert.equal(compressedOffice.artifactState, "blocked");
+  assert.equal(compressedOffice.scanResults.extractedTextSample, "");
 
   for (const fixture of [
     {

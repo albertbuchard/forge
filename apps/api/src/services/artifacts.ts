@@ -1532,7 +1532,11 @@ function scanOfficeZip(
     );
     const ratio = totalUncompressed / Math.max(1, totalCompressed);
 
-    if (entries.length > MAX_ZIP_ENTRY_COUNT) {
+    const exceedsEntryLimit = entries.length > MAX_ZIP_ENTRY_COUNT;
+    const hasUnsafeSizeCharacteristics =
+      totalUncompressed > MAX_ZIP_UNCOMPRESSED_BYTES || ratio > MAX_ZIP_RATIO;
+
+    if (exceedsEntryLimit) {
       addFinding(
         findings,
         "blocked",
@@ -1540,10 +1544,7 @@ function scanOfficeZip(
         "The archive has too many entries for safe static inspection."
       );
     }
-    if (
-      totalUncompressed > MAX_ZIP_UNCOMPRESSED_BYTES ||
-      ratio > MAX_ZIP_RATIO
-    ) {
+    if (hasUnsafeSizeCharacteristics) {
       addFinding(
         findings,
         "blocked",
@@ -1576,6 +1577,9 @@ function scanOfficeZip(
         "office_embedded_object",
         "The Office document contains embedded objects or OLE payloads."
       );
+    }
+    if (exceedsEntryLimit || hasUnsafeSizeCharacteristics) {
+      return extractedTextSample;
     }
     const relationshipText = entries
       .filter((entry) => entry.entryName.endsWith(".rels"))
