@@ -558,7 +558,7 @@
                     <p class="story-expanded-outcome">As a user or trusted agent, I can store an evidence-backed insight and connect it to the records it explains.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>insights-index</code>, <code>insight</code>, general entity links.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>the three-step guided flow, read model, provenance, linked-record lifecycle, feedback, and read-back pass; complete deduplication checks.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the three-step guided flow, read model, provenance, linked-record lifecycle, feedback, and read-back remain available. Creation normalizes Unicode, case, and whitespace, resolves the final owner before writing, checks every same-owner/same-link active candidate, and serializes duplicate detection plus Insight, owner, Activity, and event writes inside <code>BEGIN IMMEDIATE</code>. Concurrent creators collapse to one Insight and one truthful 409; active matches take precedence over Bin matches, Bin-only duplicates return <code>insight_duplicate_in_bin</code> with the existing ID, and dismissed, expired, or different-owner records remain allowed. Complete live retry and user-comprehension verification.</dd></div>
                     </dl>
                   </div>
                 </details>
