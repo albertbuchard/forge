@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
+import { Download } from "lucide-react";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import {
 } from "@/components/ui/page-state";
 import { getQuestionnaireRun } from "@/lib/api";
 import { getQuestionnaireVisibilityState } from "@/lib/questionnaire-flow";
+import type { QuestionnaireRunDetail } from "@/lib/questionnaire-types";
 import { cn } from "@/lib/utils";
 
 const sectionLabelClass =
@@ -35,6 +37,60 @@ function safeSourceHref(value: string) {
   } catch {
     return null;
   }
+}
+
+export function buildQuestionnaireRunExport(detail: QuestionnaireRunDetail) {
+  const safePrimarySourceUrl = safeSourceHref(
+    detail.instrument.primarySourceUrl
+  );
+  return {
+    schemaVersion: 1,
+    run: detail.run,
+    instrument: {
+      ...detail.instrument,
+      primarySourceUrl: safePrimarySourceUrl,
+      primarySourceUrlStatus: safePrimarySourceUrl
+        ? "available"
+        : detail.instrument.primarySourceUrl.trim().length > 0
+          ? "redacted_unsafe"
+          : "not_recorded"
+    },
+    version: {
+      ...detail.version,
+      provenance: {
+        ...detail.version.provenance,
+        sources: detail.version.provenance.sources.map((source) => {
+          const safeUrl = safeSourceHref(source.url);
+          return {
+            ...source,
+            url: safeUrl,
+            urlStatus: safeUrl
+              ? "available"
+              : source.url.trim().length > 0
+                ? "redacted_unsafe"
+                : "not_recorded"
+          };
+        })
+      }
+    },
+    answers: detail.answers,
+    scores: detail.scores
+  };
+}
+
+function downloadQuestionnaireRun(detail: QuestionnaireRunDetail) {
+  const blob = new Blob(
+    [JSON.stringify(buildQuestionnaireRunExport(detail), null, 2)],
+    { type: "application/json;charset=utf-8" }
+  );
+  const href = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.download = `questionnaire-run-${detail.run.id}.json`;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(href);
 }
 
 export function PsycheQuestionnaireRunDetailPage() {
@@ -89,6 +145,14 @@ export function PsycheQuestionnaireRunDetailPage() {
             <Link to={`/psyche/questionnaires/${detail.instrument.id}/take`}>
               <Button>Take again</Button>
             </Link>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => downloadQuestionnaireRun(detail)}
+            >
+              <Download className="mr-2 size-4" />
+              Download result JSON
+            </Button>
           </>
         }
       />
@@ -116,7 +180,9 @@ export function PsycheQuestionnaireRunDetailPage() {
               <div>
                 <dt className={sectionLabelClass}>Started</dt>
                 <dd className="mt-1 break-words text-[var(--ui-ink-medium)] [overflow-wrap:anywhere]">
-                  <time dateTime={detail.run.startedAt}>{detail.run.startedAt}</time>
+                  <time dateTime={detail.run.startedAt}>
+                    {detail.run.startedAt}
+                  </time>
                 </dd>
               </div>
               <div>
@@ -241,7 +307,8 @@ export function PsycheQuestionnaireRunDetailPage() {
                   ) : (
                     <>
                       <div className="mt-3 break-words text-sm text-[var(--ui-ink-medium)] [overflow-wrap:anywhere]">
-                        Stored answer: {answer.valueText || answer.optionKey || "Recorded"}
+                        Stored answer:{" "}
+                        {answer.valueText || answer.optionKey || "Recorded"}
                         {answer.numericValue !== null
                           ? ` · Numeric value ${answer.numericValue}`
                           : ""}

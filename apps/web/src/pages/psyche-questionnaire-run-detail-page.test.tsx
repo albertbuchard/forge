@@ -1,20 +1,33 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import type { ReactNode } from "react";
 
 import type { QuestionnaireRunDetail } from "@/lib/questionnaire-types";
-import { PsycheQuestionnaireRunDetailPage } from "@/pages/psyche-questionnaire-run-detail-page";
+import {
+  buildQuestionnaireRunExport,
+  PsycheQuestionnaireRunDetailPage
+} from "@/pages/psyche-questionnaire-run-detail-page";
 
 const { getQuestionnaireRunMock } = vi.hoisted(() => ({
   getQuestionnaireRunMock: vi.fn()
 }));
 
 vi.mock("@/components/shell/page-hero", () => ({
-  PageHero: ({ title, description }: { title: string; description: string }) => (
+  PageHero: ({
+    title,
+    description,
+    actions
+  }: {
+    title: string;
+    description: string;
+    actions?: ReactNode;
+  }) => (
     <div>
       <h1>{title}</h1>
       <p>{description}</p>
+      {actions}
     </div>
   )
 }));
@@ -222,14 +235,20 @@ function renderPage() {
 
 describe("PsycheQuestionnaireRunDetailPage", () => {
   afterEach(() => {
+    cleanup();
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
+    Reflect.deleteProperty(URL, "createObjectURL");
+    Reflect.deleteProperty(URL, "revokeObjectURL");
   });
 
   it("shows exact version, provenance, score, stored answer, and distinct missing states", async () => {
     getQuestionnaireRunMock.mockResolvedValue(completedRun);
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "AUDIT result" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "AUDIT result" })
+    ).toBeInTheDocument();
     expect(screen.getByText("Version 1")).toBeInTheDocument();
     expect(screen.getByText("Published baseline")).toBeInTheDocument();
     expect(
@@ -237,15 +256,91 @@ describe("PsycheQuestionnaireRunDetailPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Total score")).toBeInTheDocument();
     expect(screen.getByText("Low risk")).toBeInTheDocument();
-    expect(screen.getByText(/Stored answer: Never · Numeric value 0/)).toBeInTheDocument();
-    expect(screen.getByText("Not shown by questionnaire flow")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Stored answer: Never · Numeric value 0/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Not shown by questionnaire flow")
+    ).toBeInTheDocument();
     expect(screen.getByText("No answer stored")).toBeInTheDocument();
 
     expect(screen.getByRole("link", { name: "WHO source" })).toHaveAttribute(
       "href",
       "https://example.com/audit-v1"
     );
-    expect(screen.queryByRole("link", { name: "Unsafe source" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Unsafe source" })
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Unsafe source")).toBeInTheDocument();
+  });
+
+  it("downloads the exact run evidence while redacting unsafe legacy source URLs", async () => {
+    const longAnswer = "A".repeat(90_000);
+    const exportDetail: QuestionnaireRunDetail = {
+      ...completedRun,
+      instrument: {
+        ...completedRun.instrument,
+        primarySourceUrl: "https://admin:password@example.com/current"
+      },
+      answers: [
+        ...completedRun.answers,
+        {
+          itemId: "audit_3",
+          optionKey: null,
+          valueText: longAnswer,
+          numericValue: null,
+          answer: { freeText: longAnswer },
+          createdAt: "2026-08-10T09:02:00.000Z",
+          updatedAt: "2026-08-10T09:02:00.000Z"
+        }
+      ]
+    };
+    const exported = buildQuestionnaireRunExport(exportDetail);
+    expect(exported.schemaVersion).toBe(1);
+    expect(exported.run.id).toBe("run_audit_completed");
+    expect(exported.version.id).toBe("version_audit_v1");
+    expect(exported.instrument.primarySourceUrl).toBeNull();
+    expect(exported.instrument.primarySourceUrlStatus).toBe("redacted_unsafe");
+    expect(exported.answers[1]?.valueText).toHaveLength(90_000);
+    expect(exported.scores).toEqual(completedRun.scores);
+    expect(exported.version.provenance.sources).toEqual([
+      expect.objectContaining({
+        label: "WHO source",
+        url: "https://example.com/audit-v1",
+        urlStatus: "available"
+      }),
+      expect.objectContaining({
+        label: "Unsafe source",
+        url: null,
+        urlStatus: "redacted_unsafe"
+      })
+    ]);
+    expect(JSON.stringify(exported)).not.toContain("user:secret");
+    expect(JSON.stringify(exported)).not.toContain("admin:password");
+
+    const createObjectURL = vi.fn(() => "blob:questionnaire-result");
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: createObjectURL
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectURL
+    });
+    const anchorClick = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    getQuestionnaireRunMock.mockResolvedValue(exportDetail);
+    renderPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Download result JSON" })
+    );
+
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(anchorClick).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:questionnaire-result");
+    anchorClick.mockRestore();
   });
 });
