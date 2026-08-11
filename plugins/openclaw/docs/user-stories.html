@@ -1896,7 +1896,7 @@
                     <p class="story-expanded-outcome">As a user, I can inspect, edit, clone, version, and publish a questionnaire without changing historical runs.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>psyche-questionnaire-detail</code>, <code>psyche-questionnaire-edit</code>.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>verify version boundaries, scoring changes, and concurrent edits.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>answer runs now start only from a published version owned by the selected questionnaire; unpublished drafts and foreign-instrument versions are refused. Any legacy draft version already referenced by a run is also immutable, preserving its stored metadata and definition while later drafts evolve separately. Complete scoring-change, concurrent-editor, publish-conflict, and live desktop/phone matrices.</dd></div>
                     </dl>
                   </div>
                 </details>
