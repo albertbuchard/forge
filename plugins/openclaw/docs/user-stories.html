@@ -1662,7 +1662,7 @@
                     <p class="story-expanded-outcome">As a user, I can inspect inferred scores and their supporting judgments/signals instead of receiving an unexplained ranking.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Preferences workspace/read model.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>live onboarding and all adapter playbooks now define an evidence-first read flow through <code>GET /api/v1/preferences/workspace</code>, explain judgments, signals, overrides, evidence count, and uncertainty before offering a dedicated follow-up action. Complete sparse/conflicting evidence, recalculation, and UI explanation matrices.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>live onboarding and all adapter playbooks define an evidence-first read flow through <code>GET /api/v1/preferences/workspace</code>, explaining judgments, signals, overrides, evidence count, and uncertainty before a follow-up action. The bounded history window now includes labels for exactly its referenced items, so evidence outside the current score page remains readable; an unavailable historical item is described without exposing an opaque internal identifier. Complete recalculation edge cases and retained live desktop and phone verification.</dd></div>
                     </dl>
                   </div>
                 </details>
