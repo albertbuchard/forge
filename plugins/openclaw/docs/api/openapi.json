@@ -40036,8 +40036,15 @@
             "type": "string"
           },
           "targetPath": {
-            "type": "string",
-            "description": "Relative Forge web path. Deleted or missing pins point to the settings bin."
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Relative Forge web path. Deleted pins point to the settings bin; genuinely missing pins have no target path."
           },
           "ownerUserId": {
             "anyOf": [

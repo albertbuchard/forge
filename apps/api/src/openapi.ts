@@ -5441,9 +5441,9 @@ export function buildOpenApiDocument() {
       detail: { type: "string" },
       category: { type: "string" },
       targetPath: {
-        type: "string",
+        ...nullable({ type: "string" }),
         description:
-          "Relative Forge web path. Deleted or missing pins point to the settings bin."
+          "Relative Forge web path. Deleted pins point to the settings bin; genuinely missing pins have no target path."
       },
       ownerUserId: nullable({ type: "string" }),
       availability: {

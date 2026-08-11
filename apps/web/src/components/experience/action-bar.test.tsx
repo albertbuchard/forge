@@ -356,6 +356,55 @@ describe("ActionBar", () => {
     expect(touchEntityNavigationMock).not.toHaveBeenCalled();
   });
 
+  it("keeps a missing pin removable without offering a false destination", async () => {
+    const onOpenChange = vi.fn();
+    getEntityNavigationMock.mockResolvedValue({
+      generatedAt: "2026-08-11T00:00:00.000Z",
+      pinnedTotal: 1,
+      recentTotal: 0,
+      hiddenRecentCount: 0,
+      pinned: [
+        {
+          pinId: "pin_missing",
+          entityType: "goal",
+          entityId: "goal_missing",
+          title: "Goal unavailable",
+          detail: "The original record is no longer available.",
+          category: "Goal",
+          targetPath: null,
+          ownerUserId: null,
+          availability: "missing",
+          pinnedAt: "2026-08-11T00:00:00.000Z",
+          lastViewedAt: null,
+          viewCount: 0
+        }
+      ],
+      recent: []
+    });
+    renderActionBar({ onOpenChange });
+
+    expect(
+      await screen.findByRole("button", {
+        name: "Goal unavailable is unavailable"
+      })
+    ).toBeDisabled();
+    fireEvent.keyDown(
+      screen.getByPlaceholderText(
+        "Search anything in Forge or type create habit…"
+      ),
+      { key: "Enter" }
+    );
+    expect(onOpenChange).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Unpin Goal unavailable" })
+    );
+
+    await waitFor(() =>
+      expect(unpinEntityNavigationMock).toHaveBeenCalledWith("pin_missing")
+    );
+    expect(touchEntityNavigationMock).not.toHaveBeenCalled();
+  });
+
   it("lets the shell route tracker handle direct detail routes without double touching", async () => {
     renderActionBar();
 

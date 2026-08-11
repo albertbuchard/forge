@@ -3535,7 +3535,7 @@ export const entityNavigationItemSchema = z.object({
   title: nonEmptyTrimmedString,
   detail: trimmedString,
   category: nonEmptyTrimmedString,
-  targetPath: nonEmptyTrimmedString,
+  targetPath: nonEmptyTrimmedString.nullable(),
   ownerUserId: z.string().nullable(),
   availability: entityNavigationAvailabilitySchema,
   pinnedAt: z.string().nullable(),

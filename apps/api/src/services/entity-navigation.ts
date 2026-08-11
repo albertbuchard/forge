@@ -58,7 +58,7 @@ type ResolvedTarget = {
   title: string;
   detail: string;
   category: string;
-  targetPath: string;
+  targetPath: string | null;
 };
 
 function newId(prefix: string) {
@@ -332,7 +332,7 @@ function resolveTarget(
       title: `${titleCase(entityType)} unavailable`,
       detail: "The original record is no longer available.",
       category: titleCase(entityType),
-      targetPath: "/settings/bin"
+      targetPath: null
     };
   }
   if (!entityMatchesScope(entityType, entityId, entity, scope)) {

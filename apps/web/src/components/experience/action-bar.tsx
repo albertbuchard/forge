@@ -769,7 +769,7 @@ export function ActionBar({
         id: `pin-${item.pinId ?? `${item.entityType}-${item.entityId}`}`,
         title: item.title,
         detail: item.detail,
-        href: item.targetPath,
+        href: item.targetPath ?? undefined,
         category: item.category,
         section: "pinned" as const,
         searchText:
@@ -785,7 +785,7 @@ export function ActionBar({
         id: `recent-${item.entityType}-${item.entityId}`,
         title: item.title,
         detail: item.detail,
-        href: item.targetPath,
+        href: item.targetPath ?? undefined,
         category: item.category,
         section: "recent" as const,
         searchText:
@@ -961,6 +961,9 @@ export function ActionBar({
     entitySearchQuery.isFetching;
 
   const handleSelect = (item: ActionBarItem) => {
+    if (!item.onSelect && !item.href) {
+      return;
+    }
     onOpenChange(false);
     if (item.onSelect) {
       item.onSelect();
@@ -1308,7 +1311,13 @@ export function ActionBar({
                             itemRefs.current[index] = node;
                           }}
                           type="button"
-                          className="flex min-w-0 flex-1 items-start gap-2 rounded-[24px] px-3 py-3 text-left sm:gap-3 sm:px-4 sm:py-3.5"
+                          aria-label={
+                            item.availability === "missing"
+                              ? `${item.title} is unavailable`
+                              : undefined
+                          }
+                          disabled={item.availability === "missing"}
+                          className="flex min-w-0 flex-1 items-start gap-2 rounded-[24px] px-3 py-3 text-left disabled:cursor-not-allowed sm:gap-3 sm:px-4 sm:py-3.5"
                           onClick={() => handleSelect(item)}
                         >
                           <ActionBarLeadingTile item={item} />
@@ -1343,14 +1352,16 @@ export function ActionBar({
                               </div>
                             ) : null}
                           </div>
-                          <ArrowRight
-                            className={cn(
-                              "mt-1 size-4 shrink-0 transition",
-                              index === activeIndex
-                                ? "text-[var(--ui-ink-medium)]"
-                                : "text-[var(--ui-ink-faint)] group-hover:text-[var(--ui-ink-soft)]"
-                            )}
-                          />
+                          {item.availability !== "missing" ? (
+                            <ArrowRight
+                              className={cn(
+                                "mt-1 size-4 shrink-0 transition",
+                                index === activeIndex
+                                  ? "text-[var(--ui-ink-medium)]"
+                                  : "text-[var(--ui-ink-faint)] group-hover:text-[var(--ui-ink-soft)]"
+                              )}
+                            />
+                          ) : null}
                         </button>
                         {item.graphHref ||
                         (item.entityType && item.entityId) ? (

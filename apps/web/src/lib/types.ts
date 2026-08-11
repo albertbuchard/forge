@@ -4782,7 +4782,7 @@ export interface EntityNavigationItem {
   title: string;
   detail: string;
   category: string;
-  targetPath: string;
+  targetPath: string | null;
   ownerUserId: string | null;
   availability: EntityNavigationAvailability;
   pinnedAt: string | null;

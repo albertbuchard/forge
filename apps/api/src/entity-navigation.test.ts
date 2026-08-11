@@ -319,6 +319,34 @@ test("entity navigation preserves deleted pins but hides deleted recents", async
   });
 });
 
+test("entity navigation keeps genuinely missing pins visible without a false Bin route", async () => {
+  await withTestServer(async (app) => {
+    const cookie = await issueOperatorSessionCookie(app);
+    const timestamp = "2026-08-11T00:00:00.000Z";
+    getDatabase()
+      .prepare(
+        `INSERT INTO entity_pins (
+           id, owner_user_id, entity_type, entity_id, pinned_at, updated_at
+         ) VALUES (?, '', 'goal', ?, ?, ?)`
+      )
+      .run("pin_missing_goal", "goal_permanently_missing", timestamp, timestamp);
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/v1/entity-navigation",
+      headers: { cookie }
+    });
+    assert.equal(list.statusCode, 200, list.body);
+    const missing = (list.json() as EntityNavigationPayload).pinned.find(
+      (item) => item.pinId === "pin_missing_goal"
+    );
+    assert.ok(missing);
+    assert.equal(missing.availability, "missing");
+    assert.equal(missing.targetPath, null);
+    assert.match(missing.detail, /no longer available/i);
+  });
+});
+
 test("entity navigation enforces token user scope for reads and touches", async () => {
   await withTestServer(async (app) => {
     const cookie = await issueOperatorSessionCookie(app);
