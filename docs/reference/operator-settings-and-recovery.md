@@ -85,6 +85,30 @@ those actions if onboarding is unavailable so it cannot issue a credential from
 a stale scope catalog. Raw tokens are shown once. Rotation invalidates the old
 token immediately; revocation is permanent for that credential.
 
+### Optional Master Password For Remote Browser Pairing
+
+Forge does not create or assign a master password by default. An authenticated
+operator using a browser directly on the Forge host can opt in under
+**Settings → Agents**. Forge requires at least 15 Unicode characters, rejects
+common and Forge-derived values, and recommends a unique long passphrase rather
+than forced symbol rules. Replacing an existing master password requires the
+current one.
+
+The password is not a reusable Forge session or an operator credential. It is
+an alternative way to approve one already-pending remote-browser pairing
+request. The remote browser must still use the configured HTTPS origin, present
+the exact short-lived request and user code, and prove possession of its own
+one-use P-256 key. Master-password approval is limited to the `viewer` or
+`trusted_personal_assistant` browser profiles and the `read` and `write` scopes;
+it cannot approve an operator profile, an API client, or machine authority.
+Each accepted browser receives its own sender-bound, revocable credential.
+
+Forge normalizes the password with Unicode NFC and derives its verifier with
+Argon2id using 19 MiB of memory, two operations, and parallelism one after an
+installation-keyed secret digest. The database stores only the salt and
+verifier. Remote attempts are limited to five per owner and network partition
+in five minutes. The remote page does not save the submitted password.
+
 ## Model Health
 
 Model settings distinguish stored credential state from endpoint health. A

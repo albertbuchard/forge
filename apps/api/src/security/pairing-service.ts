@@ -423,6 +423,28 @@ export class PairingService<ServerContext = unknown> {
     };
   }
 
+  async verifyMasterPasswordApprovalClient(input: {
+    requestId: string;
+    clientProof: string;
+  }) {
+    const request = this.repository.readPairingRequest(input.requestId);
+    if (
+      !request ||
+      request.status !== "pending" ||
+      request.clientType !== "browser" ||
+      Date.parse(request.expiresAt) <= this.clock.now().getTime()
+    ) {
+      throw new Error("Forge browser pairing request is unavailable.");
+    }
+    await this.clientProofs.verify({
+      proof: input.clientProof,
+      expectedKeyThumbprint: request.clientKeyThumbprint,
+      expectedRequestId: request.id,
+      expectedOperation: "master_key_approve"
+    });
+    return request;
+  }
+
   deny(input: { authorization: PairingOwnerAuthorization }) {
     const request = this.repository.readPairingRequest(
       input.authorization.requestId

@@ -4,6 +4,7 @@ import { KeyRound, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
+  approveRemoteBrowserPairingWithMasterPassword,
   beginRemoteBrowserPairing,
   cancelRemoteBrowserPairing,
   cancelRemoteBrowserPairingOnPageExit,
@@ -32,6 +33,8 @@ export function RemoteBrowserPairing({
   >("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [retrySeconds, setRetrySeconds] = useState(0);
+  const [masterPassword, setMasterPassword] = useState("");
+  const [masterPasswordPending, setMasterPasswordPending] = useState(false);
   const timer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -165,6 +168,31 @@ export function RemoteBrowserPairing({
     setStatus("idle");
     setMessage(null);
     setRetrySeconds(0);
+    setMasterPassword("");
+  };
+
+  const authorizeWithMasterPassword = async () => {
+    if (!pairing || !masterPassword) return;
+    setMasterPasswordPending(true);
+    setMessage(null);
+    try {
+      await approveRemoteBrowserPairingWithMasterPassword(
+        pairing,
+        masterPassword
+      );
+      setMasterPassword("");
+      setMessage(
+        "Master password accepted. Forge is finishing this sender-bound browser pairing."
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Forge rejected the master password."
+      );
+    } finally {
+      setMasterPasswordPending(false);
+    }
   };
 
   return (
@@ -185,8 +213,8 @@ export function RemoteBrowserPairing({
             Authorize this browser once
           </h1>
           <p className="type-body mt-2 text-[var(--ui-ink-soft)]">
-            Network or Tailscale access alone is not enough. Forge will create
-            a scoped browser session only after the local owner approves this
+            Network or Tailscale access alone is not enough. Forge will create a
+            scoped browser session only after the local owner approves this
             exact request.
           </p>
         </div>
@@ -209,6 +237,50 @@ export function RemoteBrowserPairing({
             read/write scopes. This page checks silently at the server’s
             required interval.
           </p>
+          {pairing.masterPasswordAvailable ? (
+            <div className="grid gap-3 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3">
+              <div>
+                <div className="type-label text-[var(--ui-ink-faint)]">
+                  Master-password pairing
+                </div>
+                <p className="mt-1 text-sm leading-6 text-[var(--ui-ink-medium)]">
+                  The owner enabled an optional master password for remote
+                  access. It is sent only to this Forge HTTPS origin and is
+                  never saved in this browser.
+                </p>
+              </div>
+              <label className="grid gap-1.5 text-sm text-[var(--ui-ink-medium)]">
+                Master password
+                <input
+                  type="password"
+                  value={masterPassword}
+                  onChange={(event) => {
+                    setMasterPassword(event.target.value);
+                    setMessage(null);
+                  }}
+                  autoComplete="current-password"
+                  className="min-h-11 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-[var(--ui-ink-strong)] outline-none focus:border-[var(--ui-border-strong)]"
+                />
+              </label>
+              <div>
+                <Button
+                  type="button"
+                  disabled={!masterPassword || masterPasswordPending}
+                  pending={masterPasswordPending}
+                  pendingLabel="Verifying securely"
+                  onClick={() => void authorizeWithMasterPassword()}
+                >
+                  <KeyRound className="mr-2 size-4" />
+                  Pair with master password
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm leading-6 text-[var(--ui-ink-muted)]">
+              No master password is configured. The local owner can approve this
+              request now or set one later in Settings → Agents.
+            </p>
+          )}
           <div className="flex flex-wrap gap-3">
             <Button type="button" variant="secondary" onClick={cancel}>
               Cancel request

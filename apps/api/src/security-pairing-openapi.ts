@@ -78,8 +78,129 @@ const pairingReviewSchema = {
   }
 };
 
+const masterPasswordStatusSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "configured",
+    "configuredAt",
+    "updatedAt",
+    "minimumLength",
+    "maximumLength"
+  ],
+  properties: {
+    configured: { type: "boolean" },
+    configuredAt: { type: ["string", "null"], format: "date-time" },
+    updatedAt: { type: ["string", "null"], format: "date-time" },
+    minimumLength: { type: "integer", enum: [15] },
+    maximumLength: { type: "integer", enum: [128] }
+  }
+};
+
 export function buildSecurityPairingOpenApiPaths(): Record<string, unknown> {
   return {
+    "/api/v1/auth/master-password": {
+      get: {
+        summary: "Read optional master-password pairing status",
+        description:
+          "Direct-loopback local-owner operation. Returns only whether the optional password is configured and its public length policy; it never returns verifier material.",
+        security: [{ operatorSession: [] }],
+        responses: {
+          "200": {
+            description: "Master-password pairing status",
+            content: jsonContent(masterPasswordStatusSchema)
+          },
+          "401": errorResponse,
+          "403": errorResponse
+        }
+      },
+      put: {
+        summary: "Set or replace the optional remote-pairing master password",
+        description:
+          "Direct-loopback local-owner operation. No password exists by default. Forge requires at least 15 characters, rejects common and context-derived values, and stores only a peppered Argon2id verifier. Replacing an existing password requires the current password.",
+        security: [{ operatorSession: [] }],
+        requestBody: {
+          required: true,
+          content: jsonContent({
+            type: "object",
+            additionalProperties: false,
+            required: ["password", "confirmation"],
+            properties: {
+              password: {
+                type: "string",
+                minLength: 15,
+                maxLength: 128,
+                writeOnly: true
+              },
+              confirmation: {
+                type: "string",
+                minLength: 15,
+                maxLength: 128,
+                writeOnly: true
+              },
+              currentPassword: {
+                type: "string",
+                minLength: 1,
+                maxLength: 128,
+                writeOnly: true
+              }
+            }
+          })
+        },
+        responses: {
+          "200": {
+            description: "Master password configured",
+            content: jsonContent(masterPasswordStatusSchema)
+          },
+          "400": errorResponse,
+          "401": errorResponse,
+          "403": errorResponse
+        }
+      }
+    },
+    "/api/v1/auth/device/master-password/approve": {
+      post: {
+        summary:
+          "Approve one sender-bound remote browser with the master password",
+        description:
+          "Optional HTTPS-only bounded pairing protocol. The master password can approve only a browser viewer or trusted-personal-assistant request limited to read/write scopes. The request id, short code, and one-use P-256 client proof must all match. Attempts are rate-limited, and the resulting browser credential remains scoped, sender-bound, and revocable.",
+        security: [],
+        requestBody: {
+          required: true,
+          content: jsonContent({
+            type: "object",
+            additionalProperties: false,
+            required: ["requestId", "userCode", "password", "clientProof"],
+            properties: {
+              requestId: {
+                type: "string",
+                pattern: "^pair_[A-Za-z0-9-]{16,160}$"
+              },
+              userCode: { type: "string", minLength: 8, maxLength: 64 },
+              password: {
+                type: "string",
+                minLength: 1,
+                maxLength: 128,
+                writeOnly: true
+              },
+              clientProof: {
+                type: "string",
+                minLength: 64,
+                maxLength: 8192,
+                writeOnly: true
+              }
+            }
+          })
+        },
+        responses: {
+          "200": { description: "Browser pairing request approved" },
+          "401": errorResponse,
+          "403": errorResponse,
+          "409": errorResponse,
+          "429": errorResponse
+        }
+      }
+    },
     "/api/v1/auth/device/requests": {
       get: {
         summary: "List active pairing requests for the local owner",

@@ -2,6 +2,10 @@ import type {
   BrowserSessionService,
   VerifiedBrowserSession
 } from "./browser-session-service.js";
+import type {
+  MasterPasswordAuthorizationConsumer,
+  MasterPasswordPairingAuthorization
+} from "./master-password-service.js";
 import type { PrivilegedPairingAuthorization } from "./owner-step-up-service.js";
 import {
   PairingNetworkPartitionAuthority,
@@ -91,7 +95,8 @@ export class PairingOwnerAuthorizationService<ServerContext = unknown> {
           default: "denied_unless_capability_explicitly_allows"
         }
       }
-    })
+    }),
+    private readonly masterPasswordAuthorizations: MasterPasswordAuthorizationConsumer | null = null
   ) {}
 
   authorizeApproval(input: {
@@ -156,6 +161,57 @@ export class PairingOwnerAuthorizationService<ServerContext = unknown> {
       scopes: [...new Set(input.scopes)].sort(),
       profile: input.profile,
       sessionId: input.session.sessionId
+    });
+  }
+
+  authorizeMasterPasswordApproval(input: {
+    requestId: string;
+    userCode: string;
+    networkPartition: VerifiedNetworkPartition;
+    masterPasswordAuthorization: MasterPasswordPairingAuthorization;
+  }) {
+    if (!this.masterPasswordAuthorizations) {
+      throw new Error("Forge master-password pairing is unavailable.");
+    }
+    const request = this.resolvePendingRequest(
+      input.userCode,
+      input.networkPartition
+    );
+    if (request.id !== input.requestId) {
+      throw new Error(
+        "Forge pairing code does not match the selected request."
+      );
+    }
+    const verified =
+      this.masterPasswordAuthorizations.consumeMasterPasswordAuthorization(
+        input.masterPasswordAuthorization,
+        request.id
+      );
+    this.requireRequestOwner(request, verified.ownerId);
+    if (verified.ownerSecurityEpoch !== request.ownerSecurityEpoch) {
+      throw new Error(
+        "Forge master-password pairing belongs to a stale owner epoch."
+      );
+    }
+    if (
+      request.clientType !== "browser" ||
+      !["viewer", "trusted_personal_assistant"].includes(
+        request.requestedProfile
+      ) ||
+      request.requestedScopes.some(
+        (scope) => !["read", "write"].includes(scope)
+      )
+    ) {
+      throw new Error(
+        "Forge master-password pairing cannot grant privileged or non-browser authority."
+      );
+    }
+    return this.issue({
+      decision: "approve",
+      request,
+      scopes: request.requestedScopes,
+      profile: request.requestedProfile,
+      sessionId: `master-password:${request.id}`
     });
   }
 

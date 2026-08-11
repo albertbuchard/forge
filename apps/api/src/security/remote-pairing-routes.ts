@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
 import { HttpError } from "../errors.js";
+import { MasterPasswordError } from "./master-password-service.js";
 import {
   isDirectLocalTransport,
   type ApplicationSecurityRuntime
@@ -151,6 +152,17 @@ function ownerBrowserSession(request: FastifyRequest) {
   return authentication.browserSession.verified;
 }
 
+function localOwnerMasterPasswordSession(request: FastifyRequest) {
+  if (!isDirectLocalTransport(request)) {
+    throw new HttpError(
+      401,
+      "master_password_local_owner_required",
+      "The master password can be configured only from an authenticated browser on the Forge host."
+    );
+  }
+  return ownerBrowserSession(request);
+}
+
 function pairingProtocolFailure(
   error: unknown,
   input: {
@@ -258,6 +270,52 @@ export function registerRemotePairingRoutes(
   const { runtime } = input;
   const remoteMachineScopesAvailable =
     input.remoteMachineScopesAvailable === true;
+
+  app.get("/api/v1/auth/master-password", async (request, reply) => {
+    const session = localOwnerMasterPasswordSession(request);
+    reply.header("cache-control", "no-store");
+    return runtime.masterPasswords.status(session.principal.ownerId);
+  });
+
+  app.put("/api/v1/auth/master-password", async (request, reply) => {
+    const session = localOwnerMasterPasswordSession(request);
+    const body = z
+      .object({
+        password: z.string().min(1).max(512),
+        confirmation: z.string().min(1).max(512),
+        currentPassword: z.string().min(1).max(512).optional()
+      })
+      .strict()
+      .parse(request.body ?? {});
+    if (body.password.normalize("NFC") !== body.confirmation.normalize("NFC")) {
+      throw new HttpError(
+        400,
+        "master_password_confirmation_mismatch",
+        "The new master password and confirmation do not match."
+      );
+    }
+    try {
+      const status = await runtime.masterPasswords.set({
+        ownerId: session.principal.ownerId,
+        password: body.password,
+        currentPassword: body.currentPassword
+      });
+      reply.header("cache-control", "no-store");
+      return status;
+    } catch (error) {
+      if (error instanceof MasterPasswordError) {
+        throw new HttpError(
+          error.code === "master_password_current_required" ||
+            error.code === "master_password_invalid"
+            ? 403
+            : 400,
+          error.code,
+          error.message
+        );
+      }
+      throw error;
+    }
+  });
 
   app.post("/api/v1/auth/browser/refresh", async (request, reply) => {
     requireSameTargetBrowserOrigin(request, runtime);
@@ -376,7 +434,7 @@ export function registerRemotePairingRoutes(
       remoteMachineScopesAvailable
     );
     try {
-      return runtime.pairing.begin({
+      const begun = runtime.pairing.begin({
         ownerId: input.ownerId,
         networkPartition: runtime.pairingNetworkPartitions.observe(request),
         installationId: runtime.installationId,
@@ -387,6 +445,12 @@ export function registerRemotePairingRoutes(
         requestedScopes: body.requestedScopes,
         requestedProfile: body.requestedProfile
       });
+      return {
+        ...begun,
+        masterPasswordAvailable:
+          body.clientType === "browser" &&
+          runtime.masterPasswords.status(input.ownerId).configured
+      };
     } catch (error) {
       const retryAfterSeconds =
         error instanceof PairingAdmissionError ? error.retryAfterSeconds : 60;
@@ -407,6 +471,76 @@ export function registerRemotePairingRoutes(
       });
     }
   });
+
+  app.post(
+    "/api/v1/auth/device/master-password/approve",
+    async (request, reply) => {
+      const body = z
+        .object({
+          requestId: pairingRequestIdSchema,
+          userCode: z.string().trim().min(8).max(64),
+          password: z.string().min(1).max(512),
+          clientProof: pairingProofSchema
+        })
+        .strict()
+        .parse(request.body ?? {});
+      let pending;
+      try {
+        pending = await runtime.pairing.verifyMasterPasswordApprovalClient({
+          requestId: body.requestId,
+          clientProof: body.clientProof
+        });
+      } catch (error) {
+        pairingProtocolFailure(error, {
+          statusCode: 401,
+          code: "master_password_pairing_client_proof_invalid",
+          message:
+            "Forge rejected the sender-bound master-password pairing proof."
+        });
+      }
+      try {
+        const masterPasswordAuthorization =
+          await runtime.masterPasswords.authorizePairing({
+            ownerId: pending.ownerId,
+            requestId: pending.id,
+            password: body.password,
+            networkPartition: runtime.pairingNetworkPartitions.observe(request)
+          });
+        return runtime.pairing.approve({
+          authorization:
+            runtime.pairingOwnerAuthorizations.authorizeMasterPasswordApproval({
+              requestId: pending.id,
+              userCode: body.userCode,
+              networkPartition:
+                runtime.pairingNetworkPartitions.observe(request),
+              masterPasswordAuthorization
+            }),
+          registerClient: true
+        });
+      } catch (error) {
+        if (error instanceof MasterPasswordError) {
+          if (error.code === "master_password_rate_limited") {
+            reply.header("retry-after", "300");
+          }
+          throw new HttpError(
+            error.code === "master_password_rate_limited"
+              ? 429
+              : error.code === "master_password_not_configured"
+                ? 409
+                : 401,
+            error.code,
+            error.message
+          );
+        }
+        pairingProtocolFailure(error, {
+          statusCode: 403,
+          code: "master_password_pairing_rejected",
+          message:
+            "Forge rejected the master-password pairing request because its code, owner, scope, or state did not match."
+        });
+      }
+    }
+  );
 
   app.post("/api/v1/auth/device/cancel", async (request) => {
     const body = z

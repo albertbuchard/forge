@@ -34,6 +34,7 @@ const DATA_FREE_PUBLIC_ROUTES = new Set([
 const BOUNDED_AUTH_PROTOCOL_ROUTES = new Set([
   "POST /api/v1/auth/device",
   "POST /api/v1/auth/device/cancel",
+  "POST /api/v1/auth/device/master-password/approve",
   "POST /api/v1/auth/token",
   "POST /api/v1/auth/browser/refresh",
   "POST /api/v1/auth/local/begin",
@@ -135,10 +136,7 @@ const LEGACY_SCOPE_COMPATIBILITY = new Map<string, readonly string[]>([
   ],
   ["GET /api/v1/psyche/questionnaire-runs/:id", ["psyche.read"]],
   ["PATCH /api/v1/psyche/questionnaire-runs/:id", ["psyche.write"]],
-  [
-    "POST /api/v1/psyche/questionnaire-runs/:id/complete",
-    ["psyche.write"]
-  ],
+  ["POST /api/v1/psyche/questionnaire-runs/:id/complete", ["psyche.write"]],
   ["GET /api/v1/settings", ["read"]],
   ["POST /api/v1/insights", ["write", "insights"]],
   ["POST /api/v1/insights/:id/feedback", ["write", "insights"]],

@@ -12,7 +12,7 @@ import type { SecurityClock } from "./security-runtime.js";
 
 type PairingProofPayload = JWTPayload & {
   request_id: string;
-  operation: "poll" | "cancel";
+  operation: "poll" | "cancel" | "master_key_approve";
 };
 
 function containsPrivateJwkMaterial(jwk: JWK) {
@@ -32,7 +32,7 @@ export class PairingClientProofVerifier {
     proof: string;
     expectedKeyThumbprint: string;
     expectedRequestId: string;
-    expectedOperation: "poll" | "cancel";
+    expectedOperation: "poll" | "cancel" | "master_key_approve";
   }) {
     const header = decodeProtectedHeader(input.proof);
     if (

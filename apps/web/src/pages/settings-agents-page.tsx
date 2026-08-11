@@ -11,6 +11,7 @@ import { AttentionSourceReturn } from "@/components/attention/attention-source-r
 import { AgentTokenFlowDialog } from "@/components/settings/agent-token-flow-dialog";
 import { LogWorkFlowDialog } from "@/components/settings/log-work-flow-dialog";
 import { RemotePairingApprovalCard } from "@/components/settings/remote-pairing-approval-card";
+import { MasterPasswordSettingsCard } from "@/components/settings/master-password-settings-card";
 import {
   TokenRevealDialog,
   type TokenRevealState
@@ -586,7 +587,10 @@ export function SettingsAgentsPage() {
 
       <div className="grid gap-5">
         {operatorSessionQuery.data?.session.profile === "operator" ? (
-          <RemotePairingApprovalCard />
+          <>
+            <MasterPasswordSettingsCard />
+            <RemotePairingApprovalCard />
+          </>
         ) : null}
         {onboardingQuery.isError ? (
           <Card className="flex flex-wrap items-center justify-between gap-3 border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)]">

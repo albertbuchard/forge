@@ -33,6 +33,7 @@ import { LocalOwnerAssertionService } from "./local-owner-assertion.js";
 import { LocalOwnerSessionCoordinator } from "./local-owner-session-coordinator.js";
 import { legacyTokenProfile } from "./legacy-token-migration.js";
 import type { LegacyTokenTransport } from "./legacy-token-migration.js";
+import { MasterPasswordService } from "./master-password-service.js";
 import { OwnerChannelAuthority } from "./owner-channel.js";
 import { PairingClientProofVerifier } from "./pairing-client-proof.js";
 import { PairingNetworkPartitionAuthority } from "./pairing-network-partition.js";
@@ -94,6 +95,7 @@ export type ApplicationSecurityRuntime = {
   pairing: PairingService<FastifyRequest>;
   pairingOwnerAuthorizations: PairingOwnerAuthorizationService<FastifyRequest>;
   pairingNetworkPartitions: PairingNetworkPartitionAuthority<FastifyRequest>;
+  masterPasswords: MasterPasswordService<FastifyRequest>;
   privilegedPairingStepUp: PrivilegedPairingStepUp;
   refreshFamilies: RefreshFamilyService;
   localOwnerSessions: LocalOwnerSessionCoordinator | null;
@@ -498,6 +500,13 @@ export async function initializeApplicationSecurityRuntime(input: {
       const remoteAddress = request.raw.socket.remoteAddress?.trim();
       return remoteAddress ? `socket:${remoteAddress}` : "socket:unavailable";
     });
+  const masterPasswords = new MasterPasswordService(
+    systemSecurityClock,
+    systemOpaqueSecretSource,
+    digester,
+    store,
+    pairingNetworkPartitions
+  );
   const privilegedPairingStepUp = createPrivilegedPairingStepUp({
     secrets: input.secrets,
     ownerId: input.ownerId,
@@ -513,7 +522,8 @@ export async function initializeApplicationSecurityRuntime(input: {
     pairingNetworkPartitions,
     undefined,
     undefined,
-    pairingReview
+    pairingReview,
+    masterPasswords
   );
   const pairing = new PairingService(
     systemSecurityClock,
@@ -799,6 +809,7 @@ export async function initializeApplicationSecurityRuntime(input: {
     pairing,
     pairingOwnerAuthorizations,
     pairingNetworkPartitions,
+    masterPasswords,
     privilegedPairingStepUp,
     refreshFamilies,
     localOwnerSessions,

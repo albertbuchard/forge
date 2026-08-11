@@ -16,6 +16,10 @@ import type {
   LocalTransactionRepository
 } from "./local-owner-assertion.js";
 import type {
+  MasterPasswordCredential,
+  MasterPasswordRepository
+} from "./master-password-service.js";
+import type {
   OwnerAuthenticator,
   OwnerSecurityRepository
 } from "./owner-step-up-service.js";
@@ -188,6 +192,19 @@ CREATE TABLE IF NOT EXISTS security_owner_authenticators (
   revoked_at TEXT
 ) STRICT;
 
+CREATE TABLE IF NOT EXISTS security_owner_master_passwords (
+  owner_id TEXT PRIMARY KEY REFERENCES security_owners(owner_id) ON DELETE CASCADE,
+  version INTEGER NOT NULL CHECK (version = 1),
+  algorithm TEXT NOT NULL CHECK (algorithm = 'argon2id13'),
+  salt_base64 TEXT NOT NULL,
+  verifier_base64 TEXT NOT NULL,
+  memlimit INTEGER NOT NULL CHECK (memlimit >= 19922944),
+  opslimit INTEGER NOT NULL CHECK (opslimit >= 2),
+  parallelism INTEGER NOT NULL CHECK (parallelism = 1),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+) STRICT;
+
 CREATE TABLE IF NOT EXISTS security_mobile_request_nonces (
   pairing_session_id TEXT NOT NULL
     REFERENCES companion_pairing_sessions(id) ON DELETE CASCADE,
@@ -340,6 +357,19 @@ type OwnerAuthenticatorRow = {
   revoked_at: string | null;
 };
 
+type MasterPasswordRow = {
+  owner_id: string;
+  version: 1;
+  algorithm: "argon2id13";
+  salt_base64: string;
+  verifier_base64: string;
+  memlimit: number;
+  opslimit: number;
+  parallelism: number;
+  created_at: string;
+  updated_at: string;
+};
+
 function parseStringArray(value: string) {
   const parsed: unknown = JSON.parse(value);
   if (
@@ -409,6 +439,7 @@ export class SqliteSecurityStore
     PairingRepository,
     BrowserSessionRepository,
     LocalTransactionRepository,
+    MasterPasswordRepository,
     OwnerSecurityRepository,
     RefreshFamilyRepository
 {
@@ -466,6 +497,62 @@ export class SqliteSecurityStore
       .prepare(`SELECT security_epoch FROM security_owners WHERE owner_id = ?`)
       .get(ownerId) as { security_epoch: number } | undefined;
     return row?.security_epoch ?? null;
+  }
+
+  readMasterPasswordCredential(ownerId: string) {
+    const row = this.database
+      .prepare(
+        `SELECT owner_id, version, algorithm, salt_base64, verifier_base64,
+                memlimit, opslimit, parallelism, created_at, updated_at
+         FROM security_owner_master_passwords WHERE owner_id = ?`
+      )
+      .get(ownerId) as MasterPasswordRow | undefined;
+    return row
+      ? {
+          ownerId: row.owner_id,
+          version: row.version,
+          algorithm: row.algorithm,
+          saltBase64: row.salt_base64,
+          verifierBase64: row.verifier_base64,
+          memlimit: row.memlimit,
+          opslimit: row.opslimit,
+          parallelism: row.parallelism,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at
+        }
+      : null;
+  }
+
+  writeMasterPasswordCredential(record: MasterPasswordCredential) {
+    this.ensureOwner(record.ownerId);
+    this.database
+      .prepare(
+        `INSERT INTO security_owner_master_passwords (
+           owner_id, version, algorithm, salt_base64, verifier_base64,
+           memlimit, opslimit, parallelism, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(owner_id) DO UPDATE SET
+           version = excluded.version,
+           algorithm = excluded.algorithm,
+           salt_base64 = excluded.salt_base64,
+           verifier_base64 = excluded.verifier_base64,
+           memlimit = excluded.memlimit,
+           opslimit = excluded.opslimit,
+           parallelism = excluded.parallelism,
+           updated_at = excluded.updated_at`
+      )
+      .run(
+        record.ownerId,
+        record.version,
+        record.algorithm,
+        record.saltBase64,
+        record.verifierBase64,
+        record.memlimit,
+        record.opslimit,
+        record.parallelism,
+        record.createdAt,
+        record.updatedAt
+      );
   }
 
   registerClient(input: {

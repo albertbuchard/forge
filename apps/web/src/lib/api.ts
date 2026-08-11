@@ -338,6 +338,8 @@ const LOCAL_BROWSER_EXCHANGE_PATH = "/api/v1/auth/local/browser/exchange";
 const REMOTE_DEVICE_BEGIN_PATH = "/api/v1/auth/device";
 const REMOTE_DEVICE_TOKEN_PATH = "/api/v1/auth/token";
 const REMOTE_DEVICE_CANCEL_PATH = "/api/v1/auth/device/cancel";
+const REMOTE_MASTER_PASSWORD_APPROVE_PATH =
+  "/api/v1/auth/device/master-password/approve";
 const REMOTE_BROWSER_REFRESH_PATH = "/api/v1/auth/browser/refresh";
 const REMOTE_BROWSER_RENEWED_AT_KEY = "forge.browser.renewed-at";
 const REMOTE_BROWSER_RENEWAL_INTERVAL_MS = 12 * 60 * 60 * 1_000;
@@ -549,6 +551,7 @@ function shouldBootstrapAndRetryBrowserSession(input: {
     input.path !== REMOTE_DEVICE_BEGIN_PATH &&
     input.path !== REMOTE_DEVICE_TOKEN_PATH &&
     input.path !== REMOTE_DEVICE_CANCEL_PATH &&
+    input.path !== REMOTE_MASTER_PASSWORD_APPROVE_PATH &&
     isAuthRequiredResponse(input.response, input.body) &&
     canReplayRequestBody(input.init)
   );
@@ -1007,6 +1010,7 @@ type RemoteBrowserPairing = {
   verificationUri: string;
   expiresAt: number;
   intervalSeconds: number;
+  masterPasswordAvailable: boolean;
   privateKey: CryptoKey;
   publicJwk: JsonWebKey;
   cancelProof?: string;
@@ -1046,7 +1050,7 @@ async function p256Thumbprint(publicJwk: JsonWebKey) {
 
 async function signPairingProof(
   pairing: RemoteBrowserPairing,
-  operation: "poll" | "cancel"
+  operation: "poll" | "cancel" | "master_key_approve"
 ) {
   const encodedHeader = encodeBase64Url(
     new TextEncoder().encode(
@@ -1123,7 +1127,8 @@ export async function beginRemoteBrowserPairing() {
     typeof body.userCode !== "string" ||
     typeof body.verificationUri !== "string" ||
     typeof body.expiresIn !== "number" ||
-    typeof body.interval !== "number"
+    typeof body.interval !== "number" ||
+    typeof body.masterPasswordAvailable !== "boolean"
   ) {
     throw new ForgeApiError({
       status: 502,
@@ -1140,11 +1145,34 @@ export async function beginRemoteBrowserPairing() {
     verificationUri: body.verificationUri,
     expiresAt: Date.now() + body.expiresIn * 1_000,
     intervalSeconds: Math.max(5, body.interval),
+    masterPasswordAvailable: body.masterPasswordAvailable,
     privateKey: keys.privateKey,
     publicJwk
   };
   pairing.cancelProof = await signPairingProof(pairing, "cancel");
   return pairing;
+}
+
+export async function approveRemoteBrowserPairingWithMasterPassword(
+  pairing: RemoteBrowserPairing,
+  password: string
+) {
+  const approved = await sendApiRequest(REMOTE_MASTER_PASSWORD_APPROVE_PATH, {
+    method: "POST",
+    body: JSON.stringify({
+      requestId: pairing.requestId,
+      userCode: pairing.userCode,
+      password,
+      clientProof: await signPairingProof(pairing, "master_key_approve")
+    })
+  });
+  if (!approved.response.ok) {
+    throw createApiError(
+      REMOTE_MASTER_PASSWORD_APPROVE_PATH,
+      approved.response,
+      approved.body
+    );
+  }
 }
 
 export async function pollRemoteBrowserPairing(pairing: RemoteBrowserPairing) {
@@ -1274,6 +1302,29 @@ export type RemotePairingRequest = RemotePairingReview & {
   approvedAt: string | null;
   clientId: string | null;
 };
+
+export type MasterPasswordStatus = {
+  configured: boolean;
+  configuredAt: string | null;
+  updatedAt: string | null;
+  minimumLength: number;
+  maximumLength: number;
+};
+
+export function getMasterPasswordStatus() {
+  return request<MasterPasswordStatus>("/api/v1/auth/master-password");
+}
+
+export function setMasterPassword(input: {
+  password: string;
+  confirmation: string;
+  currentPassword?: string;
+}) {
+  return request<MasterPasswordStatus>("/api/v1/auth/master-password", {
+    method: "PUT",
+    body: JSON.stringify(input)
+  });
+}
 
 export function listRemotePairingRequests() {
   return request<{ requests: RemotePairingRequest[] }>(
@@ -1446,7 +1497,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     path !== REMOTE_BROWSER_REFRESH_PATH &&
     path !== REMOTE_DEVICE_BEGIN_PATH &&
     path !== REMOTE_DEVICE_TOKEN_PATH &&
-    path !== REMOTE_DEVICE_CANCEL_PATH;
+    path !== REMOTE_DEVICE_CANCEL_PATH &&
+    path !== REMOTE_MASTER_PASSWORD_APPROVE_PATH;
   if (remoteRenewalEligible) {
     await renewRemoteBrowserSession(false);
   }
