@@ -15157,6 +15157,12 @@ export function buildOpenApiDocument() {
         get: {
           summary:
             "Read the current life-force overview with stats, drains, curve state, warnings, and recommendations",
+          description:
+            "Requires read scope and builds one user-wide Life Force model from records authorized for exactly one existing Forge user. Calendar drains and the derived Action Point ledger include only calendar events owned by or assigned to that user. User-scoped tokens cannot read another user, and project- or tag-restricted tokens cannot read this user-wide model.",
+          parameters: [
+            stringQueryParameter("userId"),
+            repeatedStringQueryParameter("userIds")
+          ],
           responses: {
             "200": jsonResponse(
               {

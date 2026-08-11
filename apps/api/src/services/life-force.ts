@@ -2641,7 +2641,7 @@ type CalendarEventLifeForceRow = {
   link_count: number;
 };
 
-function readCalendarEventLifeForceRows(range: TimeRange) {
+function readCalendarEventLifeForceRows(range: TimeRange, userId: string) {
   try {
     return getDatabase()
       .prepare(
@@ -2661,6 +2661,20 @@ function readCalendarEventLifeForceRows(range: TimeRange) {
          WHERE forge_events.deleted_at IS NULL
            AND forge_events.end_at > ?
            AND forge_events.start_at < ?
+           AND (
+             EXISTS (
+               SELECT 1 FROM entity_owners
+               WHERE entity_owners.entity_type = 'calendar_event'
+                 AND entity_owners.entity_id = forge_events.id
+                 AND entity_owners.user_id = ?
+             ) OR EXISTS (
+               SELECT 1 FROM entity_assignments
+               WHERE entity_assignments.entity_type = 'calendar_event'
+                 AND entity_assignments.entity_id = forge_events.id
+                 AND entity_assignments.role = 'assignee'
+                 AND entity_assignments.user_id = ?
+             )
+           )
          GROUP BY
            forge_events.id,
            forge_events.title,
@@ -2671,7 +2685,7 @@ function readCalendarEventLifeForceRows(range: TimeRange) {
            forge_events.event_type,
            forge_events.categories_json`
       )
-      .all(range.from, range.to) as CalendarEventLifeForceRow[];
+      .all(range.from, range.to, userId, userId) as CalendarEventLifeForceRow[];
   } catch {
     return [] as CalendarEventLifeForceRow[];
   }
@@ -3524,7 +3538,7 @@ export function buildLifeForcePayload(
       startAt: entry.startsAt,
       endAt: entry.endsAt
     }));
-  const calendarRows = readCalendarEventLifeForceRows(range);
+  const calendarRows = readCalendarEventLifeForceRows(range, user.id);
   const calendarEventWindows: TimeWindow[] = calendarRows.map((row) => ({
     startAt: row.start_at,
     endAt: row.end_at

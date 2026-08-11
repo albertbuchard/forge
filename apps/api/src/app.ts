@@ -10138,7 +10138,7 @@ function resolveNutritionMutationUserId(
   return effectiveUserId;
 }
 
-function resolveLifeForceMutationUserId(
+function resolveLifeForceRouteUserId(
   query: Record<string, unknown> | undefined,
   auth: UserScopeAuth
 ) {
@@ -10147,7 +10147,7 @@ function resolveLifeForceMutationUserId(
     throw new HttpError(
       400,
       "life_force_user_selection_ambiguous",
-      "Life Force profile mutations require exactly one selected Forge user."
+      "Life Force routes require exactly one selected Forge user."
     );
   }
 
@@ -10156,7 +10156,7 @@ function resolveLifeForceMutationUserId(
     throw new HttpError(
       403,
       "life_force_scope_forbidden",
-      "A project- or tag-restricted token cannot change a user-wide Life Force profile."
+      "A project- or tag-restricted token cannot access a user-wide Life Force model."
     );
   }
 
@@ -10170,14 +10170,14 @@ function resolveLifeForceMutationUserId(
     throw new HttpError(
       403,
       "life_force_scope_forbidden",
-      "The requested Life Force profile is outside this token's allowed users."
+      "The requested Life Force user is outside this token's allowed users."
     );
   }
   if (!requestedUserId && allowedUserIds.length > 1) {
     throw new HttpError(
       400,
       "life_force_user_selection_required",
-      "This token can change several Forge users; select exactly one Life Force profile."
+      "This token can access several Forge users; select exactly one Life Force user."
     );
   }
 
@@ -15169,24 +15169,28 @@ export async function buildServer(
       })
     };
   });
-  app.get("/api/v1/life-force", async (request) => ({
-    lifeForce: buildLifeForcePayload(
-      new Date(),
-      resolveScopedUserIds(request.query as Record<string, unknown>)
-    ),
-    templates: listLifeForceTemplates(
-      resolveLifeForceUser(
-        resolveScopedUserIds(request.query as Record<string, unknown>)
-      ).id
-    )
-  }));
+  app.get("/api/v1/life-force", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read"],
+      { route: "/api/v1/life-force" }
+    );
+    const userId = resolveLifeForceRouteUserId(
+      request.query as Record<string, unknown>,
+      auth
+    );
+    return {
+      lifeForce: buildLifeForcePayload(new Date(), [userId]),
+      templates: listLifeForceTemplates(userId)
+    };
+  });
   app.patch("/api/v1/life-force/profile", async (request) => {
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["write"],
       { route: "/api/v1/life-force/profile" }
     );
-    const userId = resolveLifeForceMutationUserId(
+    const userId = resolveLifeForceRouteUserId(
       request.query as Record<string, unknown>,
       auth
     );
@@ -15210,7 +15214,7 @@ export async function buildServer(
     return {
       weekday,
       points: updateLifeForceTemplate(
-        resolveLifeForceMutationUserId(
+        resolveLifeForceRouteUserId(
           request.query as Record<string, unknown>,
           auth
         ),
