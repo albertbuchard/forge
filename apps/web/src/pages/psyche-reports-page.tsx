@@ -288,6 +288,7 @@ export function PsycheReportsPage() {
   const [vocabularyError, setVocabularyError] = useState<string | null>(null);
   const createRequestKeyRef = useRef(createRequestKey());
   const vocabularyRequestKeyRef = useRef(createRequestKey());
+  const resolvedVocabularyFocusRef = useRef<string | null>(null);
   const reportsQuery = useInfiniteQuery({
     queryKey: ["forge-psyche-reports", shell.selectedUserIds],
     initialPageParam: null as string | null,
@@ -427,6 +428,84 @@ export function PsycheReportsPage() {
       setSearchParams(next, { replace: true });
     }
   }, [defaultUserId, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const kind = searchParams.get("vocabulary");
+    const selectedId = searchParams.get("focusVocabulary");
+    if (
+      (kind !== "event_type" && kind !== "emotion_definition") ||
+      !selectedId
+    ) {
+      return;
+    }
+    vocabularyRequestKeyRef.current = createRequestKey();
+    resolvedVocabularyFocusRef.current = null;
+    setVocabularyDraft({
+      ...createPsycheVocabularyDraft(defaultUserId),
+      kind,
+      selectedId
+    });
+    setVocabularyError(null);
+    setVocabularyOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete("vocabulary");
+    next.delete("focusVocabulary");
+    setSearchParams(next, { replace: true });
+  }, [defaultUserId, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (
+      !vocabularyOpen ||
+      !vocabularyDraft.selectedId ||
+      vocabularyDraft.action
+    ) {
+      return;
+    }
+    const focusKey = `${vocabularyDraft.kind}:${vocabularyDraft.selectedId}`;
+    if (resolvedVocabularyFocusRef.current === focusKey) {
+      return;
+    }
+    const entries =
+      vocabularyDraft.kind === "event_type" ? eventTypes : emotions;
+    const entry = entries.find(
+      (candidate) => candidate.id === vocabularyDraft.selectedId
+    );
+    if (entry) {
+      resolvedVocabularyFocusRef.current = focusKey;
+      setVocabularyDraft((current) => ({
+        ...current,
+        action: entry.system ? null : "update",
+        search: entry.system ? entry.label : current.search,
+        label: entry.label,
+        description: entry.description,
+        category:
+          "category" in entry && typeof entry.category === "string"
+            ? entry.category
+            : "",
+        userId: entry.userId ?? current.userId
+      }));
+      return;
+    }
+    const querySucceeded =
+      vocabularyDraft.kind === "event_type"
+        ? eventTypesQuery.isSuccess
+        : emotionsQuery.isSuccess;
+    if (querySucceeded) {
+      resolvedVocabularyFocusRef.current = focusKey;
+      setVocabularyError(
+        "That linked vocabulary record is unavailable in this owner scope."
+      );
+    }
+  }, [
+    emotions,
+    emotionsQuery.isSuccess,
+    eventTypes,
+    eventTypesQuery.isSuccess,
+    vocabularyDraft.action,
+    vocabularyDraft.kind,
+    vocabularyDraft.selectedId,
+    vocabularyOpen
+  ]);
 
   const saveMutation = useMutation({
     mutationFn: async (value: ReportDraft) => {

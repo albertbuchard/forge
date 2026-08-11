@@ -399,6 +399,12 @@ describe("NotesPage", () => {
       "/calendar?timeboxId=box_1"
     );
     expect(getEntityRoute("calendar_event", "calendar_1")).toBeNull();
+    expect(getEntityRoute("event_type", "event type/1")).toBe(
+      "/psyche/reports?vocabulary=event_type&focusVocabulary=event%20type%2F1"
+    );
+    expect(getEntityRoute("emotion_definition", "emotion 1")).toBe(
+      "/psyche/reports?vocabulary=emotion_definition&focusVocabulary=emotion%201"
+    );
   });
 
   it("rehydrates filter controls when browser history changes the URL", async () => {

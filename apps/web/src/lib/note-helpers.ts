@@ -103,6 +103,10 @@ export function getEntityRoute(entityType: CrudEntityType, entityId: string) {
       return `/psyche/flashcards?focus=${encodedId}`;
     case "trigger_report":
       return `/psyche/reports/${encodedId}`;
+    case "event_type":
+      return `/psyche/reports?vocabulary=event_type&focusVocabulary=${encodedId}`;
+    case "emotion_definition":
+      return `/psyche/reports?vocabulary=emotion_definition&focusVocabulary=${encodedId}`;
     case "preference_catalog":
       return `/preferences?focusCatalog=${encodedId}`;
     case "preference_catalog_item":

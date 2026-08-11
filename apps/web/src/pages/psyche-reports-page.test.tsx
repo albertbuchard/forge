@@ -15,12 +15,14 @@ import { PsycheReportsPage } from "@/pages/psyche-reports-page";
 const {
   createTriggerReportMock,
   listBehaviorPatternsMock,
+  listEventTypesMock,
   listPsycheValuesMock,
   listTriggerReportsMock,
   useForgeShellMock
 } = vi.hoisted(() => ({
   createTriggerReportMock: vi.fn(),
   listBehaviorPatternsMock: vi.fn(),
+  listEventTypesMock: vi.fn(),
   listPsycheValuesMock: vi.fn(),
   listTriggerReportsMock: vi.fn(),
   useForgeShellMock: vi.fn()
@@ -40,7 +42,7 @@ vi.mock("@/lib/api", () => ({
   listBeliefs: vi.fn().mockResolvedValue({ beliefs: [] }),
   listBehaviors: vi.fn().mockResolvedValue({ behaviors: [] }),
   listEmotionDefinitions: vi.fn().mockResolvedValue({ emotions: [] }),
-  listEventTypes: vi.fn().mockResolvedValue({ eventTypes: [] }),
+  listEventTypes: listEventTypesMock,
   listModes: vi.fn().mockResolvedValue({ modes: [] }),
   listPsycheValues: listPsycheValuesMock,
   listSchemaCatalog: vi.fn().mockResolvedValue({ schemas: [] }),
@@ -184,7 +186,7 @@ vi.mock("@/components/psyche/report-chain-fields", () => ({
   ModeTimelineEditor: () => null
 }));
 
-function renderPage() {
+function renderPage(initialEntry = "/psyche/reports") {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -193,7 +195,7 @@ function renderPage() {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={["/psyche/reports"]}>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <PsycheReportsPage />
       </MemoryRouter>
     </QueryClientProvider>
@@ -276,6 +278,7 @@ beforeEach(() => {
       }
     ]
   });
+  listEventTypesMock.mockResolvedValue({ eventTypes: [] });
   listTriggerReportsMock.mockResolvedValue({
     reports: [],
     total: 0,
@@ -302,6 +305,29 @@ afterEach(() => {
 });
 
 describe("Psyche trigger report guided flow", () => {
+  it("opens an exact linked vocabulary record from a report", async () => {
+    listEventTypesMock.mockResolvedValue({
+      eventTypes: [
+        {
+          id: "event_type_1",
+          label: "Difficult conversation",
+          description: "A conversation where connection became uncertain.",
+          system: false,
+          userId: "user_operator",
+          user: null
+        }
+      ]
+    });
+
+    renderPage(
+      "/psyche/reports?vocabulary=event_type&focusVocabulary=event_type_1"
+    );
+
+    expect(
+      await screen.findByRole("button", { name: /Difficult conversation/ })
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("renders reports without waiting for supporting link catalogs", async () => {
     listPsycheValuesMock.mockReturnValueOnce(new Promise(() => undefined));
     listTriggerReportsMock.mockResolvedValueOnce({

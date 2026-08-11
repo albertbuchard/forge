@@ -19,6 +19,7 @@ import {
   ThoughtRowsEditor
 } from "@/components/psyche/report-chain-fields";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
+import { TriggerReportChainOverview } from "@/components/psyche/trigger-report-chain-overview";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { PageHero } from "@/components/shell/page-hero";
@@ -393,6 +394,22 @@ export function PsycheReportDetailPage() {
   const supportingCatalogsError = supportingCatalogQueries.some(
     (query) => query.isError
   );
+  const linkedCatalogQueries = [
+    patternsQuery,
+    valuesQuery,
+    behaviorsQuery,
+    beliefsQuery,
+    modesQuery,
+    eventTypesQuery,
+    emotionsQuery
+  ];
+  const linkedCatalogStatus = linkedCatalogQueries.some(
+    (query) => query.isLoading
+  )
+    ? "loading"
+    : linkedCatalogQueries.some((query) => query.isError)
+      ? "error"
+      : "ready";
 
   if (detailError) {
     return (
@@ -1325,6 +1342,49 @@ export function PsycheReportDetailPage() {
           </div>
         </div>
       ) : null}
+
+      <TriggerReportChainOverview
+        report={report}
+        catalog={{
+          eventTypes: eventTypes.map((eventType) => ({
+            id: eventType.id,
+            title: eventType.label
+          })),
+          emotions: emotions.map((emotion) => ({
+            id: emotion.id,
+            title: emotion.label
+          })),
+          patterns: patterns.map((pattern) => ({
+            id: pattern.id,
+            title: pattern.title
+          })),
+          values: values.map((value) => ({ id: value.id, title: value.title })),
+          goals: shell.snapshot.goals.map((goal) => ({
+            id: goal.id,
+            title: goal.title
+          })),
+          projects: shell.snapshot.projects.map((project) => ({
+            id: project.id,
+            title: project.title
+          })),
+          tasks: shell.snapshot.tasks.map((task) => ({
+            id: task.id,
+            title: task.title
+          })),
+          behaviors: behaviors.map((behavior) => ({
+            id: behavior.id,
+            title: behavior.title
+          })),
+          beliefs: beliefs.map((belief) => ({
+            id: belief.id,
+            title: belief.statement
+          })),
+          modes: modes.map((mode) => ({ id: mode.id, title: mode.title }))
+        }}
+        linkCatalogStatus={linkedCatalogStatus}
+        activeStageId={activeStage}
+        onStageChange={setActiveStage}
+      />
 
       <ChainCanvas
         stages={stages}
