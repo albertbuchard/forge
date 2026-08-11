@@ -18157,7 +18157,8 @@ test("task-run completion and release endpoints are idempotent for exact same-ac
         cookie: operatorCookie
       },
       payload: {
-        actor: "OpenClaw"
+        actor: "OpenClaw",
+        note: "Releasing ownership."
       }
     });
 
