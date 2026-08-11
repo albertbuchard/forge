@@ -1344,7 +1344,7 @@
                     <p class="story-expanded-outcome">As a user, I can link an artifact to any compatible entity through the general relationship model and embed its human-download anchor in notes or wiki pages.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>POST /api/v1/artifacts/:id/links</code>, general links, wiki renderer.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>structured general links are bounded to 100 and navigate to canonical records/graph; complete target validation, replacement, backlinks, and embeds.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>structured general links are bounded to 100, validate every supported target family against live non-deleted records before replacement, preserve existing links and audit state on missing, deleted, or unsupported targets, and navigate to canonical records or the graph. Complete backlink and embedded-download rendering checks.</dd></div>
                     </dl>
                   </div>
                 </details>
