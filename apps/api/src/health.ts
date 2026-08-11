@@ -1222,6 +1222,11 @@ function sleepMinutesOfDay(
   return minutes;
 }
 
+function circularMinuteDistance(left: number, right: number) {
+  const difference = Math.abs(left - right) % (24 * 60);
+  return Math.min(difference, 24 * 60 - difference);
+}
+
 function computeSleepDerivedMetrics(input: {
   asleepSeconds: number;
   timeInBedSeconds: number;
@@ -1377,9 +1382,9 @@ function computeSleepScore(input: {
 function computeRegularityScore(startedAt: string, timeZone = "UTC") {
   const parts = getTimeZoneParts(startedAt, resolveTimeZone(timeZone));
   const bedtimeMinutes = parts.hour * 60 + parts.minute;
-  const distanceFromTarget = Math.min(
-    Math.abs(bedtimeMinutes - 22 * 60 - 30),
-    Math.abs(bedtimeMinutes - (24 * 60 + 22 * 60 + 30))
+  const distanceFromTarget = circularMinuteDistance(
+    bedtimeMinutes,
+    22 * 60 + 30
   );
   return Math.round(Math.max(0, 100 - distanceFromTarget / 3));
 }
@@ -9599,6 +9604,12 @@ export function updateSleepSession(
     current.provenance_json,
     {}
   );
+  const localDateKey =
+    parsed.localDateKey ??
+    (parsed.endedAt !== undefined || parsed.sourceTimezone !== undefined
+      ? localDateKeyForTimezone(endedAt, sourceTimezone)
+      : current.local_date_key ||
+        localDateKeyForTimezone(endedAt, sourceTimezone));
 
   getDatabase()
     .prepare(
@@ -9616,8 +9627,7 @@ export function updateSleepSession(
       parsed.sourceType ?? current.source_type,
       parsed.sourceDevice ?? current.source_device,
       sourceTimezone,
-      (parsed.localDateKey ?? current.local_date_key) ||
-        localDateKeyForTimezone(endedAt, sourceTimezone),
+      localDateKey,
       startedAt,
       endedAt,
       timeInBedSeconds,
@@ -9647,8 +9657,7 @@ export function updateSleepSession(
   summarizeUserHealthDay(current.user_id, sleepSessionDateKey(current));
   summarizeUserHealthDay(
     current.user_id,
-    (parsed.localDateKey ?? current.local_date_key) ||
-      localDateKeyForTimezone(endedAt, sourceTimezone)
+    localDateKey
   );
   recordActivityEvent({
     entityType: "sleep_session",

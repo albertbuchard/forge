@@ -2040,7 +2040,7 @@
                     <p class="story-expanded-outcome">As a user, I can inspect sleep sessions, stages, recovery context, annotations, and trends by wake date.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>sleep-index</code>, <code>sleep_overview</code>, <code>sleep_session</code>.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>the live mobile flow exposes wake-date freshness, calendar trends, normalized stages, source records, and raw provider evidence without overflow; finish overlapping-source, nap, DST, and manual-edit fixtures.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the live mobile flow exposes wake-date freshness, calendar trends, normalized stages, source records, and raw provider evidence without overflow. After-midnight regularity now uses circular clock distance, and manual time or timezone edits recompute the wake-date key across daylight-saving transitions; finish cross-provider overlap and nap-arbitration fixtures.</dd></div>
                     </dl>
                   </div>
                 </details>
