@@ -20,6 +20,7 @@ import {
   deletePreferenceContext,
   deletePreferenceItem,
   getPreferenceWorkspace,
+  mergePreferenceContexts,
   refreshPreferenceWorkspace,
   submitAbsoluteSignal,
   submitPairwiseJudgment
@@ -713,6 +714,79 @@ test("preference item deletion rolls back when model recomputation fails", async
       { ...beforeDelete },
       "a failed model refresh must preserve the item and every deletion effect"
     );
+  } finally {
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("preference context merge rejects a self-merge without changing evidence", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-pref-context-self-merge-")
+  );
+  configureDatabase({ dataRoot: rootDir, seedDemoData: true });
+  try {
+    await initializeDatabase();
+    const base = refreshPreferenceWorkspace({
+      userId: "user_operator",
+      domain: "projects"
+    });
+    const left = createPreferenceItem(
+      itemInput("projects", "Self-merge evidence left")
+    );
+    const right = createPreferenceItem(
+      itemInput("projects", "Self-merge evidence right")
+    );
+    submitPairwiseJudgment({
+      userId: "user_operator",
+      domain: "projects",
+      contextId: base.selectedContext.id,
+      leftItemId: left.id,
+      rightItemId: right.id,
+      outcome: "left",
+      strength: 1,
+      reasonTags: []
+    });
+    submitAbsoluteSignal({
+      userId: "user_operator",
+      domain: "projects",
+      contextId: base.selectedContext.id,
+      itemId: left.id,
+      signalType: "favorite",
+      strength: 1
+    });
+    const readState = () =>
+      getDatabase()
+        .prepare(
+          `SELECT
+             (SELECT default_context_id FROM preference_profiles WHERE id = ?) AS default_context_id,
+             (SELECT active FROM preference_contexts WHERE id = ?) AS active,
+             (SELECT is_default FROM preference_contexts WHERE id = ?) AS is_default,
+             (SELECT COUNT(*) FROM pairwise_judgments WHERE context_id = ?) AS judgments,
+             (SELECT COUNT(*) FROM absolute_signals WHERE context_id = ?) AS signals,
+             (SELECT COUNT(*) FROM preference_item_scores WHERE context_id = ?) AS scores,
+             (SELECT COUNT(*) FROM preference_dimension_summaries WHERE context_id = ?) AS dimensions`
+        )
+        .get(
+          base.profile.id,
+          base.selectedContext.id,
+          base.selectedContext.id,
+          base.selectedContext.id,
+          base.selectedContext.id,
+          base.selectedContext.id,
+          base.selectedContext.id
+        ) as Record<string, string | number>;
+    const beforeMerge = readState();
+
+    assert.throws(
+      () =>
+        mergePreferenceContexts({
+          sourceContextId: base.selectedContext.id,
+          targetContextId: base.selectedContext.id
+        }),
+      /must be different/
+    );
+    assert.deepEqual({ ...readState() }, { ...beforeMerge });
   } finally {
     closeDatabase();
     await rm(rootDir, { recursive: true, force: true });

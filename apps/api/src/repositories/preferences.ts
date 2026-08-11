@@ -4473,6 +4473,13 @@ export function deletePreferenceContext(contextId: string): PreferenceContext {
 
 export function mergePreferenceContexts(input: MergePreferenceContextsInput) {
   const parsed = mergePreferenceContextsSchema.parse(input);
+  if (parsed.sourceContextId === parsed.targetContextId) {
+    throw new HttpError(
+      400,
+      "preferences_context_merge_same_context",
+      "Source and target preference contexts must be different."
+    );
+  }
   const source = readContext(parsed.sourceContextId);
   const target = readContext(parsed.targetContextId);
   if (!source || !target || source.profileId !== target.profileId) {
