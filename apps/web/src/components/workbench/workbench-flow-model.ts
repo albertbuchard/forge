@@ -1,6 +1,8 @@
 import type { Edge, Node } from "@xyflow/react";
 import { ForgeApiError } from "@/lib/api-error";
 import {
+  MAX_WORKBENCH_GRAPH_EDGES,
+  MAX_WORKBENCH_GRAPH_NODES,
   WORKBENCH_PORT_KINDS,
   normalizeWorkbenchPortDefinition
 } from "@/lib/workbench/nodes";
@@ -25,7 +27,12 @@ export type WorkbenchGraphNodeData = AiConnectorNode["data"] & {
 };
 
 export type WorkbenchEditorSection = "overview" | "contracts" | "parameters";
-export type WorkbenchSaveState = "idle" | "dirty" | "saving" | "saved" | "error";
+export type WorkbenchSaveState =
+  | "idle"
+  | "dirty"
+  | "saving"
+  | "saved"
+  | "error";
 
 export const PORT_KIND_OPTIONS: Array<ForgeBoxPortDefinition["kind"]> = [
   ...WORKBENCH_PORT_KINDS
@@ -748,6 +755,32 @@ export function collectWorkbenchGraphIssues(
   if (nodes.length === 0) {
     issues.push("Add at least one node before running the flow.");
   }
+  if (nodes.length > MAX_WORKBENCH_GRAPH_NODES) {
+    issues.push(
+      `Reduce this flow to at most ${MAX_WORKBENCH_GRAPH_NODES} nodes before saving it.`
+    );
+  }
+  if (edges.length > MAX_WORKBENCH_GRAPH_EDGES) {
+    issues.push(
+      `Reduce this flow to at most ${MAX_WORKBENCH_GRAPH_EDGES} connections before saving it.`
+    );
+  }
+  if (nodeMap.size !== nodes.length) {
+    issues.push("Give every node a unique id before saving the flow.");
+  }
+  if (new Set(edges.map((edge) => edge.id)).size !== edges.length) {
+    issues.push("Give every connection a unique id before saving the flow.");
+  }
+  for (const node of nodes) {
+    const inputKeys = (node.data.inputs ?? []).map((input) => input.key);
+    const outputKeys = (node.data.outputs ?? []).map((output) => output.key);
+    if (new Set(inputKeys).size !== inputKeys.length) {
+      issues.push(`Give every input on "${node.data.label}" a unique key.`);
+    }
+    if (new Set(outputKeys).size !== outputKeys.length) {
+      issues.push(`Give every output on "${node.data.label}" a unique key.`);
+    }
+  }
   const outputNodes = nodes.filter((node) => node.data.nodeType === "output");
   if (outputNodes.length === 0) {
     issues.push(
@@ -756,8 +789,23 @@ export function collectWorkbenchGraphIssues(
   }
 
   const incomingCounts = new Map<string, number>();
+  const outgoingCounts = new Map<string, number>();
+  const incomingOutputKeys = new Map<string, string[]>();
+  const adjacency = new Map<string, string[]>();
+  const indegrees = new Map(nodes.map((node) => [node.id, 0]));
   for (const edge of edges) {
+    if (!nodeMap.has(edge.source) || !nodeMap.has(edge.target)) {
+      issues.push(
+        `Connection "${edge.id}" points to a node that no longer exists. Remove or repair that connection.`
+      );
+      continue;
+    }
     incomingCounts.set(edge.target, (incomingCounts.get(edge.target) ?? 0) + 1);
+    outgoingCounts.set(edge.source, (outgoingCounts.get(edge.source) ?? 0) + 1);
+    const downstream = adjacency.get(edge.source) ?? [];
+    downstream.push(edge.target);
+    adjacency.set(edge.source, downstream);
+    indegrees.set(edge.target, (indegrees.get(edge.target) ?? 0) + 1);
     const sourceNode = nodeMap.get(edge.source);
     const targetNode = nodeMap.get(edge.target);
     const sourceOutputs = sourceNode?.data.outputs ?? [];
@@ -775,6 +823,13 @@ export function collectWorkbenchGraphIssues(
           `Edge from "${sourceNode.data.label}" does not name which output it should use. Pick one explicit output handle.`
         );
       }
+      const selectedOutputs = edge.sourceHandle
+        ? sourceOutputs.filter((output) => output.key === edge.sourceHandle)
+        : sourceOutputs;
+      incomingOutputKeys.set(edge.target, [
+        ...(incomingOutputKeys.get(edge.target) ?? []),
+        ...selectedOutputs.map((output) => output.key)
+      ]);
     }
     if (targetNode) {
       if (
@@ -792,28 +847,38 @@ export function collectWorkbenchGraphIssues(
     }
   }
 
+  const ready = nodes
+    .filter((node) => (indegrees.get(node.id) ?? 0) === 0)
+    .map((node) => node.id);
+  let visitedCount = 0;
+  for (let cursor = 0; cursor < ready.length; cursor += 1) {
+    const nodeId = ready[cursor]!;
+    visitedCount += 1;
+    for (const target of adjacency.get(nodeId) ?? []) {
+      const nextIndegree = (indegrees.get(target) ?? 0) - 1;
+      indegrees.set(target, nextIndegree);
+      if (nextIndegree === 0) {
+        ready.push(target);
+      }
+    }
+  }
+  if (visitedCount !== nodes.length) {
+    issues.push(
+      "Remove the circular connection before saving or running this flow. Workbench flows must be acyclic."
+    );
+  }
+
   for (const node of outputNodes) {
     if ((incomingCounts.get(node.id) ?? 0) === 0) {
       issues.push(
         `Connect something into the output node "${node.data.label}" so the flow has something to return.`
       );
     }
-    const incomingOutputKeys = edges
-      .filter((edge) => edge.target === node.id)
-      .flatMap((edge) => {
-        const sourceNode = nodeMap.get(edge.source);
-        const sourcePorts = sourceNode?.data.outputs ?? [];
-        if (edge.sourceHandle) {
-          return sourcePorts
-            .filter((port) => port.key === edge.sourceHandle)
-            .map((port) => port.key);
-        }
-        return sourcePorts.map((port) => port.key);
-      });
+    const arrivingOutputKeys = incomingOutputKeys.get(node.id) ?? [];
     if (
       node.data.outputKey &&
-      incomingOutputKeys.length > 0 &&
-      !incomingOutputKeys.includes(node.data.outputKey)
+      arrivingOutputKeys.length > 0 &&
+      !arrivingOutputKeys.includes(node.data.outputKey)
     ) {
       issues.push(
         `Output node "${node.data.label}" is configured to publish "${node.data.outputKey}", but that key is not arriving from its upstream nodes.`
@@ -823,7 +888,7 @@ export function collectWorkbenchGraphIssues(
 
   for (const node of nodes) {
     const incoming = incomingCounts.get(node.id) ?? 0;
-    const outgoing = edges.filter((edge) => edge.source === node.id).length;
+    const outgoing = outgoingCounts.get(node.id) ?? 0;
     if (
       node.data.nodeType !== "user_input" &&
       node.data.nodeType !== "value" &&
@@ -874,6 +939,82 @@ export function collectWorkbenchGraphIssues(
   }
 
   return issues;
+}
+
+export function validateWorkbenchConnection(
+  nodes: Node<WorkbenchGraphNodeData>[],
+  edges: Edge[],
+  connection: {
+    source: string | null;
+    target: string | null;
+    sourceHandle?: string | null;
+    targetHandle?: string | null;
+  }
+) {
+  if (!connection.source || !connection.target) {
+    return "Choose both a source and a destination for this connection.";
+  }
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const sourceNode = nodeMap.get(connection.source);
+  const targetNode = nodeMap.get(connection.target);
+  if (!sourceNode || !targetNode) {
+    return "This connection points to a node that no longer exists.";
+  }
+  const sourceOutputs = sourceNode.data.outputs ?? [];
+  const targetInputs = targetNode.data.inputs ?? [];
+  if (
+    connection.sourceHandle &&
+    !sourceOutputs.some((output) => output.key === connection.sourceHandle)
+  ) {
+    return `Choose an existing output on "${sourceNode.data.label}" before connecting it.`;
+  }
+  if (!connection.sourceHandle && sourceOutputs.length > 1) {
+    return `Choose one explicit output on "${sourceNode.data.label}" before connecting it.`;
+  }
+  if (
+    connection.targetHandle &&
+    !targetInputs.some((input) => input.key === connection.targetHandle)
+  ) {
+    return `Choose an existing input on "${targetNode.data.label}" before connecting it.`;
+  }
+  if (!connection.targetHandle && targetInputs.length > 1) {
+    return `Choose one explicit input on "${targetNode.data.label}" before connecting it.`;
+  }
+  if (
+    edges.some(
+      (edge) =>
+        edge.source === connection.source &&
+        edge.target === connection.target &&
+        (edge.sourceHandle ?? null) === (connection.sourceHandle ?? null) &&
+        (edge.targetHandle ?? null) === (connection.targetHandle ?? null)
+    )
+  ) {
+    return "That exact connection already exists.";
+  }
+  if (edges.length >= MAX_WORKBENCH_GRAPH_EDGES) {
+    return `This flow already has the maximum ${MAX_WORKBENCH_GRAPH_EDGES} connections.`;
+  }
+
+  const adjacency = new Map<string, string[]>();
+  for (const edge of edges) {
+    const targets = adjacency.get(edge.source) ?? [];
+    targets.push(edge.target);
+    adjacency.set(edge.source, targets);
+  }
+  const pending = [connection.target];
+  const visited = new Set<string>();
+  for (let cursor = 0; cursor < pending.length; cursor += 1) {
+    const nodeId = pending[cursor]!;
+    if (nodeId === connection.source) {
+      return "This connection would create a cycle. Workbench flows must remain acyclic.";
+    }
+    if (visited.has(nodeId)) {
+      continue;
+    }
+    visited.add(nodeId);
+    pending.push(...(adjacency.get(nodeId) ?? []));
+  }
+  return null;
 }
 
 export function buildWorkbenchFlowPatch({

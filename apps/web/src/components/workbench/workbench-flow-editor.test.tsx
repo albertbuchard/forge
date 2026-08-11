@@ -21,8 +21,28 @@ const mockRunQuery = vi.fn();
 const mockRunsQuery = vi.fn();
 
 vi.mock("@xyflow/react", () => ({
-  ReactFlow: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  ReactFlow: ({
+    children,
+    edges,
+    onEdgeClick,
+    deleteKeyCode
+  }: {
+    children: React.ReactNode;
+    edges?: Array<{ id: string }>;
+    onEdgeClick?: (event: unknown, edge: { id: string }) => void;
+    deleteKeyCode?: unknown;
+  }) => (
+    <div>
+      <span data-testid="react-flow-delete-policy">
+        {deleteKeyCode === null ? "explicit-only" : "keyboard-delete-enabled"}
+      </span>
+      {edges?.[0] ? (
+        <button type="button" onClick={() => onEdgeClick?.({}, edges[0]!)}>
+          Select first connection
+        </button>
+      ) : null}
+      {children}
+    </div>
   ),
   Background: () => null,
   Handle: () => <div />,
@@ -487,5 +507,31 @@ describe("WorkbenchFlowEditor", () => {
     fireEvent.click(confirmButton);
 
     await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(1));
+  });
+
+  it("requires an explicit connection deletion and can undo it", () => {
+    renderEditor();
+
+    expect(screen.getByTestId("react-flow-delete-policy")).toHaveTextContent(
+      "explicit-only"
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select first connection" })
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete selected connection" })
+    );
+    expect(
+      screen.getByRole("button", { name: "Undo last deletion" })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo last deletion" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select first connection" })
+    );
+    expect(
+      screen.getByRole("button", { name: "Delete selected connection" })
+    ).toBeInTheDocument();
   });
 });

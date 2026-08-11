@@ -26,6 +26,9 @@ export const LEGACY_WORKBENCH_PORT_KINDS = ["content"] as const;
 export type WorkbenchPortKind = (typeof WORKBENCH_PORT_KINDS)[number];
 export type LegacyWorkbenchPortKind = (typeof LEGACY_WORKBENCH_PORT_KINDS)[number];
 
+export const MAX_WORKBENCH_GRAPH_NODES = 1_000;
+export const MAX_WORKBENCH_GRAPH_EDGES = 4_000;
+
 export type WorkbenchParamKind =
   | WorkbenchPortKind
   | "textarea"

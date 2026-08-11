@@ -2406,7 +2406,7 @@
                     <p class="story-expanded-outcome">As a user, I can edit nodes and edges with understandable contracts, valid connections, undo, and no accidental graph loss.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Workbench graph editor.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>graph editing remains available when model settings are unavailable; complete cycles, ports, keyboard, conflict, and large-graph checks.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>browser preflight and the server now reject cycles, missing or ambiguous ports, duplicate contract keys and identifiers, and graphs above 1,000 nodes or 4,000 edges without creating a revision. Edge deletion is explicit, keyboard deletion cannot bypass it, and the latest node or edge deletion can be undone. Next check: repeat connection, deletion, undo, and conflict handling in the live desktop and 390 × 844 layouts.</dd></div>
                     </dl>
                   </div>
                 </details>

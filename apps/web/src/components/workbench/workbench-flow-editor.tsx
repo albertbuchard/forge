@@ -18,7 +18,8 @@ import {
   RotateCcw,
   Save,
   Settings2,
-  Trash2
+  Trash2,
+  Undo2
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -55,6 +56,7 @@ import {
   parseWorkbenchParamValue,
   summarizePortShape,
   summarizeSaveState,
+  validateWorkbenchConnection,
   validateWorkbenchGraphBeforeRun,
   validateWorkbenchInputValue,
   type WorkbenchEditorSection,
@@ -166,6 +168,12 @@ export function WorkbenchFlowEditor({
     () => normalizeWorkbenchGraph(flow, boxes).edges
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [lastDeletedGraph, setLastDeletedGraph] = useState<{
+    nodes: Node<WorkbenchGraphNodeData>[];
+    edges: Edge[];
+  } | null>(null);
   const [addNodeOpen, setAddNodeOpen] = useState(false);
   const [editNodeOpen, setEditNodeOpen] = useState(false);
   const [editNodeSection, setEditNodeSection] =
@@ -226,6 +234,7 @@ export function WorkbenchFlowEditor({
     if (flowSnapshot === lastHydratedSnapshotRef.current) {
       return;
     }
+    const acknowledgesLocalDraft = flowSnapshot === draftSnapshotRef.current;
     lastHydratedSnapshotRef.current = flowSnapshot;
     lastSavedSnapshotRef.current = flowSnapshot;
     draftSnapshotRef.current = flowSnapshot;
@@ -236,6 +245,11 @@ export function WorkbenchFlowEditor({
     const normalized = normalizeWorkbenchGraph(flow, boxes);
     setNodes(normalized.nodes);
     setEdges(normalized.edges);
+    setSelectedEdgeId(null);
+    setConnectionError(null);
+    if (!acknowledgesLocalDraft) {
+      setLastDeletedGraph(null);
+    }
     setSaveState("idle");
     setSaveError(null);
   }, [boxes, flow, flowSnapshot]);
@@ -344,6 +358,13 @@ export function WorkbenchFlowEditor({
     () => collectWorkbenchGraphIssues(nodes, edges),
     [nodes, edges]
   );
+  const displayedGraphIssues = useMemo(
+    () => (connectionError ? [connectionError, ...graphIssues] : graphIssues),
+    [connectionError, graphIssues]
+  );
+  useEffect(() => {
+    setConnectionError(null);
+  }, [nodes, edges]);
   const hasAiNodes = useMemo(
     () => nodes.some((node) => isAiWorkbenchNode(node.data.nodeType)),
     [nodes]
@@ -813,7 +834,9 @@ export function WorkbenchFlowEditor({
     ];
   }, [
     availableToolOptions,
+    edges,
     modelConnections,
+    nodes,
     selectedAiToolPreview,
     selectedNode
   ]);
@@ -912,11 +935,33 @@ export function WorkbenchFlowEditor({
   }
 
   function deleteSelectedNode(nodeId: string) {
+    setLastDeletedGraph({ nodes, edges });
     setNodes((current) => current.filter((node) => node.id !== nodeId));
     setEdges((current) =>
       current.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
     );
     setSelectedNodeId((current) => (current === nodeId ? null : current));
+    setSelectedEdgeId(null);
+  }
+
+  function deleteSelectedEdge() {
+    if (!selectedEdgeId) {
+      return;
+    }
+    setLastDeletedGraph({ nodes, edges });
+    setEdges((current) => current.filter((edge) => edge.id !== selectedEdgeId));
+    setSelectedEdgeId(null);
+  }
+
+  function undoLastDeletion() {
+    if (!lastDeletedGraph) {
+      return;
+    }
+    setNodes(lastDeletedGraph.nodes);
+    setEdges(lastDeletedGraph.edges);
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setLastDeletedGraph(null);
   }
 
   async function handleSave() {
@@ -1087,7 +1132,7 @@ export function WorkbenchFlowEditor({
       </div>
 
       <div className="relative h-[76vh] overflow-hidden rounded-[32px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)]">
-        {graphIssues.length > 0 ? (
+        {displayedGraphIssues.length > 0 ? (
           <div className="pointer-events-none absolute left-4 top-4 z-20 max-w-[32rem] rounded-[24px] border border-[color-mix(in_srgb,var(--warning)_28%,transparent)] bg-[color-mix(in_srgb,var(--ui-warning-soft)_82%,var(--surface-glass))] p-4 shadow-[var(--ui-shadow-floating)] backdrop-blur-xl">
             <div className="pointer-events-auto flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-[var(--warning)]">
               <span>Graph checks</span>
@@ -1097,7 +1142,7 @@ export function WorkbenchFlowEditor({
               />
             </div>
             <ul className="mt-3 grid gap-2 text-sm leading-6 text-[var(--ui-ink-strong)]">
-              {graphIssues.map((issue) => (
+              {displayedGraphIssues.map((issue) => (
                 <li key={issue} className="list-inside list-disc">
                   {issue}
                 </li>
@@ -1117,7 +1162,13 @@ export function WorkbenchFlowEditor({
           onEdgesChange={(changes) =>
             setEdges((current) => applyEdgeChanges<Edge>(changes, current))
           }
-          onConnect={(connection) =>
+          onConnect={(connection) => {
+            const issue = validateWorkbenchConnection(nodes, edges, connection);
+            if (issue) {
+              setConnectionError(issue);
+              return;
+            }
+            setConnectionError(null);
             setEdges((current) =>
               addEdge<Edge>(
                 {
@@ -1131,13 +1182,13 @@ export function WorkbenchFlowEditor({
                 },
                 current
               )
-            )
-          }
-          onEdgeClick={(_, edge) => {
-            setEdges((current) =>
-              current.filter((entry) => entry.id !== edge.id)
             );
           }}
+          onEdgeClick={(_, edge) => {
+            setSelectedEdgeId(edge.id);
+          }}
+          onPaneClick={() => setSelectedEdgeId(null)}
+          deleteKeyCode={null}
           onNodeClick={(_, node) => {
             setSelectedNodeId(node.id);
           }}
@@ -1153,6 +1204,26 @@ export function WorkbenchFlowEditor({
 
         <div className="pointer-events-none absolute right-4 bottom-4 z-20 flex flex-col gap-2">
           <div className="pointer-events-auto flex flex-col items-end gap-2">
+            {selectedEdgeId ? (
+              <button
+                type="button"
+                className={workbenchCanvasButtonClassName}
+                onClick={deleteSelectedEdge}
+              >
+                <Trash2 className="size-4" />
+                Delete selected connection
+              </button>
+            ) : null}
+            {lastDeletedGraph ? (
+              <button
+                type="button"
+                className={workbenchCanvasButtonClassName}
+                onClick={undoLastDeletion}
+              >
+                <Undo2 className="size-4" />
+                Undo last deletion
+              </button>
+            ) : null}
             <button
               type="button"
               className={workbenchCanvasButtonClassName}

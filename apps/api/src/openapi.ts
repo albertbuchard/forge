@@ -9,6 +9,10 @@ import {
   crudEntityTypeSchema,
   localSearchEntityKindSchema
 } from "./types.js";
+import {
+  MAX_WORKBENCH_GRAPH_EDGES,
+  MAX_WORKBENCH_GRAPH_NODES
+} from "@/lib/workbench/nodes.js";
 
 function arrayOf(items: Record<string, unknown>) {
   return {
@@ -12213,6 +12217,26 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const workbenchGraphInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["nodes", "edges"],
+    description:
+      "A bounded directed acyclic graph. Node ids, edge ids, and every node's input/output keys must be unique. Edges must reference existing nodes and existing named ports; a handle may be omitted only when that side exposes at most one port.",
+    properties: {
+      nodes: {
+        type: "array",
+        maxItems: MAX_WORKBENCH_GRAPH_NODES,
+        items: { type: "object", additionalProperties: true }
+      },
+      edges: {
+        type: "array",
+        maxItems: MAX_WORKBENCH_GRAPH_EDGES,
+        items: { type: "object", additionalProperties: true }
+      }
+    }
+  };
+
   const workbenchFlowVersionSummary = {
     type: "object",
     additionalProperties: false,
@@ -16121,6 +16145,28 @@ export function buildOpenApiDocument() {
         },
         post: {
           summary: "Create one Workbench flow",
+          description:
+            "Creates a validated Workbench flow. If graph is omitted Forge creates the safe default graph; supplied graphs must satisfy the bounded acyclic node, edge, and named-port contract.",
+          requestBody: jsonRequestBody(
+            {
+              type: "object",
+              additionalProperties: false,
+              required: ["title"],
+              properties: {
+                title: { type: "string", minLength: 1 },
+                description: { type: "string" },
+                kind: { type: "string", enum: ["functor", "chat"] },
+                homeSurfaceId: nullable({ type: "string" }),
+                endpointEnabled: { type: "boolean" },
+                publicInputs: arrayOf({
+                  type: "object",
+                  additionalProperties: true
+                }),
+                graph: workbenchGraphInput
+              }
+            },
+            true
+          ),
           responses: {
             "201": jsonResponse(
               {
@@ -16215,7 +16261,7 @@ export function buildOpenApiDocument() {
                   type: "object",
                   additionalProperties: true
                 }),
-                graph: { type: "object", additionalProperties: true }
+                graph: workbenchGraphInput
               }
             },
             true

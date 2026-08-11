@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
+import { HttpError } from "../errors.js";
 import type { SecretsManager } from "../managers/platform/secrets-manager.js";
 import {
   type TextPromptRunner,
@@ -43,7 +44,11 @@ import {
   executeForgeBoxTool,
   resolveForgeBoxSnapshot
 } from "../connectors/box-registry.js";
-import { normalizeWorkbenchPortDefinition } from "@/lib/workbench/nodes.js";
+import {
+  MAX_WORKBENCH_GRAPH_EDGES,
+  MAX_WORKBENCH_GRAPH_NODES,
+  normalizeWorkbenchPortDefinition
+} from "@/lib/workbench/nodes.js";
 import {
   buildWorkbenchNodeDetail,
   buildWorkbenchNodeSummary,
@@ -60,6 +65,8 @@ const MAX_MODEL_PROMPT_CHARACTERS = 64_000;
 const MAX_CONVERSATION_HISTORY_CHARACTERS = 20_000;
 const MAX_LINKED_INPUT_CHARACTERS = 12_000;
 const MAX_TOOL_TRANSCRIPT_CHARACTERS = 4_000;
+export const MAX_AI_CONNECTOR_GRAPH_NODES = MAX_WORKBENCH_GRAPH_NODES;
+export const MAX_AI_CONNECTOR_GRAPH_EDGES = MAX_WORKBENCH_GRAPH_EDGES;
 export const DEFAULT_AI_CONNECTOR_RUN_HISTORY_LIMIT = 20;
 export const MAX_AI_CONNECTOR_RUN_HISTORY_LIMIT = 100;
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
@@ -1424,21 +1431,21 @@ function canonicalEdgeHandle(
   preferred?: string
 ) {
   if (ports.length === 0) {
-    return null;
+    return handle && handle !== "primary" ? handle : null;
   }
-  if (!handle || handle === "primary") {
+  if (!handle) {
+    return ports.length === 1 ? (ports[0]?.key ?? null) : null;
+  }
+  if (handle === "primary") {
     if (preferred && ports.some((port) => port.key === preferred)) {
       return preferred;
     }
     return ports[0]?.key ?? null;
   }
-  if (ports.some((port) => port.key === handle)) {
-    return handle;
-  }
-  if (preferred && ports.some((port) => port.key === preferred)) {
-    return preferred;
-  }
-  return ports[0]?.key ?? null;
+  // Preserve explicit handles even when the current contract does not expose
+  // them. Validation must reject stale or invented handles rather than
+  // silently rerouting an edge to the first available port.
+  return handle;
 }
 
 function normalizeConnectorGraph(graph: AiConnector["graph"]) {
@@ -1856,61 +1863,120 @@ async function runModelNode(input: {
 }
 
 function validateConnectorGraph(graph: AiConnector["graph"]) {
+  const invalidGraph = (message: string): never => {
+    throw new HttpError(400, "workbench_graph_invalid", message);
+  };
   if (graph.nodes.length === 0) {
-    throw new Error("Connector graph has no nodes yet.");
+    invalidGraph("Connector graph has no nodes yet.");
+  }
+  if (graph.nodes.length > MAX_AI_CONNECTOR_GRAPH_NODES) {
+    invalidGraph(
+      `Connector graphs support at most ${MAX_AI_CONNECTOR_GRAPH_NODES} nodes.`
+    );
+  }
+  if (graph.edges.length > MAX_AI_CONNECTOR_GRAPH_EDGES) {
+    invalidGraph(
+      `Connector graphs support at most ${MAX_AI_CONNECTOR_GRAPH_EDGES} edges.`
+    );
   }
   const nodeIds = new Set(graph.nodes.map((node) => node.id));
-  for (const edge of graph.edges) {
-    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) {
-      throw new Error("Connector graph edge references a missing node.");
+  if (nodeIds.size !== graph.nodes.length) {
+    invalidGraph("Connector graph node ids must be unique.");
+  }
+  const edgeIds = new Set(graph.edges.map((edge) => edge.id));
+  if (edgeIds.size !== graph.edges.length) {
+    invalidGraph("Connector graph edge ids must be unique.");
+  }
+  const nodeMap = new Map(graph.nodes.map((node) => [node.id, node]));
+  for (const node of graph.nodes) {
+    const inputKeys = (node.data.inputs ?? []).map((input) => input.key);
+    const outputKeys = (node.data.outputs ?? []).map((output) => output.key);
+    if (new Set(inputKeys).size !== inputKeys.length) {
+      invalidGraph(
+        `Node "${node.data.label || node.id}" input keys must be unique.`
+      );
+    }
+    if (new Set(outputKeys).size !== outputKeys.length) {
+      invalidGraph(
+        `Node "${node.data.label || node.id}" output keys must be unique.`
+      );
     }
   }
-
+  const incomingCounts = new Map<string, number>();
+  const outgoingCounts = new Map<string, number>();
   const adjacency = new Map<string, string[]>();
+  const indegrees = new Map(graph.nodes.map((node) => [node.id, 0]));
   for (const edge of graph.edges) {
+    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) {
+      invalidGraph("Connector graph edge references a missing node.");
+    }
+    const sourceNode = nodeMap.get(edge.source)!;
+    const targetNode = nodeMap.get(edge.target)!;
+    const sourceOutputs = sourceNode.data.outputs ?? [];
+    const targetInputs = targetNode.data.inputs ?? [];
+    if (
+      edge.sourceHandle &&
+      !sourceOutputs.some((output) => output.key === edge.sourceHandle)
+    ) {
+      invalidGraph(
+        `Edge "${edge.id}" references missing output "${edge.sourceHandle}" on node "${sourceNode.data.label || sourceNode.id}".`
+      );
+    }
+    if (!edge.sourceHandle && sourceOutputs.length > 1) {
+      invalidGraph(
+        `Edge "${edge.id}" must name one output on node "${sourceNode.data.label || sourceNode.id}".`
+      );
+    }
+    if (
+      edge.targetHandle &&
+      !targetInputs.some((input) => input.key === edge.targetHandle)
+    ) {
+      invalidGraph(
+        `Edge "${edge.id}" references missing input "${edge.targetHandle}" on node "${targetNode.data.label || targetNode.id}".`
+      );
+    }
+    if (!edge.targetHandle && targetInputs.length > 1) {
+      invalidGraph(
+        `Edge "${edge.id}" must name one input on node "${targetNode.data.label || targetNode.id}".`
+      );
+    }
     const current = adjacency.get(edge.source) ?? [];
     current.push(edge.target);
     adjacency.set(edge.source, current);
-  }
-
-  const visiting = new Set<string>();
-  const visited = new Set<string>();
-  const visit = (nodeId: string) => {
-    if (visiting.has(nodeId)) {
-      throw new Error("Connector graphs cannot contain cycles.");
-    }
-    if (visited.has(nodeId)) {
-      return;
-    }
-    visiting.add(nodeId);
-    for (const target of adjacency.get(nodeId) ?? []) {
-      visit(target);
-    }
-    visiting.delete(nodeId);
-    visited.add(nodeId);
-  };
-
-  for (const node of graph.nodes) {
-    visit(node.id);
-  }
-
-  const incomingCounts = new Map<string, number>();
-  const outgoingCounts = new Map<string, number>();
-  for (const edge of graph.edges) {
+    indegrees.set(edge.target, (indegrees.get(edge.target) ?? 0) + 1);
     incomingCounts.set(edge.target, (incomingCounts.get(edge.target) ?? 0) + 1);
     outgoingCounts.set(edge.source, (outgoingCounts.get(edge.source) ?? 0) + 1);
   }
 
+  const ready = graph.nodes
+    .filter((node) => (indegrees.get(node.id) ?? 0) === 0)
+    .map((node) => node.id);
+  let visitedCount = 0;
+  for (let cursor = 0; cursor < ready.length; cursor += 1) {
+    const nodeId = ready[cursor]!;
+    visitedCount += 1;
+    for (const target of adjacency.get(nodeId) ?? []) {
+      const nextIndegree = (indegrees.get(target) ?? 0) - 1;
+      indegrees.set(target, nextIndegree);
+      if (nextIndegree === 0) {
+        ready.push(target);
+      }
+    }
+  }
+  if (visitedCount !== graph.nodes.length) {
+    invalidGraph("Connector graphs cannot contain cycles.");
+  }
+
   const outputNodes = graph.nodes.filter((node) => node.type === "output");
   if (outputNodes.length === 0) {
-    throw new Error("Connector graph is missing an output node.");
+    invalidGraph("Connector graph is missing an output node.");
   }
 
   const disconnectedOutput = outputNodes.find(
     (node) => (incomingCounts.get(node.id) ?? 0) === 0
   );
   if (disconnectedOutput) {
-    throw new Error(
+    invalidGraph(
       `Output node "${disconnectedOutput.data.label || disconnectedOutput.id}" has no incoming connection.`
     );
   }
@@ -1921,7 +1987,7 @@ function validateConnectorGraph(graph: AiConnector["graph"]) {
       !(node.data.promptTemplate?.trim() || node.data.prompt?.trim())
   );
   if (aiNodeMissingPrompt) {
-    throw new Error(
+    invalidGraph(
       `AI node "${aiNodeMissingPrompt.data.label || aiNodeMissingPrompt.id}" is missing a prompt.`
     );
   }
@@ -1930,7 +1996,7 @@ function validateConnectorGraph(graph: AiConnector["graph"]) {
     (node) => node.type === "merge" && (incomingCounts.get(node.id) ?? 0) < 2
   );
   if (mergeNodeMissingInputs) {
-    throw new Error(
+    invalidGraph(
       `Merge node "${mergeNodeMissingInputs.data.label || mergeNodeMissingInputs.id}" must receive both left and right inputs.`
     );
   }
@@ -1939,7 +2005,7 @@ function validateConnectorGraph(graph: AiConnector["graph"]) {
     (node) => node.type === "template" && !(node.data.template ?? "").trim()
   );
   if (templateNodeMissingTemplate) {
-    throw new Error(
+    invalidGraph(
       `Template node "${templateNodeMissingTemplate.data.label || templateNodeMissingTemplate.id}" is missing its template string.`
     );
   }
@@ -1948,7 +2014,7 @@ function validateConnectorGraph(graph: AiConnector["graph"]) {
     (node) => node.type === "pick_key" && !(node.data.selectedKey ?? "").trim()
   );
   if (pickKeyNodeMissingSelection) {
-    throw new Error(
+    invalidGraph(
       `Pick-key node "${pickKeyNodeMissingSelection.data.label || pickKeyNodeMissingSelection.id}" is missing the key it should select.`
     );
   }
@@ -1957,7 +2023,7 @@ function validateConnectorGraph(graph: AiConnector["graph"]) {
     (node) => node.type !== "output" && (outgoingCounts.get(node.id) ?? 0) === 0
   );
   if (isolatedNode) {
-    throw new Error(
+    invalidGraph(
       `Node "${isolatedNode.data.label || isolatedNode.id}" is not connected to anything downstream.`
     );
   }
@@ -2713,6 +2779,7 @@ export function createAiConnector(
       ? parsed.graph
       : buildDefaultGraph(parsed.kind, parsed.title)
   );
+  validateConnectorGraph(graph);
   const publishedOutputs = ensurePublishedOutputs(id, graph);
   return runInTransaction(() => {
     getDatabase()
