@@ -437,6 +437,51 @@ describe("core route states", () => {
       assigneeUserIds: [],
       assignees: []
     })) satisfies ForgeSnapshot["dashboard"]["projects"];
+    const strategies = Array.from({ length: 7 }, (_, index) => ({
+      id: `strategy_goal_${index + 1}`,
+      title: `Goal strategy ${index + 1}`,
+      overview: `Directed plan ${index + 1} for the dense goal.`,
+      endStateDescription: `The intended outcome for strategy ${index + 1}.`,
+      status: (index === 0
+        ? "completed"
+        : index === 1
+          ? "paused"
+          : "active") as "active" | "paused" | "completed",
+      targetGoalIds: [goal.id],
+      targetProjectIds: [],
+      linkedEntities: [],
+      graph: { nodes: [], edges: [] },
+      metrics: {
+        alignmentScore: 80 + index,
+        planCoverageScore: 80,
+        sequencingScore: 80,
+        scopeDisciplineScore: 80,
+        qualityScore: 80,
+        targetProgressScore: 40,
+        completedNodeCount: index,
+        startedNodeCount: index,
+        readyNodeCount: 0,
+        totalNodeCount: 7,
+        completedTargetCount: 0,
+        totalTargetCount: 1,
+        offPlanEntityCount: 0,
+        offPlanActiveEntityCount: 0,
+        offPlanCompletedEntityCount: 0,
+        activeNodeIds: [],
+        nextNodeIds: [],
+        blockedNodeIds: [],
+        outOfOrderNodeIds: []
+      },
+      isLocked: index % 2 === 0,
+      lockedAt:
+        index % 2 === 0 ? "2026-03-24T08:30:00.000Z" : null,
+      lockedByUserId: null,
+      lockedByUser: null,
+      userId: null,
+      user: null,
+      createdAt: "2026-03-24T08:00:00.000Z",
+      updatedAt: `2026-03-24T${String(index + 1).padStart(2, "0")}:00:00.000Z`
+    })) satisfies ForgeSnapshot["strategies"];
     const snapshot = createSnapshot({
       dashboard: {
         ...createSnapshot().dashboard,
@@ -445,6 +490,7 @@ describe("core route states", () => {
       },
       goals: [goal],
       projects,
+      strategies,
       activity: [
         {
           id: "activity_goal_oldest",
@@ -509,6 +555,32 @@ describe("core route states", () => {
     expect(screen.queryByText("Dense project 9")).not.toBeInTheDocument();
     expect(screen.getAllByText("Newest goal evidence")).toHaveLength(2);
     expect(screen.getAllByText("Oldest goal evidence")).toHaveLength(1);
+    expect(screen.getByText("Showing 6 of 7 strategies")).toBeInTheDocument();
+    expect(screen.getByText("Goal strategy 7")).toBeInTheDocument();
+    expect(screen.queryByText("Goal strategy 1")).not.toBeInTheDocument();
+    const initialStrategyLinks = screen
+      .getAllByRole("link")
+      .filter((link) =>
+        /^\/strategies\/strategy_goal_/.test(link.getAttribute("href") ?? "")
+      );
+    expect(
+      initialStrategyLinks.map(
+        (link) => link.textContent?.match(/Goal strategy \d+/)?.[0]
+      )
+    ).toEqual([
+      "Goal strategy 7",
+      "Goal strategy 6",
+      "Goal strategy 5",
+      "Goal strategy 4",
+      "Goal strategy 3",
+      "Goal strategy 2"
+    ]);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show 1 more strategies" })
+    );
+    expect(screen.getByText("Showing 7 of 7 strategies")).toBeInTheDocument();
+    expect(screen.getByText("Goal strategy 1")).toBeInTheDocument();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Show 4 more projects" })

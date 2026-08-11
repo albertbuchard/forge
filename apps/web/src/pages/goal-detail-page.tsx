@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { GoalDialog } from "@/components/goal-dialog";
@@ -15,7 +15,7 @@ import { PreferenceEntityHandoffButton } from "@/components/preferences/preferen
 import { ProjectCollectionFilters } from "@/components/projects/project-collection-filters";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
@@ -43,6 +43,12 @@ import { getSingleSelectedUserId } from "@/lib/user-ownership";
 import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 
 const GOAL_PROJECT_BATCH_SIZE = 8;
+const GOAL_STRATEGY_BATCH_SIZE = 6;
+const STRATEGY_STATUS_ORDER = {
+  active: 0,
+  paused: 1,
+  completed: 2
+} as const;
 
 export function GoalDetailPage() {
   const { t } = useI18n();
@@ -60,6 +66,9 @@ export function GoalDetailPage() {
     useState<ProjectCollectionStatusFilter>("active");
   const [visibleProjectCount, setVisibleProjectCount] = useState(
     GOAL_PROJECT_BATCH_SIZE
+  );
+  const [visibleStrategyCount, setVisibleStrategyCount] = useState(
+    GOAL_STRATEGY_BATCH_SIZE
   );
   const defaultUserId = getSingleSelectedUserId(shell.selectedUserIds);
   const [pendingRestartProjectId, setPendingRestartProjectId] = useState<
@@ -118,6 +127,27 @@ export function GoalDetailPage() {
     [allProjects, projectFilter]
   );
   const visibleProjects = projects.slice(0, visibleProjectCount);
+  const strategies = useMemo(
+    () =>
+      shell.snapshot.strategies
+        .filter((strategy) =>
+          strategy.targetGoalIds.includes(params.goalId ?? "")
+        )
+        .sort(
+          (left, right) =>
+            STRATEGY_STATUS_ORDER[left.status] -
+              STRATEGY_STATUS_ORDER[right.status] ||
+            right.updatedAt.localeCompare(left.updatedAt) ||
+            left.title.localeCompare(right.title) ||
+            left.id.localeCompare(right.id)
+        ),
+    [params.goalId, shell.snapshot.strategies]
+  );
+  const visibleStrategies = strategies.slice(0, visibleStrategyCount);
+
+  useEffect(() => {
+    setVisibleStrategyCount(GOAL_STRATEGY_BATCH_SIZE);
+  }, [params.goalId]);
 
   const projectIds = new Set(allProjects.map((project) => project.id));
   const taskIds = new Set(
@@ -275,6 +305,98 @@ export function GoalDetailPage() {
           {t("common.goalDetail.deleteGoal")}
         </Button>
       </div>
+
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+              Strategies
+            </div>
+            <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
+              See the directed plans that turn this goal into ordered work.
+            </p>
+          </div>
+          <Link
+            to="/strategies"
+            className={buttonVariants({ variant: "secondary" })}
+          >
+            Open all strategies
+          </Link>
+        </div>
+        {strategies.length === 0 ? (
+          <div className="mt-4 rounded-[20px] bg-[var(--ui-surface-2)] p-4 text-sm leading-6 text-[var(--ui-ink-soft)]">
+            No strategy targets this goal yet. Open Strategies to create or link
+            a directed execution plan.
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {visibleStrategies.map((strategy) => (
+              <Link
+                key={strategy.id}
+                to={`/strategies/${strategy.id}`}
+                className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4 transition hover:bg-[var(--ui-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium text-[var(--ui-ink-strong)]">
+                      {strategy.title}
+                    </div>
+                    <p className="mt-2 line-clamp-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                      {strategy.overview ||
+                        strategy.endStateDescription ||
+                        "No strategy summary recorded yet."}
+                    </p>
+                  </div>
+                  <UserBadge user={strategy.user} compact />
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Badge>{strategy.status}</Badge>
+                  <Badge className="bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)]">
+                    {strategy.isLocked ? "Contract locked" : "Editable draft"}
+                  </Badge>
+                  <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
+                    {strategy.metrics.alignmentScore}% aligned
+                  </Badge>
+                  <Badge className="bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)]">
+                    {strategy.metrics.completedNodeCount}/
+                    {strategy.metrics.totalNodeCount} nodes complete
+                  </Badge>
+                </div>
+              </Link>
+            ))}
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 lg:col-span-2">
+              <div
+                className="text-sm text-[var(--ui-ink-soft)]"
+                aria-live="polite"
+              >
+                Showing {visibleStrategies.length} of {strategies.length}{" "}
+                strategies
+              </div>
+              {visibleStrategies.length < strategies.length ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() =>
+                    setVisibleStrategyCount((current) =>
+                      Math.min(
+                        current + GOAL_STRATEGY_BATCH_SIZE,
+                        strategies.length
+                      )
+                    )
+                  }
+                >
+                  Show{" "}
+                  {Math.min(
+                    GOAL_STRATEGY_BATCH_SIZE,
+                    strategies.length - visibleStrategies.length
+                  )}{" "}
+                  more strategies
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        )}
+      </Card>
 
       <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <Card>
