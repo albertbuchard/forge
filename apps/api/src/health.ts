@@ -3433,6 +3433,7 @@ function findMatchingGeneratedWorkout(input: {
        FROM health_workout_sessions
        WHERE user_id = ?
          AND generated_from_habit_id IS NOT NULL
+         AND reconciliation_status = 'awaiting_import_match'
          AND workout_type = ?
          AND ABS(strftime('%s', started_at) - strftime('%s', ?)) <= 5400
          AND ABS(strftime('%s', ended_at) - strftime('%s', ?)) <= 5400
