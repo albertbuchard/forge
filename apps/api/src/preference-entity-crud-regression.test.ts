@@ -142,22 +142,20 @@ test("batch preference item source links reuse source ACLs on create and update"
       label: string,
       source: { entityType: string; entityId: string }
     ) =>
-      batchResult(
-        await app.inject({
-          method: "POST",
-          url: "/api/v1/entities/create",
-          headers,
-          payload: {
-            atomic: true,
-            operations: [
-              {
-                entityType: "preference_item",
-                data: preferenceItemData(label, source)
-              }
-            ]
-          }
-        })
-      );
+      app.inject({
+        method: "POST",
+        url: "/api/v1/entities/create",
+        headers,
+        payload: {
+          atomic: true,
+          operations: [
+            {
+              entityType: "preference_item",
+              data: preferenceItemData(label, source)
+            }
+          ]
+        }
+      });
 
     const privateCreate = await createLinkedItem("Denied private create", {
       entityType: "note",
@@ -167,9 +165,13 @@ test("batch preference item source links reuse source ACLs on create and update"
       entityType: "note",
       entityId: "note_missing_pref_acl"
     });
-    assert.equal(privateCreate.ok, false);
-    assert.deepEqual(privateCreate.error, missingNoteCreate.error);
-    assert.equal(privateCreate.error?.code, "note_not_found");
+    assert.equal(privateCreate.statusCode, 404, privateCreate.body);
+    assert.equal(missingNoteCreate.statusCode, 404, missingNoteCreate.body);
+    assert.deepEqual(privateCreate.json(), missingNoteCreate.json());
+    assert.equal(
+      (privateCreate.json() as { code: string }).code,
+      "note_not_found"
+    );
 
     const foreignCreate = await createLinkedItem("Denied foreign create", {
       entityType: "goal",
@@ -179,17 +181,20 @@ test("batch preference item source links reuse source ACLs on create and update"
       entityType: "goal",
       entityId: "goal_missing_pref_acl"
     });
-    assert.equal(foreignCreate.ok, false);
-    assert.deepEqual(foreignCreate.error, missingGoalCreate.error);
+    assert.equal(foreignCreate.statusCode, 404, foreignCreate.body);
+    assert.equal(missingGoalCreate.statusCode, 404, missingGoalCreate.body);
+    assert.deepEqual(foreignCreate.json(), missingGoalCreate.json());
     assert.equal(
-      foreignCreate.error?.code,
+      (foreignCreate.json() as { code: string }).code,
       "preferences_source_entity_not_found"
     );
 
-    const allowedCreate = await createLinkedItem("Allowed shared create", {
-      entityType: "note",
-      entityId: sharedCreatePageId
-    });
+    const allowedCreate = batchResult(
+      await createLinkedItem("Allowed shared create", {
+        entityType: "note",
+        entityId: sharedCreatePageId
+      })
+    );
     assert.equal(allowedCreate.ok, true);
 
     const updateTarget = batchResult(
@@ -211,45 +216,48 @@ test("batch preference item source links reuse source ACLs on create and update"
     assert.equal(updateTarget.ok, true);
     const updateTargetId = String(updateTarget.id);
     const updateSource = async (entityType: string, entityId: string) =>
-      batchResult(
-        await app.inject({
-          method: "POST",
-          url: "/api/v1/entities/update",
-          headers,
-          payload: {
-            atomic: true,
-            operations: [
-              {
-                entityType: "preference_item",
-                id: updateTargetId,
-                patch: {
-                  sourceEntityType: entityType,
-                  sourceEntityId: entityId
-                }
+      app.inject({
+        method: "POST",
+        url: "/api/v1/entities/update",
+        headers,
+        payload: {
+          atomic: true,
+          operations: [
+            {
+              entityType: "preference_item",
+              id: updateTargetId,
+              patch: {
+                sourceEntityType: entityType,
+                sourceEntityId: entityId
               }
-            ]
-          }
-        })
-      );
+            }
+          ]
+        }
+      });
 
     const privateUpdate = await updateSource("note", privatePageId);
     const missingNoteUpdate = await updateSource(
       "note",
       "note_missing_pref_update_acl"
     );
-    assert.equal(privateUpdate.ok, false);
-    assert.deepEqual(privateUpdate.error, missingNoteUpdate.error);
-    assert.equal(privateUpdate.error?.code, "note_not_found");
+    assert.equal(privateUpdate.statusCode, 404, privateUpdate.body);
+    assert.equal(missingNoteUpdate.statusCode, 404, missingNoteUpdate.body);
+    assert.deepEqual(privateUpdate.json(), missingNoteUpdate.json());
+    assert.equal(
+      (privateUpdate.json() as { code: string }).code,
+      "note_not_found"
+    );
 
     const foreignUpdate = await updateSource("goal", foreignGoal.id);
     const missingGoalUpdate = await updateSource(
       "goal",
       "goal_missing_pref_update_acl"
     );
-    assert.equal(foreignUpdate.ok, false);
-    assert.deepEqual(foreignUpdate.error, missingGoalUpdate.error);
+    assert.equal(foreignUpdate.statusCode, 404, foreignUpdate.body);
+    assert.equal(missingGoalUpdate.statusCode, 404, missingGoalUpdate.body);
+    assert.deepEqual(foreignUpdate.json(), missingGoalUpdate.json());
     assert.equal(
-      foreignUpdate.error?.code,
+      (foreignUpdate.json() as { code: string }).code,
       "preferences_source_entity_not_found"
     );
 
@@ -266,7 +274,9 @@ test("batch preference item source links reuse source ACLs on create and update"
     assert.equal(unchanged.source_entity_type, null);
     assert.equal(unchanged.source_entity_id, null);
 
-    const allowedUpdate = await updateSource("note", sharedUpdatePageId);
+    const allowedUpdate = batchResult(
+      await updateSource("note", sharedUpdatePageId)
+    );
     assert.equal(allowedUpdate.ok, true);
     assert.equal(allowedUpdate.entity?.sourceEntityType, "note");
     assert.equal(allowedUpdate.entity?.sourceEntityId, sharedUpdatePageId);

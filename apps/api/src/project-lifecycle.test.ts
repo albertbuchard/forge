@@ -163,10 +163,29 @@ test("project closeout persists one owned Note with exact generic links and no f
       "",
       "The durable project evidence is linked without inventing child evidence."
     ].join("\n");
+    const artifactResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/artifacts",
+      headers: { cookie },
+      payload: {
+        title: "PLAN-17 closeout evidence",
+        originalFileName: "plan-17-closeout.txt",
+        declaredMimeType: "text/plain",
+        contentBase64: Buffer.from(
+          "Durable evidence for the PLAN-17 project closeout.",
+          "utf8"
+        ).toString("base64"),
+        sourceLabel: "PLAN-17 closeout test"
+      }
+    });
+    assert.equal(artifactResponse.statusCode, 201, artifactResponse.body);
+    const artifactId = (
+      artifactResponse.json() as { artifact: { id: string } }
+    ).artifact.id;
     const suppliedLinks = [
       {
         entityType: "artifact" as const,
-        entityId: "artifact_plan_17_closeout",
+        entityId: artifactId,
         anchorKey: "final-evidence"
       },
       {
