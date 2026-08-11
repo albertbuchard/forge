@@ -8,6 +8,33 @@ export const stableIdSchema = z
   .regex(/^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/u);
 
 const nonEmptyTextSchema = z.string().trim().min(1);
+
+// The shipped 330-lesson courses remain below this transfer envelope. These
+// limits leave authoring headroom while preventing a compact import from
+// expanding into an unbounded number of database rows and reference checks.
+export const COURSE_PACKAGE_LIMITS = {
+  authors: 32,
+  courseTags: 64,
+  presentationExtensions: 32,
+  gradeScaleEntries: 32,
+  masteryDimensions: 32,
+  competencies: 256,
+  misconceptions: 256,
+  assessmentProfiles: 64,
+  conceptRefs: 512,
+  conceptUpgrades: 512,
+  concepts: 512,
+  modules: 64,
+  lessons: 512,
+  resources: 512,
+  lessonObjectives: 64,
+  lessonContentBlocks: 128,
+  lessonActivities: 32,
+  moduleLessonRefs: 512,
+  totalActivities: 4_096,
+  totalContentBlocks: 16_384,
+  extensionNamespaces: 64
+} as const;
 const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
   z.union([
     z.string(),
@@ -231,10 +258,19 @@ export const courseLessonSchema = z.object({
   summary: nonEmptyTextSchema.max(1_200),
   estimatedMinutes: z.number().int().positive().max(480),
   conceptIds: z.array(stableIdSchema).min(1),
-  objectives: z.array(z.string().trim().min(1)).min(1),
+  objectives: z
+    .array(z.string().trim().min(1))
+    .min(1)
+    .max(COURSE_PACKAGE_LIMITS.lessonObjectives),
   layoutId: stableIdSchema.optional(),
-  content: z.array(courseContentBlockSchema).min(1),
-  activities: z.array(courseActivitySchema).min(1)
+  content: z
+    .array(courseContentBlockSchema)
+    .min(1)
+    .max(COURSE_PACKAGE_LIMITS.lessonContentBlocks),
+  activities: z
+    .array(courseActivitySchema)
+    .min(1)
+    .max(COURSE_PACKAGE_LIMITS.lessonActivities)
 });
 
 export const courseModuleSchema = z.object({
@@ -244,7 +280,10 @@ export const courseModuleSchema = z.object({
   order: z.number().int().nonnegative(),
   startWeek: z.number().int().positive(),
   endWeek: z.number().int().positive(),
-  lessonIds: z.array(stableIdSchema).min(1)
+  lessonIds: z
+    .array(stableIdSchema)
+    .min(1)
+    .max(COURSE_PACKAGE_LIMITS.moduleLessonRefs)
 });
 
 export const gradeScaleSchema = z
@@ -256,7 +295,7 @@ export const gradeScaleSchema = z
   )
   .min(2);
 
-export const forgeCoursePackageSchema = z.object({
+const forgeCoursePackageBaseSchema = z.object({
   schemaVersion: z.enum(["1.0", "1.1"]),
   course: z.object({
     id: stableIdSchema,
@@ -266,11 +305,17 @@ export const forgeCoursePackageSchema = z.object({
     subtitle: z.string().trim().max(320).default(""),
     description: nonEmptyTextSchema,
     language: z.string().trim().min(2).max(20).default("en"),
-    authors: z.array(z.string().trim().min(1).max(160)).min(1),
+    authors: z
+      .array(z.string().trim().min(1).max(160))
+      .min(1)
+      .max(COURSE_PACKAGE_LIMITS.authors),
     license: z.string().trim().min(1).max(120),
     estimatedWeeks: z.number().int().positive(),
     minutesPerWeek: z.number().int().positive(),
-    tags: z.array(z.string().trim().min(1).max(80)).default([]),
+    tags: z
+      .array(z.string().trim().min(1).max(80))
+      .max(COURSE_PACKAGE_LIMITS.courseTags)
+      .default([]),
     entryLessonId: stableIdSchema,
     featuredLessonId: stableIdSchema.optional(),
     sourceUrl: z.string().url().optional()
@@ -308,6 +353,7 @@ export const forgeCoursePackageSchema = z.object({
             required: z.boolean().default(false)
           })
         )
+        .max(COURSE_PACKAGE_LIMITS.presentationExtensions)
         .default([])
     })
     .default({}),
@@ -319,7 +365,9 @@ export const forgeCoursePackageSchema = z.object({
         .enum(["first_completion", "positive_delta"])
         .default("first_completion"),
       lessonCompletion: z.literal("all_required").default("all_required"),
-      gradeScale: gradeScaleSchema.default([...DEFAULT_GRADE_SCALE]),
+      gradeScale: gradeScaleSchema
+        .max(COURSE_PACKAGE_LIMITS.gradeScaleEntries)
+        .default([...DEFAULT_GRADE_SCALE]),
       masteryDimensions: z
         .array(
           z.object({
@@ -330,6 +378,7 @@ export const forgeCoursePackageSchema = z.object({
           })
         )
         .min(1)
+        .max(COURSE_PACKAGE_LIMITS.masteryDimensions)
         .default([...DEFAULT_MASTERY_DIMENSIONS]),
       competencies: z
         .array(
@@ -339,6 +388,7 @@ export const forgeCoursePackageSchema = z.object({
             description: z.string().trim().max(1_200).default("")
           })
         )
+        .max(COURSE_PACKAGE_LIMITS.competencies)
         .default([]),
       misconceptions: z
         .array(
@@ -349,6 +399,7 @@ export const forgeCoursePackageSchema = z.object({
             remediationConceptIds: z.array(stableIdSchema).default([])
           })
         )
+        .max(COURSE_PACKAGE_LIMITS.misconceptions)
         .default([]),
       assessmentProfiles: z
         .array(
@@ -362,6 +413,7 @@ export const forgeCoursePackageSchema = z.object({
           })
         )
         .min(1)
+        .max(COURSE_PACKAGE_LIMITS.assessmentProfiles)
         .default([
           {
             id: "default",
@@ -373,7 +425,10 @@ export const forgeCoursePackageSchema = z.object({
         ])
     })
     .default({}),
-  conceptRefs: z.array(courseConceptRefSchema).default([]),
+  conceptRefs: z
+    .array(courseConceptRefSchema)
+    .max(COURSE_PACKAGE_LIMITS.conceptRefs)
+    .default([]),
   conceptUpgrades: z
     .array(
       z.object({
@@ -382,10 +437,20 @@ export const forgeCoursePackageSchema = z.object({
         reason: nonEmptyTextSchema.max(1_200)
       })
     )
+    .max(COURSE_PACKAGE_LIMITS.conceptUpgrades)
     .optional(),
-  concepts: z.array(courseConceptSchema).default([]),
-  modules: z.array(courseModuleSchema).min(1),
-  lessons: z.array(courseLessonSchema).min(1),
+  concepts: z
+    .array(courseConceptSchema)
+    .max(COURSE_PACKAGE_LIMITS.concepts)
+    .default([]),
+  modules: z
+    .array(courseModuleSchema)
+    .min(1)
+    .max(COURSE_PACKAGE_LIMITS.modules),
+  lessons: z
+    .array(courseLessonSchema)
+    .min(1)
+    .max(COURSE_PACKAGE_LIMITS.lessons),
   resources: z
     .array(
       z.object({
@@ -395,6 +460,7 @@ export const forgeCoursePackageSchema = z.object({
         description: z.string().trim().default("")
       })
     )
+    .max(COURSE_PACKAGE_LIMITS.resources)
     .default([]),
   extensions: z.record(jsonValueSchema).default({}),
   provenance: z.object({
@@ -403,6 +469,44 @@ export const forgeCoursePackageSchema = z.object({
     notes: z.string().trim().default("")
   })
 });
+
+export const forgeCoursePackageSchema =
+  forgeCoursePackageBaseSchema.superRefine((coursePackage, context) => {
+    const totalActivities = coursePackage.lessons.reduce(
+      (total, lesson) => total + lesson.activities.length,
+      0
+    );
+    if (totalActivities > COURSE_PACKAGE_LIMITS.totalActivities) {
+      context.addIssue({
+        code: "custom",
+        path: ["lessons"],
+        message: `Course packages may contain at most ${COURSE_PACKAGE_LIMITS.totalActivities} activities in total.`
+      });
+    }
+
+    const totalContentBlocks = coursePackage.lessons.reduce(
+      (total, lesson) => total + lesson.content.length,
+      0
+    );
+    if (totalContentBlocks > COURSE_PACKAGE_LIMITS.totalContentBlocks) {
+      context.addIssue({
+        code: "custom",
+        path: ["lessons"],
+        message: `Course packages may contain at most ${COURSE_PACKAGE_LIMITS.totalContentBlocks} content blocks in total.`
+      });
+    }
+
+    if (
+      Object.keys(coursePackage.extensions).length >
+      COURSE_PACKAGE_LIMITS.extensionNamespaces
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["extensions"],
+        message: `Course packages may contain at most ${COURSE_PACKAGE_LIMITS.extensionNamespaces} extension namespaces.`
+      });
+    }
+  });
 
 export type ForgeCoursePackage = z.infer<typeof forgeCoursePackageSchema>;
 export type CourseConcept = z.infer<typeof courseConceptSchema>;

@@ -1,3 +1,5 @@
+import { COURSE_PACKAGE_LIMITS } from "../../../packages/course-kit/src/index.js";
+
 const jsonContent = (schema: Record<string, unknown>) => ({
   "application/json": { schema }
 });
@@ -34,13 +36,84 @@ const packageSchema = {
   additionalProperties: true,
   properties: {
     schemaVersion: { type: "string", enum: ["1.0", "1.1"] },
-    course: { type: "object", additionalProperties: true },
-    presentation: { type: "object", additionalProperties: true },
+    course: {
+      type: "object",
+      additionalProperties: true,
+      properties: {
+        authors: { type: "array", maxItems: COURSE_PACKAGE_LIMITS.authors },
+        tags: { type: "array", maxItems: COURSE_PACKAGE_LIMITS.courseTags }
+      }
+    },
+    presentation: {
+      type: "object",
+      additionalProperties: true,
+      properties: {
+        extensions: {
+          type: "array",
+          maxItems: COURSE_PACKAGE_LIMITS.presentationExtensions
+        }
+      }
+    },
     grading: { type: "object", additionalProperties: true },
-    concepts: { type: "array", items: { type: "object" } },
-    conceptRefs: { type: "array", items: { type: "object" } },
-    modules: { type: "array", items: { type: "object" } },
-    lessons: { type: "array", items: { type: "object" } },
+    concepts: {
+      type: "array",
+      maxItems: COURSE_PACKAGE_LIMITS.concepts,
+      items: { type: "object" }
+    },
+    conceptRefs: {
+      type: "array",
+      maxItems: COURSE_PACKAGE_LIMITS.conceptRefs,
+      items: { type: "object" }
+    },
+    conceptUpgrades: {
+      type: "array",
+      maxItems: COURSE_PACKAGE_LIMITS.conceptUpgrades,
+      items: { type: "object" }
+    },
+    modules: {
+      type: "array",
+      maxItems: COURSE_PACKAGE_LIMITS.modules,
+      items: {
+        type: "object",
+        properties: {
+          lessonIds: {
+            type: "array",
+            maxItems: COURSE_PACKAGE_LIMITS.moduleLessonRefs
+          }
+        }
+      }
+    },
+    lessons: {
+      type: "array",
+      maxItems: COURSE_PACKAGE_LIMITS.lessons,
+      items: {
+        type: "object",
+        properties: {
+          objectives: {
+            type: "array",
+            maxItems: COURSE_PACKAGE_LIMITS.lessonObjectives
+          },
+          content: {
+            type: "array",
+            maxItems: COURSE_PACKAGE_LIMITS.lessonContentBlocks
+          },
+          activities: {
+            type: "array",
+            maxItems: COURSE_PACKAGE_LIMITS.lessonActivities
+          }
+        }
+      }
+    },
+    resources: {
+      type: "array",
+      maxItems: COURSE_PACKAGE_LIMITS.resources,
+      items: { type: "object" }
+    },
+    extensions: {
+      type: "object",
+      maxProperties: COURSE_PACKAGE_LIMITS.extensionNamespaces,
+      additionalProperties: true
+    },
     provenance: { type: "object", additionalProperties: true }
   }
 };
@@ -71,7 +144,7 @@ export function buildCourseOpenApiPaths(): Record<string, unknown> {
       post: {
         summary: "Validate and import a Forge course package",
         description:
-          "Verifies package references and the canonical SHA-256 hash. Course releases are immutable; importing a new version preserves versioned enrollments and exact activity snapshots.",
+          "Requires an authenticated operator session before parsing the package. Verifies package references and the canonical SHA-256 hash. Course releases are immutable; importing a new version preserves versioned enrollments and exact activity snapshots.",
         tags: ["Courses"],
         requestBody: {
           required: true,
@@ -82,6 +155,9 @@ export function buildCourseOpenApiPaths(): Record<string, unknown> {
             description: "Imported course and entity counts",
             content: jsonContent({ type: "object" })
           },
+          "400": errorResponse,
+          "401": errorResponse,
+          "403": errorResponse,
           "409": errorResponse,
           "422": errorResponse
         }
@@ -90,6 +166,8 @@ export function buildCourseOpenApiPaths(): Record<string, unknown> {
     "/api/v1/courses/{courseId}/export": {
       get: {
         summary: "Export the canonical validated Forge course package",
+        description:
+          "Requires an authenticated operator session because the canonical portable package includes private instructor assessment definitions that learner and agent reads must not expose.",
         tags: ["Courses"],
         parameters: [courseIdParameter],
         responses: {
@@ -100,6 +178,8 @@ export function buildCourseOpenApiPaths(): Record<string, unknown> {
               "application/json": { schema: packageSchema }
             }
           },
+          "401": errorResponse,
+          "403": errorResponse,
           "404": errorResponse,
           "500": errorResponse
         }

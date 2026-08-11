@@ -47316,7 +47316,7 @@
     "/api/v1/courses/import": {
       "post": {
         "summary": "Validate and import a Forge course package",
-        "description": "Verifies package references and the canonical SHA-256 hash. Course releases are immutable; importing a new version preserves versioned enrollments and exact activity snapshots.",
+        "description": "Requires an authenticated operator session before parsing the package. Verifies package references and the canonical SHA-256 hash. Course releases are immutable; importing a new version preserves versioned enrollments and exact activity snapshots.",
         "tags": [
           "Courses"
         ],
@@ -47344,11 +47344,27 @@
                   },
                   "course": {
                     "type": "object",
-                    "additionalProperties": true
+                    "additionalProperties": true,
+                    "properties": {
+                      "authors": {
+                        "type": "array",
+                        "maxItems": 32
+                      },
+                      "tags": {
+                        "type": "array",
+                        "maxItems": 64
+                      }
+                    }
                   },
                   "presentation": {
                     "type": "object",
-                    "additionalProperties": true
+                    "additionalProperties": true,
+                    "properties": {
+                      "extensions": {
+                        "type": "array",
+                        "maxItems": 32
+                      }
+                    }
                   },
                   "grading": {
                     "type": "object",
@@ -47356,27 +47372,70 @@
                   },
                   "concepts": {
                     "type": "array",
+                    "maxItems": 512,
                     "items": {
                       "type": "object"
                     }
                   },
                   "conceptRefs": {
                     "type": "array",
+                    "maxItems": 512,
+                    "items": {
+                      "type": "object"
+                    }
+                  },
+                  "conceptUpgrades": {
+                    "type": "array",
+                    "maxItems": 512,
                     "items": {
                       "type": "object"
                     }
                   },
                   "modules": {
                     "type": "array",
+                    "maxItems": 64,
                     "items": {
-                      "type": "object"
+                      "type": "object",
+                      "properties": {
+                        "lessonIds": {
+                          "type": "array",
+                          "maxItems": 512
+                        }
+                      }
                     }
                   },
                   "lessons": {
                     "type": "array",
+                    "maxItems": 512,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "objectives": {
+                          "type": "array",
+                          "maxItems": 64
+                        },
+                        "content": {
+                          "type": "array",
+                          "maxItems": 128
+                        },
+                        "activities": {
+                          "type": "array",
+                          "maxItems": 32
+                        }
+                      }
+                    }
+                  },
+                  "resources": {
+                    "type": "array",
+                    "maxItems": 512,
                     "items": {
                       "type": "object"
                     }
+                  },
+                  "extensions": {
+                    "type": "object",
+                    "maxProperties": 64,
+                    "additionalProperties": true
                   },
                   "provenance": {
                     "type": "object",
@@ -47394,6 +47453,36 @@
               "application/json": {
                 "schema": {
                   "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Forge error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Forge error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forge error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -47425,6 +47514,7 @@
     "/api/v1/courses/{courseId}/export": {
       "get": {
         "summary": "Export the canonical validated Forge course package",
+        "description": "Requires an authenticated operator session because the canonical portable package includes private instructor assessment definitions that learner and agent reads must not expose.",
         "tags": [
           "Courses"
         ],
@@ -47464,11 +47554,27 @@
                     },
                     "course": {
                       "type": "object",
-                      "additionalProperties": true
+                      "additionalProperties": true,
+                      "properties": {
+                        "authors": {
+                          "type": "array",
+                          "maxItems": 32
+                        },
+                        "tags": {
+                          "type": "array",
+                          "maxItems": 64
+                        }
+                      }
                     },
                     "presentation": {
                       "type": "object",
-                      "additionalProperties": true
+                      "additionalProperties": true,
+                      "properties": {
+                        "extensions": {
+                          "type": "array",
+                          "maxItems": 32
+                        }
+                      }
                     },
                     "grading": {
                       "type": "object",
@@ -47476,27 +47582,70 @@
                     },
                     "concepts": {
                       "type": "array",
+                      "maxItems": 512,
                       "items": {
                         "type": "object"
                       }
                     },
                     "conceptRefs": {
                       "type": "array",
+                      "maxItems": 512,
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "conceptUpgrades": {
+                      "type": "array",
+                      "maxItems": 512,
                       "items": {
                         "type": "object"
                       }
                     },
                     "modules": {
                       "type": "array",
+                      "maxItems": 64,
                       "items": {
-                        "type": "object"
+                        "type": "object",
+                        "properties": {
+                          "lessonIds": {
+                            "type": "array",
+                            "maxItems": 512
+                          }
+                        }
                       }
                     },
                     "lessons": {
                       "type": "array",
+                      "maxItems": 512,
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "objectives": {
+                            "type": "array",
+                            "maxItems": 64
+                          },
+                          "content": {
+                            "type": "array",
+                            "maxItems": 128
+                          },
+                          "activities": {
+                            "type": "array",
+                            "maxItems": 32
+                          }
+                        }
+                      }
+                    },
+                    "resources": {
+                      "type": "array",
+                      "maxItems": 512,
                       "items": {
                         "type": "object"
                       }
+                    },
+                    "extensions": {
+                      "type": "object",
+                      "maxProperties": 64,
+                      "additionalProperties": true
                     },
                     "provenance": {
                       "type": "object",
@@ -47526,11 +47675,27 @@
                     },
                     "course": {
                       "type": "object",
-                      "additionalProperties": true
+                      "additionalProperties": true,
+                      "properties": {
+                        "authors": {
+                          "type": "array",
+                          "maxItems": 32
+                        },
+                        "tags": {
+                          "type": "array",
+                          "maxItems": 64
+                        }
+                      }
                     },
                     "presentation": {
                       "type": "object",
-                      "additionalProperties": true
+                      "additionalProperties": true,
+                      "properties": {
+                        "extensions": {
+                          "type": "array",
+                          "maxItems": 32
+                        }
+                      }
                     },
                     "grading": {
                       "type": "object",
@@ -47538,33 +47703,96 @@
                     },
                     "concepts": {
                       "type": "array",
+                      "maxItems": 512,
                       "items": {
                         "type": "object"
                       }
                     },
                     "conceptRefs": {
                       "type": "array",
+                      "maxItems": 512,
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "conceptUpgrades": {
+                      "type": "array",
+                      "maxItems": 512,
                       "items": {
                         "type": "object"
                       }
                     },
                     "modules": {
                       "type": "array",
+                      "maxItems": 64,
                       "items": {
-                        "type": "object"
+                        "type": "object",
+                        "properties": {
+                          "lessonIds": {
+                            "type": "array",
+                            "maxItems": 512
+                          }
+                        }
                       }
                     },
                     "lessons": {
                       "type": "array",
+                      "maxItems": 512,
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "objectives": {
+                            "type": "array",
+                            "maxItems": 64
+                          },
+                          "content": {
+                            "type": "array",
+                            "maxItems": 128
+                          },
+                          "activities": {
+                            "type": "array",
+                            "maxItems": 32
+                          }
+                        }
+                      }
+                    },
+                    "resources": {
+                      "type": "array",
+                      "maxItems": 512,
                       "items": {
                         "type": "object"
                       }
+                    },
+                    "extensions": {
+                      "type": "object",
+                      "maxProperties": 64,
+                      "additionalProperties": true
                     },
                     "provenance": {
                       "type": "object",
                       "additionalProperties": true
                     }
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Forge error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forge error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }

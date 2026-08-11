@@ -2535,7 +2535,7 @@
                     <p class="story-expanded-outcome">As an authorized operator, I can import a validated portable course package or export its canonical package without bypassing integrity and learner-evidence protections.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Course package import/export.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>canonical hash, reference validation, concept-conflict checks, and evidence-protected replacement are implemented; complete large-package, provenance, and transfer-boundary checks.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the operator-only gateway protects canonical imports and exports without revealing whether a requested course exists. Imports verify canonical hashes, references, concept conflicts, and evidence-protected replacements before writing. The portable schema now bounds every top-level record family, individual lessons to 32 activities and 128 content blocks, and whole packages to 512 lessons, 4,096 activities, and 16,384 content blocks; an over-limit operator import writes no course row, while both shipped 330-lesson packages remain valid. Complete cross-install provenance-chain and live large-transfer verification.</dd></div>
                     </dl>
                   </div>
                 </details>
