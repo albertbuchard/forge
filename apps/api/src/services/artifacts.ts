@@ -1496,6 +1496,24 @@ function scanOfficeZip(
   try {
     const zip = new AdmZip(buffer);
     const entries = zip.getEntries() as AdmZipEntryWithHeader[];
+    const entryNames = new Set(entries.map((entry) => entry.entryName));
+    const primaryPart =
+      extension === "docx"
+        ? "word/document.xml"
+        : extension === "pptx"
+          ? "ppt/presentation.xml"
+          : "xl/workbook.xml";
+    const missingRequiredParts = ["[Content_Types].xml", primaryPart].filter(
+      (entryName) => !entryNames.has(entryName)
+    );
+    if (missingRequiredParts.length > 0) {
+      addFinding(
+        findings,
+        "high",
+        "office_structure_invalid",
+        `The Office archive is missing required package parts: ${missingRequiredParts.join(", ")}.`
+      );
+    }
     const totalUncompressed = entries.reduce(
       (sum, entry) => sum + Math.max(0, entry.header?.size ?? 0),
       0
