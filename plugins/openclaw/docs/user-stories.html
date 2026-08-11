@@ -2520,7 +2520,7 @@
                     <p class="story-expanded-outcome">As a user, I can find due concepts and inspect definition, prerequisites, cross-course evidence, and multidimensional mastery without treating a score as a verdict.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>concepts-index</code>, <code>concept-detail</code>.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>first-class concept reads and evidence-backed mastery are implemented; complete due-ordering, sparse-evidence, and cross-course checks.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>first-class concept reads and evidence-backed mastery are implemented. The review queue now orders the oldest due deadline first with deterministic title/id ties, remains isolated per learner, and excludes concepts that have no review evidence. Focused deadline-order, multi-user, and sparse-evidence checks pass; complete cross-course and retained browser evidence before promotion.</dd></div>
                     </dl>
                   </div>
                 </details>

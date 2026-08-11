@@ -1796,13 +1796,16 @@ export function listConcepts(
     );
     bindings.push(nowIso());
   }
+  const orderBy = options.dueOnly
+    ? "due.next_review_at ASC, c.title COLLATE NOCASE, c.id"
+    : "c.title COLLATE NOCASE, c.id";
   const rows = getDatabase()
     .prepare(
       `SELECT DISTINCT c.*,
         (SELECT COUNT(*) FROM course_concepts count_cc WHERE count_cc.concept_id = c.id) AS course_count
        FROM concepts c ${join}
        ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""}
-       ORDER BY c.title COLLATE NOCASE`
+       ORDER BY ${orderBy}`
     )
     .all(...bindings) as Array<{
     id: string;
