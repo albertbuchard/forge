@@ -46,8 +46,8 @@
           <a class="story-metric metric-all" href="./user-stories.html" data-metric-scope="all"><strong>203</strong><span>All stories</span></a>
           <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>193</strong><span>Current product</span></a>
           <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>10</strong><span>Planned</span></a>
-          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>17</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>158</strong><span>In review</span></a>
+          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>18</strong><span>Verified</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>157</strong><span>In review</span></a>
           <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>18</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
@@ -2075,17 +2075,17 @@
                   </div>
                 </details>
 
-                <details class="story-card" id="story-health-04" data-story-id="HEALTH-04" data-lifecycle="current" data-readiness="In review" data-family="HEALTH">
+                <details class="story-card" id="story-health-04" data-story-id="HEALTH-04" data-lifecycle="current" data-readiness="Verified" data-family="HEALTH">
                   <summary class="story-summary">
                     <span class="story-id">HEALTH-04</span>
                     <span class="story-summary-outcome">As a user, I can understand acute/chronic load, intensity mix, zone time, VO2max context, targets, and next-workout guidance.</span>
-                    <span class="story-state state-in-review">In review</span>
+                    <span class="story-state state-verified">Verified</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a user, I can understand acute/chronic load, intensity mix, zone time, VO2max context, targets, and next-workout guidance.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>training-load-index</code>, read-only <code>training_load</code>.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>the full explanation model and compact 2-column phone summary pass live and automated checks; one bulk analytics read reduced the measured route median from 191.6 ms to 145.0 ms. Finish stale-baseline and mixed-sport fixtures.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the full explanation model, compact phone summary, bounded bulk analytics read, decision thresholds, mixed-sport contribution, and evidence freshness are covered. Daily, weekly, and monthly comparison ratios now use the actual preceding 28 days, four weeks, or three calendar months, so a workout after a long gap cannot silently reuse months-old training as its recent baseline or next-week volume reference.</dd></div>
                     </dl>
                   </div>
                 </details>

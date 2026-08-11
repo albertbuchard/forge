@@ -7446,6 +7446,30 @@ function bucketDates(
   };
 }
 
+function priorBucketsWithinBaselineWindow<T extends { startDate: string }>(
+  rows: T[],
+  current: T,
+  interval: "daily" | "weekly" | "monthly"
+) {
+  const currentStart = new Date(`${current.startDate}T00:00:00.000Z`);
+  const lowerBound =
+    interval === "monthly"
+      ? new Date(
+          Date.UTC(
+            currentStart.getUTCFullYear(),
+            currentStart.getUTCMonth() - 3,
+            1
+          )
+        )
+      : addDays(currentStart, -28);
+  const lowerDateKey = dateKeyFromDate(lowerBound);
+  return rows.filter(
+    (candidate) =>
+      candidate.startDate >= lowerDateKey &&
+      candidate.startDate < current.startDate
+  );
+}
+
 function buildZoneTimeBuckets(
   sessions: TrainingLoadSession[],
   interval: "daily" | "weekly" | "monthly",
@@ -7553,12 +7577,11 @@ function buildZoneTimeBuckets(
     });
 
   return rows.map((row, index) => {
-    const baselineWindow =
-      interval === "daily"
-        ? rows.slice(Math.max(0, index - 28), index)
-        : interval === "weekly"
-          ? rows.slice(Math.max(0, index - 4), index)
-          : rows.slice(Math.max(0, index - 3), index);
+    const baselineWindow = priorBucketsWithinBaselineWindow(
+      rows.slice(0, index),
+      row,
+      interval
+    );
     const baselineLoad = average(
       baselineWindow
         .map((bucket) => bucket.trainingLoad)
@@ -7996,7 +8019,13 @@ function buildTrainingIntelligence(input: {
   zoneTimeSeries: ReturnType<typeof buildZoneTimeSeries>;
 }) {
   const latestWeek = input.zoneTimeSeries.weekly.at(-1);
-  const priorWeeks = input.zoneTimeSeries.weekly.slice(-5, -1);
+  const priorWeeks = latestWeek
+    ? priorBucketsWithinBaselineWindow(
+        input.zoneTimeSeries.weekly.slice(0, -1),
+        latestWeek,
+        "weekly"
+      )
+    : [];
   const baselineMinutes =
     average(
       priorWeeks
