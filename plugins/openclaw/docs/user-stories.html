@@ -2703,7 +2703,7 @@
                     <p class="story-expanded-outcome">As an operator, I can identify the active data root, create a backup, export data, and inspect recovery state without risking live data.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>settings-data</code>, Forge Memory export/doctor.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>backup archives/manifests use owner-only permissions, disclose credential-bearing sensitivity, publish atomically with the manifest last, and clean partial failures. Finish checksum, restore-drill, and disk-full matrices.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>backup archives/manifests use owner-only permissions, disclose credential-bearing sensitivity, publish atomically with the manifest last, clean partial failures, stream a SHA-256 checksum during creation, and verify that checksum before restore. The Settings Data page exposes the digest and explains reduced verification for legacy backups without one; mismatches stop before live data changes. Finish the disk-full matrix.</dd></div>
                     </dl>
                   </div>
                 </details>
