@@ -48,11 +48,6 @@ function bearer(token: string) {
   };
 }
 
-const PSYCHE_NOTE = {
-  contentMarkdown: "Sensitive nested evidence",
-  links: [{ entityType: "belief_entry", entityId: "belief_private" }]
-};
-
 test("parent and task-run mutations cannot bypass Psyche Note authorization", async () => {
   const dataRoot = await mkdtemp(
     path.join(os.tmpdir(), "forge-nested-note-auth-")
@@ -80,6 +75,25 @@ test("parent and task-run mutations cannot bypass Psyche Note authorization", as
     });
     assert.equal(securityResponse.statusCode, 200, securityResponse.body);
 
+    const beliefResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/psyche/beliefs",
+      headers: { cookie },
+      payload: {
+        statement: "Sensitive nested authorization fixture",
+        beliefType: "absolute",
+        userId: "user_operator"
+      }
+    });
+    assert.equal(beliefResponse.statusCode, 201, beliefResponse.body);
+    const beliefId = (
+      beliefResponse.json() as { belief: { id: string } }
+    ).belief.id;
+    const psycheNote = {
+      contentMarkdown: "Sensitive nested evidence",
+      links: [{ entityType: "belief_entry", entityId: beliefId }]
+    };
+
     const blockedGoalCreate = await app.inject({
       method: "POST",
       url: "/api/v1/goals",
@@ -87,7 +101,7 @@ test("parent and task-run mutations cannot bypass Psyche Note authorization", as
       payload: {
         title: "Blocked nested-note goal",
         userId: "user_operator",
-        notes: [PSYCHE_NOTE]
+        notes: [psycheNote]
       }
     });
     assert.equal(blockedGoalCreate.statusCode, 403, blockedGoalCreate.body);
@@ -135,17 +149,23 @@ test("parent and task-run mutations cannot bypass Psyche Note authorization", as
       {
         method: "PATCH" as const,
         url: `/api/v1/goals/${goalId}`,
-        payload: { title: "Forbidden goal title", notes: [PSYCHE_NOTE] }
+        payload: { title: "Forbidden goal title", notes: [psycheNote] },
+        expectedStatus: 403,
+        expectedCode: "insufficient_scope"
       },
       {
         method: "PATCH" as const,
         url: `/api/v1/projects/${projectId}`,
-        payload: { title: "Forbidden project title", notes: [PSYCHE_NOTE] }
+        payload: { title: "Forbidden project title", notes: [psycheNote] },
+        expectedStatus: 403,
+        expectedCode: "insufficient_scope"
       },
       {
         method: "PATCH" as const,
         url: `/api/v1/tasks/${task.id}`,
-        payload: { title: "Forbidden task title", notes: [PSYCHE_NOTE] }
+        payload: { title: "Forbidden task title", notes: [psycheNote] },
+        expectedStatus: 404,
+        expectedCode: "note_link_not_found"
       }
     ];
     for (const mutation of blockedParentUpdates) {
@@ -153,10 +173,10 @@ test("parent and task-run mutations cannot bypass Psyche Note authorization", as
         ...mutation,
         headers: ordinaryHeaders
       });
-      assert.equal(response.statusCode, 403, response.body);
+      assert.equal(response.statusCode, mutation.expectedStatus, response.body);
       assert.equal(
         (response.json() as { code: string }).code,
-        "insufficient_scope"
+        mutation.expectedCode
       );
     }
 
@@ -173,7 +193,7 @@ test("parent and task-run mutations cannot bypass Psyche Note authorization", as
             data: {
               title: "Blocked batch parent",
               userId: "user_operator",
-              notes: [PSYCHE_NOTE]
+              notes: [psycheNote]
             }
           }
         ]
@@ -204,10 +224,14 @@ test("parent and task-run mutations cannot bypass Psyche Note authorization", as
       payload: {
         actor: "Albert",
         note: "Attempted closeout",
-        closeoutNote: PSYCHE_NOTE
+        closeoutNote: psycheNote
       }
     });
-    assert.equal(blockedCompletion.statusCode, 403, blockedCompletion.body);
+    assert.equal(blockedCompletion.statusCode, 404, blockedCompletion.body);
+    assert.equal(
+      (blockedCompletion.json() as { code: string }).code,
+      "note_link_not_found"
+    );
 
     const blockedLogWork = await app.inject({
       method: "POST",
@@ -217,10 +241,14 @@ test("parent and task-run mutations cannot bypass Psyche Note authorization", as
         taskId: task.id,
         summary: "Attempted retroactive closeout",
         title: "Forbidden retroactive title",
-        closeoutNote: PSYCHE_NOTE
+        closeoutNote: psycheNote
       }
     });
-    assert.equal(blockedLogWork.statusCode, 403, blockedLogWork.body);
+    assert.equal(blockedLogWork.statusCode, 404, blockedLogWork.body);
+    assert.equal(
+      (blockedLogWork.json() as { code: string }).code,
+      "note_link_not_found"
+    );
 
     const taskRead = await app.inject({
       method: "GET",
