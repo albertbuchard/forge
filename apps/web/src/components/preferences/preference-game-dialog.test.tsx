@@ -215,8 +215,8 @@ describe("PreferenceGameDialog", () => {
     );
     fireEvent.keyDown(window, { key: "T" });
 
-    expect(onJudge).toHaveBeenNthCalledWith(1, "left", 1);
-    expect(onJudge).toHaveBeenNthCalledWith(2, "tie", 1);
+    expect(onJudge).toHaveBeenNthCalledWith(1, "left", 1, expect.any(String));
+    expect(onJudge).toHaveBeenNthCalledWith(2, "tie", 1, expect.any(String));
 
     fireEvent.click(
       screen.getByRole("button", { name: "Favorite for Deep focus" })
@@ -389,7 +389,7 @@ describe("PreferenceGameDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Left · 1" }));
 
     expect(onJudge).toHaveBeenCalledTimes(1);
-    expect(onJudge).toHaveBeenCalledWith("left", 1);
+    expect(onJudge).toHaveBeenCalledWith("left", 1, expect.any(String));
     expect(screen.getByRole("button", { name: "Left · 1" })).toBeDisabled();
 
     await act(async () => resolveJudgment());
@@ -397,9 +397,12 @@ describe("PreferenceGameDialog", () => {
     expect(screen.getByRole("button", { name: "Left · 1" })).toBeEnabled();
   });
 
-  it("releases the judgment lock without leaking a rejected request", async () => {
-    const onJudge = vi.fn().mockRejectedValue(new Error("Judgment failed"));
-    render(
+  it("retries an ambiguous judgment with the same idempotency key", async () => {
+    const onJudge = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Judgment failed"))
+      .mockResolvedValueOnce(undefined);
+    const { rerender } = render(
       <PreferenceGameDialog
         {...baseProps}
         onJudge={onJudge}
@@ -409,9 +412,27 @@ describe("PreferenceGameDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Left · 1" }));
     expect(onJudge).toHaveBeenCalledTimes(1);
+    const idempotencyKey = onJudge.mock.calls[0]?.[2];
+    expect(idempotencyKey).toEqual(expect.any(String));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Left · 1" })).toBeEnabled()
     );
+
+    rerender(
+      <PreferenceGameDialog
+        {...baseProps}
+        error="The response was lost."
+        onJudge={onJudge}
+        onSignal={vi.fn()}
+      />
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Retry left for Deep focus versus Fast iteration"
+      })
+    );
+    expect(onJudge).toHaveBeenCalledTimes(2);
+    expect(onJudge).toHaveBeenLastCalledWith("left", 1, idempotencyKey);
   });
 
   it("locks round actions while a judgment or signal is saving", () => {

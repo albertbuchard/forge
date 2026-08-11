@@ -995,7 +995,8 @@ export function PreferencesPage() {
 
   const handleGameJudgment = async (
     outcome: "left" | "right" | "tie" | "skip",
-    strength = 1
+    strength: number,
+    idempotencyKey: string
   ) => {
     if (gameScopeRef.current !== preferenceScopeKey) {
       throw new Error(
@@ -1013,7 +1014,8 @@ export function PreferencesPage() {
       leftItemId: pair.left.id,
       rightItemId: pair.right.id,
       outcome,
-      strength
+      strength,
+      idempotencyKey
     });
     const effect =
       outcome === "tie"
@@ -2809,10 +2811,15 @@ export function PreferencesPage() {
         onStartCatalogGame={(domain, catalogId) =>
           void startCatalogGame(domain, catalogId)
         }
-        onJudge={(outcome, strength) => {
+        onJudge={(outcome, strength, idempotencyKey) => {
           setGameError(null);
-          return handleGameJudgment(outcome, strength).catch((error) => {
+          return handleGameJudgment(
+            outcome,
+            strength,
+            idempotencyKey
+          ).catch((error) => {
             setGameError(describeApiError(error).description);
+            throw error;
           });
         }}
         onSignal={(itemId, signalType, idempotencyKey) => {

@@ -82,7 +82,8 @@ export function PreferenceGameDialog({
   onStartCatalogGame: (domain: PreferenceDomain, catalogId: string) => void;
   onJudge: (
     outcome: PreferenceJudgmentOutcome,
-    strength?: number
+    strength: number,
+    idempotencyKey: string
   ) => void | Promise<void>;
   onSignal: (
     itemId: string,
@@ -358,7 +359,8 @@ function PreferenceGamePlayStep({
   error: string | null;
   onJudge: (
     outcome: PreferenceJudgmentOutcome,
-    strength?: number
+    strength: number,
+    idempotencyKey: string
   ) => void | Promise<void>;
   onSignal: (
     itemId: string,
@@ -370,6 +372,14 @@ function PreferenceGamePlayStep({
   const pairKey = nextPair ? `${nextPair.left.id}:${nextPair.right.id}` : null;
   const lockedPairKeyRef = useRef<string | null>(null);
   const [judgmentLocked, setJudgmentLocked] = useState(false);
+  const [lastJudgmentAttempt, setLastJudgmentAttempt] = useState<{
+    pairKey: string;
+    leftLabel: string;
+    rightLabel: string;
+    outcome: PreferenceJudgmentOutcome;
+    strength: number;
+    idempotencyKey: string;
+  } | null>(null);
   const signalLockRef = useRef<string | null>(null);
   const sawSignalSubmittingRef = useRef(false);
   const [signalLocked, setSignalLocked] = useState(false);
@@ -394,21 +404,40 @@ function PreferenceGamePlayStep({
   }, []);
 
   const attemptJudgment = useCallback(
-    (outcome: PreferenceJudgmentOutcome, strength = 1) => {
+    (
+      outcome: PreferenceJudgmentOutcome,
+      strength = 1,
+      retryIdempotencyKey?: string
+    ) => {
       if (
         loading ||
         submitting ||
         !pairKey ||
+        !nextPair ||
         lockedPairKeyRef.current === pairKey
       ) {
         return;
       }
 
+      const idempotencyKey = retryIdempotencyKey ?? crypto.randomUUID();
       lockedPairKeyRef.current = pairKey;
       setJudgmentLocked(true);
+      setLastJudgmentAttempt({
+        pairKey,
+        leftLabel: nextPair.left.label,
+        rightLabel: nextPair.right.label,
+        outcome,
+        strength,
+        idempotencyKey
+      });
       try {
-        void Promise.resolve(onJudge(outcome, strength)).then(
-          () => releaseJudgmentLock(pairKey),
+        void Promise.resolve(onJudge(outcome, strength, idempotencyKey)).then(
+          () => {
+            setLastJudgmentAttempt((current) =>
+              current?.idempotencyKey === idempotencyKey ? null : current
+            );
+            releaseJudgmentLock(pairKey);
+          },
           () => releaseJudgmentLock(pairKey)
         );
       } catch (error) {
@@ -416,7 +445,7 @@ function PreferenceGamePlayStep({
         throw error;
       }
     },
-    [loading, onJudge, pairKey, releaseJudgmentLock, submitting]
+    [loading, nextPair, onJudge, pairKey, releaseJudgmentLock, submitting]
   );
 
   const releaseSignalLock = useCallback(() => {
@@ -468,6 +497,9 @@ function PreferenceGamePlayStep({
     }
     lockedPairKeyRef.current = null;
     setJudgmentLocked(false);
+    setLastJudgmentAttempt((current) =>
+      current && current.pairKey !== pairKey ? null : current
+    );
   }, [pairKey]);
 
   useEffect(() => {
@@ -693,6 +725,33 @@ function PreferenceGamePlayStep({
         evidence.
       </div>
 
+      {error && lastJudgmentAttempt?.pairKey === pairKey ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-l-2 border-[var(--danger)] pl-3 text-sm text-[var(--ui-ink-soft)]">
+          <span>
+            The response may have been lost. Retry with the same receipt key so
+            Forge records this comparison at most once.
+          </span>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="min-h-11"
+            aria-label={`Retry ${lastJudgmentAttempt.outcome} for ${lastJudgmentAttempt.leftLabel} versus ${lastJudgmentAttempt.rightLabel}`}
+            disabled={submitting || judgmentLocked}
+            onClick={() =>
+              attemptJudgment(
+                lastJudgmentAttempt.outcome,
+                lastJudgmentAttempt.strength,
+                lastJudgmentAttempt.idempotencyKey
+              )
+            }
+          >
+            <RefreshCcw className="mr-2 size-4" />
+            Retry comparison
+          </Button>
+        </div>
+      ) : null}
+
       {error && lastSignalAttempt ? (
         <div className="flex flex-wrap items-center justify-between gap-3 border-l-2 border-[var(--danger)] pl-3 text-sm text-[var(--ui-ink-soft)]">
           <span>
@@ -703,6 +762,7 @@ function PreferenceGamePlayStep({
             type="button"
             variant="secondary"
             size="sm"
+            className="min-h-11"
             aria-label={`Retry ${SIGNAL_OPTIONS.find((signal) => signal.signalType === lastSignalAttempt.signalType)?.label ?? lastSignalAttempt.signalType} for ${lastSignalAttempt.itemLabel}`}
             disabled={submitting || signalLocked}
             onClick={() =>
