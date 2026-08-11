@@ -1911,7 +1911,7 @@
                     <p class="story-expanded-outcome">As a user, I can answer a questionnaire one prompt at a time, pause safely, and complete it once.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>psyche-questionnaire-run</code>, <code>questionnaire_run</code> actions.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>test required/optional answers, resume, progress, offline failure, and idempotency.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>questionnaire start, read, update, and completion now enforce credential user scope before answer, scoring, completion-note, or Activity writes. Existing out-of-scope and legacy ownerless runs are indistinguishable from missing runs, and denied mutations leave draft progress and evidence unchanged. Complete the required/optional-answer, resume, offline-failure, live desktop/phone, and broader idempotency matrices.</dd></div>
                     </dl>
                   </div>
                 </details>
