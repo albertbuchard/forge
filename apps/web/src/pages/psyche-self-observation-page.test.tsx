@@ -208,6 +208,7 @@ function createObservation(args: {
   author: string;
   tags: string[];
   userKind: "human" | "bot";
+  frontmatter?: Record<string, unknown>;
   links?: Array<{ entityType: string; entityId: string; anchorKey: null }>;
 }) {
   return {
@@ -230,7 +231,7 @@ function createObservation(args: {
       author: args.author,
       source: "ui",
       sourcePath: "",
-      frontmatter: { observedAt: args.observedAt },
+      frontmatter: { ...args.frontmatter, observedAt: args.observedAt },
       revisionHash: "",
       lastSyncedAt: null,
       createdAt: args.observedAt,
@@ -561,7 +562,10 @@ describe("PsycheSelfObservationPage", () => {
                   entityType: string;
                   entityId: string;
                   anchorKey: null;
-                }>
+                }>,
+                frontmatter:
+                  (patch.frontmatter as Record<string, unknown> | undefined) ??
+                  entry.note.frontmatter
               })
             : entry
         );
@@ -747,6 +751,61 @@ describe("PsycheSelfObservationPage", () => {
 
     await waitFor(() =>
       expect(deleteNoteMock).toHaveBeenCalledWith("note_human")
+    );
+  });
+
+  it("preserves movement and provenance metadata when an observation is edited", async () => {
+    observations = [
+      createObservation({
+        id: "note_movement",
+        contentMarkdown: "Walked home after the meeting.",
+        contentPlain: "Walked home after the meeting.",
+        observedAt: "2026-04-06T12:15:00.000Z",
+        author: "Albert",
+        tags: ["Self-observation", "movement"],
+        userKind: "human",
+        frontmatter: {
+          movement: {
+            source: "companion",
+            tripId: "trip_1",
+            distanceMeters: 1840
+          },
+          sourceReceipt: {
+            id: "receipt_1",
+            importedAt: "2026-04-06T12:20:00.000Z"
+          }
+        }
+      })
+    ];
+    renderPage();
+
+    fireEvent.click(
+      (await screen.findAllByText("Walked home after the meeting."))[0]!
+    );
+    fireEvent.change(screen.getByLabelText("Observation note"), {
+      target: { value: "Walked home slowly after the meeting." }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save observation" }));
+
+    await waitFor(() =>
+      expect(patchNoteMock).toHaveBeenCalledWith(
+        "note_movement",
+        expect.objectContaining({
+          contentMarkdown: "Walked home slowly after the meeting.",
+          frontmatter: {
+            observedAt: "2026-04-06T12:15:00.000Z",
+            movement: {
+              source: "companion",
+              tripId: "trip_1",
+              distanceMeters: 1840
+            },
+            sourceReceipt: {
+              id: "receipt_1",
+              importedAt: "2026-04-06T12:20:00.000Z"
+            }
+          }
+        })
+      )
     );
   });
 

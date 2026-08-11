@@ -176,6 +176,7 @@ type ObservationDraft = {
   tags: string[];
   userId: string | null;
   observedAtInput: string;
+  preservedFrontmatter: Record<string, unknown>;
   linkedPatternIds: string[];
   linkedTriggerReportId: string | null;
   linkedEntityValues: string[];
@@ -188,6 +189,7 @@ const EMPTY_DRAFT: ObservationDraft = {
   tags: [],
   userId: null,
   observedAtInput: "",
+  preservedFrontmatter: {},
   linkedPatternIds: [],
   linkedTriggerReportId: null,
   linkedEntityValues: []
@@ -452,6 +454,7 @@ function buildDraftFromObservation(
     tags: normalizeNoteTags(observation.note.tags ?? []),
     userId: observation.note.userId ?? defaultUserId,
     observedAtInput: formatLocalDateTimeInput(observation.observedAt),
+    preservedFrontmatter: { ...observation.note.frontmatter },
     linkedPatternIds: observation.linkedPatterns.map((pattern) => pattern.id),
     linkedTriggerReportId: observation.linkedReports[0]?.id ?? null,
     linkedEntityValues: observation.note.links
@@ -847,6 +850,7 @@ export function PsycheSelfObservationPage() {
           tags: normalizeNoteTags(value.tags),
           userId: value.userId,
           frontmatter: {
+            ...value.preservedFrontmatter,
             observedAt
           },
           links
