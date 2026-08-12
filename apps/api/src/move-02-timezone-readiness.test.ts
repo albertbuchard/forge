@@ -201,9 +201,10 @@ test("MOVE-02 uses DST-aware local-day boundaries and interval overlap", async (
     assert.equal(invalidDate.statusCode, 400, invalidDate.body);
     assert.match(invalidDate.body, /real calendar date/i);
 
-    const operation = buildOpenApiDocument().paths?.[
-      "/api/v1/movement/day"
-    ] as
+    const document = buildOpenApiDocument() as {
+      paths?: Record<string, unknown>;
+    };
+    const operation = document.paths?.["/api/v1/movement/day"] as
       | { get?: { parameters?: Array<{ name?: string }> } }
       | undefined;
     assert.ok(

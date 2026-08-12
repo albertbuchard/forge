@@ -3164,7 +3164,7 @@ function upsertMovementTrip(
 
 export function ingestMovementSync(
   pairing: PairingSessionLike,
-  payload: z.infer<typeof movementSyncPayloadSchema>
+  payload: z.input<typeof movementSyncPayloadSchema>
 ) {
   const parsed = movementSyncPayloadSchema.parse(payload);
   const settings = upsertMovementSettings(pairing.user_id, parsed.settings);

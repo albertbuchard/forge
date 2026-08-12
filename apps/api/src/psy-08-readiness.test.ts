@@ -15,8 +15,8 @@ test("PSY-08 keeps new flashcards concise without rejecting legacy reads", () =>
     600
   );
   assert.equal(
-    updateFlashcardSchema.parse({ message: conciseMessage }).message.length,
-    600
+    updateFlashcardSchema.parse({ message: conciseMessage }).message,
+    conciseMessage
   );
   assert.throws(() =>
     createFlashcardSchema.parse({ message: overlongMessage })
