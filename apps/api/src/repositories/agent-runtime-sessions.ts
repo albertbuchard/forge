@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
+import { HttpError } from "../errors.js";
 import { recordActivityEvent } from "./activity-events.js";
 import { listAgentActions } from "./collaboration.js";
 import { ensureBotUser, getUserById } from "./users.js";
@@ -453,7 +454,10 @@ function linkAgentIdentityUsers(
 ) {
   const primaryUser = ensureBotUser(canonicalAgentUserSpec(provider));
   const normalizedUserIds = Array.from(
-    new Set([primaryUser.id, ...linkedUserIds.map((id) => id.trim()).filter(Boolean)])
+    new Set([
+      primaryUser.id,
+      ...linkedUserIds.map((id) => id.trim()).filter(Boolean)
+    ])
   );
   for (const userId of normalizedUserIds) {
     if (!getUserById(userId)) {
@@ -474,6 +478,27 @@ function linkAgentIdentityUsers(
         now,
         now
       );
+  }
+}
+
+function assertAgentIdentityIsActive(agentId: string) {
+  const inactive = getDatabase()
+    .prepare(
+      `SELECT users.id, users.display_name
+       FROM agent_identity_users links
+       JOIN users ON users.id = links.user_id
+       WHERE links.agent_id = ?
+         AND links.role = 'primary'
+         AND users.lifecycle_status = 'inactive'
+       LIMIT 1`
+    )
+    .get(agentId) as { id: string; display_name: string } | undefined;
+  if (inactive) {
+    throw new HttpError(
+      409,
+      "agent_user_inactive",
+      `${inactive.display_name} is inactive. Reactivate the Forge user before registering or resuming this runtime.`
+    );
   }
 }
 
@@ -564,12 +589,9 @@ function upsertRuntimeAgentIdentity(input: CreateAgentRuntimeSessionInput) {
           )
        LIMIT 1`
     )
-    .get(
-      identityKey,
-      input.provider,
-      input.provider,
-      label
-    ) as { id: string } | undefined;
+    .get(identityKey, input.provider, input.provider, label) as
+    | { id: string }
+    | undefined;
 
   const now = new Date().toISOString();
   const description = canonicalRuntimeDescription(input.provider);
@@ -695,13 +717,19 @@ export function getAgentRuntimeSessionHistory(sessionId: string) {
   };
 }
 
-export function registerAgentRuntimeSession(input: CreateAgentRuntimeSessionInput) {
+export function registerAgentRuntimeSession(
+  input: CreateAgentRuntimeSessionInput
+) {
   const parsed = createAgentRuntimeSessionSchema.parse(input);
   return runInTransaction(() => {
     const now = new Date().toISOString();
     const agentId = upsertRuntimeAgentIdentity(parsed);
+    assertAgentIdentityIsActive(agentId);
     const agentLabel = canonicalRuntimeAgentLabel(parsed.provider);
-    const existing = getSessionRowByCompositeKey(parsed.provider, parsed.sessionKey);
+    const existing = getSessionRowByCompositeKey(
+      parsed.provider,
+      parsed.sessionKey
+    );
     const sessionId =
       existing?.id ?? `ags_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
 
@@ -737,12 +765,16 @@ export function registerAgentRuntimeSession(input: CreateAgentRuntimeSessionInpu
           now,
           sessionId
         );
-      insertSessionEvent(sessionId, {
-        eventType: "session_registered",
-        title: "Session re-registered",
-        summary: `${parsed.provider} reconnected as ${parsed.actorLabel}.`,
-        metadata: parsed.metadata
-      }, now);
+      insertSessionEvent(
+        sessionId,
+        {
+          eventType: "session_registered",
+          title: "Session re-registered",
+          summary: `${parsed.provider} reconnected as ${parsed.actorLabel}.`,
+          metadata: parsed.metadata
+        },
+        now
+      );
     } else {
       getDatabase()
         .prepare(
@@ -778,12 +810,16 @@ export function registerAgentRuntimeSession(input: CreateAgentRuntimeSessionInpu
           now,
           now
         );
-      insertSessionEvent(sessionId, {
-        eventType: "session_registered",
-        title: "Session registered",
-        summary: `${parsed.provider} registered as ${parsed.actorLabel}.`,
-        metadata: parsed.metadata
-      }, now);
+      insertSessionEvent(
+        sessionId,
+        {
+          eventType: "session_registered",
+          title: "Session registered",
+          summary: `${parsed.provider} registered as ${parsed.actorLabel}.`,
+          metadata: parsed.metadata
+        },
+        now
+      );
     }
 
     disconnectSupersededSingletonSessions(parsed, sessionId, agentId, now);
@@ -800,6 +836,9 @@ export function heartbeatAgentRuntimeSession(
     const row = resolveSessionRow(parsed);
     if (!row) {
       throw new Error("Agent runtime session not found.");
+    }
+    if (row.agent_id) {
+      assertAgentIdentityIsActive(row.agent_id);
     }
     if (!ensureCurrentSessionInstance(row, parsed.externalSessionId)) {
       return mapSession(row);
@@ -835,14 +874,20 @@ export function heartbeatAgentRuntimeSession(
       );
 
     if (parsed.summary.trim().length > 0 || parsed.status === "error") {
-      insertSessionEvent(row.id, {
-        eventType: "heartbeat",
-        level: parsed.status === "error" ? "error" : "info",
-        title:
-          parsed.status === "error" ? "Heartbeat reported an error" : "Heartbeat",
-        summary: parsed.summary,
-        metadata: mergedMetadata
-      }, now);
+      insertSessionEvent(
+        row.id,
+        {
+          eventType: "heartbeat",
+          level: parsed.status === "error" ? "error" : "info",
+          title:
+            parsed.status === "error"
+              ? "Heartbeat reported an error"
+              : "Heartbeat",
+          summary: parsed.summary,
+          metadata: mergedMetadata
+        },
+        now
+      );
     }
 
     return mapSession(getSessionRowById(row.id)!);
@@ -857,6 +902,9 @@ export function appendAgentRuntimeSessionEvent(
     const row = resolveSessionRow(parsed);
     if (!row) {
       throw new Error("Agent runtime session not found.");
+    }
+    if (row.agent_id) {
+      assertAgentIdentityIsActive(row.agent_id);
     }
     if (!ensureCurrentSessionInstance(row, parsed.externalSessionId)) {
       return mapEvent(
@@ -877,9 +925,7 @@ export function appendAgentRuntimeSessionEvent(
       ...parsed.metadata
     };
     const nextStatus =
-      parsed.status === "stale"
-        ? "connected"
-        : parsed.status ?? row.status;
+      parsed.status === "stale" ? "connected" : (parsed.status ?? row.status);
 
     getDatabase()
       .prepare(
@@ -890,7 +936,7 @@ export function appendAgentRuntimeSessionEvent(
       .run(
         nextStatus,
         nextStatus === "error"
-          ? normalizeText(parsed.summary) ?? row.last_error
+          ? (normalizeText(parsed.summary) ?? row.last_error)
           : row.last_error,
         now,
         JSON.stringify(mergedMetadata),
@@ -898,13 +944,17 @@ export function appendAgentRuntimeSessionEvent(
         row.id
       );
 
-    insertSessionEvent(row.id, {
-      eventType: parsed.eventType,
-      level: parsed.level,
-      title: parsed.title,
-      summary: parsed.summary,
-      metadata: parsed.metadata
-    }, now);
+    insertSessionEvent(
+      row.id,
+      {
+        eventType: parsed.eventType,
+        level: parsed.level,
+        title: parsed.title,
+        summary: parsed.summary,
+        metadata: parsed.metadata
+      },
+      now
+    );
 
     return mapEvent(
       getDatabase()
@@ -930,6 +980,9 @@ export function reconnectAgentRuntimeSession(
     if (!row) {
       return null;
     }
+    if (row.agent_id) {
+      assertAgentIdentityIsActive(row.agent_id);
+    }
     const now = new Date().toISOString();
     getDatabase()
       .prepare(
@@ -939,13 +992,17 @@ export function reconnectAgentRuntimeSession(
          WHERE id = ?`
       )
       .run(now, now, sessionId);
-    insertSessionEvent(sessionId, {
-      eventType: "reconnect_requested",
-      level: "warning",
-      title: "Reconnect requested",
-      summary: parsed.note,
-      metadata: {}
-    }, now);
+    insertSessionEvent(
+      sessionId,
+      {
+        eventType: "reconnect_requested",
+        level: "warning",
+        title: "Reconnect requested",
+        summary: parsed.note,
+        metadata: {}
+      },
+      now
+    );
     recordActivityEvent({
       entityType: "session",
       entityId: sessionId,
@@ -985,13 +1042,17 @@ export function disconnectAgentRuntimeSession(
          WHERE id = ?`
       )
       .run(normalizeText(parsed.lastError), now, now, now, sessionId);
-    insertSessionEvent(sessionId, {
-      eventType: "session_disconnected",
-      level: parsed.lastError ? "warning" : "info",
-      title: "Session disconnected",
-      summary: parsed.note,
-      metadata: parsed.lastError ? { lastError: parsed.lastError } : {}
-    }, now);
+    insertSessionEvent(
+      sessionId,
+      {
+        eventType: "session_disconnected",
+        level: parsed.lastError ? "warning" : "info",
+        title: "Session disconnected",
+        summary: parsed.note,
+        metadata: parsed.lastError ? { lastError: parsed.lastError } : {}
+      },
+      now
+    );
     return mapSession(getSessionRowById(sessionId)!);
   });
 }

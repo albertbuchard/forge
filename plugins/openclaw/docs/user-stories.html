@@ -47,8 +47,8 @@
           <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>204</strong><span>Current product</span></a>
           <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>0</strong><span>Planned</span></a>
           <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>24</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>159</strong><span>In review</span></a>
-          <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>18</strong><span>Needs audit</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>161</strong><span>In review</span></a>
+          <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>16</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
 
@@ -294,7 +294,7 @@
                     <p class="story-expanded-outcome">As a multi-user operator, I can see and change the active user scope and understand whose records I am viewing or editing.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>User scope selectors, ownership fields, API scope policy.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>the real shell selector now names the active scope, exposes pressed states and a labeled option group, meets the phone tap target, and avoids duplicate category/user choices when only one user belongs to a category. Complete filtered write, empty-scope, token, and bot-identity matrices.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the shell selector names the active scope, exposes pressed states and a labeled option group, meets the phone tap target, and avoids duplicate category/user choices. Normal user lists and new-owner resolution now exclude inactive identities, while the operator directory retains their history separately. Complete the remaining cross-domain empty-scope and token matrices plus live desktop and phone checks.</dd></div>
                     </dl>
                   </div>
                 </details>
@@ -852,7 +852,7 @@
                     <p class="story-expanded-outcome">As a user, I can assign and filter work by human or bot owner while preserving the actor that performed each change.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>User settings, ownership fields, audit trail.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>board owner/assignee filter labels now match their behavior; complete inactive-user, reassignment, scope, and attribution checks.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>board owner/assignee labels match their behavior; inactive users cannot receive new work, and the guided lifecycle flow previews then atomically transfers generic owners and assignments to an active replacement without rewriting historical attribution. Actor, source, counts, and the exact response are stored in an idempotent receipt. Complete entity-specific assignment adapters and live desktop and phone checks.</dd></div>
                     </dl>
                   </div>
                 </details>
@@ -2669,17 +2669,17 @@
                   </div>
                 </details>
 
-                <details class="story-card" id="story-agent-08" data-story-id="AGENT-08" data-lifecycle="current" data-readiness="Needs audit" data-family="AGENT">
+                <details class="story-card" id="story-agent-08" data-story-id="AGENT-08" data-lifecycle="current" data-readiness="In review" data-family="AGENT">
                   <summary class="story-summary">
                     <span class="story-id">AGENT-08</span>
                     <span class="story-summary-outcome">As an operator, I can distinguish human and bot identity, ownership, source, session, and trust for every sensitive mutation.</span>
-                    <span class="story-state state-needs-audit">Needs audit</span>
+                    <span class="story-state state-in-review">In review</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As an operator, I can distinguish human and bot identity, ownership, source, session, and trust for every sensitive mutation.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>User/agent settings, audit trail, auth headers.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>authorization matrix across artifacts, Psyche, movement repairs, and settings.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the operator directory now distinguishes humans, linked and unlinked bots, active and inactive lifecycle states, configured identities, fresh verified runtime sessions, actor labels, providers, and session counts. Deactivation disconnects approved primary-agent sessions, revokes their tokens, and blocks registration, heartbeat, event append, or reconnect until deliberate reactivation. Complete the remaining artifact, Psyche, and movement authorization matrix plus live runtime verification.</dd></div>
                     </dl>
                   </div>
                 </details>
@@ -2753,17 +2753,17 @@
                   </div>
                 </details>
 
-                <details class="story-card" id="story-ops-05" data-story-id="OPS-05" data-lifecycle="current" data-readiness="Needs audit" data-family="OPS">
+                <details class="story-card" id="story-ops-05" data-story-id="OPS-05" data-lifecycle="current" data-readiness="In review" data-family="OPS">
                   <summary class="story-summary">
                     <span class="story-id">OPS-05</span>
                     <span class="story-summary-outcome">As an operator, I can manage human and bot users, relationships, ownership defaults, and visibility.</span>
-                    <span class="story-state state-needs-audit">Needs audit</span>
+                    <span class="story-state state-in-review">In review</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As an operator, I can manage human and bot users, relationships, ownership defaults, and visibility.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>settings-users</code>.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>verify inactive users, duplicate identity, transfer, relationship direction, and scope.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>Settings Users now separates active humans, active bots, and inactive identities; exposes trust, live sessions, ownership, experience, and default-owner routing; and provides a guided preview, transfer, deactivation, and reactivation flow. Lifecycle mutations are operator-only, atomic, audited, and exactly idempotent; inactive identities remain in history but cannot receive new work. Complete duplicate-identity reconciliation, relationship-direction edge cases, and live desktop and phone checks.</dd></div>
                     </dl>
                   </div>
                 </details>

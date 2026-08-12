@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
@@ -12,6 +12,7 @@ import {
   type UserDraft
 } from "@/components/users/user-settings-flow-dialog";
 import { UserRelationshipFlowDialog } from "@/components/users/user-relationship-flow-dialog";
+import { UserLifecycleFlowDialog } from "@/components/users/user-lifecycle-flow-dialog";
 import { UserBadge } from "@/components/ui/user-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,9 +22,12 @@ import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { useForgeShell } from "@/components/shell/app-shell";
 import {
   createUser,
+  deactivateUser,
   getUserDirectory,
   patchUser,
-  patchUserAccessGrant
+  patchUserAccessGrant,
+  reactivateUser,
+  setUserOwnershipDefault
 } from "@/lib/api";
 import type { UserAccessGrant, UserSummary } from "@/lib/types";
 
@@ -40,7 +44,14 @@ export function SettingsUsersPage() {
   const [editingGrantId, setEditingGrantId] = useState<string | null>(null);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [relationshipDialogOpen, setRelationshipDialogOpen] = useState(false);
+  const [lifecycleUser, setLifecycleUser] = useState<UserSummary | null>(null);
+  const [lifecycleDialogOpen, setLifecycleDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [ownershipDrafts, setOwnershipDrafts] = useState<
+    Record<string, string>
+  >({});
+  const lifecycleKeyRef = useRef(crypto.randomUUID());
+  const ownershipKeysRef = useRef(new Map<string, string>());
 
   const directoryQuery = useQuery({
     queryKey: ["forge-user-directory"],
@@ -83,7 +94,56 @@ export function SettingsUsersPage() {
     onSuccess: refreshUsers
   });
 
+  const lifecycleMutation = useMutation({
+    mutationFn: async (
+      input:
+        | {
+            operation: "deactivate";
+            userId: string;
+            replacementUserId: string;
+            reason: string;
+            disconnectActiveSessions: boolean;
+          }
+        | { operation: "reactivate"; userId: string; reason: string }
+    ) =>
+      input.operation === "deactivate"
+        ? deactivateUser({ ...input, idempotencyKey: lifecycleKeyRef.current })
+        : reactivateUser({ ...input, idempotencyKey: lifecycleKeyRef.current }),
+    onSuccess: async () => {
+      lifecycleKeyRef.current = crypto.randomUUID();
+      setLifecycleDialogOpen(false);
+      setLifecycleUser(null);
+      await refreshUsers();
+    }
+  });
+
+  const ownershipDefaultMutation = useMutation({
+    mutationFn: async ({
+      userId,
+      ownerUserId
+    }: {
+      userId: string;
+      ownerUserId: string;
+    }) => {
+      const signature = `${userId}:${ownerUserId}`;
+      const idempotencyKey =
+        ownershipKeysRef.current.get(signature) ?? crypto.randomUUID();
+      ownershipKeysRef.current.set(signature, idempotencyKey);
+      return setUserOwnershipDefault({ userId, ownerUserId, idempotencyKey });
+    },
+    onSuccess: async (_result, variables) => {
+      ownershipKeysRef.current.delete(
+        `${variables.userId}:${variables.ownerUserId}`
+      );
+      await refreshUsers();
+    }
+  });
+
   const directory = directoryQuery.data?.directory;
+  const allDirectoryUsers = useMemo(
+    () => [...(directory?.users ?? []), ...(directory?.inactiveUsers ?? [])],
+    [directory?.inactiveUsers, directory?.users]
+  );
   const editingGrant =
     directory?.grants.find((grant) => grant.id === editingGrantId) ?? null;
   const ownershipByUserId = useMemo(
@@ -96,6 +156,26 @@ export function SettingsUsersPage() {
   const xpByUserId = useMemo(
     () => new Map((directory?.xp ?? []).map((entry) => [entry.userId, entry])),
     [directory?.xp]
+  );
+  const identityByUserId = useMemo(
+    () =>
+      new Map(
+        (directory?.identityEvidence ?? []).map((entry) => [
+          entry.userId,
+          entry
+        ])
+      ),
+    [directory?.identityEvidence]
+  );
+  const ownershipDefaultByUserId = useMemo(
+    () =>
+      new Map(
+        (directory?.ownershipDefaults ?? []).map((entry) => [
+          entry.subjectUserId,
+          entry.ownerUserId
+        ])
+      ),
+    [directory?.ownershipDefaults]
   );
   const readableTargetsByUserId = useMemo(() => {
     const map = new Map<string, UserSummary[]>();
@@ -131,7 +211,8 @@ export function SettingsUsersPage() {
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
   const groupedUsers = useMemo(() => {
-    const baseUsers = directory?.users ?? shell.snapshot.users;
+    const baseUsers =
+      allDirectoryUsers.length > 0 ? allDirectoryUsers : shell.snapshot.users;
     const visibleUsers = baseUsers.filter((user) => {
       if (!normalizedSearch) {
         return true;
@@ -142,10 +223,17 @@ export function SettingsUsersPage() {
         .includes(normalizedSearch);
     });
     return {
-      humans: visibleUsers.filter((user) => user.kind === "human"),
-      bots: visibleUsers.filter((user) => user.kind === "bot")
+      humans: visibleUsers.filter(
+        (user) => user.kind === "human" && user.lifecycleStatus !== "inactive"
+      ),
+      bots: visibleUsers.filter(
+        (user) => user.kind === "bot" && user.lifecycleStatus !== "inactive"
+      ),
+      inactive: visibleUsers.filter(
+        (user) => user.lifecycleStatus === "inactive"
+      )
     };
-  }, [directory?.users, normalizedSearch, shell.snapshot.users]);
+  }, [allDirectoryUsers, normalizedSearch, shell.snapshot.users]);
   const highlightedUserId =
     editingGrant?.subjectUserId ?? editingUser?.id ?? null;
   const highlightedGrantId = editingGrant?.id ?? null;
@@ -191,7 +279,7 @@ export function SettingsUsersPage() {
         open={userDialogOpen}
         onOpenChange={setUserDialogOpen}
         user={editingUser}
-        existingUsers={directory.users}
+        existingUsers={allDirectoryUsers}
         grants={directory.grants}
         ownership={
           editingUser ? (ownershipByUserId.get(editingUser.id) ?? null) : null
@@ -222,6 +310,38 @@ export function SettingsUsersPage() {
         }}
       />
 
+      <UserLifecycleFlowDialog
+        open={lifecycleDialogOpen}
+        onOpenChange={(open) => {
+          setLifecycleDialogOpen(open);
+          if (!open) setLifecycleUser(null);
+        }}
+        user={lifecycleUser}
+        activeUsers={directory.users}
+        identityEvidence={
+          lifecycleUser
+            ? (identityByUserId.get(lifecycleUser.id) ?? null)
+            : null
+        }
+        pending={lifecycleMutation.isPending}
+        onDeactivate={async (draft) => {
+          if (!lifecycleUser) return;
+          await lifecycleMutation.mutateAsync({
+            operation: "deactivate",
+            userId: lifecycleUser.id,
+            ...draft
+          });
+        }}
+        onReactivate={async (reason) => {
+          if (!lifecycleUser) return;
+          await lifecycleMutation.mutateAsync({
+            operation: "reactivate",
+            userId: lifecycleUser.id,
+            reason
+          });
+        }}
+      />
+
       <Card className="grid gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -236,9 +356,10 @@ export function SettingsUsersPage() {
           </Badge>
         </div>
         <div className={`${usersPanelClass} px-4 py-3 ${usersFaintTextClass}`}>
-          This directory currently exposes active identities and their owned
-          record counts. Inactive-user review and ownership transfer require a
-          separate verified workflow and are not performed from this page.
+          Active and inactive identities remain distinct. Transfer preview,
+          ownership reassignment, agent-session shutdown, token revocation,
+          deactivation, and reactivation all produce durable actor-attributed
+          receipts from this page.
         </div>
         <div className={`flex items-center gap-3 ${usersPanelClass} px-4 py-3`}>
           <Input
@@ -381,7 +502,8 @@ export function SettingsUsersPage() {
           {(
             [
               { title: "Human users", users: groupedUsers.humans },
-              { title: "Bot users", users: groupedUsers.bots }
+              { title: "Bot users", users: groupedUsers.bots },
+              { title: "Inactive users", users: groupedUsers.inactive }
             ] as const
           ).map((group) => (
             <Card key={group.title}>
@@ -402,6 +524,20 @@ export function SettingsUsersPage() {
                           {user.description || "No description yet."}
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
+                          <Badge tone="meta">
+                            {user.lifecycleStatus ?? "active"}
+                          </Badge>
+                          <Badge tone="meta">
+                            {identityByUserId.get(user.id)?.trustState ??
+                              (user.kind === "human"
+                                ? "configured"
+                                : "unlinked")}
+                          </Badge>
+                          <Badge tone="meta">
+                            {identityByUserId.get(user.id)
+                              ?.connectedSessionCount ?? 0}{" "}
+                            live sessions
+                          </Badge>
                           <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
                             {xpByUserId.get(user.id)?.totalXp ?? 0} XP
                           </Badge>
@@ -448,17 +584,77 @@ export function SettingsUsersPage() {
                             ).toLocaleString()}
                           </div>
                         ) : null}
+                        <div className="mt-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                          <label className="grid gap-1 text-xs text-[var(--ui-ink-faint)]">
+                            Default owner for new work by this identity
+                            <select
+                              className="min-h-11 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 text-sm text-[var(--ui-ink-strong)]"
+                              value={
+                                ownershipDrafts[user.id] ??
+                                ownershipDefaultByUserId.get(user.id) ??
+                                user.id
+                              }
+                              onChange={(event) =>
+                                setOwnershipDrafts((current) => ({
+                                  ...current,
+                                  [user.id]: event.target.value
+                                }))
+                              }
+                            >
+                              {directory.users.map((candidate) => (
+                                <option key={candidate.id} value={candidate.id}>
+                                  {candidate.displayName} · {candidate.kind}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <Button
+                            variant="secondary"
+                            className="self-end"
+                            disabled={ownershipDefaultMutation.isPending}
+                            onClick={() =>
+                              ownershipDefaultMutation.mutate({
+                                userId: user.id,
+                                ownerUserId:
+                                  ownershipDrafts[user.id] ??
+                                  ownershipDefaultByUserId.get(user.id) ??
+                                  user.id
+                              })
+                            }
+                          >
+                            Save default
+                          </Button>
+                        </div>
                       </div>
                       <div className="flex gap-2">
+                        {user.lifecycleStatus !== "inactive" ? (
+                          <Button
+                            variant="secondary"
+                            onClick={() => {
+                              setEditingGrantId(null);
+                              setEditingUser(user);
+                              setUserDialogOpen(true);
+                            }}
+                          >
+                            Open settings
+                          </Button>
+                        ) : null}
                         <Button
-                          variant="secondary"
+                          variant={
+                            user.lifecycleStatus === "inactive"
+                              ? "secondary"
+                              : "ghost"
+                          }
+                          disabled={user.id === "user_operator"}
                           onClick={() => {
-                            setEditingGrantId(null);
-                            setEditingUser(user);
-                            setUserDialogOpen(true);
+                            lifecycleKeyRef.current = crypto.randomUUID();
+                            setLifecycleUser(user);
+                            setLifecycleDialogOpen(true);
                           }}
                         >
-                          Open settings
+                          {user.lifecycleStatus === "inactive"
+                            ? "Reactivate"
+                            : "Transfer / deactivate"}
                         </Button>
                       </div>
                     </div>

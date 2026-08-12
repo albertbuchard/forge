@@ -10,6 +10,7 @@ These files are durable Forge references for setup, architecture, and current op
 - [Claude Code adapter](./claude-code-adapter.md)
 - [Calendar provider setup](./calendar-provider-setup.md)
 - [Multi-user and strategies](./multi-user-and-strategies.md)
+- [User lifecycle and ownership transfer](./user-lifecycle-and-ownership.md)
 - [Preferences system](./preferences-system.md)
 - [Psyche event and emotion vocabularies](./psyche-vocabularies.md)
 - [People and peer sharing](./people-and-peer-sharing.md)

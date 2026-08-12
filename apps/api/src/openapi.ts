@@ -210,10 +210,23 @@ function buildLaunchpadOpenApiPaths() {
       get: {
         tags: ["Launchpad"],
         summary: "List reviewed starter packs and import integrations",
-        description: "Operator-session only. Manifests are deterministic and include their exact SHA-256 before any install.",
+        description:
+          "Operator-session only. Manifests are deterministic and include their exact SHA-256 before any install.",
         security: operatorSecurity,
         responses: {
-          "200": jsonResponse({ type: "object", required: ["packages"], properties: { packages: { type: "array", items: { $ref: "#/components/schemas/ProductPackage" } } } }, "Reviewed package catalog"),
+          "200": jsonResponse(
+            {
+              type: "object",
+              required: ["packages"],
+              properties: {
+                packages: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/ProductPackage" }
+                }
+              }
+            },
+            "Reviewed package catalog"
+          ),
           ...errors
         }
       }
@@ -224,14 +237,70 @@ function buildLaunchpadOpenApiPaths() {
         summary: "Read resumable outcome-first onboarding state",
         security: operatorSecurity,
         parameters: [ownerUserIdParameter],
-        responses: { "200": jsonResponse({ type: "object", required: ["onboarding"], properties: { onboarding: { $ref: "#/components/schemas/ProductOnboardingState" } } }, "Current onboarding state"), ...errors }
+        responses: {
+          "200": jsonResponse(
+            {
+              type: "object",
+              required: ["onboarding"],
+              properties: {
+                onboarding: {
+                  $ref: "#/components/schemas/ProductOnboardingState"
+                }
+              }
+            },
+            "Current onboarding state"
+          ),
+          ...errors
+        }
       },
       put: {
         tags: ["Launchpad"],
         summary: "Advance, skip, resume, or complete onboarding",
         security: operatorSecurity,
-        requestBody: jsonRequestBody({ type: "object", additionalProperties: false, required: ["ownerUserId", "outcomeKey", "currentStep", "status"], properties: { ...ownerInput, outcomeKey: nullable({ type: "string", enum: ["plan_week", "daily_reflection", "research_project"] }), currentStep: { type: "string", enum: ["choose_outcome", "review_pack", "install_pack", "first_result", "complete"] }, status: { type: "string", enum: ["not_started", "in_progress", "skipped", "complete"] } } }, true),
-        responses: { "200": jsonResponse({ type: "object", required: ["onboarding"], properties: { onboarding: { $ref: "#/components/schemas/ProductOnboardingState" } } }, "Updated onboarding state"), ...errors }
+        requestBody: jsonRequestBody(
+          {
+            type: "object",
+            additionalProperties: false,
+            required: ["ownerUserId", "outcomeKey", "currentStep", "status"],
+            properties: {
+              ...ownerInput,
+              outcomeKey: nullable({
+                type: "string",
+                enum: ["plan_week", "daily_reflection", "research_project"]
+              }),
+              currentStep: {
+                type: "string",
+                enum: [
+                  "choose_outcome",
+                  "review_pack",
+                  "install_pack",
+                  "first_result",
+                  "complete"
+                ]
+              },
+              status: {
+                type: "string",
+                enum: ["not_started", "in_progress", "skipped", "complete"]
+              }
+            }
+          },
+          true
+        ),
+        responses: {
+          "200": jsonResponse(
+            {
+              type: "object",
+              required: ["onboarding"],
+              properties: {
+                onboarding: {
+                  $ref: "#/components/schemas/ProductOnboardingState"
+                }
+              }
+            },
+            "Updated onboarding state"
+          ),
+          ...errors
+        }
       }
     },
     "/api/v1/launchpad/package-installs": {
@@ -240,66 +309,261 @@ function buildLaunchpadOpenApiPaths() {
         summary: "List one owner's starter-pack install receipts",
         security: operatorSecurity,
         parameters: [ownerUserIdParameter],
-        responses: { "200": jsonResponse({ type: "object", required: ["installs"], properties: { installs: { type: "array", maxItems: 100, items: { $ref: "#/components/schemas/ProductPackageInstall" } } } }, "Install and removal receipts"), ...errors }
+        responses: {
+          "200": jsonResponse(
+            {
+              type: "object",
+              required: ["installs"],
+              properties: {
+                installs: {
+                  type: "array",
+                  maxItems: 100,
+                  items: { $ref: "#/components/schemas/ProductPackageInstall" }
+                }
+              }
+            },
+            "Install and removal receipts"
+          ),
+          ...errors
+        }
       }
     },
     "/api/v1/launchpad/packages/preview": {
       post: {
         tags: ["Launchpad"],
-        summary: "Preview every package record and collision without creating records",
+        summary:
+          "Preview every package record and collision without creating records",
         security: operatorSecurity,
-        requestBody: jsonRequestBody({ type: "object", additionalProperties: false, required: ["ownerUserId", "packageId"], properties: { ...ownerInput, packageId: { type: "string", minLength: 3, maxLength: 120 } } }, true),
-        responses: { "200": jsonResponse({ type: "object", required: ["preview"], properties: { preview: { type: "object", additionalProperties: true } } }, "No-target-write package preview"), ...errors }
+        requestBody: jsonRequestBody(
+          {
+            type: "object",
+            additionalProperties: false,
+            required: ["ownerUserId", "packageId"],
+            properties: {
+              ...ownerInput,
+              packageId: { type: "string", minLength: 3, maxLength: 120 }
+            }
+          },
+          true
+        ),
+        responses: {
+          "200": jsonResponse(
+            {
+              type: "object",
+              required: ["preview"],
+              properties: {
+                preview: { type: "object", additionalProperties: true }
+              }
+            },
+            "No-target-write package preview"
+          ),
+          ...errors
+        }
       }
     },
     "/api/v1/launchpad/packages/install": {
       post: {
         tags: ["Launchpad"],
         summary: "Install one exact reviewed starter-pack manifest atomically",
-        description: "Operator-session only. Exact retries return the stored receipt; changed-manifest or changed-package key reuse fails. Unresolved title collisions prevent all record creation.",
+        description:
+          "Operator-session only. Exact retries return the stored receipt; changed-manifest or changed-package key reuse fails. Unresolved title collisions prevent all record creation.",
         security: operatorSecurity,
-        requestBody: jsonRequestBody({ type: "object", additionalProperties: false, required: ["ownerUserId", "packageId", "manifestSha256", "idempotencyKey"], properties: { ...ownerInput, packageId: { type: "string", minLength: 3, maxLength: 120 }, manifestSha256: { type: "string", pattern: "^[0-9a-f]{64}$" }, idempotencyKey: { type: "string", minLength: 8, maxLength: 200 } } }, true),
-        responses: { "200": jsonResponse({ type: "object", additionalProperties: true }, "Exact install replay"), "201": jsonResponse({ type: "object", additionalProperties: true }, "Installed package receipt"), ...errors }
+        requestBody: jsonRequestBody(
+          {
+            type: "object",
+            additionalProperties: false,
+            required: [
+              "ownerUserId",
+              "packageId",
+              "manifestSha256",
+              "idempotencyKey"
+            ],
+            properties: {
+              ...ownerInput,
+              packageId: { type: "string", minLength: 3, maxLength: 120 },
+              manifestSha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
+              idempotencyKey: { type: "string", minLength: 8, maxLength: 200 }
+            }
+          },
+          true
+        ),
+        responses: {
+          "200": jsonResponse(
+            { type: "object", additionalProperties: true },
+            "Exact install replay"
+          ),
+          "201": jsonResponse(
+            { type: "object", additionalProperties: true },
+            "Installed package receipt"
+          ),
+          ...errors
+        }
       }
     },
     "/api/v1/launchpad/package-installs/{id}/remove": {
       post: {
         tags: ["Launchpad"],
-        summary: "Move one installed pack's created records to the bin in reverse dependency order",
+        summary:
+          "Move one installed pack's created records to the bin in reverse dependency order",
         security: operatorSecurity,
-        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-        requestBody: jsonRequestBody({ type: "object", additionalProperties: false, required: ["ownerUserId", "expectedStatus"], properties: { ...ownerInput, expectedStatus: { type: "string", enum: ["installed"] } } }, true),
-        responses: { "200": jsonResponse({ type: "object", additionalProperties: true }, "Removal receipt or exact replay"), ...errors }
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } }
+        ],
+        requestBody: jsonRequestBody(
+          {
+            type: "object",
+            additionalProperties: false,
+            required: ["ownerUserId", "expectedStatus"],
+            properties: {
+              ...ownerInput,
+              expectedStatus: { type: "string", enum: ["installed"] }
+            }
+          },
+          true
+        ),
+        responses: {
+          "200": jsonResponse(
+            { type: "object", additionalProperties: true },
+            "Removal receipt or exact replay"
+          ),
+          ...errors
+        }
       }
     },
     "/api/v1/launchpad/imports/preview": {
       post: {
         tags: ["Launchpad"],
-        summary: "Stage and review up to 500 imported records without creating target records",
-        description: "The selected export is normalized into an owner-scoped local preview. Duplicate-title decisions enter the universal review queue; no Goal, Project, Task, Note, or Calendar Event is created by this route.",
+        summary:
+          "Stage and review up to 500 imported records without creating target records",
+        description:
+          "The selected export is normalized into an owner-scoped local preview. Duplicate-title decisions enter the universal review queue; no Goal, Project, Task, Note, or Calendar Event is created by this route.",
         security: operatorSecurity,
-        requestBody: jsonRequestBody({ type: "object", additionalProperties: false, required: ["ownerUserId", "sourceKind", "sourceLabel", "items"], properties: { ...ownerInput, sourceKind: { type: "string", enum: ["markdown", "obsidian", "notion", "todoist", "apple_reminders", "calendar", "github_issues", "linear"] }, sourceLabel: { type: "string", minLength: 1, maxLength: 240 }, items: { type: "array", minItems: 1, maxItems: 500, items: { type: "object", additionalProperties: true } } } }, true),
-        responses: { "200": jsonResponse({ type: "object", required: ["preview"], properties: { preview: { $ref: "#/components/schemas/ProductImportPreview" } } }, "Stored local preview and conflict decisions"), ...errors, "413": { $ref: "#/components/responses/Error" } }
+        requestBody: jsonRequestBody(
+          {
+            type: "object",
+            additionalProperties: false,
+            required: ["ownerUserId", "sourceKind", "sourceLabel", "items"],
+            properties: {
+              ...ownerInput,
+              sourceKind: {
+                type: "string",
+                enum: [
+                  "markdown",
+                  "obsidian",
+                  "notion",
+                  "todoist",
+                  "apple_reminders",
+                  "calendar",
+                  "github_issues",
+                  "linear"
+                ]
+              },
+              sourceLabel: { type: "string", minLength: 1, maxLength: 240 },
+              items: {
+                type: "array",
+                minItems: 1,
+                maxItems: 500,
+                items: { type: "object", additionalProperties: true }
+              }
+            }
+          },
+          true
+        ),
+        responses: {
+          "200": jsonResponse(
+            {
+              type: "object",
+              required: ["preview"],
+              properties: {
+                preview: { $ref: "#/components/schemas/ProductImportPreview" }
+              }
+            },
+            "Stored local preview and conflict decisions"
+          ),
+          ...errors,
+          "413": { $ref: "#/components/responses/Error" }
+        }
       }
     },
     "/api/v1/launchpad/imports": {
       get: {
         tags: ["Launchpad"],
-        summary: "List owner-scoped import previews, receipts, and rollback state",
-        description: "Returns at most 50 local import runs. Committed receipts expose exact created-record links and skipped-source reasons; rolled-back runs remain visible as evidence.",
+        summary:
+          "List owner-scoped import previews, receipts, and rollback state",
+        description:
+          "Returns at most 50 local import runs. Committed receipts expose exact created-record links and skipped-source reasons; rolled-back runs remain visible as evidence.",
         security: operatorSecurity,
         parameters: [ownerUserIdParameter],
-        responses: { "200": jsonResponse({ type: "object", required: ["imports"], properties: { imports: { type: "array", maxItems: 50, items: { $ref: "#/components/schemas/ProductImportRun" } } } }, "Import history and receipts"), ...errors }
+        responses: {
+          "200": jsonResponse(
+            {
+              type: "object",
+              required: ["imports"],
+              properties: {
+                imports: {
+                  type: "array",
+                  maxItems: 50,
+                  items: { $ref: "#/components/schemas/ProductImportRun" }
+                }
+              }
+            },
+            "Import history and receipts"
+          ),
+          ...errors
+        }
       }
     },
     "/api/v1/launchpad/imports/commit": {
       post: {
         tags: ["Launchpad"],
         summary: "Commit reviewed import decisions atomically",
-        description: "An exact request fingerprint binds the preview, source payload, and every create-or-skip decision to one idempotency key. Changed-decision reuse returns 409.",
+        description:
+          "An exact request fingerprint binds the preview, source payload, and every create-or-skip decision to one idempotency key. Changed-decision reuse returns 409.",
         security: operatorSecurity,
-        requestBody: jsonRequestBody({ type: "object", additionalProperties: false, required: ["ownerUserId", "previewId", "payloadFingerprint", "idempotencyKey", "decisions"], properties: { ...ownerInput, previewId: { type: "string" }, payloadFingerprint: { type: "string", pattern: "^[0-9a-f]{64}$" }, idempotencyKey: { type: "string", minLength: 8, maxLength: 200 }, decisions: { type: "array", maxItems: 500, items: { type: "object", additionalProperties: false, required: ["sourceId", "action"], properties: { sourceId: { type: "string" }, action: { type: "string", enum: ["create", "skip"] } } } } } }, true),
-        responses: { "200": jsonResponse({ type: "object", additionalProperties: true }, "Exact import replay"), "201": jsonResponse({ type: "object", additionalProperties: true }, "Committed import receipt"), ...errors }
+        requestBody: jsonRequestBody(
+          {
+            type: "object",
+            additionalProperties: false,
+            required: [
+              "ownerUserId",
+              "previewId",
+              "payloadFingerprint",
+              "idempotencyKey",
+              "decisions"
+            ],
+            properties: {
+              ...ownerInput,
+              previewId: { type: "string" },
+              payloadFingerprint: { type: "string", pattern: "^[0-9a-f]{64}$" },
+              idempotencyKey: { type: "string", minLength: 8, maxLength: 200 },
+              decisions: {
+                type: "array",
+                maxItems: 500,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["sourceId", "action"],
+                  properties: {
+                    sourceId: { type: "string" },
+                    action: { type: "string", enum: ["create", "skip"] }
+                  }
+                }
+              }
+            }
+          },
+          true
+        ),
+        responses: {
+          "200": jsonResponse(
+            { type: "object", additionalProperties: true },
+            "Exact import replay"
+          ),
+          "201": jsonResponse(
+            { type: "object", additionalProperties: true },
+            "Committed import receipt"
+          ),
+          ...errors
+        }
       }
     },
     "/api/v1/launchpad/imports/{id}/rollback": {
@@ -307,62 +571,187 @@ function buildLaunchpadOpenApiPaths() {
         tags: ["Launchpad"],
         summary: "Move records created by one committed import to the bin",
         security: operatorSecurity,
-        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-        requestBody: jsonRequestBody({ type: "object", additionalProperties: false, required: ["ownerUserId", "expectedStatus"], properties: { ...ownerInput, expectedStatus: { type: "string", enum: ["committed"] } } }, true),
-        responses: { "200": jsonResponse({ type: "object", additionalProperties: true }, "Rollback receipt or exact replay"), ...errors }
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } }
+        ],
+        requestBody: jsonRequestBody(
+          {
+            type: "object",
+            additionalProperties: false,
+            required: ["ownerUserId", "expectedStatus"],
+            properties: {
+              ...ownerInput,
+              expectedStatus: { type: "string", enum: ["committed"] }
+            }
+          },
+          true
+        ),
+        responses: {
+          "200": jsonResponse(
+            { type: "object", additionalProperties: true },
+            "Rollback receipt or exact replay"
+          ),
+          ...errors
+        }
       }
     },
     "/api/v1/launchpad/reviews": {
       get: {
         tags: ["Launchpad"],
         summary: "List owner-scoped decisions that must not be automatic",
-        description: "Combines stored import conflicts with live relationship proposals, agent approvals, and Artifact metadata proposals. Browser-local offline conflicts are added by the Forge UI without uploading them.",
+        description:
+          "Combines stored import conflicts with live relationship proposals, agent approvals, and Artifact metadata proposals. Browser-local offline conflicts are added by the Forge UI without uploading them.",
         security: operatorSecurity,
         parameters: [ownerUserIdParameter],
-        responses: { "200": jsonResponse({ type: "object", required: ["items"], properties: { items: { type: "array", maxItems: 100, items: { $ref: "#/components/schemas/ProductReviewItem" } } } }, "Revision-bound pending decisions"), ...errors }
+        responses: {
+          "200": jsonResponse(
+            {
+              type: "object",
+              required: ["items"],
+              properties: {
+                items: {
+                  type: "array",
+                  maxItems: 100,
+                  items: { $ref: "#/components/schemas/ProductReviewItem" }
+                }
+              }
+            },
+            "Revision-bound pending decisions"
+          ),
+          ...errors
+        }
       }
     },
     "/api/v1/launchpad/reviews/{id}/decision": {
       post: {
         tags: ["Launchpad"],
         summary: "Accept or reject one exact live review revision",
-        description: "Import conflicts must be resolved in their complete import preview. Relationship, agent, and Artifact proposals reauthorize their source before applying the exact reviewed action.",
+        description:
+          "Import conflicts must be resolved in their complete import preview. Relationship, agent, and Artifact proposals reauthorize their source before applying the exact reviewed action.",
         security: operatorSecurity,
-        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-        requestBody: jsonRequestBody({ type: "object", additionalProperties: false, required: ["ownerUserId", "expectedRevision", "decision"], properties: { ...ownerInput, expectedRevision: { type: "integer", minimum: 1 }, decision: { type: "string", enum: ["accept", "reject"] } } }, true),
-        responses: { "200": jsonResponse({ type: "object", additionalProperties: true }, "Committed review decision"), ...errors }
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } }
+        ],
+        requestBody: jsonRequestBody(
+          {
+            type: "object",
+            additionalProperties: false,
+            required: ["ownerUserId", "expectedRevision", "decision"],
+            properties: {
+              ...ownerInput,
+              expectedRevision: { type: "integer", minimum: 1 },
+              decision: { type: "string", enum: ["accept", "reject"] }
+            }
+          },
+          true
+        ),
+        responses: {
+          "200": jsonResponse(
+            { type: "object", additionalProperties: true },
+            "Committed review decision"
+          ),
+          ...errors
+        }
       }
     },
     "/api/v1/launchpad/feedback": {
       get: {
         tags: ["Launchpad"],
-        summary: "Inspect local privacy-feedback consent, events, and field policy",
+        summary:
+          "Inspect local privacy-feedback consent, events, and field policy",
         security: operatorSecurity,
         parameters: [ownerUserIdParameter],
-        responses: { "200": jsonResponse({ type: "object", required: ["feedback"], properties: { feedback: { $ref: "#/components/schemas/ProductFeedbackPayload" } } }, "Local-only feedback state"), ...errors }
+        responses: {
+          "200": jsonResponse(
+            {
+              type: "object",
+              required: ["feedback"],
+              properties: {
+                feedback: {
+                  $ref: "#/components/schemas/ProductFeedbackPayload"
+                }
+              }
+            },
+            "Local-only feedback state"
+          ),
+          ...errors
+        }
       },
       put: {
         tags: ["Launchpad"],
         summary: "Enable or disable local privacy feedback explicitly",
         security: operatorSecurity,
-        requestBody: jsonRequestBody({ type: "object", additionalProperties: false, required: ["ownerUserId", "enabled", "consentVersion"], properties: { ...ownerInput, enabled: { type: "boolean" }, consentVersion: nullable({ type: "string", enum: ["privacy-feedback-v1"] }) } }, true),
-        responses: { "200": jsonResponse({ type: "object", required: ["feedback"], properties: { feedback: { $ref: "#/components/schemas/ProductFeedbackPayload" } } }, "Updated consent and inspectable local events"), ...errors }
+        requestBody: jsonRequestBody(
+          {
+            type: "object",
+            additionalProperties: false,
+            required: ["ownerUserId", "enabled", "consentVersion"],
+            properties: {
+              ...ownerInput,
+              enabled: { type: "boolean" },
+              consentVersion: nullable({
+                type: "string",
+                enum: ["privacy-feedback-v1"]
+              })
+            }
+          },
+          true
+        ),
+        responses: {
+          "200": jsonResponse(
+            {
+              type: "object",
+              required: ["feedback"],
+              properties: {
+                feedback: {
+                  $ref: "#/components/schemas/ProductFeedbackPayload"
+                }
+              }
+            },
+            "Updated consent and inspectable local events"
+          ),
+          ...errors
+        }
       }
     },
     "/api/v1/launchpad/feedback/events": {
       post: {
         tags: ["Launchpad"],
-        summary: "Record one allowlisted local outcome event when consent is enabled",
+        summary:
+          "Record one allowlisted local outcome event when consent is enabled",
         security: operatorSecurity,
-        requestBody: jsonRequestBody({ type: "object", additionalProperties: true, required: ["ownerUserId", "eventName"] }, true),
-        responses: { "200": jsonResponse({ type: "object", additionalProperties: true }, "Stored or explicitly not recorded"), ...errors }
+        requestBody: jsonRequestBody(
+          {
+            type: "object",
+            additionalProperties: true,
+            required: ["ownerUserId", "eventName"]
+          },
+          true
+        ),
+        responses: {
+          "200": jsonResponse(
+            { type: "object", additionalProperties: true },
+            "Stored or explicitly not recorded"
+          ),
+          ...errors
+        }
       },
       delete: {
         tags: ["Launchpad"],
         summary: "Delete all local privacy-feedback events for one owner",
         security: operatorSecurity,
         parameters: [ownerUserIdParameter],
-        responses: { "200": jsonResponse({ type: "object", required: ["deleted"], properties: { deleted: { type: "integer", minimum: 0 } } }, "Deleted event count"), ...errors }
+        responses: {
+          "200": jsonResponse(
+            {
+              type: "object",
+              required: ["deleted"],
+              properties: { deleted: { type: "integer", minimum: 0 } }
+            },
+            "Deleted event count"
+          ),
+          ...errors
+        }
       }
     }
   };
@@ -1436,7 +1825,10 @@ export function buildOpenApiDocument() {
         enum: ["plan_week", "daily_reflection", "research_project"]
       }),
       author: { type: "string", minLength: 1, maxLength: 120 },
-      reviewState: { type: "string", enum: ["forge_reviewed", "external_setup"] },
+      reviewState: {
+        type: "string",
+        enum: ["forge_reviewed", "external_setup"]
+      },
       compatibility: { type: "string", minLength: 1, maxLength: 120 },
       permissions: {
         type: "array",
@@ -1473,9 +1865,18 @@ export function buildOpenApiDocument() {
       }),
       currentStep: {
         type: "string",
-        enum: ["choose_outcome", "review_pack", "install_pack", "first_result", "complete"]
+        enum: [
+          "choose_outcome",
+          "review_pack",
+          "install_pack",
+          "first_result",
+          "complete"
+        ]
       },
-      status: { type: "string", enum: ["not_started", "in_progress", "skipped", "complete"] },
+      status: {
+        type: "string",
+        enum: ["not_started", "in_progress", "skipped", "complete"]
+      },
       installedPackageId: nullable({ type: "string" }),
       lastResultHref: nullable({ type: "string" }),
       createdAt: nullable({ type: "string", format: "date-time" }),
@@ -1502,7 +1903,10 @@ export function buildOpenApiDocument() {
       packageVersion: { type: "string" },
       manifestSha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
       status: { type: "string", enum: ["installed", "removed"] },
-      createdEntities: { type: "array", items: { type: "object", additionalProperties: true } },
+      createdEntities: {
+        type: "array",
+        items: { type: "object", additionalProperties: true }
+      },
       installedAt: { type: "string", format: "date-time" },
       removedAt: nullable({ type: "string", format: "date-time" }),
       updatedAt: { type: "string", format: "date-time" }
@@ -1511,31 +1915,89 @@ export function buildOpenApiDocument() {
   const productImportPreview = {
     type: "object",
     additionalProperties: false,
-    required: ["previewId", "ownerUserId", "sourceKind", "sourceLabel", "payloadFingerprint", "items", "counts"],
+    required: [
+      "previewId",
+      "ownerUserId",
+      "sourceKind",
+      "sourceLabel",
+      "payloadFingerprint",
+      "items",
+      "counts"
+    ],
     properties: {
       previewId: { type: "string" },
       ownerUserId: { type: "string" },
       sourceKind: {
         type: "string",
-        enum: ["markdown", "obsidian", "notion", "todoist", "apple_reminders", "calendar", "github_issues", "linear"]
+        enum: [
+          "markdown",
+          "obsidian",
+          "notion",
+          "todoist",
+          "apple_reminders",
+          "calendar",
+          "github_issues",
+          "linear"
+        ]
       },
       sourceLabel: { type: "string" },
       payloadFingerprint: { type: "string", pattern: "^[0-9a-f]{64}$" },
-      items: { type: "array", maxItems: 500, items: { type: "object", additionalProperties: true } },
-      counts: { type: "object", additionalProperties: false, required: ["total", "create", "conflicts"], properties: { total: { type: "integer" }, create: { type: "integer" }, conflicts: { type: "integer" } } }
+      items: {
+        type: "array",
+        maxItems: 500,
+        items: { type: "object", additionalProperties: true }
+      },
+      counts: {
+        type: "object",
+        additionalProperties: false,
+        required: ["total", "create", "conflicts"],
+        properties: {
+          total: { type: "integer" },
+          create: { type: "integer" },
+          conflicts: { type: "integer" }
+        }
+      }
     }
   };
   const productImportRun = {
     type: "object",
     additionalProperties: false,
-    required: ["id", "sourceKind", "sourceLabel", "status", "created", "skipped", "committedAt", "createdAt", "updatedAt"],
+    required: [
+      "id",
+      "sourceKind",
+      "sourceLabel",
+      "status",
+      "created",
+      "skipped",
+      "committedAt",
+      "createdAt",
+      "updatedAt"
+    ],
     properties: {
       id: { type: "string" },
-      sourceKind: { type: "string", enum: ["markdown", "obsidian", "notion", "todoist", "apple_reminders", "calendar", "github_issues", "linear"] },
+      sourceKind: {
+        type: "string",
+        enum: [
+          "markdown",
+          "obsidian",
+          "notion",
+          "todoist",
+          "apple_reminders",
+          "calendar",
+          "github_issues",
+          "linear"
+        ]
+      },
       sourceLabel: { type: "string" },
       status: { type: "string", enum: ["preview", "committed", "rolled_back"] },
-      created: { type: "array", items: { type: "object", additionalProperties: true } },
-      skipped: { type: "array", items: { type: "object", additionalProperties: true } },
+      created: {
+        type: "array",
+        items: { type: "object", additionalProperties: true }
+      },
+      skipped: {
+        type: "array",
+        items: { type: "object", additionalProperties: true }
+      },
       committedAt: nullable({ type: "string", format: "date-time" }),
       createdAt: { type: "string", format: "date-time" },
       updatedAt: { type: "string", format: "date-time" }
@@ -1544,10 +2006,34 @@ export function buildOpenApiDocument() {
   const productReviewItem = {
     type: "object",
     additionalProperties: false,
-    required: ["id", "kind", "sourceType", "sourceId", "revision", "status", "title", "summary", "proposedAction", "evidence", "createdAt", "updatedAt"],
+    required: [
+      "id",
+      "kind",
+      "sourceType",
+      "sourceId",
+      "revision",
+      "status",
+      "title",
+      "summary",
+      "proposedAction",
+      "evidence",
+      "createdAt",
+      "updatedAt"
+    ],
     properties: {
       id: { type: "string" },
-      kind: { type: "string", enum: ["import_conflict", "capture_classification", "agent_proposal", "relationship_proposal", "offline_conflict", "artifact_enrichment", "sync_conflict"] },
+      kind: {
+        type: "string",
+        enum: [
+          "import_conflict",
+          "capture_classification",
+          "agent_proposal",
+          "relationship_proposal",
+          "offline_conflict",
+          "artifact_enrichment",
+          "sync_conflict"
+        ]
+      },
       sourceType: { type: "string" },
       sourceId: { type: "string" },
       revision: { type: "integer", minimum: 1 },
@@ -1555,7 +2041,10 @@ export function buildOpenApiDocument() {
       title: { type: "string" },
       summary: { type: "string" },
       proposedAction: { type: "object", additionalProperties: true },
-      evidence: { type: "array", items: { type: "object", additionalProperties: true } },
+      evidence: {
+        type: "array",
+        items: { type: "object", additionalProperties: true }
+      },
       createdAt: { type: "string", format: "date-time" },
       updatedAt: { type: "string", format: "date-time" }
     }
@@ -1566,7 +2055,10 @@ export function buildOpenApiDocument() {
     required: ["settings", "events", "policy"],
     properties: {
       settings: { type: "object", additionalProperties: true },
-      events: { type: "array", items: { type: "object", additionalProperties: true } },
+      events: {
+        type: "array",
+        items: { type: "object", additionalProperties: true }
+      },
       policy: { type: "object", additionalProperties: true }
     }
   };
@@ -1753,22 +2245,126 @@ export function buildOpenApiDocument() {
     required: [
       "id",
       "kind",
+      "lifecycleStatus",
       "handle",
       "displayName",
       "description",
       "accentColor",
+      "deactivatedAt",
+      "lifecycleReason",
+      "lifecycleActor",
+      "lifecycleSource",
       "createdAt",
       "updatedAt"
     ],
     properties: {
       id: { type: "string" },
       kind: { type: "string", enum: ["human", "bot"] },
+      lifecycleStatus: { type: "string", enum: ["active", "inactive"] },
       handle: { type: "string" },
       displayName: { type: "string" },
       description: { type: "string" },
       accentColor: { type: "string" },
+      deactivatedAt: nullable({ type: "string", format: "date-time" }),
+      lifecycleReason: { type: "string" },
+      lifecycleActor: nullable({ type: "string" }),
+      lifecycleSource: nullable({
+        type: "string",
+        enum: ["ui", "agent", "system"]
+      }),
       createdAt: { type: "string", format: "date-time" },
       updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const userDeactivationPreview = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "user",
+      "replacementUser",
+      "ownership",
+      "assignments",
+      "ownershipDefaultDependents",
+      "activeRuntimeSessions",
+      "activeAgentTokens",
+      "totalOwnedEntities",
+      "totalAssignments",
+      "requiresSessionDisconnect",
+      "canDeactivate",
+      "blockers"
+    ],
+    properties: {
+      user: { $ref: "#/components/schemas/UserSummary" },
+      replacementUser: { $ref: "#/components/schemas/UserSummary" },
+      ownership: arrayOf({
+        type: "object",
+        additionalProperties: false,
+        required: ["entityType", "count"],
+        properties: {
+          entityType: { type: "string" },
+          count: { type: "integer", minimum: 0 }
+        }
+      }),
+      assignments: arrayOf({
+        type: "object",
+        additionalProperties: false,
+        required: ["entityType", "count"],
+        properties: {
+          entityType: { type: "string" },
+          count: { type: "integer", minimum: 0 }
+        }
+      }),
+      ownershipDefaultDependents: { type: "integer", minimum: 0 },
+      activeRuntimeSessions: { type: "integer", minimum: 0 },
+      activeAgentTokens: { type: "integer", minimum: 0 },
+      totalOwnedEntities: { type: "integer", minimum: 0 },
+      totalAssignments: { type: "integer", minimum: 0 },
+      requiresSessionDisconnect: { type: "boolean" },
+      canDeactivate: { type: "boolean" },
+      blockers: arrayOf({ type: "string" })
+    }
+  };
+
+  const userLifecycleReceipt = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "operation",
+      "userId",
+      "replacementUserId",
+      "actor",
+      "source",
+      "reason",
+      "ownershipTransferred",
+      "assignmentsTransferred",
+      "sessionsDisconnected",
+      "tokensRevoked",
+      "lifecycleStatus",
+      "defaultOwnerUserId",
+      "createdAt",
+      "replayed"
+    ],
+    properties: {
+      id: { type: "string" },
+      operation: {
+        type: "string",
+        enum: ["deactivate", "reactivate", "ownership_default"]
+      },
+      userId: { type: "string" },
+      replacementUserId: nullable({ type: "string" }),
+      actor: nullable({ type: "string" }),
+      source: { type: "string", enum: ["ui", "agent", "system"] },
+      reason: { type: "string" },
+      ownershipTransferred: { type: "integer", minimum: 0 },
+      assignmentsTransferred: { type: "integer", minimum: 0 },
+      sessionsDisconnected: { type: "integer", minimum: 0 },
+      tokensRevoked: { type: "integer", minimum: 0 },
+      lifecycleStatus: { type: "string", enum: ["active", "inactive"] },
+      defaultOwnerUserId: { type: "string" },
+      createdAt: { type: "string", format: "date-time" },
+      replayed: { type: "boolean" }
     }
   };
 
@@ -13195,6 +13791,8 @@ export function buildOpenApiDocument() {
         RelationshipProposalDecisionInput: relationshipProposalDecisionInput,
         RelationshipProposalDecision: relationshipProposalDecision,
         UserSummary: userSummary,
+        UserDeactivationPreview: userDeactivationPreview,
+        UserLifecycleReceipt: userLifecycleReceipt,
         Tag: tag,
         Goal: goal,
         DashboardGoal: dashboardGoal,
@@ -18027,7 +18625,8 @@ export function buildOpenApiDocument() {
       "/api/v1/users/directory": {
         get: {
           summary:
-            "Read the live human and bot directory with ownership summaries and directional relationship graph",
+            "Read the operator-only active and inactive human/bot directory, ownership defaults, trust evidence, and directional relationship graph",
+          security: [{ operatorSession: [] }],
           responses: {
             "200": jsonResponse(
               {
@@ -18041,7 +18640,202 @@ export function buildOpenApiDocument() {
                 }
               },
               "User directory"
-            )
+            ),
+            ...preferenceErrorResponses(401, 403)
+          }
+        }
+      },
+      "/api/v1/users/{id}/deactivation-preview": {
+        get: {
+          summary:
+            "Preview an operator-only ownership, assignment, runtime-session, token, and default-owner transfer without writing",
+          security: [{ operatorSession: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            },
+            {
+              name: "replacementUserId",
+              in: "query",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["preview"],
+                properties: {
+                  preview: {
+                    $ref: "#/components/schemas/UserDeactivationPreview"
+                  }
+                }
+              },
+              "User deactivation preview"
+            ),
+            ...preferenceErrorResponses(400, 401, 403, 404)
+          }
+        }
+      },
+      "/api/v1/users/{id}/deactivate": {
+        post: {
+          summary:
+            "Atomically transfer current generic ownership and assignments, redirect defaults, disconnect linked runtime sessions, revoke linked agent tokens, and deactivate a non-operator user",
+          security: [{ operatorSession: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: [
+                    "replacementUserId",
+                    "reason",
+                    "disconnectActiveSessions",
+                    "idempotencyKey"
+                  ],
+                  properties: {
+                    replacementUserId: { type: "string", minLength: 1 },
+                    reason: { type: "string", minLength: 1, maxLength: 500 },
+                    disconnectActiveSessions: { type: "boolean" },
+                    idempotencyKey: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 128
+                    }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["receipt", "user"],
+                properties: {
+                  receipt: {
+                    $ref: "#/components/schemas/UserLifecycleReceipt"
+                  },
+                  user: { $ref: "#/components/schemas/UserSummary" }
+                }
+              },
+              "Atomic deactivation receipt"
+            ),
+            ...preferenceErrorResponses(400, 401, 403, 404, 409)
+          }
+        }
+      },
+      "/api/v1/users/{id}/reactivate": {
+        post: {
+          summary:
+            "Reactivate an inactive user without silently restoring revoked agent credentials",
+          security: [{ operatorSession: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["reason", "idempotencyKey"],
+                  properties: {
+                    reason: { type: "string", minLength: 1, maxLength: 500 },
+                    idempotencyKey: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 128
+                    }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["receipt", "user"],
+                properties: {
+                  receipt: {
+                    $ref: "#/components/schemas/UserLifecycleReceipt"
+                  },
+                  user: { $ref: "#/components/schemas/UserSummary" }
+                }
+              },
+              "Reactivation receipt"
+            ),
+            ...preferenceErrorResponses(400, 401, 403, 404, 409)
+          }
+        }
+      },
+      "/api/v1/users/{id}/ownership-default": {
+        put: {
+          summary:
+            "Set the active default owner used when this human or bot acts without an explicit owner",
+          security: [{ operatorSession: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["ownerUserId", "idempotencyKey"],
+                  properties: {
+                    ownerUserId: { type: "string", minLength: 1 },
+                    idempotencyKey: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 128
+                    }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["receipt"],
+                properties: {
+                  receipt: { $ref: "#/components/schemas/UserLifecycleReceipt" }
+                }
+              },
+              "Ownership-default receipt"
+            ),
+            ...preferenceErrorResponses(400, 401, 403, 404, 409)
           }
         }
       },

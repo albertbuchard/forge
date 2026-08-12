@@ -179,6 +179,8 @@ import type {
   DailyBriefing,
   UpdateRewardRuleInput,
   UserDirectoryPayload,
+  UserDeactivationPreview,
+  UserLifecycleReceipt,
   UserSummary,
   WeeklyReviewPayload,
   WikiEmbeddingProfile,
@@ -6144,6 +6146,71 @@ export function patchUser(
   });
 }
 
+export function getUserDeactivationPreview(
+  userId: string,
+  replacementUserId: string
+) {
+  const search = new URLSearchParams({ replacementUserId });
+  return request<{ preview: UserDeactivationPreview }>(
+    `/api/v1/users/${userId}/deactivation-preview?${search.toString()}`
+  );
+}
+
+export function deactivateUser(input: {
+  userId: string;
+  replacementUserId: string;
+  reason: string;
+  disconnectActiveSessions: boolean;
+  idempotencyKey: string;
+}) {
+  return request<{ receipt: UserLifecycleReceipt; user: UserSummary }>(
+    `/api/v1/users/${input.userId}/deactivate`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        replacementUserId: input.replacementUserId,
+        reason: input.reason,
+        disconnectActiveSessions: input.disconnectActiveSessions,
+        idempotencyKey: input.idempotencyKey
+      })
+    }
+  );
+}
+
+export function reactivateUser(input: {
+  userId: string;
+  reason: string;
+  idempotencyKey: string;
+}) {
+  return request<{ receipt: UserLifecycleReceipt; user: UserSummary }>(
+    `/api/v1/users/${input.userId}/reactivate`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        reason: input.reason,
+        idempotencyKey: input.idempotencyKey
+      })
+    }
+  );
+}
+
+export function setUserOwnershipDefault(input: {
+  userId: string;
+  ownerUserId: string;
+  idempotencyKey: string;
+}) {
+  return request<{ receipt: UserLifecycleReceipt }>(
+    `/api/v1/users/${input.userId}/ownership-default`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        ownerUserId: input.ownerUserId,
+        idempotencyKey: input.idempotencyKey
+      })
+    }
+  );
+}
+
 export function listStrategies(userIds?: string[] | unknown) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
@@ -6856,13 +6923,10 @@ export function searchLocalRecords(input: {
 }
 
 export function proposeCapture(intent: CaptureIntent) {
-  return request<{ proposal: CaptureProposal }>(
-    "/api/v1/capture/proposals",
-    {
-      method: "POST",
-      body: JSON.stringify({ intent })
-    }
-  );
+  return request<{ proposal: CaptureProposal }>("/api/v1/capture/proposals", {
+    method: "POST",
+    body: JSON.stringify({ intent })
+  });
 }
 
 export function confirmCapture(input: CaptureConfirmation) {

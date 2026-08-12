@@ -50,27 +50,36 @@ Examples:
 
 ## Current Access Posture
 
-Forge is already structured for future access-policy work, but the current
-runtime behavior is intentionally permissive so the product stays usable while
-the sharing layer matures.
+Forge applies directional access policy to scoped reads and writes. Identity
+administration is a separate operator-only boundary.
 
 Today:
 
-- Forge can list users directly
-- scoped reads can ask for one user or many users
-- users can read other users when the route explicitly asks for them
-- ownership is visible in the UI and API
+- ordinary user lists contain active identities;
+- an operator can inspect active and inactive identities in the full directory;
+- scoped reads can request one or several permitted users;
+- inactive identities stay visible in historical attribution but cannot receive
+  new work;
+- ownership is visible in the user interface and API;
+- user creation, editing, relationship grants, ownership defaults, and lifecycle
+  changes require a paired operator session.
 
 Relevant routes:
 
 - `GET /api/v1/users`
 - `GET /api/v1/users/directory`
+- `GET /api/v1/users/{id}/deactivation-preview`
+- `POST /api/v1/users/{id}/deactivate`
+- `POST /api/v1/users/{id}/reactivate`
+- `PUT /api/v1/users/{id}/ownership-default`
 - read routes that accept `userId` or repeated `userIds`
 
 Operating rule:
 
 - writes should set `userId` intentionally
 - reads should scope with `userId` or `userIds` when ownership matters
+- lifecycle changes should begin with the server preview and retain one stable
+  idempotency key across an uncertain retry
 
 ## Recommended Multi-agent Setup
 
@@ -196,7 +205,8 @@ Normal local addresses:
 
 The browser UI is where the shared user scope becomes most visible:
 
-- `Settings -> Users` manages human and bot users
+- `Settings -> Users` manages active and inactive human and bot identities,
+  ownership defaults, responsibility transfer, and reactivation
 - the shell-level scope selector can focus on one user, humans, bots, or all
 - strategy pages, search bars, detail views, notes, and calendar linking all
   surface ownership directly
@@ -223,6 +233,12 @@ Good examples:
 The goal is not cosmetic classification. It is to make ownership obvious when a
 task, project, note, or strategy belongs to a different actor.
 
+Every new user starts active and receives a self-owned default. An operator can
+route that user's future work to another active owner. Before making a user
+inactive, Forge previews and atomically transfers the user's current generic
+ownership and assignments. See [User lifecycle and ownership
+transfer](./user-lifecycle-and-ownership.md) for the exact behavior.
+
 ## Read And Write Rules For Agents
 
 When an agent writes:
@@ -230,6 +246,8 @@ When an agent writes:
 - set `userId` when creating a goal, project, task, habit, note, strategy, or
   Psyche record
 - do not assume the default operator if the request clearly concerns a bot
+- do not select an inactive user; Forge rejects new ownership or assignment to
+  inactive identities
 
 When an agent reads:
 

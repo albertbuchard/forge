@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase } from "../db.js";
+import { HttpError } from "../errors.js";
 import {
   createUserSchema,
   updateUserSchema,
@@ -16,6 +17,8 @@ import {
   type UpdateUserInput,
   type UpdateUserAccessGrantInput,
   type UserKind,
+  type UserLifecycleStatus,
+  type UserOwnershipDefault,
   type UserOwnershipSummary,
   type UserXpSummary,
   type UserSummary
@@ -28,6 +31,11 @@ type UserRow = {
   display_name: string;
   description: string;
   accent_color: string;
+  lifecycle_status: UserLifecycleStatus;
+  deactivated_at: string | null;
+  lifecycle_reason: string;
+  lifecycle_actor: string | null;
+  lifecycle_source: UserSummary["lifecycleSource"];
   created_at: string;
   updated_at: string;
 };
@@ -305,10 +313,15 @@ function mapUser(row: UserRow): UserSummary {
   return userSummarySchema.parse({
     id: row.id,
     kind: row.kind,
+    lifecycleStatus: row.lifecycle_status,
     handle: row.handle,
     displayName: row.display_name,
     description: row.description,
     accentColor: row.accent_color,
+    deactivatedAt: row.deactivated_at,
+    lifecycleReason: row.lifecycle_reason,
+    lifecycleActor: row.lifecycle_actor,
+    lifecycleSource: row.lifecycle_source,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   });
@@ -320,7 +333,9 @@ function readUserRows(
 ): UserRow[] {
   return getDatabase()
     .prepare(
-      `SELECT id, kind, handle, display_name, description, accent_color, created_at, updated_at
+      `SELECT id, kind, handle, display_name, description, accent_color,
+              lifecycle_status, deactivated_at, lifecycle_reason, lifecycle_actor, lifecycle_source,
+              created_at, updated_at
        FROM users
        ${whereSql}
        ORDER BY CASE kind WHEN 'human' THEN 0 ELSE 1 END, display_name ASC`
@@ -328,13 +343,17 @@ function readUserRows(
     .all(...params) as UserRow[];
 }
 
-export function listUsers(filters: { kind?: UserKind } = {}): UserSummary[] {
+export function listUsers(
+  filters: { kind?: UserKind; lifecycleStatus?: UserLifecycleStatus } = {}
+): UserSummary[] {
   const whereClauses: string[] = [];
   const params: Array<string | number> = [];
   if (filters.kind) {
     whereClauses.push("kind = ?");
     params.push(filters.kind);
   }
+  whereClauses.push("lifecycle_status = ?");
+  params.push(filters.lifecycleStatus ?? "active");
   const whereSql =
     whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
   return readUserRows(whereSql, params).map(mapUser);
@@ -353,7 +372,9 @@ export function listUsersByIds(userIds: string[]): UserSummary[] {
 export function getUserById(userId: string): UserSummary | undefined {
   const row = getDatabase()
     .prepare(
-      `SELECT id, kind, handle, display_name, description, accent_color, created_at, updated_at
+      `SELECT id, kind, handle, display_name, description, accent_color,
+              lifecycle_status, deactivated_at, lifecycle_reason, lifecycle_actor, lifecycle_source,
+              created_at, updated_at
        FROM users
        WHERE id = ?`
     )
@@ -387,8 +408,11 @@ export function listUserAccessGrants(
        ORDER BY subject_user_id ASC, target_user_id ASC`
     )
     .all(...params) as UserAccessGrantRow[];
+  const grantUserIds = Array.from(
+    new Set(rows.flatMap((row) => [row.subject_user_id, row.target_user_id]))
+  );
   const usersById = new Map(
-    listUsers().map((user) => [user.id, user] as const)
+    listUsersByIds(grantUserIds).map((user) => [user.id, user] as const)
   );
   return rows.map((row) =>
     userAccessGrantSchema.parse({
@@ -422,7 +446,10 @@ export function listUserOwnershipSummaries(): UserOwnershipSummary[] {
     current[row.entity_type] = row.count;
     countsByUserId.set(row.user_id, current);
   }
-  return listUsers().map((user) => {
+  return [
+    ...listUsers({ lifecycleStatus: "active" }),
+    ...listUsers({ lifecycleStatus: "inactive" })
+  ].map((user) => {
     const entityCounts = countsByUserId.get(user.id) ?? {};
     const totalOwnedEntities = Object.values(entityCounts).reduce(
       (sum, count) => sum + count,
@@ -437,7 +464,10 @@ export function listUserOwnershipSummaries(): UserOwnershipSummary[] {
 }
 
 export function listUserXpSummaries(): UserXpSummary[] {
-  const users = listUsers();
+  const users = [
+    ...listUsers({ lifecycleStatus: "active" }),
+    ...listUsers({ lifecycleStatus: "inactive" })
+  ];
   const summaries = new Map<
     string,
     {
@@ -530,10 +560,13 @@ export function findUserByLabel(label: string): UserSummary | undefined {
   }
   const row = getDatabase()
     .prepare(
-      `SELECT id, kind, handle, display_name, description, accent_color, created_at, updated_at
+      `SELECT id, kind, handle, display_name, description, accent_color,
+              lifecycle_status, deactivated_at, lifecycle_reason, lifecycle_actor, lifecycle_source,
+              created_at, updated_at
        FROM users
-       WHERE lower(display_name) = ?
-          OR lower(handle) = ?
+       WHERE lifecycle_status = 'active'
+         AND (lower(display_name) = ?
+          OR lower(handle) = ?)
        ORDER BY CASE kind WHEN 'human' THEN 0 ELSE 1 END, created_at ASC
        LIMIT 1`
     )
@@ -561,14 +594,25 @@ export function resolveUserForMutation(
   if (userId) {
     const user = getUserById(userId);
     if (!user) {
-      throw new Error(`User ${userId} does not exist`);
+      throw new HttpError(
+        404,
+        "user_not_found",
+        `User ${userId} does not exist`
+      );
+    }
+    if (user.lifecycleStatus !== "active") {
+      throw new HttpError(
+        409,
+        "user_inactive",
+        `User ${userId} is inactive and cannot own or receive new work.`
+      );
     }
     return user;
   }
   if (fallbackLabel) {
     const matched = findUserByLabel(fallbackLabel);
     if (matched) {
-      return matched;
+      return getUserOwnershipDefault(matched.id)?.owner ?? matched;
     }
   }
   return getDefaultUser();
@@ -596,8 +640,93 @@ export function createUser(input: CreateUserInput): UserSummary {
       now,
       now
     );
+  getDatabase()
+    .prepare(
+      `INSERT INTO user_ownership_defaults (
+         subject_user_id, owner_user_id, updated_by_actor, created_at, updated_at
+       ) VALUES (?, ?, NULL, ?, ?)
+       ON CONFLICT(subject_user_id) DO NOTHING`
+    )
+    .run(id, id, now, now);
   ensurePermissiveGrantsForUser(id, now);
   return getUserById(id)!;
+}
+
+export function listUserOwnershipDefaults(): Array<
+  UserOwnershipDefault & { owner: UserSummary | null }
+> {
+  const rows = getDatabase()
+    .prepare(
+      `SELECT subject_user_id, owner_user_id, updated_by_actor, created_at, updated_at
+       FROM user_ownership_defaults
+       ORDER BY subject_user_id ASC`
+    )
+    .all() as Array<{
+    subject_user_id: string;
+    owner_user_id: string;
+    updated_by_actor: string | null;
+    created_at: string;
+    updated_at: string;
+  }>;
+  const owners = new Map(
+    listUsersByIds(rows.map((row) => row.owner_user_id)).map((user) => [
+      user.id,
+      user
+    ])
+  );
+  return rows.map((row) => ({
+    subjectUserId: row.subject_user_id,
+    ownerUserId: row.owner_user_id,
+    updatedByActor: row.updated_by_actor,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    owner: owners.get(row.owner_user_id) ?? null
+  }));
+}
+
+export function getUserOwnershipDefault(
+  subjectUserId: string
+): (UserOwnershipDefault & { owner: UserSummary | null }) | undefined {
+  return listUserOwnershipDefaults().find(
+    (entry) => entry.subjectUserId === subjectUserId
+  );
+}
+
+export function setUserOwnershipDefault(
+  subjectUserId: string,
+  ownerUserId: string,
+  actor: string | null,
+  now = new Date()
+): UserOwnershipDefault & { owner: UserSummary | null } {
+  const subject = getUserById(subjectUserId);
+  const owner = getUserById(ownerUserId);
+  if (!subject) {
+    throw new HttpError(
+      404,
+      "user_not_found",
+      `User ${subjectUserId} does not exist`
+    );
+  }
+  if (!owner || owner.lifecycleStatus !== "active") {
+    throw new HttpError(
+      409,
+      "user_owner_inactive",
+      `Owner user ${ownerUserId} is not active`
+    );
+  }
+  const timestamp = now.toISOString();
+  getDatabase()
+    .prepare(
+      `INSERT INTO user_ownership_defaults (
+         subject_user_id, owner_user_id, updated_by_actor, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(subject_user_id) DO UPDATE SET
+         owner_user_id = excluded.owner_user_id,
+         updated_by_actor = excluded.updated_by_actor,
+         updated_at = excluded.updated_at`
+    )
+    .run(subjectUserId, ownerUserId, actor, timestamp, timestamp);
+  return getUserOwnershipDefault(subjectUserId)!;
 }
 
 export function updateUser(

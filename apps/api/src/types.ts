@@ -41,6 +41,7 @@ export const tagKindSchema = z.enum(["value", "category", "execution"]);
 export const taskDueFilterSchema = z.enum(["overdue", "today", "week"]);
 export const userKindSchema = z.enum(["human", "bot"]);
 export const userAccessLevelSchema = z.enum(["view", "manage"]);
+export const userLifecycleStatusSchema = z.enum(["active", "inactive"]);
 export const strategyStatusSchema = z.enum(["active", "paused", "completed"]);
 export const taskRunStatusSchema = z.enum([
   "active",
@@ -615,12 +616,86 @@ export const calendarContextConflictSchema = z.object({
 export const userSummarySchema = z.object({
   id: z.string(),
   kind: userKindSchema,
+  lifecycleStatus: userLifecycleStatusSchema.default("active"),
   handle: nonEmptyTrimmedString,
   displayName: nonEmptyTrimmedString,
   description: trimmedString,
   accentColor: z.string(),
+  deactivatedAt: z.string().nullable().default(null),
+  lifecycleReason: trimmedString.default(""),
+  lifecycleActor: z.string().nullable().default(null),
+  lifecycleSource: activitySourceSchema.nullable().default(null),
   createdAt: z.string(),
   updatedAt: z.string()
+});
+
+export const userIdentityEvidenceSchema = z.object({
+  userId: z.string(),
+  lifecycleStatus: userLifecycleStatusSchema,
+  identityKind: z.enum([
+    "human_operator",
+    "human",
+    "linked_bot",
+    "unlinked_bot"
+  ]),
+  trustState: z.enum([
+    "operator",
+    "verified_runtime",
+    "configured",
+    "inactive"
+  ]),
+  linkedAgentIds: z.array(z.string()).max(32),
+  providers: z.array(z.string()).max(16),
+  actorLabels: z.array(z.string()).max(32),
+  sessionCount: z.number().int().nonnegative(),
+  connectedSessionCount: z.number().int().nonnegative(),
+  lastSeenAt: z.string().nullable()
+});
+
+export const userOwnershipDefaultSchema = z.object({
+  subjectUserId: z.string(),
+  ownerUserId: z.string(),
+  updatedByActor: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const userLifecycleCountSchema = z.object({
+  entityType: z.string(),
+  count: z.number().int().nonnegative()
+});
+
+export const userDeactivationPreviewSchema = z.object({
+  user: userSummarySchema,
+  replacementUser: userSummarySchema,
+  ownership: z.array(userLifecycleCountSchema),
+  assignments: z.array(userLifecycleCountSchema),
+  ownershipDefaultDependents: z.number().int().nonnegative(),
+  activeRuntimeSessions: z.number().int().nonnegative(),
+  activeAgentTokens: z.number().int().nonnegative(),
+  totalOwnedEntities: z.number().int().nonnegative(),
+  totalAssignments: z.number().int().nonnegative(),
+  requiresSessionDisconnect: z.boolean(),
+  canDeactivate: z.boolean(),
+  blockers: z.array(z.string()).max(16)
+});
+
+export const userLifecycleReceiptSchema = z.object({
+  id: z.string(),
+  operation: z.enum(["deactivate", "reactivate", "ownership_default"]),
+  userId: z.string(),
+  replacementUserId: z.string().nullable(),
+  actor: z.string().nullable(),
+  source: activitySourceSchema,
+  reason: z.string(),
+  ownershipTransferred: z.number().int().nonnegative(),
+  assignmentsTransferred: z.number().int().nonnegative(),
+  sessionsDisconnected: z.number().int().nonnegative(),
+  tokensRevoked: z.number().int().nonnegative(),
+  lifecycleStatus: userLifecycleStatusSchema,
+  defaultOwnerUserId: z.string(),
+  createdAt: z.string(),
+  replayed: z.boolean().default(false)
 });
 
 export const userAccessRightsSchema = z.object({
@@ -678,9 +753,12 @@ export const userXpSummarySchema = z.object({
 
 export const userDirectoryPayloadSchema = z.object({
   users: z.array(userSummarySchema),
+  inactiveUsers: z.array(userSummarySchema),
   grants: z.array(userAccessGrantSchema),
   ownership: z.array(userOwnershipSummarySchema),
   xp: z.array(userXpSummarySchema),
+  ownershipDefaults: z.array(userOwnershipDefaultSchema),
+  identityEvidence: z.array(userIdentityEvidenceSchema),
   posture: z.object({
     accessModel: z.enum(["permissive", "directional_graph"]),
     summary: z.string(),
@@ -5955,6 +6033,29 @@ export const createUserSchema = z.object({
 
 export const updateUserSchema = createUserSchema.partial();
 
+export const setUserOwnershipDefaultSchema = z
+  .object({
+    ownerUserId: nonEmptyTrimmedString,
+    idempotencyKey: nonEmptyTrimmedString.max(128)
+  })
+  .strict();
+
+export const deactivateUserSchema = z
+  .object({
+    replacementUserId: nonEmptyTrimmedString,
+    reason: nonEmptyTrimmedString.max(500),
+    disconnectActiveSessions: z.boolean().default(false),
+    idempotencyKey: nonEmptyTrimmedString.max(128)
+  })
+  .strict();
+
+export const reactivateUserSchema = z
+  .object({
+    reason: nonEmptyTrimmedString.max(500),
+    idempotencyKey: nonEmptyTrimmedString.max(128)
+  })
+  .strict();
+
 export const createStrategySchema = z.object({
   title: nonEmptyTrimmedString,
   overview: trimmedString.default(""),
@@ -6127,6 +6228,7 @@ export type FatigueSignalCreateInput = z.infer<
 >;
 export type TaskSplitCreateInput = z.infer<typeof taskSplitCreateSchema>;
 export type CreateUserInput = z.infer<typeof createUserSchema>;
+export type DeactivateUserInput = z.infer<typeof deactivateUserSchema>;
 export type CoachingInsight = z.infer<typeof coachingInsightSchema>;
 export type DashboardGoal = z.infer<typeof dashboardGoalSchema>;
 export type DashboardPayload = z.infer<typeof dashboardPayloadSchema>;
@@ -6492,6 +6594,10 @@ export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 export type UpdateStrategyInput = z.infer<typeof updateStrategySchema>;
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+export type ReactivateUserInput = z.infer<typeof reactivateUserSchema>;
+export type SetUserOwnershipDefaultInput = z.infer<
+  typeof setUserOwnershipDefaultSchema
+>;
 export type UpdateCalendarConnectionInput = z.infer<
   typeof updateCalendarConnectionSchema
 >;
@@ -6635,7 +6741,14 @@ export type UserAccessGrant = z.infer<typeof userAccessGrantSchema>;
 export type UserAccessGrantConfig = z.infer<typeof userAccessGrantConfigSchema>;
 export type UserAccessRights = z.infer<typeof userAccessRightsSchema>;
 export type UserDirectoryPayload = z.infer<typeof userDirectoryPayloadSchema>;
+export type UserDeactivationPreview = z.infer<
+  typeof userDeactivationPreviewSchema
+>;
+export type UserIdentityEvidence = z.infer<typeof userIdentityEvidenceSchema>;
 export type UserKind = z.infer<typeof userKindSchema>;
+export type UserLifecycleReceipt = z.infer<typeof userLifecycleReceiptSchema>;
+export type UserLifecycleStatus = z.infer<typeof userLifecycleStatusSchema>;
+export type UserOwnershipDefault = z.infer<typeof userOwnershipDefaultSchema>;
 export type UserOwnershipSummary = z.infer<typeof userOwnershipSummarySchema>;
 export type UserXpSummary = z.infer<typeof userXpSummarySchema>;
 export type UserSummary = z.infer<typeof userSummarySchema>;

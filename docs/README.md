@@ -135,6 +135,7 @@ manual adapter setup, data-location guidance, screenshots, and contributor check
 - [Claude Code MCP](./reference/claude-code-adapter.md): Claude Code adapter setup and MCP bridge behavior.
 - [Calendar provider setup](./reference/calendar-provider-setup.md): Google Calendar and OAuth configuration.
 - [Multi-user and strategies](./reference/multi-user-and-strategies.md): shared runtime, identity, and strategy model notes.
+- [User lifecycle and ownership transfer](./reference/user-lifecycle-and-ownership.md): active and inactive identities, atomic responsibility transfer, bot trust, token revocation, and reactivation boundaries.
 - [Preferences system](./reference/preferences-system.md): preference storage and agent-facing preference behavior.
 - [Psyche event and emotion vocabularies](./reference/psyche-vocabularies.md): reusable report labels, owner scope, raw wording, and batch API behavior.
 - [People and peer sharing](./reference/people-and-peer-sharing.md): Person records, typed questions, agent scopes, and human-only consent controls.

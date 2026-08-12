@@ -578,10 +578,15 @@ export type UserKind = "human" | "bot";
 export interface UserSummary {
   id: string;
   kind: UserKind;
+  lifecycleStatus?: "active" | "inactive";
   handle: string;
   displayName: string;
   description: string;
   accentColor: string;
+  deactivatedAt?: string | null;
+  lifecycleReason?: string;
+  lifecycleActor?: string | null;
+  lifecycleSource?: "ui" | "agent" | "system" | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -636,14 +641,71 @@ export interface UserXpSummary {
 
 export interface UserDirectoryPayload {
   users: UserSummary[];
+  inactiveUsers?: UserSummary[];
   grants: UserAccessGrant[];
   ownership: UserOwnershipSummary[];
   xp: UserXpSummary[];
+  ownershipDefaults?: UserOwnershipDefault[];
+  identityEvidence?: UserIdentityEvidence[];
   posture: {
     accessModel: "permissive" | "directional_graph";
     summary: string;
     futureReady: boolean;
   };
+}
+
+export interface UserOwnershipDefault {
+  subjectUserId: string;
+  ownerUserId: string;
+  updatedByActor: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UserIdentityEvidence {
+  userId: string;
+  lifecycleStatus: "active" | "inactive";
+  identityKind: "human_operator" | "human" | "linked_bot" | "unlinked_bot";
+  trustState: "operator" | "verified_runtime" | "configured" | "inactive";
+  linkedAgentIds: string[];
+  providers: string[];
+  actorLabels: string[];
+  sessionCount: number;
+  connectedSessionCount: number;
+  lastSeenAt: string | null;
+}
+
+export interface UserDeactivationPreview {
+  user: UserSummary;
+  replacementUser: UserSummary;
+  ownership: Array<{ entityType: string; count: number }>;
+  assignments: Array<{ entityType: string; count: number }>;
+  ownershipDefaultDependents: number;
+  activeRuntimeSessions: number;
+  activeAgentTokens: number;
+  totalOwnedEntities: number;
+  totalAssignments: number;
+  requiresSessionDisconnect: boolean;
+  canDeactivate: boolean;
+  blockers: string[];
+}
+
+export interface UserLifecycleReceipt {
+  id: string;
+  operation: "deactivate" | "reactivate" | "ownership_default";
+  userId: string;
+  replacementUserId: string | null;
+  actor: string | null;
+  source: "ui" | "agent" | "system";
+  reason: string;
+  ownershipTransferred: number;
+  assignmentsTransferred: number;
+  sessionsDisconnected: number;
+  tokensRevoked: number;
+  lifecycleStatus: "active" | "inactive";
+  defaultOwnerUserId: string;
+  createdAt: string;
+  replayed: boolean;
 }
 
 export interface OwnedEntity {

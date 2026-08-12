@@ -15003,10 +15003,15 @@
         "required": [
           "id",
           "kind",
+          "lifecycleStatus",
           "handle",
           "displayName",
           "description",
           "accentColor",
+          "deactivatedAt",
+          "lifecycleReason",
+          "lifecycleActor",
+          "lifecycleSource",
           "createdAt",
           "updatedAt"
         ],
@@ -15021,6 +15026,13 @@
               "bot"
             ]
           },
+          "lifecycleStatus": {
+            "type": "string",
+            "enum": [
+              "active",
+              "inactive"
+            ]
+          },
           "handle": {
             "type": "string"
           },
@@ -15033,6 +15045,45 @@
           "accentColor": {
             "type": "string"
           },
+          "deactivatedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lifecycleReason": {
+            "type": "string"
+          },
+          "lifecycleActor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lifecycleSource": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "ui",
+                  "agent",
+                  "system"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -15040,6 +15091,205 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "UserDeactivationPreview": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "user",
+          "replacementUser",
+          "ownership",
+          "assignments",
+          "ownershipDefaultDependents",
+          "activeRuntimeSessions",
+          "activeAgentTokens",
+          "totalOwnedEntities",
+          "totalAssignments",
+          "requiresSessionDisconnect",
+          "canDeactivate",
+          "blockers"
+        ],
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserSummary"
+          },
+          "replacementUser": {
+            "$ref": "#/components/schemas/UserSummary"
+          },
+          "ownership": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "entityType",
+                "count"
+              ],
+              "properties": {
+                "entityType": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "assignments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "entityType",
+                "count"
+              ],
+              "properties": {
+                "entityType": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "ownershipDefaultDependents": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "activeRuntimeSessions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "activeAgentTokens": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totalOwnedEntities": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totalAssignments": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "requiresSessionDisconnect": {
+            "type": "boolean"
+          },
+          "canDeactivate": {
+            "type": "boolean"
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "UserLifecycleReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "operation",
+          "userId",
+          "replacementUserId",
+          "actor",
+          "source",
+          "reason",
+          "ownershipTransferred",
+          "assignmentsTransferred",
+          "sessionsDisconnected",
+          "tokensRevoked",
+          "lifecycleStatus",
+          "defaultOwnerUserId",
+          "createdAt",
+          "replayed"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "deactivate",
+              "reactivate",
+              "ownership_default"
+            ]
+          },
+          "userId": {
+            "type": "string"
+          },
+          "replacementUserId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "ui",
+              "agent",
+              "system"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "ownershipTransferred": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "assignmentsTransferred": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sessionsDisconnected": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "tokensRevoked": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lifecycleStatus": {
+            "type": "string",
+            "enum": [
+              "active",
+              "inactive"
+            ]
+          },
+          "defaultOwnerUserId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "replayed": {
+            "type": "boolean"
           }
         }
       },
@@ -59443,7 +59693,12 @@
     },
     "/api/v1/users/directory": {
       "get": {
-        "summary": "Read the live human and bot directory with ownership summaries and directional relationship graph",
+        "summary": "Read the operator-only active and inactive human/bot directory, ownership defaults, trust evidence, and directional relationship graph",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "User directory",
@@ -59463,12 +59718,358 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
           }
         },
         "tags": [
           "Users"
         ],
         "operationId": "getusers_directory"
+      }
+    },
+    "/api/v1/users/{id}/deactivation-preview": {
+      "get": {
+        "summary": "Preview an operator-only ownership, assignment, runtime-session, token, and default-owner transfer without writing",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "replacementUserId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User deactivation preview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "preview"
+                  ],
+                  "properties": {
+                    "preview": {
+                      "$ref": "#/components/schemas/UserDeactivationPreview"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Users"
+        ],
+        "operationId": "getusers_id_deactivation_preview"
+      }
+    },
+    "/api/v1/users/{id}/deactivate": {
+      "post": {
+        "summary": "Atomically transfer current generic ownership and assignments, redirect defaults, disconnect linked runtime sessions, revoke linked agent tokens, and deactivate a non-operator user",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "replacementUserId",
+                  "reason",
+                  "disconnectActiveSessions",
+                  "idempotencyKey"
+                ],
+                "properties": {
+                  "replacementUserId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "disconnectActiveSessions": {
+                    "type": "boolean"
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Atomic deactivation receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "receipt",
+                    "user"
+                  ],
+                  "properties": {
+                    "receipt": {
+                      "$ref": "#/components/schemas/UserLifecycleReceipt"
+                    },
+                    "user": {
+                      "$ref": "#/components/schemas/UserSummary"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Users"
+        ],
+        "operationId": "postusers_id_deactivate"
+      }
+    },
+    "/api/v1/users/{id}/reactivate": {
+      "post": {
+        "summary": "Reactivate an inactive user without silently restoring revoked agent credentials",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "reason",
+                  "idempotencyKey"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reactivation receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "receipt",
+                    "user"
+                  ],
+                  "properties": {
+                    "receipt": {
+                      "$ref": "#/components/schemas/UserLifecycleReceipt"
+                    },
+                    "user": {
+                      "$ref": "#/components/schemas/UserSummary"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Users"
+        ],
+        "operationId": "postusers_id_reactivate"
+      }
+    },
+    "/api/v1/users/{id}/ownership-default": {
+      "put": {
+        "summary": "Set the active default owner used when this human or bot acts without an explicit owner",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "ownerUserId",
+                  "idempotencyKey"
+                ],
+                "properties": {
+                  "ownerUserId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ownership-default receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "receipt"
+                  ],
+                  "properties": {
+                    "receipt": {
+                      "$ref": "#/components/schemas/UserLifecycleReceipt"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Users"
+        ],
+        "operationId": "putusers_id_ownership_default"
       }
     },
     "/api/v1/preferences/workspace": {

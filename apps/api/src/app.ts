@@ -376,6 +376,7 @@ import {
   getDefaultUser,
   getUserById,
   listUserAccessGrants,
+  listUserOwnershipDefaults,
   listUserOwnershipSummaries,
   listUserXpSummaries,
   listUsers,
@@ -703,6 +704,7 @@ import {
   createInsightSchema,
   createStrategySchema,
   createUserSchema,
+  deactivateUserSchema,
   createNoteSchema,
   createProjectSchema,
   createManualRewardGrantSchema,
@@ -758,6 +760,8 @@ import {
   updateInsightSchema,
   updateStrategySchema,
   updateUserSchema,
+  reactivateUserSchema,
+  setUserOwnershipDefaultSchema,
   updateCalendarConnectionSchema,
   updateCalendarEventSchema,
   updateNoteSchema,
@@ -814,6 +818,13 @@ import {
   listSavedViews
 } from "./services/saved-views.js";
 import { buildOpenApiDocument } from "./openapi.js";
+import {
+  deactivateUser,
+  listUserIdentityEvidence,
+  previewUserDeactivation,
+  reactivateUser,
+  updateUserOwnershipDefault
+} from "./services/user-lifecycle.js";
 import { registerWebRoutes } from "./web.js";
 import {
   forgeAccessGatewayPolicyVersion,
@@ -10905,9 +10916,12 @@ function buildOperatorContext(
 function buildUserDirectoryPayload() {
   return {
     users: listUsers(),
+    inactiveUsers: listUsers({ lifecycleStatus: "inactive" }),
     grants: listUserAccessGrants(),
     ownership: listUserOwnershipSummaries(),
     xp: listUserXpSummaries(),
+    ownershipDefaults: listUserOwnershipDefaults(),
+    identityEvidence: listUserIdentityEvidence(),
     posture: {
       accessModel: "directional_graph" as const,
       summary:
@@ -15532,23 +15546,20 @@ export async function buildServer(
       .code(result.replayed ? 200 : 201);
     return { install: result };
   });
-  app.post(
-    "/api/v1/launchpad/package-installs/:id/remove",
-    async (request) => {
-      const auth = requireOperatorSession(
-        request.headers as Record<string, unknown>,
-        { route: "/api/v1/launchpad/package-installs/:id/remove" }
-      );
-      const params = request.params as { id: string };
-      return {
-        removal: removeProductPackage(
-          params.id,
-          request.body ?? {},
-          toActivityContext(auth)
-        )
-      };
-    }
-  );
+  app.post("/api/v1/launchpad/package-installs/:id/remove", async (request) => {
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/launchpad/package-installs/:id/remove" }
+    );
+    const params = request.params as { id: string };
+    return {
+      removal: removeProductPackage(
+        params.id,
+        request.body ?? {},
+        toActivityContext(auth)
+      )
+    };
+  });
   app.post(
     "/api/v1/launchpad/imports/preview",
     { bodyLimit: 8 * 1024 * 1024 },
@@ -15584,27 +15595,27 @@ export async function buildServer(
       )
     };
   });
-  app.post(
-    "/api/v1/launchpad/imports/:id/rollback",
-    async (request) => {
-      const auth = requireOperatorSession(
-        request.headers as Record<string, unknown>,
-        { route: "/api/v1/launchpad/imports/:id/rollback" }
-      );
-      const params = request.params as { id: string };
-      return {
-        rollback: rollbackProductImport(
-          params.id,
-          request.body ?? {},
-          toActivityContext(auth)
-        )
-      };
-    }
-  );
+  app.post("/api/v1/launchpad/imports/:id/rollback", async (request) => {
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/launchpad/imports/:id/rollback" }
+    );
+    const params = request.params as { id: string };
+    return {
+      rollback: rollbackProductImport(
+        params.id,
+        request.body ?? {},
+        toActivityContext(auth)
+      )
+    };
+  });
   app.get("/api/v1/launchpad/reviews", async (request) => {
-    const auth = requireOperatorSession(request.headers as Record<string, unknown>, {
-      route: "/api/v1/launchpad/reviews"
-    });
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      {
+        route: "/api/v1/launchpad/reviews"
+      }
+    );
     const query = request.query as Record<string, unknown>;
     return {
       items: listProductReviewItems(
@@ -20556,11 +20567,14 @@ export async function buildServer(
     return projectBoardPayloadSchema.parse(payload);
   });
   app.get("/api/v1/users", async () => ({ users: listUsers() }));
-  app.get("/api/v1/users/directory", async () => ({
-    directory: buildUserDirectoryPayload()
-  }));
+  app.get("/api/v1/users/directory", async (request) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/users/directory"
+    });
+    return { directory: buildUserDirectoryPayload() };
+  });
   app.patch("/api/v1/users/access-grants/:id", async (request, reply) => {
-    requireScopedAccess(request.headers, ["write"], {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
       route: "/api/v1/users/access-grants/:id"
     });
     const { id } = request.params as { id: string };
@@ -20575,7 +20589,7 @@ export async function buildServer(
     return { grant };
   });
   app.post("/api/v1/users", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
       route: "/api/v1/users"
     });
     const user = createUser(createUserSchema.parse(request.body ?? {}));
@@ -20583,7 +20597,7 @@ export async function buildServer(
     return { user };
   });
   app.patch("/api/v1/users/:id", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
       route: "/api/v1/users/:id"
     });
     const { id } = request.params as { id: string };
@@ -20594,12 +20608,80 @@ export async function buildServer(
     }
     return { user };
   });
+  const userLifecycleContext = (
+    auth: ReturnType<typeof authenticateRequest>
+  ) => ({
+    actorKey: auth.token
+      ? `token:${auth.token.id}`
+      : `operator:${auth.session?.id ?? auth.actor ?? "local"}`,
+    actor: auth.session?.actorLabel ?? auth.actor ?? null,
+    source: auth.source
+  });
+  app.get("/api/v1/users/:id/deactivation-preview", async (request) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/users/:id/deactivation-preview"
+    });
+    const { id } = request.params as { id: string };
+    const query = z
+      .object({ replacementUserId: z.string().trim().min(1) })
+      .strict()
+      .parse(request.query ?? {});
+    return { preview: previewUserDeactivation(id, query.replacementUserId) };
+  });
+  app.post("/api/v1/users/:id/deactivate", async (request, reply) => {
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/users/:id/deactivate" }
+    );
+    const { id } = request.params as { id: string };
+    const receipt = deactivateUser(
+      id,
+      deactivateUserSchema.parse(request.body ?? {}),
+      userLifecycleContext(auth)
+    );
+    reply.header("Idempotency-Replayed", receipt.replayed ? "true" : "false");
+    return { receipt, user: getUserById(id) };
+  });
+  app.post("/api/v1/users/:id/reactivate", async (request, reply) => {
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/users/:id/reactivate" }
+    );
+    const { id } = request.params as { id: string };
+    const receipt = reactivateUser(
+      id,
+      reactivateUserSchema.parse(request.body ?? {}),
+      userLifecycleContext(auth)
+    );
+    reply.header("Idempotency-Replayed", receipt.replayed ? "true" : "false");
+    return { receipt, user: getUserById(id) };
+  });
+  app.put("/api/v1/users/:id/ownership-default", async (request, reply) => {
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/users/:id/ownership-default" }
+    );
+    const { id } = request.params as { id: string };
+    const receipt = updateUserOwnershipDefault(
+      id,
+      setUserOwnershipDefaultSchema.parse(request.body ?? {}),
+      userLifecycleContext(auth)
+    );
+    reply.header("Idempotency-Replayed", receipt.replayed ? "true" : "false");
+    return { receipt };
+  });
   app.get("/api/v1/users/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     const user = getUserById(id);
     if (!user) {
       reply.code(404);
       return { error: "User not found" };
+    }
+    if (user.lifecycleStatus === "inactive") {
+      requireOperatorSession(request.headers as Record<string, unknown>, {
+        route: "/api/v1/users/:id",
+        lifecycleStatus: "inactive"
+      });
     }
     return { user };
   });
