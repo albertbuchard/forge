@@ -171,17 +171,23 @@ export function getProjectBoard(
     goal,
     tasks,
     activity: filterNoteActivityEventsForScope(
-      listActivityEvents({
-        entityType: "project",
-        entityId: projectId,
-        limit: undefined,
-        userIds: undefined
-      }).concat(
-        listActivityEvents({
-          entityType: "task",
-          limit: undefined,
-          userIds: undefined
-        }).filter((event) => tasks.some((task) => task.id === event.entityId))
+      listActivityEvents(
+        {
+          entityType: "project",
+          entityId: projectId,
+          limit: 20,
+          userIds: options.userIds
+        },
+        { noteScope }
+      ).concat(
+        listActivityEvents(
+          {
+            entityType: "task",
+            limit: 20,
+            userIds: options.userIds
+          },
+          { noteScope, entityIds: tasks.map((task) => task.id) }
+        )
       ),
       noteScope
     )

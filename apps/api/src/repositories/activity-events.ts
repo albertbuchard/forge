@@ -3,6 +3,7 @@ import { getDatabase, runInTransaction } from "../db.js";
 import { redactSecretValues } from "../security/secret-redaction.js";
 import { getEntityOwner } from "./entity-ownership.js";
 import { recordEventLog } from "./event-log.js";
+import { PSYCHE_ENTITY_TYPES } from "../psyche-types.js";
 import {
   activityEventSchema,
   type ActivityEvent,
@@ -37,6 +38,122 @@ export type ActivityEventInput = {
   source: ActivitySource;
   metadata?: Record<string, ActivityMetadataValue>;
 };
+
+export type ActivityEventNoteScope = {
+  userIds?: readonly string[];
+  accessibleSpaceIds?: readonly string[];
+  includePsyche?: boolean;
+};
+
+type ActivityEventReadOptions = {
+  noteScope?: ActivityEventNoteScope;
+  entityIds?: readonly string[];
+};
+
+function buildNoteActivityVisibilitySql(scope: ActivityEventNoteScope) {
+  const noteIdSql = "json_extract(activity_events.metadata_json, '$.noteId')";
+  const visibilitySql =
+    "json_extract(activity_events.metadata_json, '$.noteVisibility')";
+  const liveClauses: string[] = [];
+  const archivedClauses: string[] = [
+    `json_type(activity_events.metadata_json, '$.noteVisibility') = 'object'`
+  ];
+  const liveParams: Array<string | number> = [];
+  const archivedParams: Array<string | number> = [];
+
+  if (scope.accessibleSpaceIds !== undefined) {
+    if (scope.accessibleSpaceIds.length === 0) {
+      liveClauses.push("0 = 1");
+      archivedClauses.push("0 = 1");
+    } else {
+      const placeholders = scope.accessibleSpaceIds.map(() => "?").join(", ");
+      liveClauses.push(`activity_note.space_id IN (${placeholders})`);
+      liveParams.push(...scope.accessibleSpaceIds);
+      archivedClauses.push(
+        `json_extract(${visibilitySql}, '$.spaceId') IN (${placeholders})`
+      );
+      archivedParams.push(...scope.accessibleSpaceIds);
+    }
+  }
+
+  if (scope.userIds && scope.userIds.length > 0) {
+    const userPlaceholders = scope.userIds.map(() => "?").join(", ");
+    const wikiSpaceClause =
+      scope.accessibleSpaceIds && scope.accessibleSpaceIds.length > 0
+        ? ` OR (activity_note.kind = 'wiki' AND activity_note.space_id IN (${scope.accessibleSpaceIds.map(() => "?").join(", ")}))`
+        : "";
+    liveClauses.push(`(
+      EXISTS (
+        SELECT 1 FROM entity_owners note_owner
+        WHERE note_owner.entity_type = 'note'
+          AND note_owner.entity_id = activity_note.id
+          AND note_owner.user_id IN (${userPlaceholders})
+      )
+      OR EXISTS (
+        SELECT 1 FROM entity_assignments note_assignment
+        WHERE note_assignment.entity_type = 'note'
+          AND note_assignment.entity_id = activity_note.id
+          AND note_assignment.role = 'assignee'
+          AND note_assignment.user_id IN (${userPlaceholders})
+      )${wikiSpaceClause}
+    )`);
+    liveParams.push(...scope.userIds, ...scope.userIds);
+    if (wikiSpaceClause && scope.accessibleSpaceIds) {
+      liveParams.push(...scope.accessibleSpaceIds);
+    }
+
+    const archivedWikiSpaceClause =
+      scope.accessibleSpaceIds && scope.accessibleSpaceIds.length > 0
+        ? ` OR (
+            json_extract(${visibilitySql}, '$.kind') = 'wiki'
+            AND json_extract(${visibilitySql}, '$.spaceId') IN (${scope.accessibleSpaceIds.map(() => "?").join(", ")})
+          )`
+        : "";
+    archivedClauses.push(`(
+      json_extract(${visibilitySql}, '$.ownerUserId') IN (${userPlaceholders})
+      OR EXISTS (
+        SELECT 1
+        FROM json_each(json_extract(${visibilitySql}, '$.assigneeUserIds')) archived_assignee
+        WHERE CAST(archived_assignee.value AS TEXT) IN (${userPlaceholders})
+      )${archivedWikiSpaceClause}
+    )`);
+    archivedParams.push(...scope.userIds, ...scope.userIds);
+    if (archivedWikiSpaceClause && scope.accessibleSpaceIds) {
+      archivedParams.push(...scope.accessibleSpaceIds);
+    }
+  }
+
+  if (scope.includePsyche === false) {
+    const psychePlaceholders = PSYCHE_ENTITY_TYPES.map(() => "?").join(", ");
+    liveClauses.push(`NOT EXISTS (
+      SELECT 1 FROM note_links activity_note_link
+      WHERE activity_note_link.note_id = activity_note.id
+        AND activity_note_link.entity_type IN (${psychePlaceholders})
+    )`);
+    liveParams.push(...PSYCHE_ENTITY_TYPES);
+    archivedClauses.push(
+      `COALESCE(json_extract(${visibilitySql}, '$.includesPsyche'), 1) = 0`
+    );
+  }
+
+  return {
+    sql: `(
+      json_type(activity_events.metadata_json, '$.noteId') = 'text'
+      AND (
+        EXISTS (
+          SELECT 1 FROM notes activity_note
+          WHERE activity_note.id = ${noteIdSql}
+            ${liveClauses.length > 0 ? `AND ${liveClauses.join(" AND ")}` : ""}
+        )
+        OR (
+          NOT EXISTS (SELECT 1 FROM notes activity_note WHERE activity_note.id = ${noteIdSql})
+          ${archivedClauses.length > 0 ? `AND ${archivedClauses.join(" AND ")}` : ""}
+        )
+      )
+    )`,
+    params: [...liveParams, ...archivedParams]
+  };
+}
 
 function resolveActivityOwner(
   row: ActivityEventRow
@@ -173,7 +290,8 @@ export function recordActivityEvent(
 }
 
 export function listActivityEvents(
-  filters: ActivityListQuery = {}
+  filters: ActivityListQuery = {},
+  options: ActivityEventReadOptions = {}
 ): ActivityEvent[] {
   const whereClauses: string[] = [];
   const params: Array<string | number> = [];
@@ -185,6 +303,16 @@ export function listActivityEvents(
   if (filters.entityId) {
     whereClauses.push("entity_id = ?");
     params.push(filters.entityId);
+  }
+  if (options.entityIds !== undefined) {
+    if (options.entityIds.length === 0) {
+      whereClauses.push("0 = 1");
+    } else {
+      whereClauses.push(
+        `entity_id IN (${options.entityIds.map(() => "?").join(", ")})`
+      );
+      params.push(...options.entityIds);
+    }
   }
   if (filters.source) {
     whereClauses.push("source = ?");
@@ -200,11 +328,16 @@ export function listActivityEvents(
   }
   if (filters.userIds && filters.userIds.length > 0) {
     const userPlaceholders = filters.userIds.map(() => "?").join(", ");
+    const noteVisibility = options.noteScope
+      ? buildNoteActivityVisibilitySql(options.noteScope)
+      : null;
     whereClauses.push(
-      `EXISTS (
+      `(
+       EXISTS (
          SELECT 1
          FROM entity_owners activity_owner
          WHERE activity_owner.user_id IN (${userPlaceholders})
+           ${noteVisibility ? "AND json_type(activity_events.metadata_json, '$.noteId') IS NULL" : ""}
            AND (
              (
                activity_events.entity_type = 'task_run'
@@ -251,9 +384,13 @@ export function listActivityEvents(
                AND activity_owner.entity_id = activity_events.entity_id
              )
            )
-       )`
+       )${noteVisibility ? ` OR ${noteVisibility.sql}` : ""}
+      )`
     );
     params.push(...filters.userIds);
+    if (noteVisibility) {
+      params.push(...noteVisibility.params);
+    }
   }
   if (!filters.includeCorrected) {
     whereClauses.push("event_type != 'activity_corrected'");
@@ -285,18 +422,35 @@ export function listActivityEvents(
   }
   const allowed = new Set(filters.userIds);
   return events.filter(
-    (event) => event.userId !== null && allowed.has(event.userId)
+    (event) =>
+      typeof event.metadata.noteId === "string" ||
+      (event.userId !== null && allowed.has(event.userId))
   );
 }
 
 export function listActivityEventsForTask(
   taskId: string,
   limit: number | undefined = 25,
-  userIds?: string[]
+  userIds?: string[],
+  noteScope?: ActivityEventNoteScope
 ): ActivityEvent[] {
+  const noteVisibility = noteScope
+    ? buildNoteActivityVisibilitySql(noteScope)
+    : null;
+  const noteVisibilitySql = noteVisibility
+    ? `AND (
+         json_type(activity_events.metadata_json, '$.noteId') IS NULL
+         OR ${noteVisibility.sql}
+       )`
+    : "";
   const limitSql = limit === undefined ? "" : "LIMIT ?";
-  const parameters =
-    limit === undefined ? [taskId, taskId] : [taskId, taskId, limit];
+  const parameters: Array<string | number> = [taskId, taskId];
+  if (noteVisibility) {
+    parameters.push(...noteVisibility.params);
+  }
+  if (limit !== undefined) {
+    parameters.push(limit);
+  }
   const rows = getDatabase()
     .prepare(
       `SELECT
@@ -318,6 +472,7 @@ export function listActivityEventsForTask(
             (activity_events.entity_type = 'task' AND activity_events.entity_id = ?)
          OR (activity_events.entity_type = 'task_run' AND task_runs.task_id = ?)
        )
+         ${noteVisibilitySql}
          AND activity_events.event_type != 'activity_corrected'
          AND NOT EXISTS (
            SELECT 1
@@ -335,7 +490,9 @@ export function listActivityEventsForTask(
   }
   const allowed = new Set(userIds);
   return events.filter(
-    (event) => event.userId !== null && allowed.has(event.userId)
+    (event) =>
+      typeof event.metadata.noteId === "string" ||
+      (event.userId !== null && allowed.has(event.userId))
   );
 }
 

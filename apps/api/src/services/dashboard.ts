@@ -276,10 +276,10 @@ export function getDashboard(
     habit: new Set(habits.map((habit) => habit.id))
   };
   const recentActivity = filterNoteActivityEventsForScope(
-    listActivityEvents({
-      limit: undefined,
-      userIds: undefined
-    }),
+    listActivityEvents(
+      { limit: 36, userIds: options.userIds },
+      { noteScope: options.noteScope ?? { userIds: options.userIds } }
+    ),
     options.noteScope ?? { userIds: options.userIds }
   )
     .filter((event) => {

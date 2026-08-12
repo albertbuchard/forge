@@ -221,7 +221,10 @@ export function getOverviewContext(
     ).slice(0, 6),
     dueHabits,
     recentEvidence: filterNoteActivityEventsForScope(
-      listActivityEvents({ limit: undefined, userIds: undefined }),
+      listActivityEvents(
+        { limit: 60, userIds: options.userIds },
+        { noteScope: options.noteScope ?? { userIds: options.userIds } }
+      ),
       options.noteScope ?? { userIds: options.userIds }
     ).slice(0, 12),
     achievements: dashboard.achievements,

@@ -10901,10 +10901,15 @@ function buildOperatorContext(
       done: tasks.filter((task) => task.status === "done").slice(0, 20)
     },
     recentActivity: filterNoteActivityEventsForScope(
-      listActivityEvents({
-        limit: undefined,
-        userIds: undefined
-      }),
+      listActivityEvents(
+        {
+          limit: 60,
+          userIds: scopedUserIdsForReads
+        },
+        {
+          noteScope: options.noteScope ?? { userIds: scopedUserIdsForReads }
+        }
+      ),
       options.noteScope ?? { userIds: scopedUserIdsForReads }
     ).slice(0, 20),
     recentTaskRuns,
@@ -13548,9 +13553,13 @@ export async function buildServer(
       context
     );
     const requestedLimit = query.limit;
+    const noteScope = noteReadScopeForAuth(context, userIds);
     const visible = filterNoteActivityEventsForScope(
-      listActivityEvents({ ...query, userIds: undefined, limit: undefined }),
-      noteReadScopeForAuth(context, userIds)
+      listActivityEvents(
+        { ...query, userIds, limit: query.limit },
+        { noteScope }
+      ),
+      noteScope
     );
     return requestedLimit ? visible.slice(0, requestedLimit) : visible;
   };
@@ -13558,10 +13567,11 @@ export async function buildServer(
     context: ReturnType<typeof authenticateRequest>
   ) => {
     const userIds = resolveEffectiveUserIdsForReads(undefined, context);
+    const noteScope = noteReadScopeForAuth(context, userIds);
     return (
       filterNoteActivityEventsForScope(
-        listActivityEvents({ userIds: undefined, limit: undefined }),
-        noteReadScopeForAuth(context, userIds)
+        listActivityEvents({ userIds, limit: 1 }, { noteScope }),
+        noteScope
       )[0] ?? null
     );
   };
@@ -25494,7 +25504,7 @@ export async function buildServer(
       activeTaskRun: taskRuns.find((run) => run.status === "active") ?? null,
       taskRuns,
       activity: filterNoteActivityEventsForScope(
-        listActivityEventsForTask(id, undefined, undefined),
+        listActivityEventsForTask(id, 20, userIds, noteScope),
         noteScope
       ).slice(0, 20),
       notesSummaryByEntity: buildNotesSummaryByEntity(
