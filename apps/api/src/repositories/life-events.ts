@@ -28,6 +28,7 @@ import {
 } from "../services/artifacts.js";
 import {
   createLifeEventSchema,
+  createCalendarEventSchema,
   lifeEventCalendarProjectionSchema,
   lifeEventSegmentTypeSchema,
   lifeEventSchema,
@@ -627,7 +628,7 @@ function buildCalendarInput(
       .filter(Boolean)
       .join(", ") ||
     [event.originCity, event.originCountry].filter(Boolean).join(", ");
-  return {
+  return createCalendarEventSchema.parse({
     title: event.title,
     description: event.description || event.shortDescription,
     location,
@@ -663,7 +664,7 @@ function buildCalendarInput(
         relationshipType: "life_event"
       }
     ]
-  };
+  });
 }
 
 export function listLifeEvents(): LifeEvent[] {

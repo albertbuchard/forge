@@ -97,6 +97,18 @@ function createScopedLifeEvent(input: {
   });
 }
 
+function calendarPlace(label: string) {
+  return {
+    label,
+    address: "",
+    timezone: "Europe/Zurich",
+    latitude: null,
+    longitude: null,
+    source: "scope_test",
+    externalPlaceId: ""
+  };
+}
+
 function issueScopedToken(input: {
   userId: string;
   projectIds?: string[];
@@ -232,6 +244,7 @@ test("Life Event calendar routes enforce scope before counts, reads, and actions
       title: "Allowed provider-independent event",
       description: "",
       location: "Zurich",
+      place: calendarPlace("Zurich"),
       startAt: "2035-04-16T08:00:00.000Z",
       endAt: "2035-04-16T09:00:00.000Z",
       timezone: "Europe/Zurich",
@@ -252,6 +265,7 @@ test("Life Event calendar routes enforce scope before counts, reads, and actions
       title: "Foreign calendar event",
       description: "",
       location: "Geneva",
+      place: calendarPlace("Geneva"),
       startAt: "2035-04-17T08:00:00.000Z",
       endAt: "2035-04-17T09:00:00.000Z",
       timezone: "Europe/Zurich",
@@ -381,6 +395,7 @@ test("Life Event calendar routes enforce scope before counts, reads, and actions
       title: "Allowed source with inaccessible existing Life Event",
       description: "",
       location: "Bern",
+      place: calendarPlace("Bern"),
       startAt: "2035-04-18T08:00:00.000Z",
       endAt: "2035-04-18T09:00:00.000Z",
       timezone: "Europe/Zurich",

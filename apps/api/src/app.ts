@@ -13784,7 +13784,7 @@ export async function buildServer(
         return false;
       }
       return !getDeletedEntityRecord(
-        link.targetEntityType,
+        link.targetEntityType as CrudEntityType,
         link.targetEntityId
       );
     });
@@ -13793,7 +13793,7 @@ export async function buildServer(
       : null;
     const primaryCalendarEventIsAvailable =
       !lifeEvent.primaryCalendarEventId ||
-      calendarEventMatchesAuthScope(primaryCalendarEvent, context);
+      calendarEventMatchesAuthScope(primaryCalendarEvent ?? undefined, context);
     return {
       ...lifeEvent,
       links,
