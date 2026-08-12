@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useInfiniteQuery,
   useMutation,
@@ -348,8 +348,14 @@ export function PsycheReportsPage() {
   const beliefs = beliefsQuery.data?.beliefs ?? [];
   const modes = modesQuery.data?.modes ?? [];
   const schemas = schemasQuery.data?.schemas ?? [];
-  const eventTypes = eventTypesQuery.data?.eventTypes ?? [];
-  const emotions = emotionsQuery.data?.emotions ?? [];
+  const eventTypes = useMemo(
+    () => eventTypesQuery.data?.eventTypes ?? [],
+    [eventTypesQuery.data?.eventTypes]
+  );
+  const emotions = useMemo(
+    () => emotionsQuery.data?.emotions ?? [],
+    [emotionsQuery.data?.emotions]
+  );
   const supportingCatalogQueries = [
     valuesQuery,
     patternsQuery,

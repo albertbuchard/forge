@@ -465,6 +465,18 @@ export function WorkbenchFlowEditor({
     }
     setSaveState((current) => (current === "saving" ? current : "dirty"));
   }, [draftPatch, draftSnapshot]);
+  const deleteSelectedNode = useCallback(
+    (nodeId: string) => {
+      setLastDeletedGraph({ nodes, edges });
+      setNodes((current) => current.filter((node) => node.id !== nodeId));
+      setEdges((current) =>
+        current.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
+      );
+      setSelectedNodeId((current) => (current === nodeId ? null : current));
+      setSelectedEdgeId(null);
+    },
+    [edges, nodes]
+  );
   const aiNodeSteps = useMemo<
     QuestionFlowStep<WorkbenchGraphNodeData>[]
   >(() => {
@@ -852,6 +864,7 @@ export function WorkbenchFlowEditor({
     ];
   }, [
     availableToolOptions,
+    deleteSelectedNode,
     edges,
     modelConnections,
     nodes,
@@ -950,16 +963,6 @@ export function WorkbenchFlowEditor({
     setNodes((current) =>
       current.map((node) => (node.id === selectedNodeId ? updater(node) : node))
     );
-  }
-
-  function deleteSelectedNode(nodeId: string) {
-    setLastDeletedGraph({ nodes, edges });
-    setNodes((current) => current.filter((node) => node.id !== nodeId));
-    setEdges((current) =>
-      current.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
-    );
-    setSelectedNodeId((current) => (current === nodeId ? null : current));
-    setSelectedEdgeId(null);
   }
 
   function deleteSelectedEdge() {

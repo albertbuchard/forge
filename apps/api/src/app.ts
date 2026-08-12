@@ -955,7 +955,6 @@ import {
   createNutritionAppearanceCheckinWithIdempotency,
   createNutritionBodyCheckinWithIdempotency,
   createNutritionExperiment,
-  createNutritionFoodLog,
   createNutritionFoodLogWithIdempotency,
   createNutritionGutCheckinWithIdempotency,
   createNutritionSubjectiveCheckinWithIdempotency,
