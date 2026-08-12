@@ -418,22 +418,23 @@ test("KNOW-01 keeps scoped summaries and activity truthful after floods and clea
         "2098-12-31T23:00:00.000Z",
         "2098-12-31T23:00:00.000Z"
       );
-    const assignedActivityResponse = await app.inject({
+    const assignedTargetActivityResponse = await app.inject({
       method: "GET",
       url: `/api/v1/activity?entityType=goal&entityId=${goalId}`,
       headers: bearer(botToken)
     });
     assert.equal(
-      assignedActivityResponse.statusCode,
+      assignedTargetActivityResponse.statusCode,
       200,
-      assignedActivityResponse.body
+      assignedTargetActivityResponse.body
     );
-    assert.ok(
+    assert.equal(
       (
-        assignedActivityResponse.json() as {
+        assignedTargetActivityResponse.json() as {
           activity: Array<{ metadata: Record<string, unknown> }>;
         }
-      ).activity.some((event) => event.metadata.noteId === expiringNote.id)
+      ).activity.some((event) => event.metadata.noteId === expiringNote.id),
+      false
     );
     assert.equal(cleanupExpiredNotes(new Date("2100-01-01T00:00:00.000Z")), 1);
     assert.equal(
