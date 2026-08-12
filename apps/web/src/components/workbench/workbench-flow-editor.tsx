@@ -865,9 +865,7 @@ export function WorkbenchFlowEditor({
   }, [
     availableToolOptions,
     deleteSelectedNode,
-    edges,
     modelConnections,
-    nodes,
     selectedAiToolPreview,
     selectedNode
   ]);
