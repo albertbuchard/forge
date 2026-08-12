@@ -13,6 +13,18 @@ import type {
   ComparisonResponse
 } from "./comparison-types";
 import type {
+  ProductFeedbackPayload,
+  ProductImportItem,
+  ProductImportPreview,
+  ProductImportRun,
+  ProductImportSource,
+  ProductOnboardingState,
+  ProductPackage,
+  ProductPackageInstall,
+  ProductPackagePreview,
+  ProductReviewItem
+} from "./product-launchpad-types";
+import type {
   AssessmentFeedback,
   ConceptDetail,
   CourseDetail,
@@ -184,6 +196,10 @@ import type {
   WorkoutSessionDetailPayload,
   XpMetricsPayload,
   CrudEntityType,
+  CaptureConfirmation,
+  CaptureIntent,
+  CaptureProposal,
+  CaptureReceipt,
   LocalSearchEntityKind,
   LocalSearchResponse,
   RelationshipProposalDecision,
@@ -6836,6 +6852,211 @@ export function searchLocalRecords(input: {
   }
   return request<LocalSearchResponse>(
     `/api/v1/local-search?${params.toString()}`
+  );
+}
+
+export function proposeCapture(intent: CaptureIntent) {
+  return request<{ proposal: CaptureProposal }>(
+    "/api/v1/capture/proposals",
+    {
+      method: "POST",
+      body: JSON.stringify({ intent })
+    }
+  );
+}
+
+export function confirmCapture(input: CaptureConfirmation) {
+  return request<{ receipt: CaptureReceipt }>("/api/v1/capture/confirm", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function listLaunchpadPackages() {
+  return request<{ packages: ProductPackage[] }>("/api/v1/launchpad/packages");
+}
+
+export function listLaunchpadPackageInstalls(ownerUserId: string) {
+  return request<{ installs: ProductPackageInstall[] }>(
+    `/api/v1/launchpad/package-installs?ownerUserId=${encodeURIComponent(ownerUserId)}`
+  );
+}
+
+export function removeLaunchpadPackageInstall(
+  installId: string,
+  ownerUserId: string
+) {
+  return request<{
+    removal: {
+      installId: string;
+      status: "removed";
+      removedAt?: string;
+      replayed: boolean;
+    };
+  }>(
+    `/api/v1/launchpad/package-installs/${encodeURIComponent(installId)}/remove`,
+    {
+      method: "POST",
+      body: JSON.stringify({ ownerUserId, expectedStatus: "installed" })
+    }
+  );
+}
+
+export function getLaunchpadOnboarding(ownerUserId: string) {
+  return request<{ onboarding: ProductOnboardingState }>(
+    `/api/v1/launchpad/onboarding?ownerUserId=${encodeURIComponent(ownerUserId)}`
+  );
+}
+
+export function updateLaunchpadOnboarding(
+  input: Pick<
+    ProductOnboardingState,
+    "ownerUserId" | "outcomeKey" | "currentStep" | "status"
+  >
+) {
+  return request<{ onboarding: ProductOnboardingState }>(
+    "/api/v1/launchpad/onboarding",
+    { method: "PUT", body: JSON.stringify(input) }
+  );
+}
+
+export function previewLaunchpadPackage(input: {
+  ownerUserId: string;
+  packageId: string;
+}) {
+  return request<{ preview: ProductPackagePreview }>(
+    "/api/v1/launchpad/packages/preview",
+    { method: "POST", body: JSON.stringify(input) }
+  );
+}
+
+export function installLaunchpadPackage(input: {
+  ownerUserId: string;
+  packageId: string;
+  manifestSha256: string;
+  idempotencyKey: string;
+}) {
+  return request<{
+    install: {
+      installId: string;
+      packageId: string;
+      status: "installed";
+      createdEntities: Array<{
+        ref: string;
+        entityType: CrudEntityType;
+        entityId: string;
+        title: string;
+        href: string;
+      }>;
+      installedAt: string;
+      replayed: boolean;
+    };
+  }>("/api/v1/launchpad/packages/install", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function previewLaunchpadImport(input: {
+  ownerUserId: string;
+  sourceKind: ProductImportSource;
+  sourceLabel: string;
+  items: ProductImportItem[];
+}) {
+  return request<{ preview: ProductImportPreview }>(
+    "/api/v1/launchpad/imports/preview",
+    { method: "POST", body: JSON.stringify(input) }
+  );
+}
+
+export function commitLaunchpadImport(input: {
+  ownerUserId: string;
+  previewId: string;
+  payloadFingerprint: string;
+  idempotencyKey: string;
+  decisions: Array<{ sourceId: string; action: "create" | "skip" }>;
+}) {
+  return request<{
+    import: {
+      importId: string;
+      status: "committed";
+      created: Array<{
+        sourceId: string;
+        entityType: CrudEntityType;
+        entityId: string;
+        title: string;
+        href: string;
+      }>;
+      skipped: Array<{ sourceId: string; reason: string }>;
+      replayed: boolean;
+    };
+  }>("/api/v1/launchpad/imports/commit", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function listLaunchpadImports(ownerUserId: string) {
+  return request<{ imports: ProductImportRun[] }>(
+    `/api/v1/launchpad/imports?ownerUserId=${encodeURIComponent(ownerUserId)}`
+  );
+}
+
+export function rollbackLaunchpadImport(importId: string, ownerUserId: string) {
+  return request<{
+    rollback: {
+      importId: string;
+      status: "rolled_back";
+      rolledBackAt?: string;
+      replayed: boolean;
+    };
+  }>(`/api/v1/launchpad/imports/${encodeURIComponent(importId)}/rollback`, {
+    method: "POST",
+    body: JSON.stringify({ ownerUserId, expectedStatus: "committed" })
+  });
+}
+
+export function listLaunchpadReviews(ownerUserId: string) {
+  return request<{ items: ProductReviewItem[] }>(
+    `/api/v1/launchpad/reviews?ownerUserId=${encodeURIComponent(ownerUserId)}`
+  );
+}
+
+export function decideLaunchpadReview(
+  itemId: string,
+  input: {
+    ownerUserId: string;
+    expectedRevision: number;
+    decision: "accept" | "reject";
+  }
+) {
+  return request<{ decision: Record<string, unknown> }>(
+    `/api/v1/launchpad/reviews/${encodeURIComponent(itemId)}/decision`,
+    { method: "POST", body: JSON.stringify(input) }
+  );
+}
+
+export function getLaunchpadFeedback(ownerUserId: string) {
+  return request<{ feedback: ProductFeedbackPayload }>(
+    `/api/v1/launchpad/feedback?ownerUserId=${encodeURIComponent(ownerUserId)}`
+  );
+}
+
+export function updateLaunchpadFeedback(input: {
+  ownerUserId: string;
+  enabled: boolean;
+  consentVersion: "privacy-feedback-v1" | null;
+}) {
+  return request<{ feedback: ProductFeedbackPayload }>(
+    "/api/v1/launchpad/feedback",
+    { method: "PUT", body: JSON.stringify(input) }
+  );
+}
+
+export function deleteLaunchpadFeedback(ownerUserId: string) {
+  return request<{ deleted: number }>(
+    `/api/v1/launchpad/feedback/events?ownerUserId=${encodeURIComponent(ownerUserId)}`,
+    { method: "DELETE" }
   );
 }
 

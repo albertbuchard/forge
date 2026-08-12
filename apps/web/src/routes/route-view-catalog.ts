@@ -35,6 +35,14 @@ export const ROUTE_VIEW_CATALOG = {
     tone: "core",
     skeleton: { blocks: 5, columns: 3, sideRail: true }
   },
+  launchpad: {
+    surfaceId: "launchpad",
+    title: "Launchpad",
+    description:
+      "Choose an outcome, inspect starter packs, import existing work, and resolve setup decisions.",
+    tone: "core",
+    skeleton: { blocks: 5, columns: 3, sideRail: false }
+  },
   "courses-index": {
     surfaceId: "courses-index",
     title: "Courses",
@@ -684,6 +692,7 @@ const ROUTE_VIEW_PATH_MATCHERS: RouteViewPathMatcher[] = [
   { viewId: "overview", match: exactly("/", "/overview") },
   { viewId: "course-learn", match: matches(/^\/courses\/[^/]+\/learn$/) },
   { viewId: "course-detail", match: matches(/^\/courses\/[^/]+$/) },
+  { viewId: "launchpad", match: exactly("/launchpad") },
   { viewId: "courses-index", match: exactly("/courses") },
   { viewId: "concept-detail", match: matches(/^\/concepts\/[^/]+$/) },
   { viewId: "concepts-index", match: exactly("/concepts") },

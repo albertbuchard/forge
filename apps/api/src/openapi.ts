@@ -187,6 +187,187 @@ const REWARDABLE_ENTITY_TYPE_VALUES = [
   "trigger_report"
 ];
 
+function buildLaunchpadOpenApiPaths() {
+  const ownerUserIdParameter = {
+    name: "ownerUserId",
+    in: "query",
+    required: true,
+    schema: { type: "string", minLength: 1, maxLength: 256 }
+  };
+  const operatorSecurity = [{ operatorSession: [] }];
+  const errors = {
+    "400": { $ref: "#/components/responses/Error" },
+    "401": { $ref: "#/components/responses/Error" },
+    "403": { $ref: "#/components/responses/Error" },
+    "404": { $ref: "#/components/responses/Error" },
+    "409": { $ref: "#/components/responses/Error" }
+  };
+  const ownerInput = {
+    ownerUserId: { type: "string", minLength: 1, maxLength: 256 }
+  };
+  return {
+    "/api/v1/launchpad/packages": {
+      get: {
+        tags: ["Launchpad"],
+        summary: "List reviewed starter packs and import integrations",
+        description: "Operator-session only. Manifests are deterministic and include their exact SHA-256 before any install.",
+        security: operatorSecurity,
+        responses: {
+          "200": jsonResponse({ type: "object", required: ["packages"], properties: { packages: { type: "array", items: { $ref: "#/components/schemas/ProductPackage" } } } }, "Reviewed package catalog"),
+          ...errors
+        }
+      }
+    },
+    "/api/v1/launchpad/onboarding": {
+      get: {
+        tags: ["Launchpad"],
+        summary: "Read resumable outcome-first onboarding state",
+        security: operatorSecurity,
+        parameters: [ownerUserIdParameter],
+        responses: { "200": jsonResponse({ type: "object", required: ["onboarding"], properties: { onboarding: { $ref: "#/components/schemas/ProductOnboardingState" } } }, "Current onboarding state"), ...errors }
+      },
+      put: {
+        tags: ["Launchpad"],
+        summary: "Advance, skip, resume, or complete onboarding",
+        security: operatorSecurity,
+        requestBody: jsonRequestBody({ type: "object", additionalProperties: false, required: ["ownerUserId", "outcomeKey", "currentStep", "status"], properties: { ...ownerInput, outcomeKey: nullable({ type: "string", enum: ["plan_week", "daily_reflection", "research_project"] }), currentStep: { type: "string", enum: ["choose_outcome", "review_pack", "install_pack", "first_result", "complete"] }, status: { type: "string", enum: ["not_started", "in_progress", "skipped", "complete"] } } }, true),
+        responses: { "200": jsonResponse({ type: "object", required: ["onboarding"], properties: { onboarding: { $ref: "#/components/schemas/ProductOnboardingState" } } }, "Updated onboarding state"), ...errors }
+      }
+    },
+    "/api/v1/launchpad/package-installs": {
+      get: {
+        tags: ["Launchpad"],
+        summary: "List one owner's starter-pack install receipts",
+        security: operatorSecurity,
+        parameters: [ownerUserIdParameter],
+        responses: { "200": jsonResponse({ type: "object", required: ["installs"], properties: { installs: { type: "array", maxItems: 100, items: { $ref: "#/components/schemas/ProductPackageInstall" } } } }, "Install and removal receipts"), ...errors }
+      }
+    },
+    "/api/v1/launchpad/packages/preview": {
+      post: {
+        tags: ["Launchpad"],
+        summary: "Preview every package record and collision without creating records",
+        security: operatorSecurity,
+        requestBody: jsonRequestBody({ type: "object", additionalProperties: false, required: ["ownerUserId", "packageId"], properties: { ...ownerInput, packageId: { type: "string", minLength: 3, maxLength: 120 } } }, true),
+        responses: { "200": jsonResponse({ type: "object", required: ["preview"], properties: { preview: { type: "object", additionalProperties: true } } }, "No-target-write package preview"), ...errors }
+      }
+    },
+    "/api/v1/launchpad/packages/install": {
+      post: {
+        tags: ["Launchpad"],
+        summary: "Install one exact reviewed starter-pack manifest atomically",
+        description: "Operator-session only. Exact retries return the stored receipt; changed-manifest or changed-package key reuse fails. Unresolved title collisions prevent all record creation.",
+        security: operatorSecurity,
+        requestBody: jsonRequestBody({ type: "object", additionalProperties: false, required: ["ownerUserId", "packageId", "manifestSha256", "idempotencyKey"], properties: { ...ownerInput, packageId: { type: "string", minLength: 3, maxLength: 120 }, manifestSha256: { type: "string", pattern: "^[0-9a-f]{64}$" }, idempotencyKey: { type: "string", minLength: 8, maxLength: 200 } } }, true),
+        responses: { "200": jsonResponse({ type: "object", additionalProperties: true }, "Exact install replay"), "201": jsonResponse({ type: "object", additionalProperties: true }, "Installed package receipt"), ...errors }
+      }
+    },
+    "/api/v1/launchpad/package-installs/{id}/remove": {
+      post: {
+        tags: ["Launchpad"],
+        summary: "Move one installed pack's created records to the bin in reverse dependency order",
+        security: operatorSecurity,
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: jsonRequestBody({ type: "object", additionalProperties: false, required: ["ownerUserId", "expectedStatus"], properties: { ...ownerInput, expectedStatus: { type: "string", enum: ["installed"] } } }, true),
+        responses: { "200": jsonResponse({ type: "object", additionalProperties: true }, "Removal receipt or exact replay"), ...errors }
+      }
+    },
+    "/api/v1/launchpad/imports/preview": {
+      post: {
+        tags: ["Launchpad"],
+        summary: "Stage and review up to 500 imported records without creating target records",
+        description: "The selected export is normalized into an owner-scoped local preview. Duplicate-title decisions enter the universal review queue; no Goal, Project, Task, Note, or Calendar Event is created by this route.",
+        security: operatorSecurity,
+        requestBody: jsonRequestBody({ type: "object", additionalProperties: false, required: ["ownerUserId", "sourceKind", "sourceLabel", "items"], properties: { ...ownerInput, sourceKind: { type: "string", enum: ["markdown", "obsidian", "notion", "todoist", "apple_reminders", "calendar", "github_issues", "linear"] }, sourceLabel: { type: "string", minLength: 1, maxLength: 240 }, items: { type: "array", minItems: 1, maxItems: 500, items: { type: "object", additionalProperties: true } } } }, true),
+        responses: { "200": jsonResponse({ type: "object", required: ["preview"], properties: { preview: { $ref: "#/components/schemas/ProductImportPreview" } } }, "Stored local preview and conflict decisions"), ...errors, "413": { $ref: "#/components/responses/Error" } }
+      }
+    },
+    "/api/v1/launchpad/imports": {
+      get: {
+        tags: ["Launchpad"],
+        summary: "List owner-scoped import previews, receipts, and rollback state",
+        description: "Returns at most 50 local import runs. Committed receipts expose exact created-record links and skipped-source reasons; rolled-back runs remain visible as evidence.",
+        security: operatorSecurity,
+        parameters: [ownerUserIdParameter],
+        responses: { "200": jsonResponse({ type: "object", required: ["imports"], properties: { imports: { type: "array", maxItems: 50, items: { $ref: "#/components/schemas/ProductImportRun" } } } }, "Import history and receipts"), ...errors }
+      }
+    },
+    "/api/v1/launchpad/imports/commit": {
+      post: {
+        tags: ["Launchpad"],
+        summary: "Commit reviewed import decisions atomically",
+        description: "An exact request fingerprint binds the preview, source payload, and every create-or-skip decision to one idempotency key. Changed-decision reuse returns 409.",
+        security: operatorSecurity,
+        requestBody: jsonRequestBody({ type: "object", additionalProperties: false, required: ["ownerUserId", "previewId", "payloadFingerprint", "idempotencyKey", "decisions"], properties: { ...ownerInput, previewId: { type: "string" }, payloadFingerprint: { type: "string", pattern: "^[0-9a-f]{64}$" }, idempotencyKey: { type: "string", minLength: 8, maxLength: 200 }, decisions: { type: "array", maxItems: 500, items: { type: "object", additionalProperties: false, required: ["sourceId", "action"], properties: { sourceId: { type: "string" }, action: { type: "string", enum: ["create", "skip"] } } } } } }, true),
+        responses: { "200": jsonResponse({ type: "object", additionalProperties: true }, "Exact import replay"), "201": jsonResponse({ type: "object", additionalProperties: true }, "Committed import receipt"), ...errors }
+      }
+    },
+    "/api/v1/launchpad/imports/{id}/rollback": {
+      post: {
+        tags: ["Launchpad"],
+        summary: "Move records created by one committed import to the bin",
+        security: operatorSecurity,
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: jsonRequestBody({ type: "object", additionalProperties: false, required: ["ownerUserId", "expectedStatus"], properties: { ...ownerInput, expectedStatus: { type: "string", enum: ["committed"] } } }, true),
+        responses: { "200": jsonResponse({ type: "object", additionalProperties: true }, "Rollback receipt or exact replay"), ...errors }
+      }
+    },
+    "/api/v1/launchpad/reviews": {
+      get: {
+        tags: ["Launchpad"],
+        summary: "List owner-scoped decisions that must not be automatic",
+        description: "Combines stored import conflicts with live relationship proposals, agent approvals, and Artifact metadata proposals. Browser-local offline conflicts are added by the Forge UI without uploading them.",
+        security: operatorSecurity,
+        parameters: [ownerUserIdParameter],
+        responses: { "200": jsonResponse({ type: "object", required: ["items"], properties: { items: { type: "array", maxItems: 100, items: { $ref: "#/components/schemas/ProductReviewItem" } } } }, "Revision-bound pending decisions"), ...errors }
+      }
+    },
+    "/api/v1/launchpad/reviews/{id}/decision": {
+      post: {
+        tags: ["Launchpad"],
+        summary: "Accept or reject one exact live review revision",
+        description: "Import conflicts must be resolved in their complete import preview. Relationship, agent, and Artifact proposals reauthorize their source before applying the exact reviewed action.",
+        security: operatorSecurity,
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: jsonRequestBody({ type: "object", additionalProperties: false, required: ["ownerUserId", "expectedRevision", "decision"], properties: { ...ownerInput, expectedRevision: { type: "integer", minimum: 1 }, decision: { type: "string", enum: ["accept", "reject"] } } }, true),
+        responses: { "200": jsonResponse({ type: "object", additionalProperties: true }, "Committed review decision"), ...errors }
+      }
+    },
+    "/api/v1/launchpad/feedback": {
+      get: {
+        tags: ["Launchpad"],
+        summary: "Inspect local privacy-feedback consent, events, and field policy",
+        security: operatorSecurity,
+        parameters: [ownerUserIdParameter],
+        responses: { "200": jsonResponse({ type: "object", required: ["feedback"], properties: { feedback: { $ref: "#/components/schemas/ProductFeedbackPayload" } } }, "Local-only feedback state"), ...errors }
+      },
+      put: {
+        tags: ["Launchpad"],
+        summary: "Enable or disable local privacy feedback explicitly",
+        security: operatorSecurity,
+        requestBody: jsonRequestBody({ type: "object", additionalProperties: false, required: ["ownerUserId", "enabled", "consentVersion"], properties: { ...ownerInput, enabled: { type: "boolean" }, consentVersion: nullable({ type: "string", enum: ["privacy-feedback-v1"] }) } }, true),
+        responses: { "200": jsonResponse({ type: "object", required: ["feedback"], properties: { feedback: { $ref: "#/components/schemas/ProductFeedbackPayload" } } }, "Updated consent and inspectable local events"), ...errors }
+      }
+    },
+    "/api/v1/launchpad/feedback/events": {
+      post: {
+        tags: ["Launchpad"],
+        summary: "Record one allowlisted local outcome event when consent is enabled",
+        security: operatorSecurity,
+        requestBody: jsonRequestBody({ type: "object", additionalProperties: true, required: ["ownerUserId", "eventName"] }, true),
+        responses: { "200": jsonResponse({ type: "object", additionalProperties: true }, "Stored or explicitly not recorded"), ...errors }
+      },
+      delete: {
+        tags: ["Launchpad"],
+        summary: "Delete all local privacy-feedback events for one owner",
+        security: operatorSecurity,
+        parameters: [ownerUserIdParameter],
+        responses: { "200": jsonResponse({ type: "object", required: ["deleted"], properties: { deleted: { type: "integer", minimum: 0 } } }, "Deleted event count"), ...errors }
+      }
+    }
+  };
+}
+
 const API_TAGS = [
   {
     name: "Meta",
@@ -260,6 +441,16 @@ const API_TAGS = [
     name: "Search",
     description:
       "Permission-first local lexical and released-relationship search across eligible Forge record families."
+  },
+  {
+    name: "Capture",
+    description:
+      "Browser-local draft classification and explicit atomic Note or Artifact confirmation."
+  },
+  {
+    name: "Launchpad",
+    description:
+      "Outcome-first onboarding, reviewed starter packs, import previews, the universal review queue, privacy feedback, and distribution readiness."
   },
   {
     name: "Relationship Proposals",
@@ -408,6 +599,8 @@ const API_TAG_GROUPS = [
       "Reviews",
       "Insights",
       "Attention",
+      "Capture",
+      "Launchpad",
       "Navigation",
       "Workbench"
     ]
@@ -498,6 +691,12 @@ function resolveTagsForPath(path: string) {
   }
   if (path.startsWith("/api/v1/local-search")) {
     return ["Search"];
+  }
+  if (path.startsWith("/api/v1/capture")) {
+    return ["Capture"];
+  }
+  if (path.startsWith("/api/v1/launchpad")) {
+    return ["Launchpad"];
   }
   if (path.startsWith("/api/v1/relationship-proposals")) {
     return ["Relationship Proposals"];
@@ -1002,6 +1201,373 @@ export function buildOpenApiDocument() {
         items: { $ref: "#/components/schemas/LocalSearchResult" }
       },
       coverage: { $ref: "#/components/schemas/LocalSearchCoverage" }
+    }
+  };
+  const captureFileDescriptor = {
+    type: "object",
+    additionalProperties: false,
+    required: ["name", "declaredMimeType", "byteSize", "sha256"],
+    properties: {
+      name: { type: "string", minLength: 1, maxLength: 512 },
+      declaredMimeType: { type: "string", maxLength: 240 },
+      byteSize: {
+        type: "integer",
+        minimum: 1,
+        maximum: 100 * 1024 * 1024
+      },
+      sha256: { type: "string", pattern: "^[0-9a-f]{64}$" }
+    }
+  };
+  const captureIntentBaseProperties = {
+    version: { type: "integer", enum: [1] },
+    text: { type: "string", maxLength: 24_000 },
+    ownerUserId: nullable({ type: "string", minLength: 1, maxLength: 256 })
+  };
+  const captureIntent = {
+    oneOf: [
+      {
+        type: "object",
+        additionalProperties: false,
+        required: ["version", "kind", "text", "ownerUserId"],
+        properties: {
+          ...captureIntentBaseProperties,
+          kind: { type: "string", enum: ["text"] },
+          text: { type: "string", minLength: 1, maxLength: 24_000 }
+        }
+      },
+      {
+        type: "object",
+        additionalProperties: false,
+        required: ["version", "kind", "text", "ownerUserId"],
+        properties: {
+          ...captureIntentBaseProperties,
+          kind: { type: "string", enum: ["dictation"] },
+          text: { type: "string", minLength: 1, maxLength: 24_000 }
+        }
+      },
+      {
+        type: "object",
+        additionalProperties: false,
+        required: ["version", "kind", "url", "text", "ownerUserId"],
+        properties: {
+          ...captureIntentBaseProperties,
+          kind: { type: "string", enum: ["url"] },
+          url: { type: "string", format: "uri", maxLength: 4_096 }
+        }
+      },
+      {
+        type: "object",
+        additionalProperties: false,
+        required: ["version", "kind", "file", "text", "ownerUserId"],
+        properties: {
+          ...captureIntentBaseProperties,
+          kind: { type: "string", enum: ["file"] },
+          file: { $ref: "#/components/schemas/CaptureFileDescriptor" }
+        }
+      }
+    ]
+  };
+  const captureRelationship = {
+    type: "object",
+    additionalProperties: false,
+    required: ["entityType", "entityId", "title", "sourceHref", "reason"],
+    properties: {
+      entityType: {
+        type: "string",
+        enum: [...crudEntityTypeSchema.options]
+      },
+      entityId: { type: "string", minLength: 1, maxLength: 512 },
+      title: { type: "string", minLength: 1, maxLength: 240 },
+      sourceHref: { type: "string", minLength: 1, maxLength: 2_048 },
+      reason: { type: "string", minLength: 1, maxLength: 500 }
+    }
+  };
+  const captureProposal = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "version",
+      "proposalId",
+      "targetType",
+      "confidence",
+      "classificationReason",
+      "title",
+      "contentMarkdown",
+      "description",
+      "relationships",
+      "warnings",
+      "requiresConfirmation"
+    ],
+    properties: {
+      version: { type: "integer", enum: [1] },
+      proposalId: {
+        type: "string",
+        pattern: "^capture_proposal_[0-9a-f]{32}$"
+      },
+      targetType: { type: "string", enum: ["note", "artifact"] },
+      confidence: {
+        type: "string",
+        enum: ["deterministic", "review_required"]
+      },
+      classificationReason: { type: "string", minLength: 1, maxLength: 500 },
+      title: { type: "string", minLength: 1, maxLength: 240 },
+      contentMarkdown: nullable({ type: "string", maxLength: 24_000 }),
+      description: nullable({ type: "string", maxLength: 24_000 }),
+      relationships: {
+        type: "array",
+        maxItems: 5,
+        items: { $ref: "#/components/schemas/CaptureRelationship" }
+      },
+      warnings: {
+        type: "array",
+        maxItems: 8,
+        items: { type: "string", minLength: 1, maxLength: 500 }
+      },
+      requiresConfirmation: { type: "boolean", enum: [true] }
+    }
+  };
+  const captureConfirmation = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "proposalId",
+      "idempotencyKey",
+      "intent",
+      "selection",
+      "fileContentBase64"
+    ],
+    properties: {
+      proposalId: {
+        type: "string",
+        pattern: "^capture_proposal_[0-9a-f]{32}$"
+      },
+      idempotencyKey: {
+        type: "string",
+        minLength: 8,
+        maxLength: 200,
+        pattern: "^[A-Za-z0-9._:-]+$"
+      },
+      intent: { $ref: "#/components/schemas/CaptureIntent" },
+      selection: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "targetType",
+          "title",
+          "contentMarkdown",
+          "description",
+          "relationshipKeys"
+        ],
+        properties: {
+          targetType: { type: "string", enum: ["note", "artifact"] },
+          title: { type: "string", minLength: 1, maxLength: 240 },
+          contentMarkdown: nullable({
+            type: "string",
+            minLength: 1,
+            maxLength: 24_000
+          }),
+          description: nullable({ type: "string", maxLength: 24_000 }),
+          relationshipKeys: {
+            type: "array",
+            maxItems: 5,
+            items: { type: "string", minLength: 3, maxLength: 640 }
+          }
+        }
+      },
+      fileContentBase64: nullable({
+        type: "string",
+        description:
+          "Base64 file bytes supplied only after the operator reviewed an Artifact proposal."
+      })
+    }
+  };
+  const captureReceipt = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "version",
+      "proposalId",
+      "targetType",
+      "targetId",
+      "targetHref",
+      "title",
+      "replayed",
+      "confirmedAt",
+      "relationshipCount"
+    ],
+    properties: {
+      version: { type: "integer", enum: [1] },
+      proposalId: { type: "string" },
+      targetType: { type: "string", enum: ["note", "artifact"] },
+      targetId: { type: "string" },
+      targetHref: { type: "string" },
+      title: { type: "string" },
+      replayed: { type: "boolean" },
+      confirmedAt: { type: "string", format: "date-time" },
+      relationshipCount: { type: "integer", minimum: 0, maximum: 5 }
+    }
+  };
+  const productPackage = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "version",
+      "kind",
+      "title",
+      "summary",
+      "outcomeKey",
+      "author",
+      "reviewState",
+      "compatibility",
+      "permissions",
+      "records",
+      "setupHref",
+      "manifestSha256"
+    ],
+    properties: {
+      id: { type: "string", minLength: 3, maxLength: 120 },
+      version: { type: "string", minLength: 1, maxLength: 40 },
+      kind: { type: "string", enum: ["starter_pack", "integration"] },
+      title: { type: "string", minLength: 1, maxLength: 160 },
+      summary: { type: "string", minLength: 1, maxLength: 1_000 },
+      outcomeKey: nullable({
+        type: "string",
+        enum: ["plan_week", "daily_reflection", "research_project"]
+      }),
+      author: { type: "string", minLength: 1, maxLength: 120 },
+      reviewState: { type: "string", enum: ["forge_reviewed", "external_setup"] },
+      compatibility: { type: "string", minLength: 1, maxLength: 120 },
+      permissions: {
+        type: "array",
+        maxItems: 32,
+        items: { type: "string", minLength: 1, maxLength: 120 }
+      },
+      records: {
+        type: "array",
+        maxItems: 40,
+        items: { type: "object", additionalProperties: true }
+      },
+      setupHref: nullable({ type: "string", maxLength: 2_048 }),
+      manifestSha256: { type: "string", pattern: "^[0-9a-f]{64}$" }
+    }
+  };
+  const productOnboardingState = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "ownerUserId",
+      "outcomeKey",
+      "currentStep",
+      "status",
+      "installedPackageId",
+      "lastResultHref",
+      "createdAt",
+      "updatedAt"
+    ],
+    properties: {
+      ownerUserId: { type: "string" },
+      outcomeKey: nullable({
+        type: "string",
+        enum: ["plan_week", "daily_reflection", "research_project"]
+      }),
+      currentStep: {
+        type: "string",
+        enum: ["choose_outcome", "review_pack", "install_pack", "first_result", "complete"]
+      },
+      status: { type: "string", enum: ["not_started", "in_progress", "skipped", "complete"] },
+      installedPackageId: nullable({ type: "string" }),
+      lastResultHref: nullable({ type: "string" }),
+      createdAt: nullable({ type: "string", format: "date-time" }),
+      updatedAt: nullable({ type: "string", format: "date-time" })
+    }
+  };
+  const productPackageInstall = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "packageId",
+      "packageVersion",
+      "manifestSha256",
+      "status",
+      "createdEntities",
+      "installedAt",
+      "removedAt",
+      "updatedAt"
+    ],
+    properties: {
+      id: { type: "string" },
+      packageId: { type: "string" },
+      packageVersion: { type: "string" },
+      manifestSha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
+      status: { type: "string", enum: ["installed", "removed"] },
+      createdEntities: { type: "array", items: { type: "object", additionalProperties: true } },
+      installedAt: { type: "string", format: "date-time" },
+      removedAt: nullable({ type: "string", format: "date-time" }),
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+  const productImportPreview = {
+    type: "object",
+    additionalProperties: false,
+    required: ["previewId", "ownerUserId", "sourceKind", "sourceLabel", "payloadFingerprint", "items", "counts"],
+    properties: {
+      previewId: { type: "string" },
+      ownerUserId: { type: "string" },
+      sourceKind: {
+        type: "string",
+        enum: ["markdown", "obsidian", "notion", "todoist", "apple_reminders", "calendar", "github_issues", "linear"]
+      },
+      sourceLabel: { type: "string" },
+      payloadFingerprint: { type: "string", pattern: "^[0-9a-f]{64}$" },
+      items: { type: "array", maxItems: 500, items: { type: "object", additionalProperties: true } },
+      counts: { type: "object", additionalProperties: false, required: ["total", "create", "conflicts"], properties: { total: { type: "integer" }, create: { type: "integer" }, conflicts: { type: "integer" } } }
+    }
+  };
+  const productImportRun = {
+    type: "object",
+    additionalProperties: false,
+    required: ["id", "sourceKind", "sourceLabel", "status", "created", "skipped", "committedAt", "createdAt", "updatedAt"],
+    properties: {
+      id: { type: "string" },
+      sourceKind: { type: "string", enum: ["markdown", "obsidian", "notion", "todoist", "apple_reminders", "calendar", "github_issues", "linear"] },
+      sourceLabel: { type: "string" },
+      status: { type: "string", enum: ["preview", "committed", "rolled_back"] },
+      created: { type: "array", items: { type: "object", additionalProperties: true } },
+      skipped: { type: "array", items: { type: "object", additionalProperties: true } },
+      committedAt: nullable({ type: "string", format: "date-time" }),
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+  const productReviewItem = {
+    type: "object",
+    additionalProperties: false,
+    required: ["id", "kind", "sourceType", "sourceId", "revision", "status", "title", "summary", "proposedAction", "evidence", "createdAt", "updatedAt"],
+    properties: {
+      id: { type: "string" },
+      kind: { type: "string", enum: ["import_conflict", "capture_classification", "agent_proposal", "relationship_proposal", "offline_conflict", "artifact_enrichment", "sync_conflict"] },
+      sourceType: { type: "string" },
+      sourceId: { type: "string" },
+      revision: { type: "integer", minimum: 1 },
+      status: { type: "string", enum: ["pending"] },
+      title: { type: "string" },
+      summary: { type: "string" },
+      proposedAction: { type: "object", additionalProperties: true },
+      evidence: { type: "array", items: { type: "object", additionalProperties: true } },
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+  const productFeedbackPayload = {
+    type: "object",
+    additionalProperties: true,
+    required: ["settings", "events", "policy"],
+    properties: {
+      settings: { type: "object", additionalProperties: true },
+      events: { type: "array", items: { type: "object", additionalProperties: true } },
+      policy: { type: "object", additionalProperties: true }
     }
   };
   const relationshipProposalEndpoint = {
@@ -12607,6 +13173,19 @@ export function buildOpenApiDocument() {
         LocalSearchResult: localSearchResult,
         LocalSearchCoverage: localSearchCoverage,
         LocalSearchResponse: localSearchResponse,
+        CaptureFileDescriptor: captureFileDescriptor,
+        CaptureIntent: captureIntent,
+        CaptureRelationship: captureRelationship,
+        CaptureProposal: captureProposal,
+        CaptureConfirmation: captureConfirmation,
+        CaptureReceipt: captureReceipt,
+        ProductPackage: productPackage,
+        ProductOnboardingState: productOnboardingState,
+        ProductPackageInstall: productPackageInstall,
+        ProductImportPreview: productImportPreview,
+        ProductImportRun: productImportRun,
+        ProductReviewItem: productReviewItem,
+        ProductFeedbackPayload: productFeedbackPayload,
         RelationshipProposalEndpoint: relationshipProposalEndpoint,
         RelationshipProposalEvidence: relationshipProposalEvidence,
         RelationshipProposal: relationshipProposal,
@@ -12921,6 +13500,7 @@ export function buildOpenApiDocument() {
       ...buildPeerOpenApiPaths(),
       ...buildCourseOpenApiPaths(),
       ...buildSecurityPairingOpenApiPaths(),
+      ...buildLaunchpadOpenApiPaths(),
       "/api/v1/comparisons/catalog": {
         get: {
           tags: ["Comparisons"],
@@ -13209,6 +13789,118 @@ export function buildOpenApiDocument() {
                 }
               }
             }
+          }
+        }
+      },
+      "/api/v1/capture/proposals": {
+        post: {
+          tags: ["Capture"],
+          summary: "Review a browser-local capture without writing",
+          description:
+            "Requires a trusted local operator session. Forge validates the selected owner, classifies text, an HTTP(S) URL, one file descriptor, or a browser-produced dictation transcript as a Note or Artifact, and searches only currently authorized local records for at most five proposed relationships. This route never creates or changes a Forge record. File bytes remain in the browser and dictation audio is never accepted or stored.",
+          security: [{ operatorSession: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["intent"],
+                  properties: {
+                    intent: { $ref: "#/components/schemas/CaptureIntent" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["proposal"],
+                properties: {
+                  proposal: { $ref: "#/components/schemas/CaptureProposal" }
+                }
+              },
+              "A deterministic, no-write proposal requiring explicit confirmation"
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": {
+              description:
+                "Agent tokens and other non-operator principals cannot use Global Capture.",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" }
+                }
+              }
+            },
+            "404": {
+              description: "Generic unavailable response for an unknown owner.",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" }
+                }
+              }
+            },
+            "413": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/capture/confirm": {
+        post: {
+          tags: ["Capture"],
+          summary: "Confirm one reviewed capture atomically",
+          description:
+            "Requires a trusted local operator session. Forge recomputes the current proposal, requires an exact proposal identifier and reviewed target type, reauthorizes every selected relationship, and then creates exactly one Note or Artifact. The idempotency key determines the target identity: an exact retry returns the original receipt without another record, link, or audit event, while changed-payload reuse returns 409. Artifact bytes must match the reviewed byte count and SHA-256. Nothing is created when review, authorization, file integrity, or idempotency checks fail.",
+          security: [{ operatorSession: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/CaptureConfirmation" }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["receipt"],
+                properties: {
+                  receipt: { $ref: "#/components/schemas/CaptureReceipt" }
+                }
+              },
+              "Exact idempotent replay of a previously confirmed capture"
+            ),
+            "201": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["receipt"],
+                properties: {
+                  receipt: { $ref: "#/components/schemas/CaptureReceipt" }
+                }
+              },
+              "One newly created Note or Artifact and its durable receipt"
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": {
+              description:
+                "The proposal, file, relationship, or idempotency payload changed after review. No record is created.",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" }
+                }
+              }
+            },
+            "413": { $ref: "#/components/responses/Error" }
           }
         }
       },

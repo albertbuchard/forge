@@ -19,6 +19,7 @@ import {
   Clock3,
   Filter,
   GitBranch,
+  Inbox,
   LayoutDashboard,
   LoaderCircle,
   Network,
@@ -37,6 +38,7 @@ import {
   Zap
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { CaptureDialog } from "@/components/experience/capture-dialog";
 import {
   EntityLinkMultiSelect,
   type EntityLinkOption
@@ -350,6 +352,7 @@ export function ActionBar({
   const [savedViewName, setSavedViewName] = useState("");
   const [savedViewNotice, setSavedViewNotice] = useState<string | null>(null);
   const [savedViewError, setSavedViewError] = useState<string | null>(null);
+  const [captureOpen, setCaptureOpen] = useState(false);
   const deferredQuery = useDeferredValue(query);
   const normalizedQuery = normalizeActionBarQuery(deferredQuery);
   const selectedFilterKey = selectedFilterIds.join("|");
@@ -394,6 +397,10 @@ export function ActionBar({
     snapshot.users.find((user) => user.id === "user_operator") ??
     snapshot.users.find((user) => user.kind === "human") ??
     null;
+  const captureOwnerUserId =
+    selectedUserIds.length === 1
+      ? selectedUserIds[0]
+      : (savedViewOwner?.id ?? null);
   const savedViewsQuery = useQuery({
     queryKey: ["forge-saved-views", savedViewOwner?.id ?? ""],
     enabled: open && savedViewOwner !== null,
@@ -801,14 +808,38 @@ export function ActionBar({
     [entityNavigationQuery.data]
   );
 
+  const captureActionItem = useMemo<ActionBarItem>(
+    () => ({
+      id: "quick-global-capture",
+      title: "Capture anything",
+      detail:
+        "Review text, a link, one file, or browser dictation before Forge creates a Note or Artifact.",
+      category: "Quick action",
+      section: "quick-actions",
+      searchText:
+        "capture anything quick inbox text link url file upload dictate dictation voice note artifact",
+      score: normalizedQuery
+        ? scoreActionBarMatch(
+            deferredQuery,
+            "Capture anything",
+            "capture anything quick inbox text link url file upload dictate dictation voice note artifact"
+          )
+        : 0,
+      onSelect: () => setCaptureOpen(true),
+      ...getAuxiliaryVisual("action", Inbox)
+    }),
+    [deferredQuery, normalizedQuery]
+  );
+
   const defaultItems = useMemo<ActionBarItem[]>(
     () =>
       [
+        captureActionItem,
         ...navigationItems.filter((item) => item.section === "pinned"),
         ...navigationItems.filter((item) => item.section === "recent"),
         ...routeItems.slice(0, 5)
       ].slice(0, 16),
-    [navigationItems, routeItems]
+    [captureActionItem, navigationItems, routeItems]
   );
 
   const entitySearchQuery = useQuery({
@@ -883,24 +914,31 @@ export function ActionBar({
   }, [deferredQuery, normalizedQuery, searchableRouteItems]);
 
   const quickActionItems = useMemo<ActionBarItem[]>(() => {
-    return buildActionBarCreateActionMatches(deferredQuery, createActions)
-      .filter((action) =>
-        createActionMatchesActionBarFilters(action, selectedFilters)
-      )
-      .slice(0, 6)
-      .map((action) => ({
-        id: `quick-${action.id}`,
-        title: action.quickActionTitle,
-        detail: action.description,
-        category: "Quick action",
-        section: "quick-actions" as const,
-        searchText:
-          `${action.quickActionTitle} ${action.description} ${action.aliases.join(" ")}`.toLowerCase(),
-        score: action.score,
-        onSelect: action.onSelect,
-        ...getAuxiliaryVisual("action", Plus)
-      }));
-  }, [createActions, deferredQuery, selectedFilters]);
+    const captureMatches =
+      selectedFilters.length === 0 && captureActionItem.score > 0
+        ? [captureActionItem]
+        : [];
+    return [
+      ...captureMatches,
+      ...buildActionBarCreateActionMatches(deferredQuery, createActions)
+        .filter((action) =>
+          createActionMatchesActionBarFilters(action, selectedFilters)
+        )
+        .slice(0, 6)
+        .map((action) => ({
+          id: `quick-${action.id}`,
+          title: action.quickActionTitle,
+          detail: action.description,
+          category: "Quick action",
+          section: "quick-actions" as const,
+          searchText:
+            `${action.quickActionTitle} ${action.description} ${action.aliases.join(" ")}`.toLowerCase(),
+          score: action.score,
+          onSelect: action.onSelect,
+          ...getAuxiliaryVisual("action", Plus)
+        }))
+    ].slice(0, 6);
+  }, [captureActionItem, createActions, deferredQuery, selectedFilters]);
 
   const visibleItems = useMemo(() => {
     if (!normalizedQuery && selectedFilters.length === 0) {
@@ -1001,6 +1039,7 @@ export function ActionBar({
   };
 
   return (
+    <>
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="surface-overlay fixed inset-0 z-40 backdrop-blur-xl" />
@@ -1443,5 +1482,11 @@ export function ActionBar({
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+    <CaptureDialog
+      open={captureOpen}
+      onOpenChange={setCaptureOpen}
+      ownerUserId={captureOwnerUserId}
+    />
+    </>
   );
 }

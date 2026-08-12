@@ -259,6 +259,7 @@ type ShellContextValue = {
     taskId?: string | null;
     projectId?: string | null;
   }) => void;
+  offlineMutationOutbox?: OfflineMutationOutboxController;
 };
 
 export function buildOfflineTaskStatusMove(
@@ -1848,7 +1849,8 @@ export function AppShell() {
       setStartWorkDefaults(defaults);
       setStartWorkError(null);
       setStartWorkOpen(true);
-    }
+    },
+    offlineMutationOutbox
   };
   lastKnownShellContext = contextValue;
 

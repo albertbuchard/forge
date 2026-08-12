@@ -53,7 +53,8 @@ const storySections = new Set([
   "Settings, Data Safety, And Progression",
   "iPhone Companion",
   "watchOS Companion",
-  "Planned User Stories"
+  "Planned User Stories",
+  "Product Expansion Stories"
 ]);
 
 function splitTableRow(line) {

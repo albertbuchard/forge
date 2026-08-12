@@ -1,7 +1,11 @@
 import { useEffect, type ReactElement } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { AppShell } from "@/components/shell/app-shell";
+import { AppShell, useForgeShell } from "@/components/shell/app-shell";
+import { DemoBanner } from "@/components/demo-banner";
 import { SettingsOperatorGate } from "@/components/settings/settings-operator-gate";
+import { LoadingState } from "@/components/ui/page-state";
+import { getLaunchpadOnboarding } from "@/lib/api";
 import {
   createUiDiagnosticLogger,
   publishUiDiagnosticLog
@@ -24,6 +28,7 @@ import {
   InsightsPage,
   KanbanPage,
   KnowledgeGraphPage,
+  LaunchpadPage,
   LifeEventsPage,
   LifeForcePage,
   MovementPage,
@@ -152,6 +157,37 @@ function DiagnosticsBootstrap() {
   return null;
 }
 
+function StartRoute() {
+  const shell = useForgeShell();
+  const ownerUserId =
+    shell.selectedUserIds.length === 1
+      ? shell.selectedUserIds[0]
+      : (shell.snapshot.users.find((user) => user.id === "user_operator")?.id ??
+        shell.snapshot.users.find((user) => user.kind === "human")?.id ??
+        "");
+  const onboarding = useQuery({
+    queryKey: ["forge-launchpad-onboarding", ownerUserId],
+    enabled: Boolean(ownerUserId),
+    queryFn: () => getLaunchpadOnboarding(ownerUserId)
+  });
+  if (!ownerUserId) return <Navigate to="/overview" replace />;
+  if (onboarding.isLoading) {
+    return (
+      <LoadingState
+        title="Preparing Forge…"
+        description="Loading your resumable first-result path."
+      />
+    );
+  }
+  const status = onboarding.data?.onboarding.status;
+  return (
+    <Navigate
+      to={status === "complete" || status === "skipped" ? "/overview" : "/launchpad"}
+      replace
+    />
+  );
+}
+
 export function App() {
   function surface(
     surfaceId: RouteViewId,
@@ -178,10 +214,11 @@ export function App() {
 
   return (
     <>
+      <DemoBanner />
       <DiagnosticsBootstrap />
       <Routes>
         <Route element={<AppShell />}>
-          <Route index element={<Navigate to="/overview" replace />} />
+          <Route index element={<StartRoute />} />
           <Route
             path="overview"
             element={surface(
@@ -189,6 +226,15 @@ export function App() {
               "Overview",
               "Daily signal, momentum, and current Forge state.",
               <OverviewPage />
+            )}
+          />
+          <Route
+            path="launchpad"
+            element={surface(
+              "launchpad",
+              "Launchpad",
+              "Choose an outcome, import existing work, and review every proposed change.",
+              <LaunchpadPage />
             )}
           />
           <Route

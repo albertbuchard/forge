@@ -287,6 +287,34 @@ import {
   searchLocalDocuments
 } from "./services/local-search.js";
 import {
+  buildCaptureProposal,
+  captureSearchQuery,
+  confirmCapture
+} from "./services/capture.js";
+import {
+  captureConfirmationSchema,
+  captureProposalRequestSchema
+} from "./capture-types.js";
+import {
+  commitProductImport,
+  decideProductReviewItem,
+  deleteProductFeedback,
+  getOnboardingState,
+  getProductFeedback,
+  installProductPackage,
+  listProductImportRuns,
+  listProductPackages,
+  listProductPackageInstalls,
+  listProductReviewItems,
+  previewProductImport,
+  previewProductPackage,
+  recordProductFeedbackEvent,
+  removeProductPackage,
+  rollbackProductImport,
+  updateOnboardingState,
+  updateProductFeedbackSettings
+} from "./services/product-launchpad.js";
+import {
   createOwnerRelationshipProposals,
   decideRelationshipProposal,
   listOwnerRelationshipProposals
@@ -15385,6 +15413,252 @@ export async function buildServer(
       entityKinds: query.entityKind,
       limit: query.limit
     });
+  });
+  const buildCurrentCaptureProposal = (
+    intent: Parameters<typeof buildCaptureProposal>[0]["intent"],
+    auth: ReturnType<typeof authenticateRequest>
+  ) => {
+    const userIds = intent.ownerUserId ? [intent.ownerUserId] : undefined;
+    const query = captureSearchQuery(intent);
+    if (!query) {
+      return buildCaptureProposal({ intent, searchResults: [] });
+    }
+    assertLocalSearchCapacity();
+    const graph = buildKnowledgeGraph(
+      userIds,
+      {},
+      {
+        includePeople: true,
+        noteScope: noteReadScopeForAuth(auth, userIds)
+      }
+    );
+    const search = searchLocalDocuments({
+      query,
+      documents: [
+        ...buildGraphLocalSearchDocuments(graph.nodes),
+        ...listSupplementalLocalSearchDocuments(userIds)
+      ],
+      edges: graph.edges,
+      deletionTombstones: listLocalSearchDeletionTombstones(),
+      scopeTombstones: listLocalSearchScopeTombstones(userIds),
+      limit: 5
+    });
+    return buildCaptureProposal({ intent, searchResults: search.results });
+  };
+  app.post("/api/v1/capture/proposals", async (request, reply) => {
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/capture/proposals" }
+    );
+    const { intent } = captureProposalRequestSchema.parse(request.body ?? {});
+    reply.header("cache-control", "no-store");
+    return { proposal: buildCurrentCaptureProposal(intent, auth) };
+  });
+  app.post(
+    "/api/v1/capture/confirm",
+    { bodyLimit: 150 * 1024 * 1024 },
+    async (request, reply) => {
+      const auth = requireOperatorSession(
+        request.headers as Record<string, unknown>,
+        { route: "/api/v1/capture/confirm" }
+      );
+      const confirmation = captureConfirmationSchema.parse(request.body ?? {});
+      const proposal = buildCurrentCaptureProposal(confirmation.intent, auth);
+      const receipt = await confirmCapture({
+        confirmation,
+        proposal,
+        context: {
+          ...toActivityContext(auth),
+          token: auth.token
+        }
+      });
+      reply
+        .header("cache-control", "no-store")
+        .header("Idempotency-Replayed", receipt.replayed ? "true" : "false")
+        .code(receipt.replayed ? 200 : 201);
+      return { receipt };
+    }
+  );
+  app.get("/api/v1/launchpad/packages", async (request) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/launchpad/packages"
+    });
+    return { packages: listProductPackages() };
+  });
+  app.get("/api/v1/launchpad/package-installs", async (request) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/launchpad/package-installs"
+    });
+    const query = request.query as Record<string, unknown>;
+    return {
+      installs: listProductPackageInstalls(
+        typeof query.ownerUserId === "string" ? query.ownerUserId : ""
+      )
+    };
+  });
+  app.get("/api/v1/launchpad/onboarding", async (request) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/launchpad/onboarding"
+    });
+    const query = request.query as Record<string, unknown>;
+    return {
+      onboarding: getOnboardingState(
+        typeof query.ownerUserId === "string" ? query.ownerUserId : ""
+      )
+    };
+  });
+  app.put("/api/v1/launchpad/onboarding", async (request) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/launchpad/onboarding"
+    });
+    return { onboarding: updateOnboardingState(request.body ?? {}) };
+  });
+  app.post("/api/v1/launchpad/packages/preview", async (request) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/launchpad/packages/preview"
+    });
+    return { preview: previewProductPackage(request.body ?? {}) };
+  });
+  app.post("/api/v1/launchpad/packages/install", async (request, reply) => {
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/launchpad/packages/install" }
+    );
+    const result = installProductPackage(
+      request.body ?? {},
+      toActivityContext(auth)
+    );
+    reply
+      .header("Idempotency-Replayed", result.replayed ? "true" : "false")
+      .code(result.replayed ? 200 : 201);
+    return { install: result };
+  });
+  app.post(
+    "/api/v1/launchpad/package-installs/:id/remove",
+    async (request) => {
+      const auth = requireOperatorSession(
+        request.headers as Record<string, unknown>,
+        { route: "/api/v1/launchpad/package-installs/:id/remove" }
+      );
+      const params = request.params as { id: string };
+      return {
+        removal: removeProductPackage(
+          params.id,
+          request.body ?? {},
+          toActivityContext(auth)
+        )
+      };
+    }
+  );
+  app.post(
+    "/api/v1/launchpad/imports/preview",
+    { bodyLimit: 8 * 1024 * 1024 },
+    async (request) => {
+      requireOperatorSession(request.headers as Record<string, unknown>, {
+        route: "/api/v1/launchpad/imports/preview"
+      });
+      return { preview: previewProductImport(request.body ?? {}) };
+    }
+  );
+  app.post("/api/v1/launchpad/imports/commit", async (request, reply) => {
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/launchpad/imports/commit" }
+    );
+    const result = commitProductImport(
+      request.body ?? {},
+      toActivityContext(auth)
+    );
+    reply
+      .header("Idempotency-Replayed", result.replayed ? "true" : "false")
+      .code(result.replayed ? 200 : 201);
+    return { import: result };
+  });
+  app.get("/api/v1/launchpad/imports", async (request) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/launchpad/imports"
+    });
+    const query = request.query as Record<string, unknown>;
+    return {
+      imports: listProductImportRuns(
+        typeof query.ownerUserId === "string" ? query.ownerUserId : ""
+      )
+    };
+  });
+  app.post(
+    "/api/v1/launchpad/imports/:id/rollback",
+    async (request) => {
+      const auth = requireOperatorSession(
+        request.headers as Record<string, unknown>,
+        { route: "/api/v1/launchpad/imports/:id/rollback" }
+      );
+      const params = request.params as { id: string };
+      return {
+        rollback: rollbackProductImport(
+          params.id,
+          request.body ?? {},
+          toActivityContext(auth)
+        )
+      };
+    }
+  );
+  app.get("/api/v1/launchpad/reviews", async (request) => {
+    const auth = requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/launchpad/reviews"
+    });
+    const query = request.query as Record<string, unknown>;
+    return {
+      items: listProductReviewItems(
+        typeof query.ownerUserId === "string" ? query.ownerUserId : "",
+        toActivityContext(auth)
+      )
+    };
+  });
+  app.post("/api/v1/launchpad/reviews/:id/decision", async (request) => {
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/launchpad/reviews/:id/decision" }
+    );
+    const params = request.params as { id: string };
+    return {
+      decision: decideProductReviewItem(
+        params.id,
+        request.body ?? {},
+        toActivityContext(auth)
+      )
+    };
+  });
+  app.get("/api/v1/launchpad/feedback", async (request) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/launchpad/feedback"
+    });
+    const query = request.query as Record<string, unknown>;
+    return {
+      feedback: getProductFeedback(
+        typeof query.ownerUserId === "string" ? query.ownerUserId : ""
+      )
+    };
+  });
+  app.put("/api/v1/launchpad/feedback", async (request) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/launchpad/feedback"
+    });
+    return { feedback: updateProductFeedbackSettings(request.body ?? {}) };
+  });
+  app.post("/api/v1/launchpad/feedback/events", async (request) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/launchpad/feedback/events"
+    });
+    return recordProductFeedbackEvent(request.body ?? {});
+  });
+  app.delete("/api/v1/launchpad/feedback/events", async (request) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/launchpad/feedback/events"
+    });
+    const query = request.query as Record<string, unknown>;
+    return deleteProductFeedback(
+      typeof query.ownerUserId === "string" ? query.ownerUserId : ""
+    );
   });
   app.get("/api/v1/relationship-proposals", async (request) => {
     requireOperatorSession(request.headers as Record<string, unknown>, {

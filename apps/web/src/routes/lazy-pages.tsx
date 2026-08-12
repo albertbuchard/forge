@@ -95,6 +95,11 @@ export const LifeEventsPage = lazy(() =>
     default: module.LifeEventsPage
   }))
 );
+export const LaunchpadPage = lazy(() =>
+  import("@/pages/launchpad-page").then((module) => ({
+    default: module.LaunchpadPage
+  }))
+);
 export const MovementPage = lazy(() =>
   import("@/pages/movement-page").then((module) => ({
     default: module.MovementPage

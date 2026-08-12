@@ -2520,7 +2520,7 @@ function artifactUploadActorScope(context: ArtifactContext) {
   return "human:operator";
 }
 
-function artifactIdForIdempotencyKey(
+export function artifactIdForIdempotencyKey(
   idempotencyKey: string,
   context: ArtifactContext
 ) {
@@ -4633,6 +4633,60 @@ export function applyArtifactEnrichmentProposal(
       provider: proposal.provider,
       model: proposal.model,
       dangerScore: nextDangerScore
+    });
+  });
+  return getArtifactById(id, context)!;
+}
+
+export function rejectArtifactEnrichmentProposal(
+  id: string,
+  proposalId: string,
+  context: ArtifactContext
+) {
+  const artifact = getArtifactById(id, context);
+  if (!artifact) return undefined;
+  const currentRow = getArtifactRow(id)!;
+  const proposal = readArtifactEnrichmentProposal(currentRow);
+  if (!proposal || proposal.proposalId !== proposalId) {
+    throw new HttpError(
+      409,
+      "artifact_enrichment_proposal_stale",
+      "This enrichment proposal is no longer current. Refresh before deciding.",
+      { artifactId: id }
+    );
+  }
+  const rejectedAt = nowIso();
+  const rejected = { ...proposal, status: "rejected", rejectedAt };
+  runInTransaction(() => {
+    const update = getDatabase()
+      .prepare(
+        `UPDATE artifacts
+         SET enrichment_results_json = ?, updated_at = ?
+         WHERE id = ? AND enrichment_results_json = ?
+           AND NOT EXISTS (
+             SELECT 1 FROM deleted_entities
+             WHERE deleted_entities.entity_type = 'artifact'
+               AND deleted_entities.entity_id = artifacts.id
+           )`
+      )
+      .run(
+        JSON.stringify(rejected),
+        rejectedAt,
+        id,
+        currentRow.enrichment_results_json
+      );
+    if (update.changes !== 1) {
+      throw new HttpError(
+        409,
+        "artifact_enrichment_proposal_stale",
+        "This enrichment proposal changed before the rejection was stored. Refresh before deciding.",
+        { artifactId: id }
+      );
+    }
+    recordArtifactAudit(id, "artifact.enrichment_rejected", context, {
+      proposalId,
+      provider: proposal.provider,
+      model: proposal.model
     });
   });
   return getArtifactById(id, context)!;

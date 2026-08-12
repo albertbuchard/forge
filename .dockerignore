@@ -1,0 +1,13 @@
+.git
+.github
+.turbo
+coverage
+data
+node_modules
+playwright-report
+test-results
+tmp
+*.log
+apps/android-companion/.gradle
+apps/android-companion/app/build
+apps/desktop-tauri/target

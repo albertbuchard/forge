@@ -279,6 +279,18 @@ const LEGACY_SCOPE_COMPATIBILITY = new Map<string, readonly string[]>([
 
 const REVIEWED_BODY_LIMIT_OVERRIDES = new Map<string, number>([
   ["POST /api/v1/artifacts", 150 * 1024 * 1024],
+  ["POST /api/v1/capture/proposals", 128 * 1024],
+  ["POST /api/v1/capture/confirm", 150 * 1024 * 1024],
+  ["PUT /api/v1/launchpad/onboarding", 4 * 1024],
+  ["POST /api/v1/launchpad/packages/preview", 4 * 1024],
+  ["POST /api/v1/launchpad/packages/install", 8 * 1024],
+  ["POST /api/v1/launchpad/package-installs/:id/remove", 4 * 1024],
+  ["POST /api/v1/launchpad/imports/preview", 8 * 1024 * 1024],
+  ["POST /api/v1/launchpad/imports/commit", 256 * 1024],
+  ["POST /api/v1/launchpad/imports/:id/rollback", 4 * 1024],
+  ["POST /api/v1/launchpad/reviews/:id/decision", 4 * 1024],
+  ["PUT /api/v1/launchpad/feedback", 4 * 1024],
+  ["POST /api/v1/launchpad/feedback/events", 4 * 1024],
   ["POST /api/v1/mobile/healthkit/sync-sessions/:id/chunks", 40_000_000],
   ["POST /api/v1/mobile/healthkit/sync", 8_000_000],
   ["POST /api/v1/offline-mutations/task-status", 16 * 1024],

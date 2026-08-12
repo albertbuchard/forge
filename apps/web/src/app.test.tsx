@@ -7,6 +7,10 @@ import { MemoryRouter, Outlet } from "react-router-dom";
 import { App } from "./app";
 import { createAppStore } from "@/store/store";
 
+const { getLaunchpadOnboardingMock } = vi.hoisted(() => ({
+  getLaunchpadOnboardingMock: vi.fn()
+}));
+
 afterEach(() => {
   cleanup();
 });
@@ -17,7 +21,18 @@ vi.mock("@/components/shell/app-shell", () => ({
       <div>Forge shell</div>
       <Outlet />
     </div>
-  )
+  ),
+  useForgeShell: () => ({
+    selectedUserIds: ["user_operator"],
+    snapshot: { users: [{ id: "user_operator", kind: "human" }] }
+  })
+}));
+
+vi.mock("@/components/demo-banner", () => ({ DemoBanner: () => null }));
+
+vi.mock("@/lib/api", () => ({
+  getLaunchpadOnboarding: (...args: unknown[]) =>
+    getLaunchpadOnboardingMock(...args)
 }));
 
 vi.mock("@/components/customization/surface-route-frame", () => ({
@@ -53,6 +68,10 @@ function renderApp(initialEntry: string) {
 
 vi.mock("@/pages/overview-page", () => ({
   OverviewPage: () => <div>Overview route</div>
+}));
+
+vi.mock("@/pages/launchpad-page", () => ({
+  LaunchpadPage: () => <div>Launchpad route</div>
 }));
 
 vi.mock("@/pages/goals-page", () => ({
@@ -250,7 +269,20 @@ vi.mock("@/pages/wiki-editor-page", () => ({
 }));
 
 describe("App routing", () => {
-  it("redirects the index route to overview", async () => {
+  it("sends an unfinished first run to Launchpad", async () => {
+    getLaunchpadOnboardingMock.mockResolvedValueOnce({
+      onboarding: { status: "not_started" }
+    });
+    renderApp("/");
+
+    expect(await screen.findByText("Forge shell")).toBeInTheDocument();
+    expect(await screen.findByText("Launchpad route")).toBeInTheDocument();
+  });
+
+  it("sends a completed first run to Overview", async () => {
+    getLaunchpadOnboardingMock.mockResolvedValueOnce({
+      onboarding: { status: "complete" }
+    });
     renderApp("/");
 
     expect(await screen.findByText("Forge shell")).toBeInTheDocument();

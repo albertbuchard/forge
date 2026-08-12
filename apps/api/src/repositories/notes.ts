@@ -76,6 +76,10 @@ type NoteContext = {
   actor?: string | null;
 };
 
+export type CreateNoteOptions = {
+  id?: string;
+};
+
 type NotesPageQuery = NotesListQuery & {
   cursor?: string;
   observedFrom?: string;
@@ -1172,7 +1176,8 @@ export function listNotesByObservedAtRange(
 
 export function createNoteWithinTransaction(
   input: CreateNoteInput,
-  context: NoteContext
+  context: NoteContext,
+  options: CreateNoteOptions = {}
 ): Note {
   cleanupExpiredNotes();
   const parsed = createNoteSchema.parse({
@@ -1181,7 +1186,15 @@ export function createNoteWithinTransaction(
     tags: normalizeTags(input.tags)
   });
   const now = new Date().toISOString();
-  const id = `note_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+  const id =
+    options.id ?? `note_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+  if (!/^note_[a-z0-9]{10,64}$/u.test(id)) {
+    throw new HttpError(
+      400,
+      "note_internal_id_invalid",
+      "The requested internal Note identity is invalid."
+    );
+  }
   const wikiFields = prepareNoteWikiFields({
     id,
     contentMarkdown: parsed.contentMarkdown,

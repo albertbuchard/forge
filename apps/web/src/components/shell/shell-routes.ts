@@ -23,6 +23,7 @@ import {
   Orbit,
   Radar,
   Repeat,
+  Rocket,
   Settings,
   SlidersHorizontal,
   Target,
@@ -47,6 +48,13 @@ export type ShellRouteDefinition = {
 };
 
 export const PRIMARY_ROUTES: ShellRouteDefinition[] = [
+  {
+    id: "launchpad",
+    to: "/launchpad",
+    label: "Launchpad",
+    detail: ROUTE_VIEW_CATALOG.launchpad.description,
+    icon: Rocket
+  },
   {
     id: "overview",
     to: "/overview",

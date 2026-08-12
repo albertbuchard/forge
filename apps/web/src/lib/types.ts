@@ -220,6 +220,78 @@ export interface LocalSearchResponse {
     truncated: false;
   };
 }
+export type CaptureInputKind = "text" | "url" | "file" | "dictation";
+export interface CaptureFileDescriptor {
+  name: string;
+  declaredMimeType: string;
+  byteSize: number;
+  sha256: string;
+}
+export type CaptureIntent =
+  | {
+      version: 1;
+      kind: "text" | "dictation";
+      text: string;
+      ownerUserId: string | null;
+    }
+  | {
+      version: 1;
+      kind: "url";
+      url: string;
+      text: string;
+      ownerUserId: string | null;
+    }
+  | {
+      version: 1;
+      kind: "file";
+      file: CaptureFileDescriptor;
+      text: string;
+      ownerUserId: string | null;
+    };
+export interface CaptureRelationship {
+  entityType: CrudEntityType;
+  entityId: string;
+  title: string;
+  sourceHref: string;
+  reason: string;
+}
+export interface CaptureProposal {
+  version: 1;
+  proposalId: string;
+  targetType: "note" | "artifact";
+  confidence: "deterministic" | "review_required";
+  classificationReason: string;
+  title: string;
+  contentMarkdown: string | null;
+  description: string | null;
+  relationships: CaptureRelationship[];
+  warnings: string[];
+  requiresConfirmation: true;
+}
+export interface CaptureConfirmation {
+  proposalId: string;
+  idempotencyKey: string;
+  intent: CaptureIntent;
+  selection: {
+    targetType: "note" | "artifact";
+    title: string;
+    contentMarkdown: string | null;
+    description: string | null;
+    relationshipKeys: string[];
+  };
+  fileContentBase64: string | null;
+}
+export interface CaptureReceipt {
+  version: 1;
+  proposalId: string;
+  targetType: "note" | "artifact";
+  targetId: string;
+  targetHref: string;
+  title: string;
+  replayed: boolean;
+  confirmedAt: string;
+  relationshipCount: number;
+}
 export type RelationshipProposalRelation = "supports" | "informs" | "related";
 export interface RelationshipProposalEndpoint {
   entityType: CrudEntityType;

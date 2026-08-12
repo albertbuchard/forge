@@ -1,0 +1,98 @@
+name: Release signed Forge desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing or new desktop release tag, for example desktop-v0.2.0
+        required: true
+        type: string
+      publish:
+        description: Publish the GitHub release after all signed artifacts upload
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: forge-desktop-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  signed-package:
+    name: Signed ${{ matrix.label }} package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS Apple Silicon
+            os: macos-15
+            target: aarch64-apple-darwin
+          - label: macOS Intel
+            os: macos-15
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Require signing and notarization authority
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          for name in TAURI_SIGNING_PRIVATE_KEY TAURI_UPDATER_PUBLIC_KEY APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!name}" ]; then
+              echo "Missing required desktop release authority: ${name}" >&2
+              exit 1
+            fi
+          done
+
+      - run: npm ci
+
+      - name: Write pinned updater configuration
+        env:
+          TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
+        run: npm run tauri:release-config
+
+      - name: Build, sign, notarize, and upload
+        uses: tauri-apps/tauri-action@v0.6.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          projectPath: apps/desktop-tauri
+          args: --config tauri.release.conf.json --target ${{ matrix.target }}
+          tagName: ${{ inputs.release_tag }}
+          releaseName: Forge desktop ${{ inputs.release_tag }}
+          releaseBody: Signed and notarized Forge desktop installers with signature-verified updater metadata.
+          releaseDraft: ${{ !inputs.publish }}
+          prerelease: false
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true
+          retryAttempts: 2

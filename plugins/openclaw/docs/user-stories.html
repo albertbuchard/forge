@@ -43,11 +43,11 @@
         </section>
 
         <section class="story-metrics" aria-label="Story totals">
-          <a class="story-metric metric-all" href="./user-stories.html" data-metric-scope="all"><strong>203</strong><span>All stories</span></a>
-          <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>193</strong><span>Current product</span></a>
-          <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>10</strong><span>Planned</span></a>
+          <a class="story-metric metric-all" href="./user-stories.html" data-metric-scope="all"><strong>204</strong><span>All stories</span></a>
+          <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>204</strong><span>Current product</span></a>
+          <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>0</strong><span>Planned</span></a>
           <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>24</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>151</strong><span>In review</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>159</strong><span>In review</span></a>
           <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>18</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
@@ -115,7 +115,7 @@
           </div>
 
           <div class="result-bar">
-            <p data-result-count aria-live="polite">Showing all 203 stories.</p>
+            <p data-result-count aria-live="polite">Showing all 204 stories.</p>
             <button type="button" class="reset-button" data-reset-filters hidden>Clear filters</button>
           </div>
           <noscript><p class="noscript-note">Filtering needs JavaScript. The complete story contract remains available below; open any family to read its stories.</p></noscript>
@@ -130,7 +130,7 @@
             <details class="story-family" data-family-group="SYS">
               <summary>
                 <span class="family-title"><span class="family-code">SYS</span>Global shell and navigation</span>
-                <span class="family-counts"><span data-family-visible>22</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 21 current · 1 planned</span></span>
+                <span class="family-counts"><span data-family-visible>23</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 23 current</span></span>
               </summary>
               <div class="story-list">
 
@@ -449,17 +449,32 @@
                   </div>
                 </details>
 
-                <details class="story-card" id="story-sys-22" data-story-id="SYS-22" data-lifecycle="planned" data-readiness="planned" data-family="SYS">
+                <details class="story-card" id="story-sys-22" data-story-id="SYS-22" data-lifecycle="current" data-readiness="In review" data-family="SYS">
                   <summary class="story-summary">
                     <span class="story-id">SYS-22</span>
                     <span class="story-summary-outcome">As a user, I can capture text, links, files, or dictation in one place, review the record type and relationships Forge proposes, and confirm the result before it is stored.</span>
-                    <span class="story-state state-planned">Planned</span>
+                    <span class="story-state state-in-review">In review</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a user, I can capture text, links, files, or dictation in one place, review the record type and relationships Forge proposes, and confirm the result before it is stored.</p>
                     <dl class="story-details">
-                      <div><dt>Where it lives</dt><dd>Global capture, Artifact Store, notes, guided classification, general links.</dd></div>
-                      <div><dt>First evidence needed</dt><dd>test representative inputs, ambiguous classifications, unsafe files, permissions, accessibility, and a strict confirmation boundary.</dd></div>
+                      <div><dt>Where it lives</dt><dd>Global capture, Artifact Store, notes, local search, Action Bar.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the global Capture dialog keeps drafts in the browser, proposes a Note or Artifact without writing, limits relationships to authorized local records, requires confirmation, rechecks file bytes, and returns an idempotent receipt. Complete live keyboard, screen-reader, ambiguous-language, and unsafe-file review.</dd></div>
+                    </dl>
+                  </div>
+                </details>
+
+                <details class="story-card" id="story-sys-23" data-story-id="SYS-23" data-lifecycle="current" data-readiness="In review" data-family="SYS">
+                  <summary class="story-summary">
+                    <span class="story-id">SYS-23</span>
+                    <span class="story-summary-outcome">As a user, I can resolve imports, agent approvals, relationship proposals, offline conflicts, and Artifact enrichment from one human review queue.</span>
+                    <span class="story-state state-in-review">In review</span>
+                  </summary>
+                  <div class="story-expanded">
+                    <p class="story-expanded-outcome">As a user, I can resolve imports, agent approvals, relationship proposals, offline conflicts, and Artifact enrichment from one human review queue.</p>
+                    <dl class="story-details">
+                      <div><dt>Where it lives</dt><dd>Launchpad Review Queue, relationship proposals, agent approvals, offline outbox, Artifact enrichment.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the queue combines the five decision sources, uses source revisions for conflict detection, and routes import conflicts back to the complete import preview. Complete live multi-actor conflict, long-queue, keyboard, and screen-reader review.</dd></div>
                     </dl>
                   </div>
                 </details>
@@ -2857,7 +2872,7 @@
             <details class="story-family" data-family-group="IOS">
               <summary>
                 <span class="family-title"><span class="family-code">IOS</span>iPhone companion</span>
-                <span class="family-counts"><span data-family-visible>12</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 11 current · 1 planned</span></span>
+                <span class="family-counts"><span data-family-visible>12</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 12 current</span></span>
               </summary>
               <div class="story-list">
 
@@ -3026,17 +3041,17 @@
                   </div>
                 </details>
 
-                <details class="story-card" id="story-ios-12" data-story-id="IOS-12" data-lifecycle="planned" data-readiness="planned" data-family="IOS">
+                <details class="story-card" id="story-ios-12" data-story-id="IOS-12" data-lifecycle="current" data-readiness="Externally blocked" data-family="IOS">
                   <summary class="story-summary">
                     <span class="story-id">IOS-12</span>
                     <span class="story-summary-outcome">As an iPhone user, I can install the public companion through a normal distribution channel after its sync, permission, privacy, and recovery contracts are verified.</span>
-                    <span class="story-state state-planned">Planned</span>
+                    <span class="story-state state-externally-blocked">Externally blocked</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As an iPhone user, I can install the public companion through a normal distribution channel after its sync, permission, privacy, and recovery contracts are verified.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>App Store distribution, release metadata, iPhone verification gates.</dd></div>
-                      <div><dt>First evidence needed</dt><dd>require the applicable IOS-01 through IOS-11 gates, privacy disclosures, support path, signed build evidence, and external store approval before public availability.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the native companion and signed archive, TestFlight, screenshot, and App Store submission paths exist. Public availability still requires Apple credentials, a successful signed submission, privacy metadata, and Apple review approval.</dd></div>
                     </dl>
                   </div>
                 </details>
@@ -3235,81 +3250,81 @@
             <details class="story-family" data-family-group="ONB">
               <summary>
                 <span class="family-title"><span class="family-code">ONB</span>First use and adoption</span>
-                <span class="family-counts"><span data-family-visible>5</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 0 current · 5 planned</span></span>
+                <span class="family-counts"><span data-family-visible>5</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 5 current</span></span>
               </summary>
               <div class="story-list">
 
-                <details class="story-card" id="story-onb-01" data-story-id="ONB-01" data-lifecycle="planned" data-readiness="planned" data-family="ONB">
+                <details class="story-card" id="story-onb-01" data-story-id="ONB-01" data-lifecycle="current" data-readiness="In review" data-family="ONB">
                   <summary class="story-summary">
                     <span class="story-id">ONB-01</span>
                     <span class="story-summary-outcome">As a new user, I can choose the outcome I want from Forge and receive a short first-run path that ends in a useful result rather than a tour of every screen.</span>
-                    <span class="story-state state-planned">Planned</span>
+                    <span class="story-state state-in-review">In review</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a new user, I can choose the outcome I want from Forge and receive a short first-run path that ends in a useful result rather than a tour of every screen.</p>
                     <dl class="story-details">
-                      <div><dt>Where it lives</dt><dd>First-run experience, starter data, permissions, progress and resume state.</dd></div>
-                      <div><dt>First evidence needed</dt><dd>test the top three intended outcomes with new users and define skip, resume, empty, offline, and permission-denied behavior without mutating existing accounts.</dd></div>
+                      <div><dt>Where it lives</dt><dd>Launchpad Outcomes, starter packs, progress and resume state.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>a new account opens Launchpad, can choose weekly planning, daily reflection, or research, review the exact starter pack, resume after interruption, skip the flow, and open its first created record. Complete live first-use testing with new users and permission-denied cases.</dd></div>
                     </dl>
                   </div>
                 </details>
 
-                <details class="story-card" id="story-onb-02" data-story-id="ONB-02" data-lifecycle="planned" data-readiness="planned" data-family="ONB">
+                <details class="story-card" id="story-onb-02" data-story-id="ONB-02" data-lifecycle="current" data-readiness="Externally blocked" data-family="ONB">
                   <summary class="story-summary">
                     <span class="story-id">ONB-02</span>
                     <span class="story-summary-outcome">As a prospective user, I can try a safe public demonstration of Forge without installing it or exposing personal information.</span>
-                    <span class="story-state state-planned">Planned</span>
+                    <span class="story-state state-externally-blocked">Externally blocked</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a prospective user, I can try a safe public demonstration of Forge without installing it or exposing personal information.</p>
                     <dl class="story-details">
-                      <div><dt>Where it lives</dt><dd>Isolated demo runtime, deterministic sample data, reset and abuse controls.</dd></div>
-                      <div><dt>First evidence needed</dt><dd>define the public threat model, operating-cost ceiling, reset isolation, clear sample-data labeling, and a task-completion fixture before hosting anything.</dd></div>
+                      <div><dt>Where it lives</dt><dd>Isolated demo gateway, per-session runtime, deterministic sample data, reset and abuse controls.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the demo image creates an isolated temporary Forge data root per signed session, enforces capacity, lifetime, idle, request-rate, and body-size limits, blocks sensitive routes, and labels sample data. Hosting still needs an approved domain, TLS termination, runtime secret, cost controls, and an operational abuse response.</dd></div>
                     </dl>
                   </div>
                 </details>
 
-                <details class="story-card" id="story-onb-03" data-story-id="ONB-03" data-lifecycle="planned" data-readiness="planned" data-family="ONB">
+                <details class="story-card" id="story-onb-03" data-story-id="ONB-03" data-lifecycle="current" data-readiness="In review" data-family="ONB">
                   <summary class="story-summary">
                     <span class="story-id">ONB-03</span>
                     <span class="story-summary-outcome">As a new user, I can import supported records from Markdown or Obsidian, Notion, Todoist, Apple Reminders, calendars, GitHub Issues, or Linear while preserving source provenance and reviewing conflicts.</span>
-                    <span class="story-state state-planned">Planned</span>
+                    <span class="story-state state-in-review">In review</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a new user, I can import supported records from Markdown or Obsidian, Notion, Todoist, Apple Reminders, calendars, GitHub Issues, or Linear while preserving source provenance and reviewing conflicts.</p>
                     <dl class="story-details">
-                      <div><dt>Where it lives</dt><dd>Import assistants, source adapters, preview, mapping, provenance, rollback.</dd></div>
-                      <div><dt>First evidence needed</dt><dd>measure demand by source, document export constraints, and prove preview, deduplication, partial failure, permission, and recoverable rollback before enabling writes.</dd></div>
+                      <div><dt>Where it lives</dt><dd>Launchpad Import, source adapters, preview, provenance, receipts, rollback.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>Forge reads Markdown directly and bounded JSON exports for the other sources, shows every create-or-skip decision before an atomic import, preserves source identity, lists durable receipts, and can move records from one receipt to the bin. Complete real export-version fixtures and live partial-failure review.</dd></div>
                     </dl>
                   </div>
                 </details>
 
-                <details class="story-card" id="story-onb-04" data-story-id="ONB-04" data-lifecycle="planned" data-readiness="planned" data-family="ONB">
+                <details class="story-card" id="story-onb-04" data-story-id="ONB-04" data-lifecycle="current" data-readiness="In review" data-family="ONB">
                   <summary class="story-summary">
                     <span class="story-id">ONB-04</span>
                     <span class="story-summary-outcome">As a user, I can opt in to privacy-preserving product feedback that records activation outcomes without sending record content, titles, paths, credentials, or stable device identifiers.</span>
-                    <span class="story-state state-planned">Planned</span>
+                    <span class="story-state state-in-review">In review</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a user, I can opt in to privacy-preserving product feedback that records activation outcomes without sending record content, titles, paths, credentials, or stable device identifiers.</p>
                     <dl class="story-details">
-                      <div><dt>Where it lives</dt><dd>Consent settings, event allowlist, local inspection, deletion and export controls.</dd></div>
-                      <div><dt>First evidence needed</dt><dd>define the minimum event schema, retention and aggregation rules, opt-in copy, network failure behavior, and tests that prohibited fields can never leave the runtime.</dd></div>
+                      <div><dt>Where it lives</dt><dd>Launchpad Privacy feedback, strict event schema, local inspection, deletion and export.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>feedback is off by default, remains in local SQLite, accepts only six activation event names and bounded non-content fields, expires after 90 days, and can be inspected, exported, or deleted. Complete a live network-observation check proving the feature never opens a feedback transport.</dd></div>
                     </dl>
                   </div>
                 </details>
 
-                <details class="story-card" id="story-onb-05" data-story-id="ONB-05" data-lifecycle="planned" data-readiness="planned" data-family="ONB">
+                <details class="story-card" id="story-onb-05" data-story-id="ONB-05" data-lifecycle="current" data-readiness="Externally blocked" data-family="ONB">
                   <summary class="story-summary">
                     <span class="story-id">ONB-05</span>
                     <span class="story-summary-outcome">As a desktop user, I can install and update a signed Forge package through a normal application flow without using a terminal, while keeping data location and rollback choices visible.</span>
-                    <span class="story-state state-planned">Planned</span>
+                    <span class="story-state state-externally-blocked">Externally blocked</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a desktop user, I can install and update a signed Forge package through a normal application flow without using a terminal, while keeping data location and rollback choices visible.</p>
                     <dl class="story-details">
-                      <div><dt>Where it lives</dt><dd>Signed desktop packages, installer, updater, data-root selection, rollback.</dd></div>
-                      <div><dt>First evidence needed</dt><dd>choose supported operating systems, document signing and notarization requirements, and test clean install, upgrade, downgrade, failure, uninstall, and data preservation.</dd></div>
+                      <div><dt>Where it lives</dt><dd>Tauri desktop packages, signature-pinned updater, data-root and rollback links.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>Forge can build Apple Silicon and Intel packages, requires signing and notarization credentials, creates signed updater artifacts, checks the pinned update channel in the app, reports download progress, installs, and restarts. Release still requires the real signing credentials and successful clean-install, upgrade, downgrade, and uninstall runs on both macOS architectures.</dd></div>
                     </dl>
                   </div>
                 </details>
@@ -3319,36 +3334,36 @@
             <details class="story-family" data-family-group="ECO">
               <summary>
                 <span class="family-title"><span class="family-code">ECO</span>Templates and ecosystem</span>
-                <span class="family-counts"><span data-family-visible>2</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 0 current · 2 planned</span></span>
+                <span class="family-counts"><span data-family-visible>2</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 2 current</span></span>
               </summary>
               <div class="story-list">
 
-                <details class="story-card" id="story-eco-01" data-story-id="ECO-01" data-lifecycle="planned" data-readiness="planned" data-family="ECO">
+                <details class="story-card" id="story-eco-01" data-story-id="ECO-01" data-lifecycle="current" data-readiness="In review" data-family="ECO">
                   <summary class="story-summary">
                     <span class="story-id">ECO-01</span>
                     <span class="story-summary-outcome">As a new user, I can start from a reviewed Forge setup for a concrete outcome and understand exactly which records, links, settings, and permissions it will add.</span>
-                    <span class="story-state state-planned">Planned</span>
+                    <span class="story-state state-in-review">In review</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a new user, I can start from a reviewed Forge setup for a concrete outcome and understand exactly which records, links, settings, and permissions it will add.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Starter-pack manifest, preview, scoped install, provenance, removal.</dd></div>
-                      <div><dt>First evidence needed</dt><dd>identify high-demand outcomes and prove manifest validation, permission disclosure, collision handling, versioning, and recoverable removal.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>Forge ships three first-party packs for weekly planning, daily reflection, and research. Each pack has a hash-bound manifest, exact record preview, collision report, atomic idempotent installation, durable provenance, install history, and explicit two-step removal. Complete live dense-account collision and interrupted-removal testing.</dd></div>
                     </dl>
                   </div>
                 </details>
 
-                <details class="story-card" id="story-eco-02" data-story-id="ECO-02" data-lifecycle="planned" data-readiness="planned" data-family="ECO">
+                <details class="story-card" id="story-eco-02" data-story-id="ECO-02" data-lifecycle="current" data-readiness="In review" data-family="ECO">
                   <summary class="story-summary">
                     <span class="story-id">ECO-02</span>
                     <span class="story-summary-outcome">As a user, I can browse a trustworthy gallery of templates and integrations, inspect compatibility and permissions, and install only an explicitly reviewed package.</span>
-                    <span class="story-state state-planned">Planned</span>
+                    <span class="story-state state-in-review">In review</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a user, I can browse a trustworthy gallery of templates and integrations, inspect compatibility and permissions, and install only an explicitly reviewed package.</p>
                     <dl class="story-details">
-                      <div><dt>Where it lives</dt><dd>Gallery metadata, signing and review state, compatibility, install and update contracts.</dd></div>
-                      <div><dt>First evidence needed</dt><dd>define authorship, moderation, signing, version compatibility, security review, reporting, removal, and offline failure requirements before accepting third-party packages.</dd></div>
+                      <div><dt>Where it lives</dt><dd>Launchpad Gallery, first-party metadata, compatibility, permissions, setup routes.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the gallery lists the three Forge-reviewed starter packs and seven first-party integration entries with authorship, compatibility, permissions, review state, and setup action. Third-party publishing remains disabled until signing, moderation, reporting, update, and removal governance is implemented.</dd></div>
                     </dl>
                   </div>
                 </details>
@@ -3358,21 +3373,21 @@
             <details class="story-family" data-family-group="ANDROID">
               <summary>
                 <span class="family-title"><span class="family-code">ANDROID</span>Android companion</span>
-                <span class="family-counts"><span data-family-visible>1</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 0 current · 1 planned</span></span>
+                <span class="family-counts"><span data-family-visible>1</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 1 current</span></span>
               </summary>
               <div class="story-list">
 
-                <details class="story-card" id="story-android-01" data-story-id="ANDROID-01" data-lifecycle="planned" data-readiness="planned" data-family="ANDROID">
+                <details class="story-card" id="story-android-01" data-story-id="ANDROID-01" data-lifecycle="current" data-readiness="In review" data-family="ANDROID">
                   <summary class="story-summary">
                     <span class="story-id">ANDROID-01</span>
                     <span class="story-summary-outcome">As an Android user, I can pair a companion, grant Health Connect permissions selectively, and synchronize supported health and movement evidence through the same provider-neutral Forge contracts.</span>
-                    <span class="story-state state-planned">Planned</span>
+                    <span class="story-state state-in-review">In review</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As an Android user, I can pair a companion, grant Health Connect permissions selectively, and synchronize supported health and movement evidence through the same provider-neutral Forge contracts.</p>
                     <dl class="story-details">
-                      <div><dt>Where it lives</dt><dd>Android companion, Health Connect, pairing, background sync, provider-neutral health API.</dd></div>
-                      <div><dt>First evidence needed</dt><dd>validate user demand and platform coverage, map Health Connect data and permission differences, and require parity tests for pairing, privacy, deduplication, background limits, recovery, and source provenance.</dd></div>
+                      <div><dt>Where it lives</dt><dd>Android companion, Health Connect, encrypted pairing and queue, WorkManager, signed bundle workflow.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the native companion uses HTTPS QR pairing, Android Keystore encryption, no health category by default, explicit Steps, Heart rate, and Weight permissions, an encrypted 500-item queue, manual retry and discard, and truthful background-sync state. Complete a signed Android build, device-level permission and recovery tests, source-provenance comparison, and Google Play review.</dd></div>
                     </dl>
                   </div>
                 </details>

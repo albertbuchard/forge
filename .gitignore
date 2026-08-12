@@ -3,6 +3,7 @@
 $CODEX_HOME/
 docs/**/internal/
 node_modules/
+apps/desktop-tauri/tauri.release.conf.json
 dist/
 data/
 coverage/

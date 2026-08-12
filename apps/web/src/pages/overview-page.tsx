@@ -791,6 +791,12 @@ export function OverviewPage() {
                 aria-label="Create in Forge"
               />
               <Link
+                to="/launchpad"
+                className="inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium text-[var(--primary)] hover:bg-[var(--ui-accent-soft)]"
+              >
+                Launchpad
+              </Link>
+              <Link
                 to="/attention"
                 className="inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium text-[var(--ui-ink-medium)] hover:text-[var(--ui-ink-strong)]"
               >

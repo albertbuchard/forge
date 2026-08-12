@@ -141,6 +141,9 @@ manual adapter setup, data-location guidance, screenshots, and contributor check
 - [Gamification and XP](./reference/gamification.md): reward rules, scoped XP reads, timezone behavior, idempotency, and optional art packs.
 - [Today priority](./reference/today-priority.md): one bounded decision for next work, active-run conflicts, task timeboxes, and capacity states.
 - [Daily briefing](./reference/daily-briefing.md): owner-scoped work, schedule, persisted capacity, and recent activity with statement-level sources, freshness, and omission reasons.
+- [Capture](./reference/capture.md): browser-local drafts, no-write proposals, explicit confirmation, idempotent receipts, and file-byte verification.
+- [Launchpad](./reference/launchpad.md): outcome-first onboarding, reviewed starter packs, imports, the universal Review Queue, and local optional feedback.
+- [Distribution](./reference/distribution.md): signed desktop updates, iPhone and Android release boundaries, and the isolated public demo.
 - [Artifact Store](./reference/artifact-store.md): trusted file storage, metadata, safety scans, generic entity links, and human-only downloads.
 - [KarpaWiki browse and search](./reference/karpawiki.md): durable wiki documents, ranked retrieval, pagination, and access rules.
 - [Life Events](./reference/life-events.md): chronological life-event records, calendar reconciliation, ticket import, and agent route rules.
