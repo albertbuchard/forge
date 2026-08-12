@@ -86,6 +86,7 @@ import type {
   ActionProfile,
   CalendarEvent,
   CalendarEventLink,
+  LifeEvent,
   TaskTimebox,
   WorkBlockKind,
   WorkBlockTemplate
