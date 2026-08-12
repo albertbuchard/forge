@@ -601,14 +601,14 @@ test("workbench mock chat flows keep conversation continuity and validate requir
               source: "chat_node",
               target: "out",
               sourceHandle: "answer",
-              targetHandle: "answer",
+              targetHandle: "result",
               label: null
             }
           ]
         }
       }
     });
-    assert.equal(createResponse.statusCode, 201);
+    assert.equal(createResponse.statusCode, 201, createResponse.body);
     const flowId = (createResponse.json() as { flow: { id: string } }).flow.id;
 
     const missingInputResponse = await app.inject({
@@ -622,10 +622,18 @@ test("workbench mock chat flows keep conversation continuity and validate requir
         userInput: "hello"
       }
     });
-    assert.equal(missingInputResponse.statusCode, 500);
+    assert.equal(
+      missingInputResponse.statusCode,
+      422,
+      missingInputResponse.body
+    );
+    assert.equal(
+      (missingInputResponse.json() as { code: string }).code,
+      "workbench_run_failed"
+    );
     assert.equal(
       (missingInputResponse.json() as { error: string }).error,
-      "Forge could not complete the request."
+      "The Workbench run failed. Open run history for its node evidence, then retry it explicitly."
     );
 
     const firstChatResponse = await app.inject({
@@ -782,14 +790,14 @@ test("workbench mock tool flows expose stable node results", async () => {
               source: "tool_node",
               target: "out",
               sourceHandle: "answer",
-              targetHandle: "answer",
+              targetHandle: "result",
               label: null
             }
           ]
         }
       }
     });
-    assert.equal(createResponse.statusCode, 201);
+    assert.equal(createResponse.statusCode, 201, createResponse.body);
     const flowId = (createResponse.json() as { flow: { id: string } }).flow.id;
 
     const runResponse = await app.inject({
