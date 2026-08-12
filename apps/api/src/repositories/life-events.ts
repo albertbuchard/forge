@@ -1,6 +1,7 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getDatabase, runInTransaction } from "../db.js";
+import { HttpError } from "../errors.js";
 import {
   createCalendarEvent,
   getCalendarEventById,
@@ -8,7 +9,11 @@ import {
   updateCalendarEvent
 } from "./calendar.js";
 import { recordActivityEvent } from "./activity-events.js";
-import { decorateOwnedEntity, setEntityOwner } from "./entity-ownership.js";
+import {
+  decorateOwnedEntity,
+  getEntityOwnerId,
+  setEntityOwner
+} from "./entity-ownership.js";
 import { filterDeletedEntities, isEntityDeleted } from "./deleted-entities.js";
 import {
   listEntityLinksForSources,
@@ -17,6 +22,7 @@ import {
   type EntityLinkRecord
 } from "./entity-links.js";
 import {
+  getArtifactById,
   readTrustedArtifactTicketText,
   serializeArtifactPublicPayload
 } from "../services/artifacts.js";
@@ -174,9 +180,23 @@ export const lifeEventTicketImportInputSchema = z
     artifactId: z.string().trim().min(1),
     createDraft: z.boolean().default(false),
     useLlm: z.boolean().default(false),
-    llmProfileId: z.string().trim().optional()
+    llmProfileId: z.string().trim().optional(),
+    previewFingerprint: z
+      .string()
+      .trim()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional()
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.createDraft && !value.previewFingerprint) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["previewFingerprint"],
+        message: "Confirming a ticket draft requires its preview fingerprint."
+      });
+    }
+  });
 
 function escapeLikePattern(value: string) {
   return value.replace(/[\\%_]/g, "\\$&");
@@ -1218,7 +1238,11 @@ export function createLifeEventFromCalendar(
   };
 }
 
-function extractTicketDraft(text: string, originalFileName: string) {
+function extractTicketDraft(
+  text: string,
+  originalFileName: string,
+  stableFallbackAt: string
+) {
   const haystack = text;
   const flightMatch = haystack.match(/\b([A-Z]{2,3})\s?(\d{2,4})\b/);
   const iataMatches = Array.from(
@@ -1233,7 +1257,7 @@ function extractTicketDraft(text: string, originalFileName: string) {
       ? new Date(
           `${dateMatch[1].replaceAll("/", "-")}T${timeMatches[0]}:00Z`
         ).toISOString()
-      : new Date().toISOString();
+      : new Date(stableFallbackAt).toISOString();
   const endsAt =
     dateMatch && timeMatches[1]
       ? new Date(
@@ -1250,6 +1274,18 @@ function extractTicketDraft(text: string, originalFileName: string) {
         .replace(/\.[^.]+$/, "")
         .replace(/[_-]+/g, " ")
         .trim() || "Travel event";
+  const warnings = [
+    !flightMatch ? "No flight or service number was detected." : null,
+    iataMatches.length < 2
+      ? "Forge could not identify both origin and destination codes."
+      : null,
+    !dateMatch
+      ? "No travel date was detected. The Artifact creation time is shown as a stable placeholder."
+      : null,
+    timeMatches.length < 2
+      ? "Forge could not identify both departure and arrival times."
+      : null
+  ].filter((warning): warning is string => Boolean(warning));
   return {
     title,
     shortDescription:
@@ -1268,7 +1304,9 @@ function extractTicketDraft(text: string, originalFileName: string) {
       method: "deterministic_ticket_text",
       llmUsed: false,
       extractedCodes: iataMatches,
-      flightNumber: flightMatch ? `${carrierCode}${serviceNumber}` : null
+      flightNumber: flightMatch ? `${carrierCode}${serviceNumber}` : null,
+      reviewStatus: warnings.length === 0 ? "complete" : "needs_review",
+      warnings
     },
     segments: [
       {
@@ -1304,8 +1342,13 @@ export async function importLifeEventTicket(
     return undefined;
   }
   const { artifact, extractedText } = trustedContent;
+  const artifactOwnerUserId = getEntityOwnerId("artifact", artifact.id);
   const publicArtifact = serializeArtifactPublicPayload(artifact);
-  const draft = extractTicketDraft(extractedText, artifact.originalFileName);
+  const draft = extractTicketDraft(
+    extractedText,
+    artifact.originalFileName,
+    artifact.createdAt
+  );
   const llmNotice = parsed.useLlm
     ? {
         llmRequested: true,
@@ -1314,6 +1357,22 @@ export async function importLifeEventTicket(
           "not_called_from_agent_route; use configured artifact enrichment or explicit operator-approved LLM extraction"
       }
     : { llmRequested: false };
+  const previewFingerprint = createHash("sha256")
+    .update(
+      JSON.stringify({
+        version: 1,
+        artifactId: artifact.id,
+        artifactContentSha256: artifact.contentSha256,
+        artifactStoredContentSha256: artifact.storedContentSha256,
+        artifactUpdatedAt: artifact.updatedAt,
+        artifactOwnerUserId,
+        originalFileName: artifact.originalFileName,
+        useLlm: parsed.useLlm,
+        llmProfileId: parsed.llmProfileId ?? null,
+        draft
+      })
+    )
+    .digest("hex");
   const lifeEventInput = {
     ...draft,
     sourceKind: "artifact_ticket" as const,
@@ -1326,12 +1385,14 @@ export async function importLifeEventTicket(
       artifactId: artifact.id,
       artifactDangerScore: artifact.dangerScore,
       artifactDangerLevel: artifact.dangerLevel,
+      previewFingerprint,
       ...llmNotice
     },
     metadata: {
       ticketArtifactOriginalFileName: artifact.originalFileName,
       ticketArtifactFormatFamily: artifact.formatFamily
     },
+    userId: artifactOwnerUserId,
     links: [
       {
         entityType: "artifact",
@@ -1339,23 +1400,82 @@ export async function importLifeEventTicket(
         relationship: "ticket_artifact"
       }
     ],
-    calendarProjection: "link_or_create" as const
+    calendarProjection: "none" as const
   };
   if (!parsed.createDraft) {
     return {
       draft: lifeEventInput,
       artifact: publicArtifact,
       lifeEvent: null,
+      previewFingerprint,
       action: "drafted_from_ticket" as const
     };
   }
-  const lifeEvent = createLifeEvent(lifeEventInput, activity);
-  return {
-    draft: lifeEventInput,
-    artifact: publicArtifact,
-    lifeEvent,
-    action: "created_draft_from_ticket" as const
-  };
+  if (parsed.previewFingerprint !== previewFingerprint) {
+    throw new HttpError(
+      409,
+      "life_event_ticket_preview_changed",
+      "The ticket proposal changed after it was reviewed. Prepare a new preview before confirming it.",
+      { artifactId: artifact.id }
+    );
+  }
+  return runInTransaction(() => {
+    const currentArtifact = getArtifactById(
+      artifact.id,
+      activity ?? { source: "system" }
+    );
+    if (
+      !currentArtifact ||
+      currentArtifact.artifactState !== "active" ||
+      currentArtifact.dangerLevel === "blocked" ||
+      currentArtifact.contentProtection.mode !== "plaintext" ||
+      currentArtifact.contentSha256 !== artifact.contentSha256 ||
+      currentArtifact.storedContentSha256 !== artifact.storedContentSha256 ||
+      currentArtifact.byteSize !== artifact.byteSize ||
+      currentArtifact.storedByteSize !== artifact.storedByteSize ||
+      currentArtifact.storageKey !== artifact.storageKey ||
+      currentArtifact.originalFileName !== artifact.originalFileName ||
+      getEntityOwnerId("artifact", artifact.id) !== artifactOwnerUserId ||
+      currentArtifact.updatedAt !== artifact.updatedAt
+    ) {
+      throw new HttpError(
+        409,
+        "life_event_ticket_preview_changed",
+        "The ticket Artifact changed after it was reviewed. Prepare a new preview before confirming it.",
+        { artifactId: artifact.id }
+      );
+    }
+    const existing = listLifeEvents().find(
+      (event) => event.sourceArtifactId === artifact.id
+    );
+    if (existing) {
+      if (
+        existing.extractionSummary.previewFingerprint !== previewFingerprint
+      ) {
+        throw new HttpError(
+          409,
+          "life_event_ticket_already_imported_changed",
+          "This ticket Artifact already has a Life Event created from a different reviewed preview.",
+          { artifactId: artifact.id, lifeEventId: existing.id }
+        );
+      }
+      return {
+        draft: lifeEventInput,
+        artifact: publicArtifact,
+        lifeEvent: existing,
+        previewFingerprint,
+        action: "already_imported_ticket" as const
+      };
+    }
+    const lifeEvent = createLifeEvent(lifeEventInput, activity);
+    return {
+      draft: lifeEventInput,
+      artifact: publicArtifact,
+      lifeEvent,
+      previewFingerprint,
+      action: "created_draft_from_ticket" as const
+    };
+  });
 }
 
 export function getLifeEventTravelStatus(lifeEventId: string) {

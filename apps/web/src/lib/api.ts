@@ -110,6 +110,7 @@ import type {
   LifeForceProfilePatchInput,
   LifeForceTemplateUpdateInput,
   LifeEvent,
+  LifeEventTicketImportResult,
   LifeEventTimelinePayload,
   FatigueSignalInput,
   TaskSplitInput,
@@ -1818,16 +1819,15 @@ export function importLifeEventTicket(input: {
   createDraft?: boolean;
   useLlm?: boolean;
   llmProfileId?: string;
+  previewFingerprint?: string;
 }) {
-  return request<{
-    draft: Record<string, unknown>;
-    artifact: Artifact;
-    lifeEvent: LifeEvent | null;
-    action: string;
-  }>("/api/v1/life-events/import-ticket", {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+  return request<LifeEventTicketImportResult>(
+    "/api/v1/life-events/import-ticket",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
 }
 
 export function getLifeEventTravelStatus(id: string) {

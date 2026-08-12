@@ -70,6 +70,7 @@ import { useForgeThemeKey } from "@/hooks/use-forge-theme-key";
 import type {
   ArtifactUploadInput,
   LifeEvent,
+  LifeEventTicketImportResult,
   LifeEventTimelinePayload,
   LifeEventType
 } from "@/lib/types";
@@ -112,6 +113,14 @@ type TicketImportDraft = {
   files: File[];
   sourceLabel: string;
   useLlm: boolean;
+};
+
+type PreparedTicketImport = {
+  key: string;
+  fileName: string;
+  selected: boolean;
+  result: LifeEventTicketImportResult | null;
+  error: string | null;
 };
 
 type LifeEventTravelStatusPayload = Awaited<
@@ -701,9 +710,7 @@ function transportModeForEventType(
   return fallback;
 }
 
-function customTypeLabelFor(
-  event: Pick<LifeEvent, "eventType" | "metadata">
-) {
+function customTypeLabelFor(event: Pick<LifeEvent, "eventType" | "metadata">) {
   if (event.eventType !== "custom") {
     return "";
   }
@@ -1692,6 +1699,9 @@ export function LifeEventsPage() {
   const [ticketDraft, setTicketDraft] = useState<TicketImportDraft>(() =>
     defaultTicketDraft()
   );
+  const [preparedTickets, setPreparedTickets] = useState<
+    PreparedTicketImport[]
+  >([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const timelineQuery = useQuery({
@@ -1900,34 +1910,81 @@ export function LifeEventsPage() {
     }
   });
 
-  const ticketMutation = useMutation({
+  const ticketPreviewMutation = useMutation({
     mutationFn: async (value: TicketImportDraft) => {
       if (value.files.length === 0) {
         throw new Error("Choose one or more ticket files.");
       }
-      for (const file of value.files) {
-        const title = file.name
-          .replace(/\.[^.]+$/, "")
-          .replace(/[_-]+/g, " ")
-          .trim();
-        const input: ArtifactUploadInput = {
-          title,
-          shortDescription: "Ticket or travel confirmation",
-          description: "Uploaded from the Life Events ticket flow.",
-          originalFileName: file.name,
-          declaredMimeType: file.type,
-          contentBase64: await fileToBase64(file),
-          sourceKind: "upload",
-          sourceLabel: value.sourceLabel,
-          useLlmEnrichment: value.useLlm
-        };
-        const { artifact } = await uploadArtifact(input);
-        await importLifeEventTicket({
-          artifactId: artifact.id,
-          createDraft: true,
-          useLlm: value.useLlm
-        });
+      const prepared: PreparedTicketImport[] = [];
+      for (const [index, file] of value.files.entries()) {
+        const key = `${file.name}:${file.size}:${file.lastModified}:${index}`;
+        try {
+          const title = file.name
+            .replace(/\.[^.]+$/, "")
+            .replace(/[_-]+/g, " ")
+            .trim();
+          const input: ArtifactUploadInput = {
+            title,
+            shortDescription: "Ticket or travel confirmation",
+            description: "Uploaded from the Life Events ticket flow.",
+            originalFileName: file.name,
+            declaredMimeType: file.type,
+            contentBase64: await fileToBase64(file),
+            sourceKind: "upload",
+            sourceLabel: value.sourceLabel,
+            useLlmEnrichment: value.useLlm
+          };
+          const { artifact } = await uploadArtifact(input);
+          const result = await importLifeEventTicket({
+            artifactId: artifact.id,
+            createDraft: false,
+            useLlm: value.useLlm
+          });
+          prepared.push({
+            key,
+            fileName: file.name,
+            selected: true,
+            result,
+            error: null
+          });
+        } catch (error) {
+          prepared.push({
+            key,
+            fileName: file.name,
+            selected: false,
+            result: null,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Forge could not prepare this ticket."
+          });
+        }
       }
+      return prepared;
+    },
+    onSuccess: (prepared) => {
+      setPreparedTickets(prepared);
+    }
+  });
+
+  const ticketCreateMutation = useMutation({
+    mutationFn: async (prepared: PreparedTicketImport[]) => {
+      const selected = prepared.filter(
+        (item) => item.selected && item.result !== null
+      );
+      if (selected.length === 0) {
+        throw new Error("Select at least one prepared ticket draft.");
+      }
+      return Promise.all(
+        selected.map((item) =>
+          importLifeEventTicket({
+            artifactId: item.result!.artifact.id,
+            createDraft: true,
+            useLlm: ticketDraft.useLlm,
+            previewFingerprint: item.result!.previewFingerprint
+          })
+        )
+      );
     },
     onSuccess: async () => {
       await Promise.all([
@@ -1936,6 +1993,7 @@ export function LifeEventsPage() {
         queryClient.invalidateQueries({ queryKey: ["knowledge-graph"] })
       ]);
       setTicketDraft(defaultTicketDraft());
+      setPreparedTickets([]);
       setTicketDialogOpen(false);
     }
   });
@@ -2240,7 +2298,10 @@ export function LifeEventsPage() {
         render: (value, setValue) => (
           <FileDropZone
             files={value.files}
-            onFiles={(files) => setValue({ files })}
+            onFiles={(files) => {
+              setPreparedTickets([]);
+              setValue({ files });
+            }}
           />
         )
       },
@@ -2252,24 +2313,141 @@ export function LifeEventsPage() {
           <div className="grid gap-3">
             <Input
               value={value.sourceLabel}
-              onChange={(event) =>
-                setValue({ sourceLabel: event.target.value })
-              }
+              onChange={(event) => {
+                setPreparedTickets([]);
+                setValue({ sourceLabel: event.target.value });
+              }}
               placeholder="Airline email, booking site, exported PDF"
             />
             <label className="flex items-center gap-3 rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 text-sm">
               <input
                 type="checkbox"
                 checked={value.useLlm}
-                onChange={(event) => setValue({ useLlm: event.target.checked })}
+                onChange={(event) => {
+                  setPreparedTickets([]);
+                  setValue({ useLlm: event.target.checked });
+                }}
               />
-              <span>Use configured LLM extraction when available</span>
+              <span>
+                Run configured Artifact enrichment before deterministic ticket
+                parsing
+              </span>
             </label>
+          </div>
+        )
+      },
+      {
+        id: "review",
+        eyebrow: "Review",
+        title: "Review every proposed Life Event before creating it.",
+        description:
+          "Preparing previews uploads the files to Artifact Store but does not create a Life Event. You choose which proposals to keep.",
+        render: () => (
+          <div className="grid gap-3">
+            {ticketPreviewMutation.isPending ? (
+              <p role="status" className="text-sm text-[var(--ui-ink-soft)]">
+                Uploading tickets and preparing previews…
+              </p>
+            ) : preparedTickets.length === 0 ? (
+              <div className="rounded-[20px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                No Life Event exists yet. Choose{" "}
+                <strong>Prepare previews</strong>
+                below to inspect the proposed dates, route, and extraction
+                warnings before anything is created.
+              </div>
+            ) : (
+              preparedTickets.map((item) => {
+                const warnings = Array.isArray(
+                  item.result?.draft.extractionSummary.warnings
+                )
+                  ? item.result.draft.extractionSummary.warnings
+                  : [];
+                if (!item.result) {
+                  return (
+                    <div
+                      key={item.key}
+                      className="rounded-[20px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] p-4"
+                    >
+                      <div className="font-medium text-[var(--ui-ink-strong)]">
+                        {item.fileName}
+                      </div>
+                      <p className="mt-1 text-sm leading-6 text-[var(--danger)]">
+                        {item.error}
+                      </p>
+                    </div>
+                  );
+                }
+                const draft = item.result.draft;
+                return (
+                  <label
+                    key={item.key}
+                    className="grid min-h-11 gap-3 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4"
+                  >
+                    <span className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={item.selected}
+                        onChange={(event) =>
+                          setPreparedTickets((current) =>
+                            current.map((candidate) =>
+                              candidate.key === item.key
+                                ? {
+                                    ...candidate,
+                                    selected: event.target.checked
+                                  }
+                                : candidate
+                            )
+                          )
+                        }
+                        className="mt-1 size-5 shrink-0"
+                      />
+                      <span className="min-w-0">
+                        <span className="block break-words font-semibold text-[var(--ui-ink-strong)]">
+                          {draft.title}
+                        </span>
+                        <span className="mt-1 block break-words text-xs text-[var(--ui-ink-faint)]">
+                          {item.fileName}
+                        </span>
+                      </span>
+                    </span>
+                    <span className="grid gap-1 text-sm leading-6 text-[var(--ui-ink-soft)] sm:grid-cols-2">
+                      <span>
+                        {draft.originLabel || "Origin not found"} →{" "}
+                        {draft.destinationLabel || "Destination not found"}
+                      </span>
+                      <span>
+                        {new Date(draft.startsAt).toLocaleString()} →{" "}
+                        {new Date(draft.endsAt).toLocaleString()}
+                      </span>
+                    </span>
+                    {warnings.length > 0 ? (
+                      <ul className="grid list-disc gap-1 pl-5 text-sm leading-6 text-[var(--warning)]">
+                        {warnings.map((warning) => (
+                          <li key={warning}>{warning}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <span className="text-sm text-[var(--success)]">
+                        Flight number, route, date, and times were found.
+                      </span>
+                    )}
+                  </label>
+                );
+              })
+            )}
+            {preparedTickets.length > 0 ? (
+              <p className="text-sm leading-6 text-[var(--ui-ink-soft)]">
+                Repeating confirmation is safe: Forge returns the existing Life
+                Event for an Artifact that was already imported. New drafts stay
+                out of the calendar until you review and project them from Life
+                Events.
+              </p>
+            ) : null}
           </div>
         )
       }
     ],
-    []
+    [preparedTickets, ticketPreviewMutation.isPending]
   );
 
   if (timelineQuery.isLoading) {
@@ -2506,14 +2684,26 @@ export function LifeEventsPage() {
         value={ticketDraft}
         onChange={setTicketDraft}
         steps={ticketSteps}
-        submitLabel="Import tickets"
-        pending={ticketMutation.isPending}
-        pendingLabel="Importing"
+        submitLabel={
+          preparedTickets.length > 0
+            ? "Create selected drafts"
+            : "Prepare previews"
+        }
+        pending={
+          ticketPreviewMutation.isPending || ticketCreateMutation.isPending
+        }
+        pendingLabel={
+          ticketPreviewMutation.isPending ? "Preparing" : "Creating drafts"
+        }
         error={submitError}
         onSubmit={async () => {
           setSubmitError(null);
           try {
-            await ticketMutation.mutateAsync(ticketDraft);
+            if (preparedTickets.length === 0) {
+              await ticketPreviewMutation.mutateAsync(ticketDraft);
+              return;
+            }
+            await ticketCreateMutation.mutateAsync(preparedTickets);
           } catch (error) {
             setSubmitError(
               error instanceof Error

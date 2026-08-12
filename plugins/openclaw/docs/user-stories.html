@@ -1041,7 +1041,7 @@
                     <p class="story-expanded-outcome">As a user, I can attach a trusted ticket, let an enabled LLM propose travel details, review them, and create a draft without automatic file execution.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Artifact Store, Life Events <code>importTicket</code>, model settings.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>ticket import, Artifact Store trust, static scan, and human-only download tests pass without autonomous execution. Finish unreadable, malicious, duplicate, and ambiguous-ticket cases.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>ticket files are scanned and prepared as per-file previews before any Life Event is created. The review shows route, dates, times, and explicit warnings; preserves successful previews when another file is unreadable; and requires the user to select proposals before confirmation. Missing dates use a stable Artifact timestamp instead of the current clock. Confirmation is bound to the reviewed preview by a SHA-256 fingerprint, rejects a changed proposal, Artifact, or owner, inherits the Artifact owner, returns the existing Life Event on an exact retry, and never creates a Calendar event automatically. Complete approved model-backed extraction and live desktop and phone verification.</dd></div>
                     </dl>
                   </div>
                 </details>

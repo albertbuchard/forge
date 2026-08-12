@@ -12740,7 +12740,13 @@ export function buildOpenApiDocument() {
       artifactId: { type: "string" },
       createDraft: { type: "boolean", default: false },
       useLlm: { type: "boolean", default: false },
-      llmProfileId: { type: "string" }
+      llmProfileId: { type: "string" },
+      previewFingerprint: {
+        type: "string",
+        pattern: "^[a-f0-9]{64}$",
+        description:
+          "Required when createDraft is true. Copy the exact fingerprint from the reviewed preview response."
+      }
     }
   };
 
@@ -15427,9 +15433,10 @@ export function buildOpenApiDocument() {
       },
       "/api/v1/life-events/import-ticket": {
         post: {
-          summary: "Draft or create a travel Life Event from a ticket artifact",
+          summary:
+            "Preview or confirm a travel Life Event draft from a ticket artifact",
           description:
-            "Uses only transient text from a fresh integrity-verified static scan of an active, plaintext, non-quarantined Artifact. Caller-supplied extracted text, Artifact descriptions, blocked, quarantined, archived, metadata-only, encrypted, or integrity-mismatched content is rejected. Agents must upload through Artifact Store first and must not download, execute, or parse stored bytes directly. Optional LLM extraction is only used when configured and approved.",
+            "Uses only transient text from a fresh integrity-verified static scan of an active, plaintext, non-quarantined Artifact. Caller-supplied extracted text, Artifact descriptions, blocked, quarantined, archived, metadata-only, encrypted, or integrity-mismatched content is rejected. Agents must upload through Artifact Store first and must not download, execute, or parse stored bytes directly. With createDraft false, the route returns a stable preview, warnings, and a SHA-256 preview fingerprint without creating a Life Event. With createDraft true, the caller must return that fingerprint; Forge rejects a changed proposal or Artifact, creates at most one active Life Event per Artifact, returns that event on an exact retry, and never creates a Calendar projection. Configured Artifact enrichment may run during the separate upload step; this route uses deterministic ticket parsing and truthfully reports when requested LLM extraction is unavailable.",
           requestBody: {
             required: true,
             content: {
@@ -15445,14 +15452,31 @@ export function buildOpenApiDocument() {
               {
                 type: "object",
                 additionalProperties: false,
-                required: ["draft", "artifact", "lifeEvent", "action"],
+                required: [
+                  "draft",
+                  "artifact",
+                  "lifeEvent",
+                  "previewFingerprint",
+                  "action"
+                ],
                 properties: {
                   draft: { type: "object", additionalProperties: true },
                   artifact: { $ref: "#/components/schemas/Artifact" },
                   lifeEvent: nullable({
                     $ref: "#/components/schemas/LifeEvent"
                   }),
-                  action: { type: "string" }
+                  previewFingerprint: {
+                    type: "string",
+                    pattern: "^[a-f0-9]{64}$"
+                  },
+                  action: {
+                    type: "string",
+                    enum: [
+                      "drafted_from_ticket",
+                      "created_draft_from_ticket",
+                      "already_imported_ticket"
+                    ]
+                  }
                 }
               },
               "Ticket import result"

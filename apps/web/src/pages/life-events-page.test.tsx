@@ -132,6 +132,7 @@ vi.mock("@/components/flows/question-flow-dialog", () => ({
     onChange,
     steps,
     onSubmit,
+    error,
     children
   }: {
     open: boolean;
@@ -149,6 +150,7 @@ vi.mock("@/components/flows/question-flow-dialog", () => ({
       ) => ReactNode;
     }>;
     onSubmit: () => Promise<void>;
+    error?: string | null;
     children?: ReactNode;
   }) =>
     open ? (
@@ -162,6 +164,7 @@ vi.mock("@/components/flows/question-flow-dialog", () => ({
           </section>
         ))}
         {children}
+        {error ? <p role="alert">{error}</p> : null}
         <button type="button" onClick={() => void onSubmit()}>
           {submitLabel}
         </button>
@@ -379,6 +382,138 @@ describe("LifeEventsPage", () => {
     ).toHaveTextContent("Import tickets");
   });
 
+  it("previews ticket proposals before an explicit selected draft creation", async () => {
+    const preview = {
+      action: "drafted_from_ticket" as const,
+      artifact: { id: "artifact_ticket_1" },
+      draft: {
+        title: "Flight LX638",
+        originLabel: "ZRH",
+        destinationLabel: "CDG",
+        startsAt: "2026-08-01T07:30:00.000Z",
+        endsAt: "2026-08-01T09:10:00.000Z",
+        extractionSummary: {
+          reviewStatus: "needs_review",
+          warnings: [
+            "Forge could not identify both departure and arrival times."
+          ]
+        }
+      },
+      lifeEvent: null,
+      previewFingerprint: "a".repeat(64)
+    };
+    uploadArtifactMock.mockImplementation(
+      async (input: { originalFileName: string }) => {
+        if (input.originalFileName === "unreadable.pdf") {
+          throw new Error("This ticket could not be read safely.");
+        }
+        return { artifact: { id: "artifact_ticket_1" } };
+      }
+    );
+    importLifeEventTicketMock.mockImplementation(
+      async (input: { artifactId: string; createDraft: boolean }) =>
+        input.createDraft
+          ? {
+              ...preview,
+              action: "created_draft_from_ticket" as const,
+              lifeEvent: { id: "lifeevent_ticket_1" }
+            }
+          : preview
+    );
+
+    const view = renderPage({
+      events: [buildLifeEvent()],
+      now: "2026-07-01T12:00:00.000Z",
+      nextLifeEventId: "lifeevent_123",
+      limit: 500,
+      offset: 0
+    });
+
+    await screen.findByText("Flight to Paris");
+    fireEvent.click(screen.getByRole("button", { name: /import tickets/i }));
+    const flow = within(screen.getByTestId("guided-question-flow"));
+    expect(flow.getByText(/no life event exists yet/i)).toBeInTheDocument();
+    expect(importLifeEventTicketMock).not.toHaveBeenCalled();
+
+    const fileInput =
+      view.container.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(fileInput).not.toBeNull();
+    const ticket = new File(
+      ["Flight LX638 ZRH CDG 2026-08-01 07:30 09:10"],
+      "lx638.txt",
+      { type: "text/plain", lastModified: 1_786_000_000_000 }
+    );
+    const unreadableTicket = new File(
+      ["not a trusted ticket"],
+      "unreadable.pdf",
+      {
+        type: "application/pdf",
+        lastModified: 1_786_000_000_001
+      }
+    );
+    fireEvent.change(fileInput!, {
+      target: { files: [ticket, unreadableTicket] }
+    });
+    expect(flow.getByText("lx638.txt")).toBeInTheDocument();
+    expect(flow.getByText("unreadable.pdf")).toBeInTheDocument();
+    expect(importLifeEventTicketMock).not.toHaveBeenCalled();
+
+    fireEvent.click(flow.getByRole("button", { name: /prepare previews/i }));
+
+    await waitFor(() => {
+      expect(uploadArtifactMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "lx638",
+          originalFileName: "lx638.txt",
+          declaredMimeType: "text/plain"
+        })
+      );
+      expect(importLifeEventTicketMock).toHaveBeenCalledWith({
+        artifactId: "artifact_ticket_1",
+        createDraft: false,
+        useLlm: true
+      });
+    });
+
+    expect(await flow.findByText("Flight LX638")).toBeInTheDocument();
+    expect(
+      flow.getByText(/could not identify both departure and arrival times/i)
+    ).toBeInTheDocument();
+    expect(
+      flow.getByText(/new drafts stay out of the calendar/i)
+    ).toBeInTheDocument();
+    expect(
+      flow.getByText("This ticket could not be read safely.")
+    ).toBeInTheDocument();
+    expect(importLifeEventTicketMock).toHaveBeenCalledTimes(1);
+
+    const proposal = flow.getByRole("checkbox", { name: /Flight LX638/i });
+    fireEvent.click(proposal);
+    fireEvent.click(
+      flow.getByRole("button", { name: /create selected drafts/i })
+    );
+    expect(
+      await flow.findByText("Select at least one prepared ticket draft.")
+    ).toBeInTheDocument();
+    expect(importLifeEventTicketMock).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(proposal);
+    fireEvent.click(
+      flow.getByRole("button", { name: /create selected drafts/i })
+    );
+    await waitFor(() => {
+      expect(importLifeEventTicketMock).toHaveBeenLastCalledWith({
+        artifactId: "artifact_ticket_1",
+        createDraft: true,
+        useLlm: true,
+        previewFingerprint: "a".repeat(64)
+      });
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId("guided-question-flow")).toBeNull();
+    });
+  });
+
   it("offers every supported type and saves a readable Custom type name", async () => {
     createEntitiesMock.mockResolvedValue({ results: [{ ok: true }] });
     renderPage({
@@ -409,9 +544,7 @@ describe("LifeEventsPage", () => {
     fireEvent.change(screen.getByPlaceholderText("Flight to Paris"), {
       target: { value: "Neighborhood assembly" }
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: /create life event/i })
-    );
+    fireEvent.click(screen.getByRole("button", { name: /create life event/i }));
 
     await waitFor(() => {
       expect(createEntitiesMock).toHaveBeenCalledWith({

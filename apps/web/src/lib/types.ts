@@ -1837,6 +1837,36 @@ export interface LifeEvent extends OwnedEntity {
   updatedAt: string;
 }
 
+export interface LifeEventTicketDraft {
+  title: string;
+  shortDescription: string;
+  description: string;
+  eventType: LifeEventType;
+  startsAt: string;
+  endsAt: string;
+  originLabel: string;
+  destinationLabel: string;
+  sourceArtifactId: string;
+  extractionSummary: {
+    reviewStatus?: "complete" | "needs_review";
+    warnings?: string[];
+    flightNumber?: string | null;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export interface LifeEventTicketImportResult {
+  draft: LifeEventTicketDraft;
+  artifact: Artifact;
+  lifeEvent: LifeEvent | null;
+  previewFingerprint: string;
+  action:
+    | "drafted_from_ticket"
+    | "created_draft_from_ticket"
+    | "already_imported_ticket";
+}
+
 export interface LifeEventTimelinePayload {
   events: LifeEvent[];
   now: string;

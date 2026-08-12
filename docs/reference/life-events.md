@@ -65,7 +65,8 @@ Life Events have a dedicated route family for chronology and domain actions:
 - `POST /api/v1/life-events/from-calendar-event`
   creates or links a Life Event from an existing `calendar_event`.
 - `POST /api/v1/life-events/import-ticket`
-  drafts or creates a travel Life Event from a trusted Artifact Store ticket.
+  previews or confirms a travel Life Event draft from a trusted Artifact Store
+  ticket. Preview mode does not create a Life Event.
 - `GET /api/v1/life-events/:id/travel-status`
   returns scheduled or provider-backed travel status when available.
 
@@ -95,8 +96,21 @@ The flow is:
 
 1. Upload the file as an Artifact Store artifact.
 2. Keep the file under Artifact Store safety rules.
-3. Call `POST /api/v1/life-events/import-ticket` with the `artifactId`.
-4. Review the draft, fill missing fields, and save or calendar-sync the event.
+3. Call `POST /api/v1/life-events/import-ticket` with the `artifactId` and
+   `createDraft: false`.
+4. Review each proposal, including its route, dates, times, and extraction warnings.
+5. Select the proposals to keep and confirm them with `createDraft: true`.
+6. Review or edit the saved Life Event before projecting it to Calendar.
+
+Preview mode never creates a Life Event. A missing ticket date uses the Artifact's
+creation time as a stable placeholder and returns a warning instead of inventing a
+date. If one file fails, the other prepared proposals remain available for review.
+Confirmation creates at most one active Life Event for each ticket Artifact. Repeating
+the same confirmation returns the existing Life Event. The confirmation must include
+the SHA-256 fingerprint returned with the reviewed preview. Forge rejects confirmation
+if the proposal, Artifact, or Artifact owner changed after review. The saved Life Event
+inherits the Artifact owner. Ticket confirmation never creates or links a Calendar
+event automatically.
 
 Agents must not download, open, execute, decrypt, preview, or transform stored artifact
 bytes. Ticket import accepts no caller-supplied extracted text and does not derive travel
@@ -123,7 +137,10 @@ The Life Events view should stay fast and readable even with many events:
   month-scale, and custom spans
 - display long durations compactly on cards and expanded details
 - allow several ticket files to be uploaded in one guided import flow
-- let the user open per-file detail when a ticket needs more description or review
+- show a separate success or error result for each file without discarding the other
+  previews
+- show extraction warnings and require an explicit selection before creating drafts
+- keep confirmed drafts out of Calendar until the user projects them separately
 - keep travel and map rendering lazy so the timeline stays responsive
 
 Travel and stay cards can show origin, destination, departure, arrival, transport
