@@ -4023,7 +4023,11 @@ export function buildOpenApiDocument() {
     properties: {
       entityType: { type: "string" },
       entityId: { type: "string" },
-      anchorKey: nullable({ type: "string" })
+      anchorKey: nullable({
+        type: "string",
+        description:
+          "Canonical trimmed anchor within the linked record. Blank anchors become null, and duplicate links are removed by the exact entityType, entityId, and canonical anchor tuple."
+      })
     }
   };
 
@@ -21807,7 +21811,7 @@ export function buildOpenApiDocument() {
         post: {
           summary: "Create a note linked to one or more Forge entities",
           description:
-            "When createContext is present, Forge validates one exact live source link inside the same transaction that creates the note. Missing, deleted, unauthorized, duplicated, or mismatched source records do not create a note.",
+            "Forge authenticates and checks a compatible Note mutation scope before parsing the body. author is descriptive attribution only and never selects the Note owner; userId or the caller's allowed owner scope controls ownership. Link anchors are trimmed, blanks become null, and exact canonical link tuples are deduplicated before storage. When createContext is present, Forge validates one exact live source link inside the same transaction that creates the note. Missing, deleted, unauthorized, duplicated, or mismatched source records do not create a note.",
           requestBody: {
             required: true,
             content: {
@@ -21859,7 +21863,7 @@ export function buildOpenApiDocument() {
         patch: {
           summary: "Update a note",
           description:
-            "Use expectedRevisionHash from the last read to prevent a stale editor from overwriting a newer revision. A replacement links list cannot silently delete stored links that were omitted from the caller's read projection.",
+            "Forge authenticates and verifies access to the existing Note before parsing the replacement payload. Use expectedRevisionHash from the last read to prevent a stale editor from overwriting a newer revision. author remains descriptive attribution and cannot transfer ownership. A replacement links list cannot silently delete stored links that were omitted from the caller's read projection; supplied anchors are canonicalized and deduplicated before storage.",
           parameters: [
             {
               in: "path",
@@ -21892,7 +21896,7 @@ export function buildOpenApiDocument() {
         delete: {
           summary: "Soft-delete or permanently delete a note",
           description:
-            "The default soft delete moves the note to the Forge bin and preserves its snapshot for the shared entity restore route.",
+            "Forge authenticates and verifies access before parsing deletion options. The default soft delete moves the note to the Forge bin and preserves its snapshot for the shared entity restore route. Permanent and expiry cleanup remove owner and assignee rows while retaining only the minimum redacted visibility evidence needed to keep historical activity visible to the users who were authorized at that event; this evidence is never returned in Activity metadata.",
           parameters: [
             {
               in: "path",
@@ -26064,7 +26068,7 @@ export function buildOpenApiDocument() {
           summary:
             "Search across multiple Forge entity types in one ordered batch request",
           description:
-            "Agent tokens require base read or write. Explicit event_type or emotion_definition searches additionally require psyche.read when Psyche authentication is enabled; searches[].userIds selects the effective custom owner scope while built-ins remain visible. Normal note search uses the indexed Notes query and applies owner, Wiki-space, deleted/expired, and Psyche authorization before result limits. Psyche-linked notes require psyche.read. Note results omit inaccessible linked records and expose only unavailableLinkCount, never their identifiers or reasons.",
+            "Agent tokens require base read or write. Explicit event_type or emotion_definition searches additionally require psyche.read when Psyche authentication is enabled; searches[].userIds selects the effective custom owner scope while built-ins remain visible. Normal note search uses the indexed Notes query and applies the same explicit IDs, normalized query, link, owner, Wiki-space, deleted/expired, and Psyche rules to live and deleted Notes before result limits. Psyche-linked notes require psyche.read. Note results omit inaccessible linked records and expose only unavailableLinkCount, never their identifiers or reasons. Each ordered result is the dedicated BatchEntitySearchResult shape and cannot be confused with a mutation result.",
           requestBody: {
             required: true,
             content: {

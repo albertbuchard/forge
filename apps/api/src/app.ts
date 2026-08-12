@@ -10902,8 +10902,8 @@ function buildOperatorContext(
     },
     recentActivity: filterNoteActivityEventsForScope(
       listActivityEvents({
-        limit: 60,
-        userIds: scopedUserIdsForReads
+        limit: undefined,
+        userIds: undefined
       }),
       options.noteScope ?? { userIds: scopedUserIdsForReads }
     ).slice(0, 20),
@@ -13549,7 +13549,7 @@ export async function buildServer(
     );
     const requestedLimit = query.limit;
     const visible = filterNoteActivityEventsForScope(
-      listActivityEvents({ ...query, userIds, limit: undefined }),
+      listActivityEvents({ ...query, userIds: undefined, limit: undefined }),
       noteReadScopeForAuth(context, userIds)
     );
     return requestedLimit ? visible.slice(0, requestedLimit) : visible;
@@ -13560,7 +13560,7 @@ export async function buildServer(
     const userIds = resolveEffectiveUserIdsForReads(undefined, context);
     return (
       filterNoteActivityEventsForScope(
-        listActivityEvents({ userIds, limit: 100 }),
+        listActivityEvents({ userIds: undefined, limit: undefined }),
         noteReadScopeForAuth(context, userIds)
       )[0] ?? null
     );
@@ -14167,6 +14167,18 @@ export async function buildServer(
     managers.authorization.requireAnyTokenScope(
       context,
       ["write", "insights"],
+      detail
+    );
+    return context;
+  };
+  const requirePotentialNoteMutationAccess = (
+    headers: Record<string, unknown>,
+    detail?: Record<string, unknown>
+  ) => {
+    const context = requireAuthenticatedActor(headers, detail);
+    managers.authorization.requireAnyTokenScope(
+      context,
+      ["write", "insights", "psyche.note"],
       detail
     );
     return context;
@@ -18745,6 +18757,10 @@ export async function buildServer(
     };
   });
   app.post("/api/v1/notes", async (request, reply) => {
+    requirePotentialNoteMutationAccess(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/notes" }
+    );
     const input = createNoteSchema.parse(request.body ?? {});
     const firstLinkedEntityType =
       input.links.find((link) => isPsycheEntityType(link.entityType))
@@ -18805,8 +18821,7 @@ export async function buildServer(
   });
   app.patch("/api/v1/notes/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const patch = updateNoteSchema.parse(request.body ?? {});
-    const actor = requireAuthenticatedActor(
+    const actor = requirePotentialNoteMutationAccess(
       request.headers as Record<string, unknown>,
       { route: "/api/v1/notes/:id" }
     );
@@ -18817,6 +18832,20 @@ export async function buildServer(
     }
     requireScopedNoteOwnership(actor, current);
     requireWikiNoteAccess(toWikiUserScope(actor), current, "write");
+    const currentLinkedEntityType =
+      current.links.find((link) => isPsycheEntityType(link.entityType))
+        ?.entityType ??
+      current.links[0]?.entityType ??
+      null;
+    requireNoteAccess(
+      request.headers as Record<string, unknown>,
+      currentLinkedEntityType,
+      {
+        route: "/api/v1/notes/:id",
+        entityType: currentLinkedEntityType
+      }
+    );
+    const patch = updateNoteSchema.parse(request.body ?? {});
     const linkedEntityType =
       current.links.find((link) => isPsycheEntityType(link.entityType))
         ?.entityType ??
@@ -18873,7 +18902,7 @@ export async function buildServer(
   });
   app.delete("/api/v1/notes/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const actor = requireAuthenticatedActor(
+    const actor = requirePotentialNoteMutationAccess(
       request.headers as Record<string, unknown>,
       { route: "/api/v1/notes/:id" }
     );
@@ -25465,9 +25494,9 @@ export async function buildServer(
       activeTaskRun: taskRuns.find((run) => run.status === "active") ?? null,
       taskRuns,
       activity: filterNoteActivityEventsForScope(
-        listActivityEventsForTask(id, 20, userIds),
+        listActivityEventsForTask(id, undefined, undefined),
         noteScope
-      ),
+      ).slice(0, 20),
       notesSummaryByEntity: buildNotesSummaryByEntity(
         [
           { entityType: "task", entityId: task.id },

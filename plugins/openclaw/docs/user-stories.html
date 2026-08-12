@@ -47,8 +47,8 @@
           <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>204</strong><span>Current product</span></a>
           <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>0</strong><span>Planned</span></a>
           <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>24</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>163</strong><span>In review</span></a>
-          <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>14</strong><span>Needs audit</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>164</strong><span>In review</span></a>
+          <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>13</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
 
@@ -1100,17 +1100,17 @@
               </summary>
               <div class="story-list">
 
-                <details class="story-card" id="story-know-01" data-story-id="KNOW-01" data-lifecycle="current" data-readiness="Needs audit" data-family="KNOW">
+                <details class="story-card" id="story-know-01" data-story-id="KNOW-01" data-lifecycle="current" data-readiness="In review" data-family="KNOW">
                   <summary class="story-summary">
                     <span class="story-id">KNOW-01</span>
                     <span class="story-summary-outcome">As a user, I can create, edit, search, tag, date, and link Markdown notes as durable prose beside structured records.</span>
-                    <span class="story-state state-needs-audit">Needs audit</span>
+                    <span class="story-state state-in-review">In review</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a user, I can create, edit, search, tag, date, and link Markdown notes as durable prose beside structured records.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>notes-index</code>, <code>note</code>, general links.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>the first coordinated source package passed backend 10/10, web/API 44/44, playbook 16/16, server/root, lint, format, and diff gates, but independent review found material owner-default, summary/activity visibility, direct-route ordering, cleanup-owner, anchor-deduplication, deleted/ID query-parity, and batch-response-schema gaps. The complete correction package is active; do not return this story to <code>In review</code> until all seven findings and adversarial regressions pass together.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the coordinated correction package now closes all seven prior findings together. Free-form authors cannot choose owners or audit actors; scoped summaries and activity remain inaccessible outside their authorized scope and complete even after newer hidden events; direct routes authenticate before parsing or record disclosure; hard deletion and expiry clear live ownership while retaining redacted historical visibility; link anchors are canonicalized and collision-safely deduplicated; live and deleted searches share exact ID and normalized-query rules; and batch mutation/search responses use distinct exact OpenAPI contracts, including truthful atomic rollback results. The combined backend contract is 18/18 and root TypeScript passes. Complete one retained live desktop and 390-pixel phone pass over Note creation, search, editing, linking, soft delete, restore, and activity before promotion to <code>Verified</code>.</dd></div>
                     </dl>
                   </div>
                 </details>

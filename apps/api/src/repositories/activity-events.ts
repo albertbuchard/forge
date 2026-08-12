@@ -291,9 +291,12 @@ export function listActivityEvents(
 
 export function listActivityEventsForTask(
   taskId: string,
-  limit = 25,
+  limit: number | undefined = 25,
   userIds?: string[]
 ): ActivityEvent[] {
+  const limitSql = limit === undefined ? "" : "LIMIT ?";
+  const parameters =
+    limit === undefined ? [taskId, taskId] : [taskId, taskId, limit];
   const rows = getDatabase()
     .prepare(
       `SELECT
@@ -320,11 +323,11 @@ export function listActivityEventsForTask(
            SELECT 1
            FROM activity_event_corrections
            WHERE activity_event_corrections.corrected_event_id = activity_events.id
-         )
+       )
        ORDER BY activity_events.created_at DESC
-       LIMIT ?`
+       ${limitSql}`
     )
-    .all(taskId, taskId, limit) as ActivityEventRow[];
+    .all(...parameters) as ActivityEventRow[];
 
   const events = rows.map(mapActivityEvent);
   if (!userIds || userIds.length === 0) {

@@ -277,8 +277,8 @@ export function getDashboard(
   };
   const recentActivity = filterNoteActivityEventsForScope(
     listActivityEvents({
-      limit: 36,
-      userIds: options.userIds
+      limit: undefined,
+      userIds: undefined
     }),
     options.noteScope ?? { userIds: options.userIds }
   )

@@ -174,19 +174,19 @@ export function getProjectBoard(
       listActivityEvents({
         entityType: "project",
         entityId: projectId,
-        limit: 20,
-        userIds: options.userIds
+        limit: undefined,
+        userIds: undefined
       }).concat(
         listActivityEvents({
           entityType: "task",
-          limit: 100,
-          userIds: options.userIds
-        })
-          .filter((event) => tasks.some((task) => task.id === event.entityId))
-          .slice(0, 20)
+          limit: undefined,
+          userIds: undefined
+        }).filter((event) => tasks.some((task) => task.id === event.entityId))
       ),
       noteScope
-    ),
+    )
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .slice(0, 40),
     notesSummaryByEntity: buildNotesSummaryByEntity(
       [
         { entityType: "project", entityId: project.id },

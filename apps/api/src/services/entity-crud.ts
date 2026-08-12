@@ -695,6 +695,16 @@ function requireTaskTimeboxScope(timeboxId: string, context: CrudContext) {
   return timebox;
 }
 
+function noteMatchesCrudIdentityAndQuery(
+  note: Note,
+  input: Pick<CrudSearchInput, "ids" | "query">
+) {
+  if (input.ids && input.ids.length > 0 && !input.ids.includes(note.id)) {
+    return false;
+  }
+  return noteMatchesSearchQuery(note, input.query);
+}
+
 function searchNotesForEntityCrud(
   input: CrudSearchInput,
   context: EntitySearchContext
@@ -732,7 +742,7 @@ function searchNotesForEntityCrud(
     );
     notes.push(
       ...filterVisible(page.notes).filter((note) =>
-        noteMatchesSearchQuery(note, input.query)
+        noteMatchesCrudIdentityAndQuery(note, input)
       )
     );
     cursor = page.nextCursor ?? undefined;
@@ -3272,9 +3282,14 @@ export function searchEntities(
                     !noteHasPsycheLink(item.snapshot as Note)))
             )
             .filter((item) =>
-              search.ids && search.ids.length > 0
-                ? search.ids.includes(item.entityId)
-                : true
+              item.entityType === "note"
+                ? noteMatchesCrudIdentityAndQuery(
+                    { ...item.snapshot, id: item.entityId } as Note,
+                    search
+                  )
+                : search.ids && search.ids.length > 0
+                  ? search.ids.includes(item.entityId)
+                  : true
             )
             .filter((item) =>
               item.entityType === "artifact"
@@ -3292,7 +3307,7 @@ export function searchEntities(
             )
             .filter((item) =>
               item.entityType === "note"
-                ? noteMatchesSearchQuery(item.snapshot as Note, search.query)
+                ? true
                 : matchesQuery(item.snapshot, search.query) ||
                   matchesQuery(item, search.query)
             )

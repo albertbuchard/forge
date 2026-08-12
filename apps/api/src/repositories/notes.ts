@@ -114,6 +114,15 @@ const DEFAULT_NOTES_PAGE_LIMIT = 40;
 const MAX_NOTES_PAGE_LIMIT = 100;
 export const EXPIRED_NOTE_CLEANUP_BATCH_SIZE = 100;
 const PSYCHE_NOTE_LINK_TYPES = PSYCHE_ENTITY_TYPES;
+const NOTE_ACTIVITY_VISIBILITY_METADATA_KEY = "noteVisibility";
+
+type NoteActivityVisibilityMetadata = {
+  ownerUserId: string | null;
+  assigneeUserIds: string[];
+  spaceId: string;
+  kind: Note["kind"];
+  includesPsyche: boolean;
+};
 
 export function noteHasPsycheLink(note: Pick<Note, "links">) {
   return (
@@ -127,7 +136,8 @@ export function noteHasPsycheLink(note: Pick<Note, "links">) {
 }
 
 function normalizeAnchorKey(anchorKey: string): string | null {
-  return anchorKey.trim().length > 0 ? anchorKey : null;
+  const normalized = anchorKey.trim();
+  return normalized.length > 0 ? normalized : null;
 }
 
 function normalizeLinks(
@@ -137,14 +147,24 @@ function normalizeLinks(
     return [];
   }
   const seen = new Set<string>();
-  return links.filter((link) => {
-    const key = `${link.entityType}:${link.entityId}:${link.anchorKey ?? ""}`;
+  const normalized: CreateNoteInput["links"] = [];
+  for (const link of links) {
+    const next = {
+      ...link,
+      anchorKey: normalizeAnchorKey(link.anchorKey ?? "")
+    };
+    const key = JSON.stringify([
+      next.entityType,
+      next.entityId,
+      next.anchorKey
+    ]);
     if (seen.has(key)) {
-      return false;
+      continue;
     }
     seen.add(key);
-    return true;
-  });
+    normalized.push(next);
+  }
+  return normalized;
 }
 
 function normalizeTags(tags: string[] | undefined): string[] {
@@ -900,11 +920,18 @@ function recordNoteActivity(
         : "A linked note was deleted.";
   const linksByTarget = new Map<string, NoteLink[]>();
   for (const link of note.links) {
-    const key = `${link.entityType}:${link.entityId}`;
+    const key = JSON.stringify([link.entityType, link.entityId]);
     const links = linksByTarget.get(key) ?? [];
     links.push(link);
     linksByTarget.set(key, links);
   }
+  const visibility: NoteActivityVisibilityMetadata = {
+    ownerUserId: note.userId ?? null,
+    assigneeUserIds: note.assigneeUserIds ?? [],
+    spaceId: note.spaceId,
+    kind: note.kind,
+    includesPsyche: noteHasPsycheLink(note)
+  };
   for (const links of linksByTarget.values()) {
     const link = links[0]!;
     const anchorKeys = Array.from(
@@ -916,19 +943,20 @@ function recordNoteActivity(
       eventType,
       title,
       description,
-      actor: note.author ?? context.actor ?? null,
+      actor: context.actor ?? null,
       source: context.source,
       metadata: {
         noteId: note.id,
         anchorKey: anchorKeys[0] ?? "",
-        anchorKeys
+        anchorKeys,
+        [NOTE_ACTIVITY_VISIBILITY_METADATA_KEY]: visibility
       }
     });
     recordEventLog({
       eventKind: eventType,
       entityType: link.entityType,
       entityId: link.entityId,
-      actor: note.author ?? context.actor ?? null,
+      actor: context.actor ?? null,
       source: context.source,
       metadata: {
         noteId: note.id,
@@ -937,6 +965,67 @@ function recordNoteActivity(
       }
     });
   }
+}
+
+function parseNoteActivityVisibilityMetadata(
+  value: unknown
+): NoteActivityVisibilityMetadata | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const metadata = value as Record<string, unknown>;
+  if (
+    (metadata.ownerUserId !== null &&
+      typeof metadata.ownerUserId !== "string") ||
+    !Array.isArray(metadata.assigneeUserIds) ||
+    !metadata.assigneeUserIds.every((userId) => typeof userId === "string") ||
+    typeof metadata.spaceId !== "string" ||
+    (metadata.kind !== "evidence" && metadata.kind !== "wiki") ||
+    typeof metadata.includesPsyche !== "boolean"
+  ) {
+    return null;
+  }
+  return {
+    ownerUserId: metadata.ownerUserId as string | null,
+    assigneeUserIds: metadata.assigneeUserIds as string[],
+    spaceId: metadata.spaceId,
+    kind: metadata.kind,
+    includesPsyche: metadata.includesPsyche
+  };
+}
+
+function isNoteActivityVisibilityMetadataVisible(
+  metadata: NoteActivityVisibilityMetadata,
+  scope: NoteReadScope
+) {
+  if (
+    scope.accessibleSpaceIds !== undefined &&
+    !scope.accessibleSpaceIds.includes(metadata.spaceId)
+  ) {
+    return false;
+  }
+  if (scope.includePsyche === false && metadata.includesPsyche) {
+    return false;
+  }
+  if (!scope.userIds || scope.userIds.length === 0) {
+    return true;
+  }
+  const allowed = new Set(scope.userIds);
+  return (
+    (metadata.ownerUserId !== null && allowed.has(metadata.ownerUserId)) ||
+    metadata.assigneeUserIds.some((userId) => allowed.has(userId)) ||
+    (metadata.kind === "wiki" &&
+      scope.accessibleSpaceIds?.includes(metadata.spaceId) === true)
+  );
+}
+
+function redactNoteActivityVisibilityMetadata(event: ActivityEvent) {
+  if (!(NOTE_ACTIVITY_VISIBILITY_METADATA_KEY in event.metadata)) {
+    return event;
+  }
+  const metadata = { ...event.metadata };
+  delete metadata[NOTE_ACTIVITY_VISIBILITY_METADATA_KEY];
+  return { ...event, metadata };
 }
 
 export function isNoteVisibleToScope(note: Note, scope: NoteReadScope) {
@@ -967,14 +1056,15 @@ export function filterNoteActivityEventsForScope(
   scope: NoteReadScope
 ) {
   const visibility = new Map<string, boolean>();
-  return events.filter((event) => {
+  const visibleEvents: ActivityEvent[] = [];
+  for (const event of events) {
     if (
       scope.includePsyche === false &&
       PSYCHE_NOTE_LINK_TYPES.includes(
         event.entityType as (typeof PSYCHE_NOTE_LINK_TYPES)[number]
       )
     ) {
-      return false;
+      continue;
     }
     const metadataNoteId =
       typeof event.metadata.noteId === "string"
@@ -983,17 +1073,38 @@ export function filterNoteActivityEventsForScope(
     const noteId =
       metadataNoteId || (event.entityType === "note" ? event.entityId : "");
     if (!noteId) {
-      return true;
-    }
-    const cached = visibility.get(noteId);
-    if (cached !== undefined) {
-      return cached;
+      if (
+        scope.userIds &&
+        scope.userIds.length > 0 &&
+        (!event.userId || !scope.userIds.includes(event.userId))
+      ) {
+        continue;
+      }
+      visibleEvents.push(redactNoteActivityVisibilityMetadata(event));
+      continue;
     }
     const note = getNoteByIdIncludingDeleted(noteId, { skipCleanup: true });
-    const visible = Boolean(note && isNoteVisibleToScope(note, scope));
-    visibility.set(noteId, visible);
-    return visible;
-  });
+    const cached = note ? visibility.get(noteId) : undefined;
+    const storedVisibility = note
+      ? null
+      : parseNoteActivityVisibilityMetadata(
+          event.metadata[NOTE_ACTIVITY_VISIBILITY_METADATA_KEY]
+        );
+    const visible =
+      cached ??
+      (note
+        ? isNoteVisibleToScope(note, scope)
+        : storedVisibility
+          ? isNoteActivityVisibilityMetadataVisible(storedVisibility, scope)
+          : false);
+    if (note && cached === undefined) {
+      visibility.set(noteId, visible);
+    }
+    if (visible) {
+      visibleEvents.push(redactNoteActivityVisibilityMetadata(event));
+    }
+  }
+  return visibleEvents;
 }
 
 export function getNoteById(
@@ -1244,12 +1355,7 @@ export function createNoteWithinTransaction(
       now
     );
   insertLinks(id, parsed.links, now);
-  setEntityOwner(
-    "note",
-    id,
-    parsed.userId,
-    parsed.author ?? context.actor ?? null
-  );
+  setEntityOwner("note", id, parsed.userId, null);
   clearDeletedEntityRecord("note", id);
   upsertSearchRow(id, contentPlain, parsed.author ?? context.actor ?? null);
 
@@ -1408,12 +1514,7 @@ export function updateNote(
       replaceLinks(noteId, patch.links, updatedAt);
     }
     if (patch.userId !== undefined) {
-      setEntityOwner(
-        "note",
-        noteId,
-        patch.userId,
-        nextAuthor ?? context.actor ?? null
-      );
+      setEntityOwner("note", noteId, patch.userId, null);
     }
 
     const note = getNoteByIdIncludingDeleted(noteId, { skipCleanup: true })!;
