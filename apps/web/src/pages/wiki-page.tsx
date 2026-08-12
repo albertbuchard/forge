@@ -57,6 +57,16 @@ type WikiSearchMode = "text" | "semantic" | "entity" | "hybrid";
 type WikiDetail = Awaited<ReturnType<typeof getWikiHome>>;
 const WIKI_SEARCH_PAGE_SIZE = 20;
 const EMPTY_SELECTED_USER_IDS: string[] = [];
+const WIKI_SEARCH_PARAM = "wikiSearch";
+const WIKI_SEARCH_QUERY_PARAM = "wikiQuery";
+const WIKI_SEARCH_MODE_PARAM = "wikiMode";
+const WIKI_SEARCH_PROFILE_PARAM = "wikiProfile";
+
+function readWikiSearchMode(value: string | null): WikiSearchMode {
+  return value === "text" || value === "semantic" || value === "hybrid"
+    ? value
+    : "hybrid";
+}
 
 const WIKI_SEARCH_MATCH_LABELS = {
   title: "Title match",
@@ -306,16 +316,33 @@ export function WikiPage() {
   const queryClient = useQueryClient();
   const { slug } = useParams<{ slug?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(
+    () => searchParams.get(WIKI_SEARCH_PARAM) === "1"
+  );
   const [spacePickerOpen, setSpacePickerOpen] = useState(false);
   const [ingestMenuOpen, setIngestMenuOpen] = useState(false);
-  const [searchMode, setSearchMode] = useState<WikiSearchMode>("hybrid");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchMode, setSearchMode] = useState<WikiSearchMode>(() =>
+    readWikiSearchMode(searchParams.get(WIKI_SEARCH_MODE_PARAM))
+  );
+  const [searchQuery, setSearchQuery] = useState(
+    () => searchParams.get(WIKI_SEARCH_QUERY_PARAM) ?? ""
+  );
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [mobileIndexOpen, setMobileIndexOpen] = useState(false);
-  const [selectedEmbeddingProfileId, setSelectedEmbeddingProfileId] =
-    useState("");
+  const [selectedEmbeddingProfileId, setSelectedEmbeddingProfileId] = useState(
+    () => searchParams.get(WIKI_SEARCH_PROFILE_PARAM) ?? ""
+  );
   const ingestMenuRef = useRef<HTMLDivElement | null>(null);
+  const searchTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  const updateModalParams = (
+    updater: (params: URLSearchParams) => void,
+    replace = false
+  ) => {
+    const next = new URLSearchParams(searchParams);
+    updater(next);
+    setSearchParams(next, { replace });
+  };
 
   const selectedSpaceId = searchParams.get("spaceId") ?? "";
   const ingestOpen = searchParams.get("ingest") === "1";
@@ -380,6 +407,58 @@ export function WikiPage() {
   );
 
   useEffect(() => {
+    const urlOpen = searchParams.get(WIKI_SEARCH_PARAM) === "1";
+    const urlQuery = searchParams.get(WIKI_SEARCH_QUERY_PARAM) ?? "";
+    const urlMode = readWikiSearchMode(
+      searchParams.get(WIKI_SEARCH_MODE_PARAM)
+    );
+    const urlProfile = searchParams.get(WIKI_SEARCH_PROFILE_PARAM) ?? "";
+    setSearchOpen((current) => (current === urlOpen ? current : urlOpen));
+    setSearchQuery((current) =>
+      current === urlQuery ? current : urlQuery.slice(0, 500)
+    );
+    setSearchMode((current) => (current === urlMode ? current : urlMode));
+    setSelectedEmbeddingProfileId((current) =>
+      current === urlProfile ? current : urlProfile
+    );
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!searchOpen) {
+      return;
+    }
+    const next = new URLSearchParams(searchParams);
+    next.set(WIKI_SEARCH_PARAM, "1");
+    next.set(WIKI_SEARCH_MODE_PARAM, searchMode);
+    if (searchQuery) {
+      next.set(WIKI_SEARCH_QUERY_PARAM, searchQuery);
+    } else {
+      next.delete(WIKI_SEARCH_QUERY_PARAM);
+    }
+    if (
+      (searchMode === "semantic" || searchMode === "hybrid") &&
+      selectedEmbeddingProfileId
+    ) {
+      next.set(WIKI_SEARCH_PROFILE_PARAM, selectedEmbeddingProfileId);
+    } else {
+      next.delete(WIKI_SEARCH_PROFILE_PARAM);
+    }
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [
+    searchMode,
+    searchOpen,
+    searchParams,
+    searchQuery,
+    selectedEmbeddingProfileId,
+    setSearchParams
+  ]);
+
+  useEffect(() => {
+    if (isOperatorSession && settingsQuery.isLoading) {
+      return;
+    }
     if (embeddingProfiles.length === 0) {
       if (selectedEmbeddingProfileId) {
         setSelectedEmbeddingProfileId("");
@@ -396,7 +475,13 @@ export function WikiPage() {
     ) {
       setSelectedEmbeddingProfileId(embeddingProfiles[0]!.id);
     }
-  }, [embeddingProfiles, searchMode, selectedEmbeddingProfileId]);
+  }, [
+    embeddingProfiles,
+    isOperatorSession,
+    searchMode,
+    selectedEmbeddingProfileId,
+    settingsQuery.isLoading
+  ]);
 
   useEffect(() => {
     const timeout = window.setTimeout(
@@ -629,6 +714,37 @@ export function WikiPage() {
       rawTargets: Array.from(item.rawTargets)
     }));
   }, [detail?.backlinks, detail?.backlinksBySourceId]);
+  const outboundPageItems = useMemo(() => {
+    const backlinkSourceIds = new Set(
+      (detail?.backlinks ?? []).map((edge) => edge.sourceNoteId)
+    );
+    const seen = new Set<string>();
+    return (detail?.outboundLinks ?? []).flatMap((edge) => {
+      if (edge.targetType === "entity") {
+        return [];
+      }
+      const id = [
+        edge.targetNoteId ?? "",
+        edge.rawTarget,
+        edge.label,
+        edge.status,
+        edge.isEmbed ? "embed" : "link"
+      ].join(":");
+      if (seen.has(id)) {
+        return [];
+      }
+      seen.add(id);
+      return [
+        {
+          ...edge,
+          id,
+          isTwoWay: Boolean(
+            edge.targetPage && backlinkSourceIds.has(edge.targetPage.id)
+          )
+        }
+      ];
+    });
+  }, [detail?.backlinks, detail?.outboundLinks]);
   const searchResults = useMemo(() => {
     const byPageId = new Map(
       (searchResultsQuery.data?.pages ?? [])
@@ -664,13 +780,18 @@ export function WikiPage() {
     }
   });
 
-  const updateModalParams = (
-    updater: (params: URLSearchParams) => void,
-    replace = false
-  ) => {
-    const next = new URLSearchParams(searchParams);
-    updater(next);
-    setSearchParams(next, { replace });
+  const handleSearchOpenChange = (nextOpen: boolean) => {
+    setSearchOpen(nextOpen);
+    if (nextOpen) {
+      return;
+    }
+    updateModalParams((next) => {
+      next.delete(WIKI_SEARCH_PARAM);
+      next.delete(WIKI_SEARCH_QUERY_PARAM);
+      next.delete(WIKI_SEARCH_MODE_PARAM);
+      next.delete(WIKI_SEARCH_PROFILE_PARAM);
+    }, true);
+    window.requestAnimationFrame(() => searchTriggerRef.current?.focus());
   };
 
   const openIngestModal = (jobId?: string | null) => {
@@ -845,6 +966,7 @@ export function WikiPage() {
 
             <div className="mt-3 flex flex-col gap-2 lg:flex-row lg:items-center">
               <button
+                ref={searchTriggerRef}
                 type="button"
                 className="wiki-search-launch flex min-h-[2.9rem] w-full items-center gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 text-left text-[14px] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)] lg:flex-1"
                 onClick={() => setSearchOpen(true)}
@@ -1100,21 +1222,113 @@ export function WikiPage() {
                   linkStates={detail?.outboundLinks ?? []}
                 />
 
-                {detail?.outboundLinksTruncated ? (
-                  <p
-                    className="mt-4 rounded-lg border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 text-xs leading-5 text-[var(--ui-ink-soft)]"
-                    role="status"
-                  >
-                    This large page shows link status for the first{" "}
-                    {detail.outboundLinkLimit ?? 500} wiki links.
-                  </p>
-                ) : null}
-
                 {selectedPage.summary.trim() ? (
                   <p className="mt-5 border-t border-[var(--ui-border-subtle)] pt-4 text-[13px] leading-6 text-[var(--ui-ink-soft)]">
                     {selectedPage.summary}
                   </p>
                 ) : null}
+
+                <section
+                  className="mt-8 min-w-0 border-t border-[var(--ui-border-subtle)] pt-4"
+                  aria-labelledby="wiki-outbound-links-heading"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div
+                      id="wiki-outbound-links-heading"
+                      className="text-[11px] font-semibold uppercase text-[var(--ui-ink-faint)]"
+                    >
+                      Links from this page
+                    </div>
+                    {outboundPageItems.length > 0 ? (
+                      <span className="text-[11px] text-[var(--ui-ink-faint)]">
+                        {outboundPageItems.length} visible connection
+                        {outboundPageItems.length === 1 ? "" : "s"}
+                      </span>
+                    ) : null}
+                  </div>
+                  {outboundPageItems.length > 0 ? (
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {outboundPageItems.map((item) => {
+                        const card = (
+                          <>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="break-words text-[13px] font-semibold text-[var(--ui-ink-strong)]">
+                                {item.targetPage?.title ||
+                                  item.label.trim() ||
+                                  item.rawTarget}
+                              </span>
+                              <Badge
+                                size="sm"
+                                tone={
+                                  item.status === "available"
+                                    ? "signal"
+                                    : "meta"
+                                }
+                              >
+                                {item.isSelfLink
+                                  ? "This page"
+                                  : item.status === "available"
+                                    ? "Available"
+                                    : item.status === "missing"
+                                      ? "Not found"
+                                      : "Unavailable"}
+                              </Badge>
+                            </div>
+                            {item.label.trim() &&
+                            item.label.trim() !== item.targetPage?.title ? (
+                              <div className="mt-1 break-words text-[12px] leading-5 text-[var(--ui-ink-soft)]">
+                                Shown as {item.label.trim()}
+                              </div>
+                            ) : null}
+                            <div className="mt-1 break-all text-[11px] leading-5 text-[var(--ui-ink-faint)]">
+                              {item.rawTarget}
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-semibold uppercase text-[var(--ui-ink-faint)]">
+                              {item.isEmbed ? <span>Embedded</span> : null}
+                              {item.isTwoWay ? <span>Two-way link</span> : null}
+                            </div>
+                          </>
+                        );
+                        return item.targetPage && !item.isSelfLink ? (
+                          <Link
+                            key={item.id}
+                            to={{
+                              pathname:
+                                item.targetPage.slug === "index"
+                                  ? "/wiki"
+                                  : `/wiki/page/${encodeURIComponent(item.targetPage.slug)}`,
+                              search: `?spaceId=${encodeURIComponent(item.targetPage.spaceId)}`
+                            }}
+                            className="min-h-11 min-w-0 rounded-lg border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 transition hover:bg-[var(--ui-surface-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/35"
+                          >
+                            {card}
+                          </Link>
+                        ) : (
+                          <div
+                            key={item.id}
+                            className="min-h-11 min-w-0 rounded-lg border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3"
+                          >
+                            {card}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-[12px] leading-5 text-[var(--ui-ink-faint)]">
+                      This page does not link to another KarpaWiki page.
+                    </p>
+                  )}
+                  {detail?.outboundLinksTruncated ? (
+                    <p
+                      className="mt-3 text-[11px] leading-5 text-[var(--ui-ink-faint)]"
+                      role="status"
+                    >
+                      Showing the first {detail.outboundLinkLimit ?? 500} page
+                      references. Additional references are omitted from this
+                      bounded view.
+                    </p>
+                  ) : null}
+                </section>
 
                 {linkedEntityItems.length > 0 ? (
                   <section
@@ -1242,7 +1456,7 @@ export function WikiPage() {
         </div>
       </div>
 
-      <Dialog.Root open={searchOpen} onOpenChange={setSearchOpen}>
+      <Dialog.Root open={searchOpen} onOpenChange={handleSearchOpenChange}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 surface-overlay backdrop-blur-sm" />
           <Dialog.Content className="fixed left-1/2 top-3 z-50 flex max-h-[calc(100dvh-1.5rem)] w-[min(54rem,calc(100vw-1.5rem))] -translate-x-1/2 flex-col rounded-lg border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-popover)] p-4 shadow-[var(--ui-shadow-floating)] sm:top-[6vh] sm:max-h-[88dvh] sm:p-5">
@@ -1252,13 +1466,14 @@ export function WikiPage() {
                   Search the wiki
                 </Dialog.Title>
                 <Dialog.Description className="mt-1 text-[13px] leading-5 text-[var(--ui-ink-soft)]">
-                  Search titles and content in the current KarpaWiki space.
+                  Search titles and content in the current KarpaWiki space. This
+                  search can be reloaded or shared from the page URL.
                 </Dialog.Description>
               </div>
               <Dialog.Close asChild>
                 <button
                   type="button"
-                  className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-2 text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
+                  className="inline-flex size-11 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
                   aria-label="Close search"
                 >
                   <X className="size-4" />
@@ -1283,15 +1498,18 @@ export function WikiPage() {
                 role="group"
                 aria-label="Wiki search mode"
               >
-                {(embeddingProfiles.length > 0
-                  ? (["text", "hybrid", "semantic"] as WikiSearchMode[])
-                  : (["text", "hybrid"] as WikiSearchMode[])
+                {(
+                  [
+                    "text",
+                    "hybrid",
+                    ...(embeddingProfiles.length > 0 ? ["semantic"] : [])
+                  ] as WikiSearchMode[]
                 ).map((mode) => (
                   <button
                     key={mode}
                     type="button"
                     className={cn(
-                      "min-h-10 rounded-full px-3 py-1.5 text-[12px] font-medium uppercase transition",
+                      "min-h-11 rounded-full px-3 py-1.5 text-[12px] font-medium uppercase transition",
                       searchMode === mode
                         ? "bg-[var(--ui-surface-3)] text-[var(--ui-ink-strong)]"
                         : "bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
@@ -1306,7 +1524,7 @@ export function WikiPage() {
                 embeddingProfiles.length > 0 ? (
                   <select
                     aria-label="Embedding profile"
-                    className="ml-auto rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-1.5 text-[12px] text-[var(--ui-ink-strong)]"
+                    className="ml-auto min-h-11 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-1.5 text-[12px] text-[var(--ui-ink-strong)]"
                     value={selectedEmbeddingProfileId}
                     onChange={(event) =>
                       setSelectedEmbeddingProfileId(event.target.value)

@@ -47,8 +47,8 @@
           <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>204</strong><span>Current product</span></a>
           <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>0</strong><span>Planned</span></a>
           <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>24</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>161</strong><span>In review</span></a>
-          <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>16</strong><span>Needs audit</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>163</strong><span>In review</span></a>
+          <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>14</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
 
@@ -1115,17 +1115,17 @@
                   </div>
                 </details>
 
-                <details class="story-card" id="story-know-02" data-story-id="KNOW-02" data-lifecycle="current" data-readiness="Needs audit" data-family="KNOW">
+                <details class="story-card" id="story-know-02" data-story-id="KNOW-02" data-lifecycle="current" data-readiness="In review" data-family="KNOW">
                   <summary class="story-summary">
                     <span class="story-id">KNOW-02</span>
                     <span class="story-summary-outcome">As a user, I can browse and search KarpaWiki pages as durable structured-memory documents.</span>
-                    <span class="story-state state-needs-audit">Needs audit</span>
+                    <span class="story-state state-in-review">In review</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a user, I can browse and search KarpaWiki pages as durable structured-memory documents.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>wiki-index</code>, <code>wiki_page</code> specialized CRUD and search.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>test title/content search, pagination, empty state, and ranking.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the bounded index and ranked search cover title, alias, content, hybrid, semantic, empty, warning, retry, and paginated result states. Search query, mode, and applicable embedding profile now live in the page URL, so a search survives reload, browser history, and sharing. Closing clears only the search parameters and restores keyboard focus. Focused Wiki tests pass. Complete retained live desktop and 390-pixel phone verification before promotion.</dd></div>
                     </dl>
                   </div>
                 </details>
@@ -1145,17 +1145,17 @@
                   </div>
                 </details>
 
-                <details class="story-card" id="story-know-04" data-story-id="KNOW-04" data-lifecycle="current" data-readiness="Needs audit" data-family="KNOW">
+                <details class="story-card" id="story-know-04" data-story-id="KNOW-04" data-lifecycle="current" data-readiness="In review" data-family="KNOW">
                   <summary class="story-summary">
                     <span class="story-id">KNOW-04</span>
                     <span class="story-summary-outcome">As a user, I can follow backlinks, citations, related pages, and general entity links from a wiki page.</span>
-                    <span class="story-state state-needs-audit">Needs audit</span>
+                    <span class="story-state state-in-review">In review</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a user, I can follow backlinks, citations, related pages, and general entity links from a wiki page.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Wiki detail, backlinks, entity relationships.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>test broken/deleted targets, link labels, permissions, and cycles.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>page detail now has separate directed views for outbound <code>Links from this page</code> and inbound <code>Linked here</code> citations. Outbound cards preserve labels, raw targets, and embed intent; available targets navigate canonically, while missing, access-unavailable, and self-link targets remain truthful and non-destructive. A two-way marker appears only when both stored directions exist, and bounded truncation stays visible. Existing Forge entity links retain selected-user scope behavior. Focused Wiki relationship tests pass. Complete the retained permission/deleted-target and live desktop/phone promotion matrix.</dd></div>
                     </dl>
                   </div>
                 </details>

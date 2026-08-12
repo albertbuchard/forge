@@ -31,7 +31,7 @@ Hidden pages are omitted unless `includeHidden=true`. Soft-deleted pages and pag
 reads, and backlinks. A backlink exposes source metadata only when its source page is
 active and belongs to the same wiki space as the target page.
 
-## Links And Relationships
+## Links and relationships
 
 Wiki page detail reads return the complete document plus a bounded relationship view:
 
@@ -81,6 +81,15 @@ columns. Relationship surfaces use the same semantic foreground, border, warning
 surface tokens as the rest of Forge, and horizontal overflow is clipped at the article
 boundary so link-state changes do not shift the reading layout.
 
+The page also lists its outgoing wiki connections under `Links from this page`. Each
+entry preserves the written label and raw target. It identifies available, missing,
+access-unavailable, and self-link targets without turning unavailable records into
+links. Embedded references are labelled. An available target is marked `Two-way link`
+when that target also links back to the current page. This describes the 2 stored
+directions; it does not infer that the pages are semantically related. The existing
+`Linked here` section remains the inbound citation view. Both sections report when
+their bounded server window omits additional records.
+
 ## Search
 
 `POST /api/v1/wiki/search` supports `text`, `entity`, `semantic`, and `hybrid`
@@ -107,6 +116,16 @@ semantic mode only when an embedding profile is enabled. Entity-only retrieval i
 available through the API when a concrete `linkedEntity` is supplied. Initial and
 subsequent-page failures keep explicit retry actions, and fallback warnings remain
 visible even when the result set is empty.
+
+Opening search writes the dialog state into the current page URL. `wikiSearch=1` opens
+the dialog, `wikiQuery` stores up to 500 query characters, `wikiMode` stores `text`,
+`hybrid`, or `semantic`, and `wikiProfile` stores the selected embedding profile when it
+applies. Reloading or sharing that URL restores the same search. Typing replaces the
+current history entry instead of creating one entry per keystroke. Closing search
+removes those parameters and returns keyboard focus to the search button. Invalid or
+unsupported URL modes fall back to hybrid search. The URL does not accept a free-text
+`entity` mode because entity retrieval requires the structured `linkedEntity` API
+input.
 
 ## Access
 

@@ -3,11 +3,12 @@ import {
   fireEvent,
   render,
   screen,
-  waitFor
+  waitFor,
+  within
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 
 import { WikiEditorPage } from "@/pages/wiki-editor-page";
 import { WikiPage } from "@/pages/wiki-page";
@@ -122,13 +123,21 @@ describe("wiki missing-page routing", () => {
     });
   }
 
-  function renderRoute(
-    initialEntry: string,
-    client = createTestQueryClient()
-  ) {
+  function LocationProbe() {
+    const location = useLocation();
+    return (
+      <output data-testid="location-probe">
+        {location.pathname}
+        {location.search}
+      </output>
+    );
+  }
+
+  function renderRoute(initialEntry: string, client = createTestQueryClient()) {
     return render(
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={[initialEntry]}>
+          <LocationProbe />
           <Routes>
             <Route path="/wiki/page/:slug" element={<WikiPage />} />
             <Route path="/wiki" element={<WikiPage />} />
@@ -185,7 +194,12 @@ describe("wiki missing-page routing", () => {
   function makeDetail(page: ReturnType<typeof makePage>) {
     return {
       page,
+      outboundLinks: [],
+      outboundLinksTruncated: false,
+      outboundLinkLimit: 500,
       backlinks: [],
+      backlinksTruncated: false,
+      backlinkLimit: 100,
       backlinkSourceNotes: [],
       assets: [],
       backlinksBySourceId: {}
@@ -617,6 +631,269 @@ describe("wiki missing-page routing", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("restores a shared search URL and removes its state on close", async () => {
+    const space = makeSpace({
+      id: "wiki_space_shared",
+      label: "Shared Wiki",
+      visibility: "shared",
+      ownerUserId: null
+    });
+    const page = makePage(space.id);
+    getWikiSettingsMock.mockResolvedValue({
+      settings: { spaces: [space], llmProfiles: [], embeddingProfiles: [] }
+    });
+    getWikiHomeMock.mockResolvedValue(makeDetail(page));
+    getWikiTreeMock.mockResolvedValue({ tree: [], truncated: false });
+    searchWikiMock.mockResolvedValue({
+      mode: "hybrid",
+      profileId: null,
+      limit: 20,
+      offset: 0,
+      hasMore: false,
+      nextOffset: null,
+      warnings: [],
+      results: []
+    });
+    useForgeShellMock.mockReturnValue({
+      operatorSession,
+      selectedUserIds: [],
+      snapshot: { metrics: {} }
+    });
+
+    renderRoute(
+      `/wiki?spaceId=${space.id}&wikiSearch=1&wikiQuery=linked+task&wikiMode=hybrid`
+    );
+
+    const searchbox = await screen.findByRole("searchbox", {
+      name: "Search KarpaWiki pages"
+    });
+    expect(searchbox).toHaveValue("linked task");
+    expect(screen.getByRole("button", { name: "hybrid" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    await waitFor(() =>
+      expect(searchWikiMock).toHaveBeenCalledWith(
+        expect.objectContaining({ query: "linked task", mode: "hybrid" }),
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      )
+    );
+
+    fireEvent.change(searchbox, { target: { value: "updated memory" } });
+    await waitFor(() =>
+      expect(screen.getByTestId("location-probe")).toHaveTextContent(
+        "wikiQuery=updated+memory"
+      )
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Close search" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("location-probe")).toHaveTextContent(
+        `/wiki?spaceId=${space.id}`
+      )
+    );
+    expect(screen.getByTestId("location-probe")).not.toHaveTextContent(
+      "wikiSearch"
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Search KarpaWiki" })
+      ).toHaveFocus()
+    );
+  });
+
+  it("preserves semantic URL state while operator embedding settings load", async () => {
+    const space = makeSpace({
+      id: "wiki_space_shared",
+      label: "Shared Wiki",
+      visibility: "shared",
+      ownerUserId: null
+    });
+    const page = makePage(space.id);
+    let resolveSettings!: (value: {
+      settings: {
+        spaces: ReturnType<typeof makeSpace>[];
+        llmProfiles: never[];
+        embeddingProfiles: Array<{
+          id: string;
+          label: string;
+          enabled: boolean;
+        }>;
+      };
+    }) => void;
+    listWikiSpacesMock.mockResolvedValue({ spaces: [space] });
+    getWikiSettingsMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSettings = resolve;
+      })
+    );
+    getWikiHomeMock.mockResolvedValue(makeDetail(page));
+    getWikiTreeMock.mockResolvedValue({ tree: [], truncated: false });
+    searchWikiMock.mockResolvedValue({
+      mode: "semantic",
+      profileId: "embedding_local",
+      limit: 20,
+      offset: 0,
+      hasMore: false,
+      nextOffset: null,
+      warnings: [],
+      results: []
+    });
+    useForgeShellMock.mockReturnValue({
+      operatorSession,
+      selectedUserIds: [],
+      snapshot: { metrics: {} }
+    });
+
+    renderRoute(
+      `/wiki?spaceId=${space.id}&wikiSearch=1&wikiQuery=memory&wikiMode=semantic&wikiProfile=embedding_local`
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("location-probe")).toHaveTextContent(
+        "wikiMode=semantic"
+      )
+    );
+    resolveSettings({
+      settings: {
+        spaces: [space],
+        llmProfiles: [],
+        embeddingProfiles: [
+          {
+            id: "embedding_local",
+            label: "Local embeddings",
+            enabled: true
+          }
+        ]
+      }
+    });
+
+    expect(
+      await screen.findByRole("button", { name: "semantic" })
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("combobox", { name: "Embedding profile" })
+    ).toHaveValue("embedding_local");
+    expect(screen.getByTestId("location-probe")).toHaveTextContent(
+      "wikiMode=semantic"
+    );
+  });
+
+  it("shows directed, missing, unavailable, self, embedded, and two-way page connections", async () => {
+    const space = makeSpace({
+      id: "wiki_space_shared",
+      label: "Shared Wiki",
+      visibility: "shared",
+      ownerUserId: null
+    });
+    const page = makePage(space.id);
+    const target = {
+      ...makePage(space.id, "Destination page"),
+      id: "note_destination",
+      slug: "destination"
+    };
+    const edgeBase = {
+      sourceNoteId: page.id,
+      targetEntityType: null,
+      targetEntityId: null,
+      createdAt: "2026-04-06T00:00:00.000Z",
+      updatedAt: "2026-04-06T00:00:00.000Z"
+    };
+    getWikiSettingsMock.mockResolvedValue({
+      settings: { spaces: [space], llmProfiles: [], embeddingProfiles: [] }
+    });
+    getWikiHomeMock.mockResolvedValue({
+      ...makeDetail(page),
+      outboundLinks: [
+        {
+          ...edgeBase,
+          targetType: "page",
+          targetNoteId: target.id,
+          label: "Roadmap source",
+          rawTarget: "destination",
+          isEmbed: true,
+          status: "available",
+          targetPage: target,
+          isSelfLink: false
+        },
+        {
+          ...edgeBase,
+          targetType: "unresolved",
+          targetNoteId: null,
+          label: "Missing plan",
+          rawTarget: "missing-plan",
+          isEmbed: false,
+          status: "missing",
+          targetPage: null,
+          isSelfLink: false
+        },
+        {
+          ...edgeBase,
+          targetType: "page",
+          targetNoteId: "note_private",
+          label: "Restricted evidence",
+          rawTarget: "restricted-evidence",
+          isEmbed: false,
+          status: "unavailable",
+          targetPage: null,
+          isSelfLink: false
+        },
+        {
+          ...edgeBase,
+          targetType: "page",
+          targetNoteId: page.id,
+          label: "Current page",
+          rawTarget: "index",
+          isEmbed: false,
+          status: "available",
+          targetPage: page,
+          isSelfLink: true
+        }
+      ],
+      outboundLinksTruncated: true,
+      backlinks: [
+        {
+          ...edgeBase,
+          sourceNoteId: target.id,
+          targetType: "page",
+          targetNoteId: page.id,
+          label: "Return link",
+          rawTarget: "index",
+          isEmbed: false
+        }
+      ]
+    });
+    getWikiTreeMock.mockResolvedValue({ tree: [], truncated: false });
+    useForgeShellMock.mockReturnValue({
+      operatorSession,
+      selectedUserIds: [],
+      snapshot: { metrics: {} }
+    });
+
+    renderRoute(`/wiki?spaceId=${space.id}`);
+
+    const connections = await screen.findByRole("region", {
+      name: "Links from this page"
+    });
+    expect(
+      within(connections).getByRole("link", { name: /Destination page/ })
+    ).toHaveAttribute(
+      "href",
+      "/wiki/page/destination?spaceId=wiki_space_shared"
+    );
+    expect(within(connections).getByText("Embedded")).toBeInTheDocument();
+    expect(within(connections).getByText("Two-way link")).toBeInTheDocument();
+    expect(within(connections).getByText("Not found")).toBeInTheDocument();
+    expect(within(connections).getByText("Unavailable")).toBeInTheDocument();
+    expect(within(connections).getByText("This page")).toBeInTheDocument();
+    expect(
+      within(connections).queryByRole("link", { name: /Missing plan/ })
+    ).not.toBeInTheDocument();
+    expect(
+      within(connections).getByText(/first 500 page references/)
+    ).toBeInTheDocument();
+  });
+
   it("shows scoped entity availability, citation labels, and relationship bounds", async () => {
     const space = makeSpace({
       id: "wiki_space_shared",
@@ -698,7 +975,7 @@ describe("wiki missing-page routing", () => {
     expect(
       screen.getByText("Cited as Home reference, Overview citation")
     ).toBeInTheDocument();
-    expect(screen.getByText(/first 500 wiki links/)).toBeInTheDocument();
+    expect(screen.getByText(/first 500 page references/)).toBeInTheDocument();
     expect(
       screen.getByText(/first 100 backlink citations/)
     ).toBeInTheDocument();
