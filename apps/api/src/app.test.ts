@@ -9321,7 +9321,7 @@ test("movement day and timeline classify short gaps into repaired stays, repaire
 
     const dayResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/movement/day?date=2026-04-05"
+      url: "/api/v1/movement/day?date=2026-04-05&timeZone=UTC"
     });
     assert.equal(dayResponse.statusCode, 200);
     const day = dayResponse.json() as {
@@ -9381,7 +9381,7 @@ test("movement day and timeline classify short gaps into repaired stays, repaire
     assert.equal(dayCoverage[0]?.startedAt, "2026-04-05T00:00:00.000Z");
     assert.equal(
       dayCoverage[dayCoverage.length - 1]?.endedAt,
-      "2026-04-05T23:59:59.999Z"
+      "2026-04-06T00:00:00.000Z"
     );
     for (let index = 1; index < dayCoverage.length; index += 1) {
       assert.equal(
