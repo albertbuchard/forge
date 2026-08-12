@@ -6513,7 +6513,8 @@ export function buildOpenApiDocument() {
           "entity_soft_delete",
           "entity_hard_delete",
           "task_update",
-          "attention_state"
+          "attention_state",
+          "preference_judgment"
         ]
       },
       targetType: { type: "string" },
@@ -19849,19 +19850,52 @@ export function buildOpenApiDocument() {
             }
           },
           responses: {
-            "201": jsonResponse(
-              {
-                type: "object",
-                additionalProperties: false,
-                required: ["judgment"],
-                properties: {
-                  judgment: {
-                    $ref: "#/components/schemas/PairwisePreferenceJudgment"
+            "200": {
+              ...jsonResponse(
+                {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["judgment", "mutationReceipt"],
+                  properties: {
+                    judgment: {
+                      $ref: "#/components/schemas/PairwisePreferenceJudgment"
+                    },
+                    mutationReceipt: {
+                      $ref: "#/components/schemas/MutationReceipt"
+                    }
                   }
+                },
+                "Exact idempotent replay of a pairwise judgment and its undo receipt"
+              ),
+              headers: {
+                "Idempotency-Replayed": {
+                  schema: { type: "string", enum: ["true"] }
                 }
-              },
-              "Created pairwise judgment"
-            ),
+              }
+            },
+            "201": {
+              ...jsonResponse(
+                {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["judgment", "mutationReceipt"],
+                  properties: {
+                    judgment: {
+                      $ref: "#/components/schemas/PairwisePreferenceJudgment"
+                    },
+                    mutationReceipt: {
+                      $ref: "#/components/schemas/MutationReceipt"
+                    }
+                  }
+                },
+                "Created pairwise judgment and a ten-minute undo receipt"
+              ),
+              headers: {
+                "Idempotency-Replayed": {
+                  schema: { type: "string", enum: ["false"] }
+                }
+              }
+            },
             ...preferenceErrorResponses(400, 401, 403, 404, 409, 500)
           }
         }

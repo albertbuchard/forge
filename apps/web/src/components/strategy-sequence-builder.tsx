@@ -11,7 +11,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy
 } from "@dnd-kit/sortable";
-import { Plus, Search, Undo2 } from "lucide-react";
+import { Plus, Redo2, Search, Undo2 } from "lucide-react";
 import { Dispatch, SetStateAction } from "react";
 
 import { FlowField } from "@/components/flows/question-flow-dialog";
@@ -88,6 +88,8 @@ export function StrategySequenceBuilder({
   reorderNodes,
   undoNodes,
   canUndoNodes,
+  redoNodes,
+  canRedoNodes,
   contractChecks,
   alignmentBreakdown
 }: {
@@ -129,6 +131,8 @@ export function StrategySequenceBuilder({
   reorderNodes: (activeId: string, overId: string) => void;
   undoNodes: () => void;
   canUndoNodes: boolean;
+  redoNodes: () => void;
+  canRedoNodes: boolean;
   contractChecks: StrategyReadinessCheck[];
   alignmentBreakdown: StrategyAlignmentMetric[];
 }) {
@@ -232,13 +236,25 @@ export function StrategySequenceBuilder({
                 type="button"
                 variant="secondary"
                 size="sm"
-                className="size-9 px-0"
+                className="size-11 px-0"
                 aria-label="Undo last graph change"
                 title="Undo graph change"
                 disabled={!canUndoNodes}
                 onClick={undoNodes}
               >
                 <Undo2 className="size-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="size-11 px-0"
+                aria-label="Redo last undone graph change"
+                title="Redo graph change"
+                disabled={!canRedoNodes}
+                onClick={redoNodes}
+              >
+                <Redo2 className="size-4" />
               </Button>
               <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
                 {draft.nodes.length} planned steps

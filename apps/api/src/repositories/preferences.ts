@@ -267,6 +267,7 @@ type JudgmentRow = {
   source: string;
   reason_tags_json: string;
   created_at: string;
+  undone_at?: string | null;
 };
 
 type SignalRow = {
@@ -1003,11 +1004,9 @@ function selectReplacementDefaultContext(
        ORDER BY is_default DESC, active DESC, created_at ASC, id ASC
        LIMIT 1`
     )
-    .get(
-      profileId,
-      excludedContextId ?? null,
-      excludedContextId ?? null
-    ) as ContextRow | undefined;
+    .get(profileId, excludedContextId ?? null, excludedContextId ?? null) as
+    | ContextRow
+    | undefined;
   return row ? mapContext(row) : null;
 }
 
@@ -1248,6 +1247,7 @@ function listJudgmentsForContexts(contextIds: string[]): {
                 COUNT(*) OVER (PARTITION BY context_id) AS context_total
          FROM pairwise_judgments
          WHERE context_id IN (${placeholders})
+           AND undone_at IS NULL
        )
        SELECT id, profile_id, context_id, user_id, left_item_id, right_item_id,
               outcome, strength, response_time_ms, source, reason_tags_json,
@@ -3394,12 +3394,10 @@ function buildWorkspace(
     historyItemIds.add(signal.itemId);
   }
   const historyItemLabels = Object.fromEntries(
-    [...historyItemIds]
-      .sort()
-      .flatMap((itemId) => {
-        const item = itemsById.get(itemId);
-        return item ? [[itemId, item.label] as const] : [];
-      })
+    [...historyItemIds].sort().flatMap((itemId) => {
+      const item = itemsById.get(itemId);
+      return item ? [[itemId, item.label] as const] : [];
+    })
   );
   const mappedDimensions = listStoredDimensions(selectedContext.id);
   const nextPair = buildNextPair({
@@ -4873,11 +4871,11 @@ export function createPreferenceItemFromEntity(
   });
 }
 
-export function submitPairwiseJudgment(
+export function submitPairwiseJudgmentWithReplay(
   input: SubmitPairwiseJudgmentInput,
   mutationContext: PreferenceMutationContext = { source: "ui", actor: null },
   idempotencyKey?: string | null
-): PairwiseJudgment {
+): { judgment: PairwiseJudgment; replayed: boolean } {
   const parsed = submitPairwiseJudgmentSchema.parse(input);
   return runInTransaction(() => {
     const fingerprint = judgmentFingerprint(parsed);
@@ -4903,7 +4901,7 @@ export function submitPairwiseJudgment(
           .prepare(
             `SELECT id, profile_id, context_id, user_id, left_item_id,
                     right_item_id, outcome, strength, response_time_ms, source,
-                    reason_tags_json, created_at
+                    reason_tags_json, created_at, undone_at
              FROM pairwise_judgments
              WHERE id = ?`
           )
@@ -4915,7 +4913,14 @@ export function submitPairwiseJudgment(
             "The preference judgment recorded for this idempotency key is missing."
           );
         }
-        return mapJudgment(replay);
+        if (replay.undone_at) {
+          throw new HttpError(
+            409,
+            "preferences_judgment_undone",
+            "This exact preference judgment was undone and cannot be submitted again with the same request identifier."
+          );
+        }
+        return { judgment: mapJudgment(replay), replayed: true };
       }
     }
 
@@ -5004,17 +5009,114 @@ export function submitPairwiseJudgment(
         )
         .run(parsed.userId, idempotencyKey, fingerprint, judgmentId, timestamp);
     }
-    return mapJudgment(
-      getDatabase()
-        .prepare(
-          `SELECT id, profile_id, context_id, user_id, left_item_id,
-                  right_item_id, outcome, strength, response_time_ms, source,
-                  reason_tags_json, created_at
-           FROM pairwise_judgments
-           WHERE id = ?`
-        )
-        .get(judgmentId) as JudgmentRow
-    );
+    return {
+      judgment: mapJudgment(
+        getDatabase()
+          .prepare(
+            `SELECT id, profile_id, context_id, user_id, left_item_id,
+                    right_item_id, outcome, strength, response_time_ms, source,
+                    reason_tags_json, created_at
+             FROM pairwise_judgments
+             WHERE id = ?`
+          )
+          .get(judgmentId) as JudgmentRow
+      ),
+      replayed: false
+    };
+  });
+}
+
+export function submitPairwiseJudgment(
+  input: SubmitPairwiseJudgmentInput,
+  mutationContext: PreferenceMutationContext = { source: "ui", actor: null },
+  idempotencyKey?: string | null
+): PairwiseJudgment {
+  return submitPairwiseJudgmentWithReplay(
+    input,
+    mutationContext,
+    idempotencyKey
+  ).judgment;
+}
+
+export function getPreferenceJudgmentById(
+  judgmentId: string
+): PairwiseJudgment | null {
+  const row = getDatabase()
+    .prepare(
+      `SELECT id, profile_id, context_id, user_id, left_item_id,
+              right_item_id, outcome, strength, response_time_ms, source,
+              reason_tags_json, created_at
+       FROM pairwise_judgments
+       WHERE id = ? AND undone_at IS NULL`
+    )
+    .get(judgmentId) as JudgmentRow | undefined;
+  return row ? mapJudgment(row) : null;
+}
+
+export function undoPairwiseJudgment(
+  judgmentId: string,
+  mutationContext: PreferenceMutationContext = { source: "ui", actor: null }
+): { judgment: PairwiseJudgment; undoneAt: string } {
+  return runInTransaction(() => {
+    const judgment = getPreferenceJudgmentById(judgmentId);
+    if (!judgment) {
+      throw new HttpError(
+        409,
+        "preferences_judgment_changed",
+        "This preference judgment is no longer available to undo."
+      );
+    }
+    const undoneAt = nowIso();
+    const updated = getDatabase()
+      .prepare(
+        `UPDATE pairwise_judgments
+         SET undone_at = ?, undone_by_actor = ?, undone_source = ?
+         WHERE id = ? AND undone_at IS NULL`
+      )
+      .run(
+        undoneAt,
+        mutationContext.actor ?? null,
+        mutationContext.source,
+        judgment.id
+      );
+    if (updated.changes !== 1) {
+      throw new HttpError(
+        409,
+        "preferences_judgment_changed",
+        "This preference judgment changed before Forge could undo it."
+      );
+    }
+    recordActivityEvent({
+      entityType: "preference_item",
+      entityId:
+        judgment.outcome === "right"
+          ? judgment.rightItemId
+          : judgment.leftItemId,
+      eventType: "preference_judgment_undone",
+      title: "Preference comparison undone",
+      description: "The comparison was removed from preference learning.",
+      actor: mutationContext.actor ?? null,
+      source: mutationContext.source,
+      metadata: {
+        judgmentId: judgment.id,
+        contextId: judgment.contextId,
+        leftItemId: judgment.leftItemId,
+        rightItemId: judgment.rightItemId,
+        outcome: judgment.outcome,
+        strength: judgment.strength,
+        ownerUserId: judgment.userId
+      }
+    });
+    const profile = getPreferenceProfileById(judgment.profileId);
+    if (!profile) {
+      throw new HttpError(
+        409,
+        "preferences_profile_missing",
+        "The preference profile is no longer available."
+      );
+    }
+    recomputeAffectedContexts(profile, judgment.contextId, mutationContext);
+    return { judgment, undoneAt };
   });
 }
 
@@ -5218,13 +5320,7 @@ export function submitAbsoluteSignalWithReceipt(
              user_id, idempotency_key, request_fingerprint, signal_id, created_at
            ) VALUES (?, ?, ?, ?, ?)`
         )
-        .run(
-          parsed.userId,
-          idempotencyKey,
-          fingerprint,
-          signalId,
-          timestamp
-        );
+        .run(parsed.userId, idempotencyKey, fingerprint, signalId, timestamp);
     }
     return {
       signal: mapSignal({
@@ -5249,11 +5345,8 @@ export function submitAbsoluteSignal(
   mutationContext: PreferenceMutationContext = { source: "ui", actor: null },
   idempotencyKey?: string | null
 ): AbsoluteSignal {
-  return submitAbsoluteSignalWithReceipt(
-    input,
-    mutationContext,
-    idempotencyKey
-  ).signal;
+  return submitAbsoluteSignalWithReceipt(input, mutationContext, idempotencyKey)
+    .signal;
 }
 
 export function updatePreferenceScore(

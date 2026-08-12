@@ -672,7 +672,7 @@
                     <p class="story-expanded-outcome">As a user, I can define and edit a strategy as an ordered graph of states, dependencies, and linked work.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>strategies-index</code>, <code>strategy-detail</code>, <code>strategy</code>, graph editor.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>graph validation now rejects duplicate edges and cycles iteratively at large depth; the sequence editor supports keyboard sorting, bounded undo history, Ctrl/Cmd+Z outside text fields, and filling the initial placeholder without duplicate nodes. Complete full API round-trip, redo, corrupted persisted graph, and dense live-graph performance matrices.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>graph validation rejects duplicate edges and cycles iteratively at large depth. The sequence editor supports keyboard sorting, bounded 50-state undo and redo histories, Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or Ctrl+Y redo outside text fields, and clears redo after any new edit. Complete the full API round-trip, corrupted persisted graph, dense live-graph performance, and retained desktop/phone matrices.</dd></div>
                     </dl>
                   </div>
                 </details>
@@ -906,7 +906,7 @@
                     <p class="story-expanded-outcome">As a user, I can view provider events, Forge events, work blocks, task timeboxes, and Life Events in one readable calendar.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>calendar-index</code>, calendar overview.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>the phone week is a bounded seven-day swipe rail with no page overflow, and multi-day events render on every applicable day. Finish dense overlap, recurrence, and a separate month-view matrix.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the phone week remains a bounded seven-day swipe rail with no page overflow, and multi-day events render on every applicable day. A separate restorable Month view now uses a stable <code>view=month&amp;date=YYYY-MM-DD</code> URL, queries one exact 42-day grid, summarizes provider events, Forge events, work blocks, and timeboxes per day, and drills a selected day back into the editable week. Complete dense overlap, recurrence, keyboard, and retained desktop/phone month matrices.</dd></div>
                     </dl>
                   </div>
                 </details>
@@ -1647,7 +1647,7 @@
                     <p class="story-expanded-outcome">As a user, I can compare two items and record a pairwise judgment with strength and context.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>preference_judgment</code> action route.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>card, button, and keyboard submissions share an immediate per-pair lock. Each judgment now receives one stable idempotency key before submission; an ambiguous failure retains the exact pair, outcome, strength, and key behind a 44-pixel retry action, so server replay records it at most once. Ties and skips remain explicit. Complete undo and retained live desktop and phone promotion evidence.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>card, button, and keyboard submissions share an immediate per-pair lock and one stable idempotency key. An ambiguous failure retains the exact pair, outcome, strength, and key behind a 44-pixel retry action. Every accepted judgment now returns an actor-scoped ten-minute mutation receipt; Undo atomically marks that evidence inactive, recomputes the affected preference context, records one audit event, and replays exactly without recreating the judgment. Ties and skips remain explicit. Complete retained live desktop and phone promotion evidence.</dd></div>
                     </dl>
                   </div>
                 </details>

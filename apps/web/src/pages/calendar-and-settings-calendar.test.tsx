@@ -787,6 +787,86 @@ afterEach(() => {
 });
 
 describe("calendar routing surfaces", () => {
+  it("restores a six-week month view and drills one day into its editable week", async () => {
+    getCalendarOverviewMock.mockResolvedValue({
+      calendar: {
+        generatedAt: "2026-05-03T09:00:00.000Z",
+        providers: [],
+        connections: [],
+        calendars: [],
+        events: [
+          {
+            id: "event_month_review",
+            connectionId: null,
+            calendarId: null,
+            remoteId: null,
+            ownership: "forge",
+            originType: "native",
+            status: "confirmed",
+            title: "Month review",
+            description: "",
+            location: "",
+            place: {
+              label: "",
+              address: "",
+              timezone: "Europe/Zurich",
+              latitude: null,
+              longitude: null,
+              source: "",
+              externalPlaceId: ""
+            },
+            startAt: "2026-05-03T08:00:00.000Z",
+            endAt: "2026-05-03T09:00:00.000Z",
+            timezone: "Europe/Zurich",
+            isAllDay: false,
+            availability: "busy",
+            eventType: "meeting",
+            categories: [],
+            sourceMappings: [],
+            links: [],
+            actionProfile: null,
+            remoteUpdatedAt: null,
+            deletedAt: null,
+            createdAt: "2026-05-01T00:00:00.000Z",
+            updatedAt: "2026-05-01T00:00:00.000Z"
+          }
+        ],
+        workBlockTemplates: [],
+        workBlockInstances: [],
+        timeboxes: []
+      }
+    });
+
+    renderWithRouter(<CalendarPage />, "/calendar?view=month&date=2026-05-03");
+
+    expect(
+      await screen.findByTestId("calendar-month-grid")
+    ).toBeInTheDocument();
+    expect(screen.getByText("May 2026")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^month$/i })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByText("Month review")).toBeInTheDocument();
+    expect(getCalendarOverviewMock).toHaveBeenCalledWith({
+      from: "2026-04-27T00:00:00.000Z",
+      to: "2026-06-08T00:00:00.000Z",
+      userIds: []
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Sunday, May 3, 2026: 1 scheduled item\. Open week\./i
+      })
+    );
+
+    expect(await screen.findByTestId("calendar-week-grid")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^week$/i })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+  });
+
   it("places timezone-aware calendar events on their event-local day", async () => {
     restoreDate?.();
     restoreDate = installMockDate("2026-09-10T09:00:00.000Z");

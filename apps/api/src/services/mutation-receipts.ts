@@ -12,6 +12,7 @@ export type MutationReceiptOperation =
   | "entity_soft_delete"
   | "entity_hard_delete"
   | "task_update"
+  | "preference_judgment"
   | "attention_state";
 
 export type MutationReceiptStatus =
@@ -55,6 +56,10 @@ export type MutationReceiptInverse =
       patch: Record<string, unknown>;
     }
   | {
+      kind: "preference_judgment_undo";
+      judgmentId: string;
+    }
+  | {
       kind: "attention_state";
       itemId: string;
       state: "active" | "snoozed" | "dismissed";
@@ -71,6 +76,10 @@ export type MutationReceiptExpected =
   | { kind: "entity_deleted" }
   | {
       kind: "task_fields";
+      fields: Record<string, unknown>;
+    }
+  | {
+      kind: "preference_judgment";
       fields: Record<string, unknown>;
     }
   | {
@@ -115,7 +124,10 @@ function parseJson<T>(value: string | null): T | null {
   return JSON.parse(value) as T;
 }
 
-function publicStatus(row: MutationReceiptRow, now: Date): MutationReceiptStatus {
+function publicStatus(
+  row: MutationReceiptRow,
+  now: Date
+): MutationReceiptStatus {
   if (
     row.status === "available" &&
     row.expires_at !== null &&
@@ -145,7 +157,10 @@ function statusExplanation(
   );
 }
 
-function toRecord(row: MutationReceiptRow, now = new Date()): MutationReceiptRecord {
+function toRecord(
+  row: MutationReceiptRow,
+  now = new Date()
+): MutationReceiptRecord {
   const status = publicStatus(row, now);
   return {
     view: {
@@ -243,18 +258,45 @@ export function getMutationReceiptRecord(
   now = new Date()
 ): MutationReceiptRecord | null {
   const row = getDatabase()
-    .prepare(
-      `SELECT * FROM mutation_receipts WHERE actor_key = ? AND id = ?`
-    )
+    .prepare(`SELECT * FROM mutation_receipts WHERE actor_key = ? AND id = ?`)
     .get(actorKey, receiptId) as MutationReceiptRow | undefined;
   if (!row) return null;
   if (
     allowedOwnerUserIds?.length &&
-    (row.owner_user_id === null || !allowedOwnerUserIds.includes(row.owner_user_id))
+    (row.owner_user_id === null ||
+      !allowedOwnerUserIds.includes(row.owner_user_id))
   ) {
     return null;
   }
   return toRecord(row, now);
+}
+
+export function getLatestMutationReceiptForTarget(input: {
+  actorKey: string;
+  targetType: string;
+  targetId: string;
+  allowedOwnerUserIds?: string[];
+  now?: Date;
+}): MutationReceiptRecord | null {
+  const row = getDatabase()
+    .prepare(
+      `SELECT * FROM mutation_receipts
+       WHERE actor_key = ? AND target_type = ? AND target_id = ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1`
+    )
+    .get(input.actorKey, input.targetType, input.targetId) as
+    | MutationReceiptRow
+    | undefined;
+  if (!row) return null;
+  if (
+    input.allowedOwnerUserIds?.length &&
+    (row.owner_user_id === null ||
+      !input.allowedOwnerUserIds.includes(row.owner_user_id))
+  ) {
+    return null;
+  }
+  return toRecord(row, input.now);
 }
 
 export function listMutationReceipts(input: {
@@ -297,7 +339,11 @@ export function beginMutationReceiptUndo(input: {
     now
   );
   if (!record) {
-    throw new HttpError(404, "mutation_receipt_not_found", "Change receipt not found.");
+    throw new HttpError(
+      404,
+      "mutation_receipt_not_found",
+      "Change receipt not found."
+    );
   }
   if (record.view.status === "undone") {
     if (record.undoIdempotencyKey === input.idempotencyKey) {
@@ -367,7 +413,12 @@ export function completeMutationReceiptUndo(input: {
       "The change receipt was updated by another request."
     );
   }
-  return getMutationReceiptRecord(input.actorKey, input.receiptId, undefined, now)!;
+  return getMutationReceiptRecord(
+    input.actorKey,
+    input.receiptId,
+    undefined,
+    now
+  )!;
 }
 
 export function markMutationReceiptConflict(input: {
@@ -384,7 +435,12 @@ export function markMutationReceiptConflict(input: {
        WHERE actor_key = ? AND id = ? AND status = 'available'`
     )
     .run(input.explanation, now.toISOString(), input.actorKey, input.receiptId);
-  return getMutationReceiptRecord(input.actorKey, input.receiptId, undefined, now)!.view;
+  return getMutationReceiptRecord(
+    input.actorKey,
+    input.receiptId,
+    undefined,
+    now
+  )!.view;
 }
 
 export function mutationReceiptValuesMatch(

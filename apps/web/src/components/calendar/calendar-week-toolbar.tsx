@@ -3,13 +3,17 @@ import { CalendarDays } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatWeekday } from "@/lib/calendar-ui";
+import { formatMonthLabel } from "@/lib/calendar-ui";
 
 export function CalendarWeekToolbar({
   eyebrow = "Week view",
   description,
   weekStart,
+  view = "week",
+  month,
   status,
   badges,
+  onViewChange,
   onPrevious,
   onCurrent,
   onNext
@@ -17,8 +21,11 @@ export function CalendarWeekToolbar({
   eyebrow?: string;
   description: string;
   weekStart: Date;
+  view?: "week" | "month";
+  month?: Date;
   status?: ReactNode;
   badges?: ReactNode;
+  onViewChange?: (view: "week" | "month") => void;
   onPrevious: () => void;
   onCurrent: () => void;
   onNext: () => void;
@@ -37,14 +44,38 @@ export function CalendarWeekToolbar({
       <div className="flex min-w-0 flex-wrap gap-2">
         <Badge className="border border-[color-mix(in_srgb,var(--primary)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-accent-soft)] text-[var(--primary)]">
           <CalendarDays className="mr-1 size-3.5" />
-          Week of {formatWeekday(weekStart, "UTC")}
+          {view === "month"
+            ? formatMonthLabel(month ?? weekStart)
+            : `Week of ${formatWeekday(weekStart, "UTC")}`}
         </Badge>
         {badges}
+        {onViewChange ? (
+          <div
+            className="inline-flex rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-1"
+            aria-label="Calendar view"
+          >
+            {(["week", "month"] as const).map((candidate) => (
+              <button
+                key={candidate}
+                type="button"
+                aria-pressed={view === candidate}
+                className={`min-h-11 rounded-[calc(var(--radius-control)-4px)] px-4 text-sm font-medium capitalize transition ${
+                  view === candidate
+                    ? "bg-[var(--ui-accent-soft)] text-[var(--primary)]"
+                    : "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                }`}
+                onClick={() => onViewChange(candidate)}
+              >
+                {candidate}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <Button variant="secondary" onClick={onPrevious}>
           Previous
         </Button>
         <Button variant="secondary" onClick={onCurrent}>
-          This week
+          {view === "month" ? "This month" : "This week"}
         </Button>
         <Button variant="secondary" onClick={onNext}>
           Next

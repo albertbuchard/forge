@@ -1,12 +1,13 @@
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   screen,
   within,
   waitFor
 } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PreferenceGameDialog } from "./preference-game-dialog";
 import type {
@@ -14,6 +15,20 @@ import type {
   PreferenceItem,
   PreferenceWorkspacePayload
 } from "@/lib/types";
+
+const { undoMutationReceiptMock } = vi.hoisted(() => ({
+  undoMutationReceiptMock: vi.fn()
+}));
+
+vi.mock("@/lib/api", () => ({
+  createMutationReceiptUndoKey: () => "undo_preference_test",
+  undoMutationReceipt: undoMutationReceiptMock
+}));
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 const dimensions = {
   novelty: 0,
@@ -163,6 +178,9 @@ const baseProps = {
   onOpenChange: vi.fn(),
   error: null,
   notice: null,
+  mutationReceipt: null,
+  onMutationReceiptChange: vi.fn(),
+  onJudgmentUndone: vi.fn(),
   loading: false,
   submitting: false,
   workspaceLoading: false,
@@ -184,6 +202,65 @@ const baseProps = {
 };
 
 describe("PreferenceGameDialog", () => {
+  it("offers the shared safe Undo receipt after a comparison", async () => {
+    const receipt = {
+      id: "mrc_preference_1",
+      operation: "preference_judgment" as const,
+      targetType: "preference_judgment",
+      targetId: "judgment_1",
+      targetLabel: "Deep focus versus Fast iteration",
+      ownerUserId: "user_1",
+      summary:
+        "Recorded preference comparison: Deep focus versus Fast iteration",
+      status: "available" as const,
+      reversible: true,
+      explanation: "Undo is available until the time shown.",
+      expiresAt: "2099-01-01T00:10:00.000Z",
+      createdAt: "2099-01-01T00:00:00.000Z",
+      undoneAt: null
+    };
+    const undoneReceipt = {
+      ...receipt,
+      status: "undone" as const,
+      reversible: false,
+      explanation: "This change has already been undone.",
+      undoneAt: "2099-01-01T00:01:00.000Z"
+    };
+    const onMutationReceiptChange = vi.fn();
+    const onJudgmentUndone = vi.fn();
+    undoMutationReceiptMock.mockResolvedValue({
+      receipt: undoneReceipt,
+      replayed: false,
+      result: { judgmentId: "judgment_1" }
+    });
+
+    render(
+      <PreferenceGameDialog
+        {...baseProps}
+        mutationReceipt={receipt}
+        onMutationReceiptChange={onMutationReceiptChange}
+        onJudgmentUndone={onJudgmentUndone}
+        onJudge={vi.fn()}
+        onSignal={vi.fn()}
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /undo: recorded preference comparison/i
+      })
+    );
+
+    await waitFor(() =>
+      expect(undoMutationReceiptMock).toHaveBeenCalledWith(
+        "mrc_preference_1",
+        "undo_preference_test"
+      )
+    );
+    expect(onMutationReceiptChange).toHaveBeenCalledWith(undoneReceipt);
+    expect(onJudgmentUndone).toHaveBeenCalledTimes(1);
+  });
+
   it("supports keyboard judgments and explains context-specific model effects", async () => {
     const onJudge = vi.fn();
     const onSignal = vi.fn();

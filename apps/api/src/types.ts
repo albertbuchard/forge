@@ -5269,6 +5269,7 @@ const offlineMutationReceiptSchema = z
       "entity_soft_delete",
       "entity_hard_delete",
       "task_update",
+      "preference_judgment",
       "attention_state"
     ]),
     targetType: z.string(),

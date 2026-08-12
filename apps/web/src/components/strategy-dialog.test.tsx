@@ -252,7 +252,7 @@ describe("StrategyDialog", () => {
     );
   });
 
-  it("fills the initial placeholder and can undo the graph change", async () => {
+  it("undoes, redoes, and invalidates redo after a new graph change", async () => {
     renderDialog();
 
     fireEvent.change(screen.getByLabelText("Strategy title"), {
@@ -291,5 +291,24 @@ describe("StrategyDialog", () => {
       screen.getByText("Select an entity for this step")
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add step" })).toBeEnabled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Redo last undone graph change" })
+    );
+    expect(screen.queryByText("Select an entity for this step")).toBeNull();
+
+    fireEvent.keyDown(window, { key: "z", metaKey: true });
+    expect(
+      screen.getByText("Select an entity for this step")
+    ).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true, shiftKey: true });
+    expect(screen.queryByText("Select an entity for this step")).toBeNull();
+
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+    fireEvent.click(screen.getByRole("button", { name: "Add step" }));
+    expect(
+      screen.getByRole("button", { name: "Redo last undone graph change" })
+    ).toBeDisabled();
   });
 });

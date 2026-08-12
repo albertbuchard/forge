@@ -109,6 +109,7 @@ export function StrategyDialog({
   const [nodeHistory, setNodeHistory] = useState<StrategyDialogDraftNode[][]>(
     []
   );
+  const [nodeFuture, setNodeFuture] = useState<StrategyDialogDraftNode[][]>([]);
 
   useEffect(() => {
     if (!open) {
@@ -147,17 +148,15 @@ export function StrategyDialog({
     setInlineTaskError(null);
     setSubmitError(null);
     setNodeHistory([]);
+    setNodeFuture([]);
   }, [defaultUserId, editingStrategy, open, projects]);
 
   useEffect(() => {
-    if (!open || nodeHistory.length === 0) {
+    if (!open) {
       return;
     }
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        !(event.metaKey || event.ctrlKey) ||
-        event.key.toLowerCase() !== "z"
-      ) {
+      if (!(event.metaKey || event.ctrlKey)) {
         return;
       }
       const target = event.target;
@@ -168,17 +167,31 @@ export function StrategyDialog({
       ) {
         return;
       }
-      event.preventDefault();
-      const previousNodes = nodeHistory[nodeHistory.length - 1];
-      if (!previousNodes) {
+      const key = event.key.toLowerCase();
+      const redoRequested = key === "y" || (key === "z" && event.shiftKey);
+      const undoRequested = key === "z" && !event.shiftKey;
+      if (!redoRequested && !undoRequested) {
         return;
       }
-      setNodeHistory((current) => current.slice(0, -1));
-      setDraft((current) => ({ ...current, nodes: previousNodes }));
+      if (undoRequested) {
+        const previousNodes = nodeHistory[nodeHistory.length - 1];
+        if (!previousNodes) return;
+        event.preventDefault();
+        setNodeHistory((current) => current.slice(0, -1));
+        setNodeFuture((current) => [...current.slice(-49), draft.nodes]);
+        setDraft((current) => ({ ...current, nodes: previousNodes }));
+        return;
+      }
+      const nextNodes = nodeFuture[nodeFuture.length - 1];
+      if (!nextNodes) return;
+      event.preventDefault();
+      setNodeFuture((current) => current.slice(0, -1));
+      setNodeHistory((current) => [...current.slice(-49), draft.nodes]);
+      setDraft((current) => ({ ...current, nodes: nextNodes }));
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [nodeHistory, open]);
+  }, [draft.nodes, nodeFuture, nodeHistory, open]);
 
   const objectiveQuery = useDeferredValue(objectiveSearchQuery);
   const contextQuery = useDeferredValue(contextSearchQuery);
@@ -626,6 +639,7 @@ export function StrategyDialog({
     patch: Partial<StrategyDialogDraftNode>
   ) => {
     setNodeHistory((current) => [...current.slice(-49), draft.nodes]);
+    setNodeFuture([]);
     setDraft((current) => ({
       ...current,
       nodes: current.nodes.map((node) =>
@@ -646,6 +660,7 @@ export function StrategyDialog({
       return;
     }
     setNodeHistory((current) => [...current.slice(-49), draft.nodes]);
+    setNodeFuture([]);
     setDraft((current) => {
       const emptyNodeId = current.nodes.find((node) => !node.entityId)?.id;
       return {
@@ -674,6 +689,7 @@ export function StrategyDialog({
 
   const removeNode = (nodeId: string) => {
     setNodeHistory((current) => [...current.slice(-49), draft.nodes]);
+    setNodeFuture([]);
     setDraft((current) => {
       const remaining = current.nodes.filter((node) => node.id !== nodeId);
       return {
@@ -699,6 +715,7 @@ export function StrategyDialog({
       return;
     }
     setNodeHistory((current) => [...current.slice(-49), draft.nodes]);
+    setNodeFuture([]);
     setDraft((current) => {
       const oldIndex = current.nodes.findIndex((node) => node.id === activeId);
       const newIndex = current.nodes.findIndex((node) => node.id === overId);
@@ -718,7 +735,18 @@ export function StrategyDialog({
       return;
     }
     setNodeHistory((current) => current.slice(0, -1));
+    setNodeFuture((current) => [...current.slice(-49), draft.nodes]);
     setDraft((current) => ({ ...current, nodes: previousNodes }));
+  };
+
+  const redoNodes = () => {
+    const nextNodes = nodeFuture[nodeFuture.length - 1];
+    if (!nextNodes) {
+      return;
+    }
+    setNodeFuture((current) => current.slice(0, -1));
+    setNodeHistory((current) => [...current.slice(-49), draft.nodes]);
+    setDraft((current) => ({ ...current, nodes: nextNodes }));
   };
 
   const openInlineTaskComposer = () => {
@@ -1356,6 +1384,8 @@ export function StrategyDialog({
           reorderNodes={reorderNodes}
           undoNodes={undoNodes}
           canUndoNodes={nodeHistory.length > 0}
+          redoNodes={redoNodes}
+          canRedoNodes={nodeFuture.length > 0}
           contractChecks={contractChecks}
           alignmentBreakdown={alignmentBreakdown}
         />

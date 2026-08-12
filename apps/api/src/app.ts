@@ -252,6 +252,7 @@ import {
   getPreferenceContextById,
   getPreferenceItemById,
   getPreferenceItemScoreForContext,
+  getPreferenceJudgmentById,
   getPreferenceProfileById,
   getPreferenceWorkspace,
   listPreferenceCatalogItemPage,
@@ -262,7 +263,8 @@ import {
   refreshPreferenceWorkspace,
   startPreferenceGame,
   submitAbsoluteSignalWithReceipt,
-  submitPairwiseJudgment,
+  submitPairwiseJudgmentWithReplay,
+  undoPairwiseJudgment,
   updatePreferenceCatalog,
   updatePreferenceCatalogItem,
   updatePreferenceContext,
@@ -499,6 +501,7 @@ import {
   beginMutationReceiptUndo,
   completeMutationReceiptUndo,
   createMutationReceipt,
+  getLatestMutationReceiptForTarget,
   listMutationReceipts,
   markMutationReceiptConflict,
   mutationReceiptValuesMatch,
@@ -21569,13 +21572,52 @@ export async function buildServer(
     const idempotencyKey = parseIdempotencyKey(
       request.headers as Record<string, unknown>
     );
-    const judgment = submitPairwiseJudgment(
-      input,
-      toActivityContext(auth),
-      idempotencyKey
-    );
-    reply.code(201);
-    return { judgment };
+    const actorKey = mutationReceiptActorKeyFor(auth);
+    const submission = runInTransaction(() => {
+      const result = submitPairwiseJudgmentWithReplay(
+        input,
+        toActivityContext(auth),
+        idempotencyKey
+      );
+      const existingReceipt = result.replayed
+        ? (getLatestMutationReceiptForTarget({
+            actorKey,
+            targetType: "preference_judgment",
+            targetId: result.judgment.id,
+            allowedOwnerUserIds: mutationReceiptAllowedOwnerIdsFor(auth)
+          })?.view ?? null)
+        : null;
+      const leftItem = getPreferenceItemById(result.judgment.leftItemId);
+      const rightItem = getPreferenceItemById(result.judgment.rightItemId);
+      const targetLabel = `${leftItem?.label ?? "First item"} versus ${rightItem?.label ?? "second item"}`;
+      const mutationReceipt =
+        existingReceipt ??
+        createMutationReceipt({
+          actorKey,
+          ownerUserId: result.judgment.userId,
+          operation: "preference_judgment",
+          targetType: "preference_judgment",
+          targetId: result.judgment.id,
+          targetLabel,
+          summary: `Recorded preference comparison: ${targetLabel}`,
+          inverse: {
+            kind: "preference_judgment_undo",
+            judgmentId: result.judgment.id
+          },
+          expected: {
+            kind: "preference_judgment",
+            fields: result.judgment as unknown as Record<string, unknown>
+          }
+        });
+      return { ...result, mutationReceipt };
+    });
+    reply
+      .header("Idempotency-Replayed", submission.replayed ? "true" : "false")
+      .code(submission.replayed ? 200 : 201);
+    return {
+      judgment: submission.judgment,
+      mutationReceipt: submission.mutationReceipt
+    };
   });
   app.post("/api/v1/preferences/signals", async (request, reply) => {
     const auth = requireScopedAccess(
@@ -22227,6 +22269,33 @@ export async function buildServer(
           }
           assertTaskResultScope(task, auth);
           result = { task };
+        } else if (
+          inverse.kind === "preference_judgment_undo" &&
+          expected.kind === "preference_judgment"
+        ) {
+          const current = getPreferenceJudgmentById(inverse.judgmentId);
+          if (
+            !current ||
+            !mutationReceiptValuesMatch(
+              current as unknown as Record<string, unknown>,
+              expected.fields
+            )
+          ) {
+            throw new HttpError(
+              409,
+              "mutation_receipt_target_changed",
+              "This preference judgment changed after the receipt was created. Forge left the newer preference evidence unchanged."
+            );
+          }
+          requirePreferenceProfileOwner(current.profileId, auth);
+          const undone = undoPairwiseJudgment(
+            inverse.judgmentId,
+            toActivityContext(auth)
+          );
+          result = {
+            judgmentId: undone.judgment.id,
+            undoneAt: undone.undoneAt
+          };
         } else if (
           inverse.kind === "attention_state" &&
           expected.kind === "attention_state"

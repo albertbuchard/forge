@@ -6,7 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState, LoadingState } from "@/components/ui/page-state";
+import { MutationReceiptBanner } from "@/components/mutation-receipt-banner";
 import { cn } from "@/lib/utils";
+import type { MutationReceipt } from "@/lib/mutation-receipts";
 import type {
   PreferenceCatalog,
   PreferenceDomain,
@@ -37,6 +39,9 @@ export function PreferenceGameDialog({
   onOpenChange,
   error,
   notice,
+  mutationReceipt,
+  onMutationReceiptChange,
+  onJudgmentUndone,
   loading,
   submitting,
   workspaceLoading,
@@ -62,6 +67,9 @@ export function PreferenceGameDialog({
   onOpenChange: (open: boolean) => void;
   error: string | null;
   notice: string | null;
+  mutationReceipt: MutationReceipt | null;
+  onMutationReceiptChange: (receipt: MutationReceipt) => void;
+  onJudgmentUndone: () => Promise<void> | void;
   loading: boolean;
   submitting: boolean;
   workspaceLoading: boolean;
@@ -143,6 +151,11 @@ export function PreferenceGameDialog({
                 {notice}
               </div>
             ) : null}
+            <MutationReceiptBanner
+              receipt={mutationReceipt}
+              onReceiptChange={onMutationReceiptChange}
+              onUndone={onJudgmentUndone}
+            />
 
             {state.phase === "domain" ? (
               <PreferenceGameDomainStep onSelectDomain={onSelectDomain} />

@@ -68,6 +68,7 @@ import { ACTION_BAR_SEARCH_ENTITY_TYPES } from "@/lib/action-bar";
 import { getEntityKindForCrudEntityType } from "@/lib/entity-visuals";
 import { getSingleSelectedUserId } from "@/lib/user-ownership";
 import { cn } from "@/lib/utils";
+import type { MutationReceipt } from "@/lib/mutation-receipts";
 import {
   DEFAULT_DIMENSIONS,
   DOMAIN_OPTIONS,
@@ -208,6 +209,8 @@ export function PreferencesPage() {
   });
   const [gameError, setGameError] = useState<string | null>(null);
   const [gameNotice, setGameNotice] = useState<string | null>(null);
+  const [gameMutationReceipt, setGameMutationReceipt] =
+    useState<MutationReceipt | null>(null);
   const [gameLoading, setGameLoading] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [itemEditor, setItemEditor] = useState<{
@@ -981,6 +984,7 @@ export function PreferencesPage() {
 
   const handleGameDomainSelection = async (domain: PreferenceDomain) => {
     setGameNotice(null);
+    setGameMutationReceipt(null);
     if (FORGE_GAME_DOMAINS.has(domain)) {
       await launchForgeDomainGame(domain);
       return;
@@ -1007,7 +1011,7 @@ export function PreferencesPage() {
       return;
     }
     const pair = activeGameWorkspace.compare.nextPair;
-    await judgmentMutation.mutateAsync({
+    const result = await judgmentMutation.mutateAsync({
       userId: selectedUserId,
       domain: gameState.domain,
       contextId: activeGameWorkspace.selectedContext.id,
@@ -1017,6 +1021,7 @@ export function PreferencesPage() {
       strength,
       idempotencyKey
     });
+    setGameMutationReceipt(result.mutationReceipt);
     const effect =
       outcome === "tie"
         ? "Tie recorded"
@@ -1121,12 +1126,12 @@ export function PreferencesPage() {
       const { score } = await signalMutation.mutateAsync({
         userId: selectedUserId,
         domain: selectedDomain,
-      contextId: workspace.selectedContext.id,
-      itemId: input.itemId,
-      signalType: input.signalType,
-      strength: input.strength,
-      idempotencyKey: input.idempotencyKey
-    });
+        contextId: workspace.selectedContext.id,
+        itemId: input.itemId,
+        signalType: input.signalType,
+        strength: input.strength,
+        idempotencyKey: input.idempotencyKey
+      });
       setSelectedItemId(score.itemId);
       updateSearchParams({ focusItem: score.itemId });
       return;
@@ -2774,6 +2779,12 @@ export function PreferencesPage() {
             : null)
         }
         notice={gameNotice}
+        mutationReceipt={gameMutationReceipt}
+        onMutationReceiptChange={setGameMutationReceipt}
+        onJudgmentUndone={async () => {
+          setGameNotice("Preference comparison undone.");
+          await refreshWorkspace();
+        }}
         loading={gameLoading}
         submitting={judgmentMutation.isPending || signalMutation.isPending}
         workspaceLoading={gameWorkspaceQuery.isLoading}
@@ -2819,14 +2830,12 @@ export function PreferencesPage() {
         }
         onJudge={(outcome, strength, idempotencyKey) => {
           setGameError(null);
-          return handleGameJudgment(
-            outcome,
-            strength,
-            idempotencyKey
-          ).catch((error) => {
-            setGameError(describeApiError(error).description);
-            throw error;
-          });
+          return handleGameJudgment(outcome, strength, idempotencyKey).catch(
+            (error) => {
+              setGameError(describeApiError(error).description);
+              throw error;
+            }
+          );
         }}
         onSignal={(itemId, signalType, idempotencyKey) => {
           setGameError(null);

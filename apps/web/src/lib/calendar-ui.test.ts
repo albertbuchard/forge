@@ -1,13 +1,26 @@
 import { describe, expect, it } from "vitest";
 import {
+  addMonths,
+  buildMonthGridDays,
   buildDefaultCalendarEventTiming,
   calendarEventOverlapsDate,
   calendarEventTimeLabelForDate,
   formatWeekday,
+  formatMonthLabel,
   moveCalendarSpanToDate
 } from "./calendar-ui";
 
 describe("calendar date and timezone behavior", () => {
+  it("builds a stable six-week month grid and month navigation", () => {
+    const april = new Date("2026-04-15T00:00:00.000Z");
+    const days = buildMonthGridDays(april);
+    expect(days).toHaveLength(42);
+    expect(days[0]?.toISOString().slice(0, 10)).toBe("2026-03-30");
+    expect(days[41]?.toISOString().slice(0, 10)).toBe("2026-05-10");
+    expect(formatMonthLabel(april)).toBe("April 2026");
+    expect(formatMonthLabel(addMonths(april, 1))).toBe("May 2026");
+  });
+
   it("creates the default event at 09:00 in the selected timezone", () => {
     expect(
       buildDefaultCalendarEventTiming("2026-09-12", "America/Los_Angeles")
@@ -18,9 +31,9 @@ describe("calendar date and timezone behavior", () => {
   });
 
   it("keeps abstract calendar day headings on their UTC date key", () => {
-    expect(
-      formatWeekday(new Date("2026-09-14T00:00:00.000Z"), "UTC")
-    ).toBe("Mon, Sep 14");
+    expect(formatWeekday(new Date("2026-09-14T00:00:00.000Z"), "UTC")).toBe(
+      "Mon, Sep 14"
+    );
   });
 
   it("preserves a flight's local wall time and absolute duration when moved", () => {

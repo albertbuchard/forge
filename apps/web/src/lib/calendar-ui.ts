@@ -79,6 +79,32 @@ export function addDays(date: Date, days: number) {
   return next;
 }
 
+export function startOfMonth(input = new Date()) {
+  const date = new Date(input);
+  date.setUTCDate(1);
+  date.setUTCHours(0, 0, 0, 0);
+  return date;
+}
+
+export function addMonths(date: Date, months: number) {
+  const next = startOfMonth(date);
+  next.setUTCMonth(next.getUTCMonth() + months);
+  return next;
+}
+
+export function buildMonthGridDays(month: Date) {
+  const gridStart = startOfWeek(startOfMonth(month));
+  return Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
+}
+
+export function formatMonthLabel(date: Date) {
+  return new Intl.DateTimeFormat("en", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC"
+  }).format(date);
+}
+
 function addDaysToDateKey(dateKey: string, days: number) {
   const [year, month, day] = dateKey.split("-").map(Number);
   const date = new Date(Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1));

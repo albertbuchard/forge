@@ -2170,16 +2170,16 @@ export function submitPairwisePreferenceJudgment(
   input: PreferenceJudgmentInput
 ) {
   const { idempotencyKey, ...body } = input;
-  return request<{ judgment: PairwiseJudgment }>(
-    "/api/v1/preferences/judgments",
-    {
-      method: "POST",
-      headers: {
-        "Idempotency-Key": idempotencyKey ?? crypto.randomUUID()
-      },
-      body: JSON.stringify(body)
-    }
-  );
+  return request<{
+    judgment: PairwiseJudgment;
+    mutationReceipt: MutationReceipt;
+  }>("/api/v1/preferences/judgments", {
+    method: "POST",
+    headers: {
+      "Idempotency-Key": idempotencyKey ?? crypto.randomUUID()
+    },
+    body: JSON.stringify(body)
+  });
 }
 
 export function submitPreferenceSignal(input: PreferenceSignalInput) {
