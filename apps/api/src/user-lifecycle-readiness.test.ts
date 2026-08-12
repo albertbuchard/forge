@@ -20,7 +20,7 @@ test("user lifecycle atomically transfers responsibility, disables bot authority
     path.join(os.tmpdir(), "forge-user-lifecycle-")
   );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
-  const cookie = issueTestOperatorSessionCookie(app, "Lifecycle operator");
+  const cookie = issueTestOperatorSessionCookie(app);
   const sourceUserId = "user_agent_codex";
   const replacementUserId = "user_operator";
   const now = new Date().toISOString();
@@ -33,12 +33,16 @@ test("user lifecycle atomically transfers responsibility, disables bot authority
       actorLabel: "Codex",
       sessionKey: "lifecycle-test-session",
       sessionLabel: "Lifecycle test session",
+      linkedUserIds: [],
       connectionMode: "mcp",
       baseUrl: "http://127.0.0.1:4317",
+      webUrl: null,
       dataRoot: rootDir,
+      externalSessionId: null,
       staleAfterSeconds: 3600,
       metadata: { test: true },
-      status: "connected"
+      status: "connected",
+      lastError: null
     });
     const identity = getDatabase()
       .prepare(
@@ -104,7 +108,8 @@ test("user lifecycle atomically transfers responsibility, disables bot authority
 
     disconnectAgentRuntimeSession(session.id, {
       note: "Prove a linked identity without a live runtime is not verified.",
-      externalSessionId: session.externalSessionId ?? undefined
+      externalSessionId: session.externalSessionId,
+      lastError: null
     });
     const configuredDirectory = await app.inject({
       method: "GET",
@@ -288,10 +293,17 @@ test("user lifecycle atomically transfers responsibility, disables bot authority
           agentType: "codex",
           actorLabel: "Codex",
           sessionKey: "lifecycle-test-session-after-deactivation",
+          sessionLabel: "Lifecycle test session after deactivation",
+          linkedUserIds: [],
           connectionMode: "mcp",
+          baseUrl: "http://127.0.0.1:4317",
+          webUrl: null,
+          dataRoot: rootDir,
+          externalSessionId: null,
           staleAfterSeconds: 3600,
           metadata: {},
-          status: "connected"
+          status: "connected",
+          lastError: null
         }),
       /inactive/u
     );
