@@ -159,8 +159,27 @@ export const lifeEventTimelineQuerySchema = z.object({
               .map((item) => item.trim())
               .filter(Boolean)
           : []
-    )
+    ),
+  userIds: z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .transform((value) => {
+      const values = Array.isArray(value)
+        ? value
+        : typeof value === "string"
+          ? value.split(",")
+          : [];
+      return Array.from(
+        new Set(values.map((item) => item.trim()).filter(Boolean))
+      );
+    })
 });
+
+export type LifeEventTimelineScope = {
+  userIds?: string[];
+  linkedTargets?: Array<{ entityType: string; entityId: string }>;
+  enforceLinkedTargets?: boolean;
+};
 
 export const lifeEventCalendarSyncInputSchema = z.object({
   projection: lifeEventCalendarProjectionSchema.default("link_or_create"),
@@ -385,6 +404,7 @@ function mapLifeEvent(row: LifeEventRow): LifeEvent {
       metadata,
       segments: listSegments(row.id),
       links: listEntityLinksForSources("life_event", [row.id]),
+      unavailableLinkCount: 0,
       deletedAt: row.deleted_at,
       createdAt: row.created_at,
       updatedAt: row.updated_at
@@ -528,9 +548,13 @@ function scoreCalendarMatch(event: LifeEvent, calendarEvent: CalendarEvent) {
   return Math.min(1, score);
 }
 
-function findCalendarMatch(event: LifeEvent) {
+function findCalendarMatch(
+  event: LifeEvent,
+  calendarEventAllowed: (calendarEvent: CalendarEvent) => boolean = () => true
+) {
   const range = calendarRangeFor(event);
   const matches = listCalendarEvents(range)
+    .filter(calendarEventAllowed)
     .map((calendarEvent) => ({
       calendarEvent,
       confidence: scoreCalendarMatch(event, calendarEvent)
@@ -626,6 +650,13 @@ function buildCalendarInput(
     preferredCalendarId: preferredCalendarId ?? undefined,
     userId: event.userId,
     links: [
+      ...event.links
+        .filter((link) => link.targetEntityType !== "calendar_event")
+        .map((link) => ({
+          entityType: link.targetEntityType,
+          entityId: link.targetEntityId,
+          relationshipType: link.relationship
+        })),
       {
         entityType: "life_event" as const,
         entityId: event.id,
@@ -654,7 +685,8 @@ export function listLifeEvents(): LifeEvent[] {
 }
 
 export function listLifeEventTimeline(
-  input: z.input<typeof lifeEventTimelineQuerySchema>
+  input: z.input<typeof lifeEventTimelineQuerySchema>,
+  scope: LifeEventTimelineScope = {}
 ) {
   const query = lifeEventTimelineQuerySchema.parse(input);
   const clauses = [
@@ -666,6 +698,80 @@ export function listLifeEventTimeline(
     )`
   ];
   const params: Array<string | number> = [];
+  const effectiveUserIds = scope.userIds ?? query.userIds;
+  if (effectiveUserIds && effectiveUserIds.length > 0) {
+    const placeholders = effectiveUserIds.map(() => "?").join(", ");
+    clauses.push(
+      `(EXISTS (
+        SELECT 1
+        FROM entity_owners life_event_owner
+        WHERE life_event_owner.entity_type = 'life_event'
+          AND life_event_owner.entity_id = life_events.id
+          AND life_event_owner.user_id IN (${placeholders})
+      ) OR EXISTS (
+        SELECT 1
+        FROM entity_assignments life_event_assignee
+        WHERE life_event_assignee.entity_type = 'life_event'
+          AND life_event_assignee.entity_id = life_events.id
+          AND life_event_assignee.role = 'assignee'
+          AND life_event_assignee.user_id IN (${placeholders})
+      ))`
+    );
+    params.push(...effectiveUserIds, ...effectiveUserIds);
+  }
+  if (scope.enforceLinkedTargets) {
+    const linkedTargets = Array.from(
+      new Map(
+        (scope.linkedTargets ?? []).map((target) => [
+          `${target.entityType}:${target.entityId}`,
+          target
+        ])
+      ).values()
+    );
+    if (linkedTargets.length === 0) {
+      clauses.push("0 = 1");
+    } else {
+      const targetPredicate = linkedTargets
+        .map(
+          () =>
+            "(life_event_scope_link.target_entity_type = ? AND life_event_scope_link.target_entity_id = ?)"
+        )
+        .join(" OR ");
+      const calendarTargetPredicate = linkedTargets
+        .map(
+          () =>
+            "(calendar_scope_link.entity_type = ? AND calendar_scope_link.entity_id = ?)"
+        )
+        .join(" OR ");
+      clauses.push(
+        `(EXISTS (
+          SELECT 1
+          FROM entity_links life_event_scope_link
+          WHERE life_event_scope_link.source_entity_type = 'life_event'
+            AND life_event_scope_link.source_entity_id = life_events.id
+            AND (${targetPredicate})
+        ) OR EXISTS (
+          SELECT 1
+          FROM entity_links life_event_calendar_link
+          INNER JOIN forge_events scoped_calendar_event
+            ON scoped_calendar_event.id = life_event_calendar_link.target_entity_id
+           AND scoped_calendar_event.deleted_at IS NULL
+          INNER JOIN forge_event_links calendar_scope_link
+            ON calendar_scope_link.forge_event_id = life_event_calendar_link.target_entity_id
+          WHERE life_event_calendar_link.source_entity_type = 'life_event'
+            AND life_event_calendar_link.source_entity_id = life_events.id
+            AND life_event_calendar_link.target_entity_type = 'calendar_event'
+            AND (${calendarTargetPredicate})
+        ))`
+      );
+      for (const target of linkedTargets) {
+        params.push(target.entityType, target.entityId);
+      }
+      for (const target of linkedTargets) {
+        params.push(target.entityType, target.entityId);
+      }
+    }
+  }
   if (query.from) {
     clauses.push("ends_at >= ?");
     params.push(query.from);
@@ -1062,13 +1168,20 @@ export function deleteLifeEvent(
 
 export function syncLifeEventCalendar(
   lifeEventId: string,
-  input: z.input<typeof lifeEventCalendarSyncInputSchema> = {}
+  input: z.input<typeof lifeEventCalendarSyncInputSchema> = {},
+  options: {
+    event?: LifeEvent;
+    calendarEventAllowed?: (calendarEvent: CalendarEvent) => boolean;
+  } = {}
 ) {
   const parsed = lifeEventCalendarSyncInputSchema.parse(input);
-  const event = getLifeEventById(lifeEventId);
-  if (!event) {
+  const storedEvent = getLifeEventById(lifeEventId);
+  if (!storedEvent) {
     return undefined;
   }
+  const event =
+    options.event?.id === storedEvent.id ? options.event : storedEvent;
+  const calendarEventAllowed = options.calendarEventAllowed ?? (() => true);
   return runInTransaction(() => {
     if (parsed.projection === "none") {
       patchLifeEventCalendarState(lifeEventId, {
@@ -1079,7 +1192,7 @@ export function syncLifeEventCalendar(
       return {
         lifeEvent: getLifeEventById(lifeEventId)!,
         calendarEvent: event.primaryCalendarEventId
-          ? getCalendarEventById(event.primaryCalendarEventId)
+          ? (getCalendarEventById(event.primaryCalendarEventId) ?? null)
           : null,
         action: "disabled" as const,
         confidence: event.calendarMatchConfidence
@@ -1088,7 +1201,7 @@ export function syncLifeEventCalendar(
 
     if (event.primaryCalendarEventId) {
       const calendarEvent = getCalendarEventById(event.primaryCalendarEventId);
-      if (calendarEvent) {
+      if (calendarEvent && calendarEventAllowed(calendarEvent)) {
         updateCalendarEvent(
           event.primaryCalendarEventId,
           buildCalendarInput(event, parsed.preferredCalendarId)
@@ -1116,7 +1229,7 @@ export function syncLifeEventCalendar(
       }
     }
 
-    const match = findCalendarMatch(event);
+    const match = findCalendarMatch(event, calendarEventAllowed);
     if (match) {
       patchLifeEventCalendarState(lifeEventId, {
         primaryCalendarEventId: match.calendarEvent.id,
@@ -1220,7 +1333,13 @@ export function createLifeEventFromCalendar(
       calendarMatchConfidence: 1,
       calendarProjection: "none",
       sourceKind: "calendar",
+      userId: calendarEvent.userId,
       links: [
+        ...calendarEvent.links.map((link) => ({
+          entityType: link.entityType,
+          entityId: link.entityId,
+          relationship: link.relationshipType
+        })),
         {
           entityType: "calendar_event",
           entityId: calendarEvent.id,

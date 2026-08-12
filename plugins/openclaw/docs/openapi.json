@@ -31891,6 +31891,7 @@
           "metadata",
           "segments",
           "links",
+          "unavailableLinkCount",
           "deletedAt",
           "createdAt",
           "updatedAt"
@@ -32182,7 +32183,13 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EntityLink"
-            }
+            },
+            "description": "Only live linked targets available under the caller's user, project, and tag scope. Omitted targets are counted without exposing their identifiers or the reason."
+          },
+          "unavailableLinkCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of stored links omitted because the target is deleted, unavailable, or outside the caller's permissions and scope."
           },
           "deletedAt": {
             "anyOf": [
@@ -53562,7 +53569,7 @@
     "/api/v1/life-events/timeline": {
       "get": {
         "summary": "Read the virtualized Life Events chronology",
-        "description": "Returns chronological Life Event records for the dedicated timeline view. Normal stored life_event create, update, delete, restore, and search still use shared batch entity routes.",
+        "description": "Returns chronological Life Event records for the dedicated timeline and Calendar views. User, project, and tag scope is applied before totals, counts, next-event selection, pagination, and link projection. Normal stored life_event create, update, delete, restore, and search still use shared batch entity routes.",
         "parameters": [
           {
             "name": "from",
@@ -53596,6 +53603,19 @@
               "type": "string"
             },
             "description": "Comma-separated or repeated event type values such as travel_flight, concert, family, or custom."
+          },
+          {
+            "name": "userIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true,
+            "description": "Optional repeated owner or assignee selection. Explicit invalid operator selections return an empty timeline, and token selections remain bounded by the token policy."
           },
           {
             "name": "limit",
@@ -53657,6 +53677,7 @@
       ],
       "get": {
         "summary": "Read one Life Event",
+        "description": "Returns the Life Event only when it is inside the caller's user, project, and tag scope. Inaccessible records return the same not-found response as missing records, and inaccessible links are omitted and counted.",
         "responses": {
           "200": {
             "description": "Life Event",
@@ -53699,7 +53720,7 @@
       ],
       "post": {
         "summary": "Link or project a Life Event into the calendar",
-        "description": "Searches for an existing calendar_event first. If a match is found, Forge links through entity_links and calendar event links. If no match is found and projection is link_or_create, Forge creates a native calendar_event.",
+        "description": "Requires the source Life Event to be inside the caller's user, project, and tag scope before any calendar search or mutation. If a match is found, Forge links through entity_links and calendar event links. If no match is found and projection is link_or_create, Forge creates a native calendar_event.",
         "requestBody": {
           "required": false,
           "content": {
@@ -53769,7 +53790,7 @@
     "/api/v1/life-events/from-calendar-event": {
       "post": {
         "summary": "Create or link a Life Event from a calendar event",
-        "description": "Calendar UI action for marking an existing calendar_event as a Life Event. The relationship is stored through generic entity_links and mirrored to the calendar event link list.",
+        "description": "Calendar UI action for marking an existing calendar_event as a Life Event. The source event must be inside the caller's user, project, and tag scope before mutation. A new Life Event inherits the source event owner and permitted links; the relationship is stored through generic entity_links and mirrored to the calendar event link list.",
         "requestBody": {
           "required": true,
           "content": {
@@ -53911,7 +53932,7 @@
       ],
       "get": {
         "summary": "Read Life Event travel status",
-        "description": "Returns scheduled travel status by default. Optional live providers such as OpenSky, FlightAware AeroAPI, AeroDataBox, Aviationstack, or ADS-B Exchange are provider abstractions and require configuration, rate limiting, and caching.",
+        "description": "Returns scheduled travel status only when the Life Event is inside the caller's user, project, and tag scope. Optional live providers such as OpenSky, FlightAware AeroAPI, AeroDataBox, Aviationstack, or ADS-B Exchange are provider abstractions and require configuration, rate limiting, and caching.",
         "responses": {
           "200": {
             "description": "Travel status",

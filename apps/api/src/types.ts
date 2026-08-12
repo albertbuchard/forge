@@ -1737,6 +1737,7 @@ export const lifeEventSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).default({}),
   segments: z.array(lifeEventSegmentSchema).default([]),
   links: z.array(lifeEventEntityLinkSchema).default([]),
+  unavailableLinkCount: z.number().int().min(0).default(0),
   deletedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),

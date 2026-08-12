@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { CalendarDays, Clock3 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -5,6 +6,7 @@ import { calendarEventOverlapsDate, WEEKDAY_LABELS } from "@/lib/calendar-ui";
 import { localDateKeyInTimeZone } from "@/lib/timezone-datetime";
 import type {
   CalendarEvent,
+  LifeEvent,
   TaskTimebox,
   WorkBlockInstance
 } from "@/lib/types";
@@ -13,13 +15,106 @@ type MonthItem = {
   id: string;
   title: string;
   startsAt: string;
-  kind: "event" | "work block" | "timebox";
+  kind: "event" | "life event" | "work block" | "timebox";
 };
+
+export function buildCalendarMonthItemIndex(input: {
+  days: Date[];
+  events: CalendarEvent[];
+  lifeEvents: LifeEvent[];
+  workBlocks: WorkBlockInstance[];
+  timeboxes: TaskTimebox[];
+  timeZone: string;
+}) {
+  const dayKeys = input.days.map((day) => day.toISOString().slice(0, 10));
+  const itemsByDay = new Map<string, MonthItem[]>(
+    dayKeys.map((dayKey) => [dayKey, []])
+  );
+  const append = (dayKey: string, item: MonthItem) => {
+    itemsByDay.get(dayKey)?.push(item);
+  };
+  const appendSpanningItem = (
+    entry: Pick<CalendarEvent, "startAt" | "endAt" | "timezone" | "isAllDay">,
+    item: MonthItem
+  ) => {
+    const startKey = localDateKeyInTimeZone(entry.startAt, entry.timezone);
+    const endKey = localDateKeyInTimeZone(entry.endAt, entry.timezone);
+    if (!startKey || !endKey) {
+      return;
+    }
+    for (const dayKey of dayKeys) {
+      if (dayKey < startKey || dayKey > endKey) {
+        continue;
+      }
+      if (dayKey === endKey && !calendarEventOverlapsDate(entry, dayKey)) {
+        continue;
+      }
+      append(dayKey, item);
+    }
+  };
+
+  for (const event of input.events) {
+    if (event.deletedAt) {
+      continue;
+    }
+    appendSpanningItem(event, {
+      id: event.id,
+      title: event.title,
+      startsAt: event.startAt,
+      kind: "event"
+    });
+  }
+  for (const lifeEvent of input.lifeEvents) {
+    if (lifeEvent.deletedAt) {
+      continue;
+    }
+    appendSpanningItem(
+      {
+        startAt: lifeEvent.startsAt,
+        endAt: lifeEvent.endsAt,
+        timezone: lifeEvent.timezone,
+        isAllDay: lifeEvent.isAllDay
+      },
+      {
+        id: lifeEvent.id,
+        title: lifeEvent.title,
+        startsAt: lifeEvent.startsAt,
+        kind: "life event"
+      }
+    );
+  }
+  for (const block of input.workBlocks) {
+    append(block.dateKey, {
+      id: block.id,
+      title: block.title,
+      startsAt: block.startAt,
+      kind: "work block"
+    });
+  }
+  for (const timebox of input.timeboxes) {
+    append(localDateKeyInTimeZone(timebox.startsAt, input.timeZone), {
+      id: timebox.id,
+      title: timebox.title,
+      startsAt: timebox.startsAt,
+      kind: "timebox"
+    });
+  }
+  for (const items of itemsByDay.values()) {
+    items.sort(
+      (left, right) =>
+        Date.parse(left.startsAt) - Date.parse(right.startsAt) ||
+        left.kind.localeCompare(right.kind) ||
+        left.id.localeCompare(right.id)
+    );
+  }
+  return itemsByDay;
+}
 
 export function CalendarMonthGrid({
   days,
   month,
   events,
+  lifeEvents,
   workBlocks,
   timeboxes,
   timeZone,
@@ -28,6 +123,7 @@ export function CalendarMonthGrid({
   days: Date[];
   month: Date;
   events: CalendarEvent[];
+  lifeEvents: LifeEvent[];
   workBlocks: WorkBlockInstance[];
   timeboxes: TaskTimebox[];
   timeZone: string;
@@ -35,6 +131,18 @@ export function CalendarMonthGrid({
 }) {
   const currentMonth = month.getUTCMonth();
   const todayKey = localDateKeyInTimeZone(new Date().toISOString(), timeZone);
+  const itemsByDay = useMemo(
+    () =>
+      buildCalendarMonthItemIndex({
+        days,
+        events,
+        lifeEvents,
+        workBlocks,
+        timeboxes,
+        timeZone
+      }),
+    [days, events, lifeEvents, timeZone, timeboxes, workBlocks]
+  );
 
   return (
     <div
@@ -52,42 +160,7 @@ export function CalendarMonthGrid({
         ))}
         {days.map((day) => {
           const dayKey = day.toISOString().slice(0, 10);
-          const items: MonthItem[] = [
-            ...events
-              .filter(
-                (event) =>
-                  !event.deletedAt && calendarEventOverlapsDate(event, dayKey)
-              )
-              .map((event) => ({
-                id: event.id,
-                title: event.title,
-                startsAt: event.startAt,
-                kind: "event" as const
-              })),
-            ...workBlocks
-              .filter((block) => block.dateKey === dayKey)
-              .map((block) => ({
-                id: block.id,
-                title: block.title,
-                startsAt: block.startAt,
-                kind: "work block" as const
-              })),
-            ...timeboxes
-              .filter(
-                (timebox) =>
-                  localDateKeyInTimeZone(timebox.startsAt, timeZone) === dayKey
-              )
-              .map((timebox) => ({
-                id: timebox.id,
-                title: timebox.title,
-                startsAt: timebox.startsAt,
-                kind: "timebox" as const
-              }))
-          ].sort(
-            (left, right) =>
-              Date.parse(left.startsAt) - Date.parse(right.startsAt) ||
-              left.id.localeCompare(right.id)
-          );
+          const items = itemsByDay.get(dayKey) ?? [];
           const outsideMonth = day.getUTCMonth() !== currentMonth;
           return (
             <button
@@ -130,7 +203,7 @@ export function CalendarMonthGrid({
                       {item.title}
                     </div>
                     <div className="mt-0.5 flex items-center gap-1 text-[10px] text-[var(--ui-ink-muted)]">
-                      {item.kind === "event" ? (
+                      {item.kind === "event" || item.kind === "life event" ? (
                         <CalendarDays className="size-3" aria-hidden="true" />
                       ) : (
                         <Clock3 className="size-3" aria-hidden="true" />

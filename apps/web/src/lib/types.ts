@@ -1832,6 +1832,7 @@ export interface LifeEvent extends OwnedEntity {
   metadata: Record<string, unknown>;
   segments: LifeEventSegment[];
   links: EntityLink[];
+  unavailableLinkCount: number;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;

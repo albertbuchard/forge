@@ -12543,6 +12543,7 @@ export function buildOpenApiDocument() {
       "metadata",
       "segments",
       "links",
+      "unavailableLinkCount",
       "deletedAt",
       "createdAt",
       "updatedAt"
@@ -12635,7 +12636,11 @@ export function buildOpenApiDocument() {
           "other"
         ]
       }),
-      primaryCalendarEventId: nullable({ type: "string" }),
+      primaryCalendarEventId: {
+        ...nullable({ type: "string" }),
+        description:
+          "Primary Calendar projection identifier when that Calendar event is live and inside the caller's scope; otherwise null without exposing the unavailable identifier."
+      },
       calendarSyncState: {
         type: "string",
         enum: [
@@ -12674,7 +12679,17 @@ export function buildOpenApiDocument() {
       displayStyle: { type: "object", additionalProperties: true },
       metadata: { type: "object", additionalProperties: true },
       segments: arrayOf({ $ref: "#/components/schemas/LifeEventSegment" }),
-      links: arrayOf({ $ref: "#/components/schemas/EntityLink" }),
+      links: {
+        ...arrayOf({ $ref: "#/components/schemas/EntityLink" }),
+        description:
+          "Only live linked targets available under the caller's user, project, and tag scope. Omitted targets are counted without exposing their identifiers or the reason."
+      },
+      unavailableLinkCount: {
+        type: "integer",
+        minimum: 0,
+        description:
+          "Number of stored links omitted because the target is deleted, unavailable, or outside the caller's permissions and scope."
+      },
       deletedAt: nullable({ type: "string", format: "date-time" }),
       createdAt: { type: "string", format: "date-time" },
       updatedAt: { type: "string", format: "date-time" }
@@ -15319,7 +15334,7 @@ export function buildOpenApiDocument() {
         get: {
           summary: "Read the virtualized Life Events chronology",
           description:
-            "Returns chronological Life Event records for the dedicated timeline view. Normal stored life_event create, update, delete, restore, and search still use shared batch entity routes.",
+            "Returns chronological Life Event records for the dedicated timeline and Calendar views. User, project, and tag scope is applied before totals, counts, next-event selection, pagination, and link projection. Normal stored life_event create, update, delete, restore, and search still use shared batch entity routes.",
           parameters: [
             {
               name: "from",
@@ -15344,6 +15359,18 @@ export function buildOpenApiDocument() {
               schema: { type: "string" },
               description:
                 "Comma-separated or repeated event type values such as travel_flight, concert, family, or custom."
+            },
+            {
+              name: "userIds",
+              in: "query",
+              schema: {
+                type: "array",
+                items: { type: "string" }
+              },
+              style: "form",
+              explode: true,
+              description:
+                "Optional repeated owner or assignee selection. Explicit invalid operator selections return an empty timeline, and token selections remain bounded by the token policy."
             },
             {
               name: "limit",
@@ -15384,6 +15411,8 @@ export function buildOpenApiDocument() {
         ],
         get: {
           summary: "Read one Life Event",
+          description:
+            "Returns the Life Event only when it is inside the caller's user, project, and tag scope. Inaccessible records return the same not-found response as missing records, and inaccessible links are omitted and counted.",
           responses: {
             "200": jsonResponse(
               {
@@ -15411,7 +15440,7 @@ export function buildOpenApiDocument() {
         post: {
           summary: "Link or project a Life Event into the calendar",
           description:
-            "Searches for an existing calendar_event first. If a match is found, Forge links through entity_links and calendar event links. If no match is found and projection is link_or_create, Forge creates a native calendar_event.",
+            "Requires the source Life Event to be inside the caller's user, project, and tag scope before any calendar search or mutation. Matching considers only live Calendar events inside that same scope. A created projection inherits the scoped Life Event owner and visible context links; inaccessible source links are never copied. If no authorized match is found and projection is link_or_create, Forge creates a native calendar_event.",
           requestBody: {
             required: false,
             content: {
@@ -15452,7 +15481,7 @@ export function buildOpenApiDocument() {
         post: {
           summary: "Create or link a Life Event from a calendar event",
           description:
-            "Calendar UI action for marking an existing calendar_event as a Life Event. The relationship is stored through generic entity_links and mirrored to the calendar event link list.",
+            "Calendar UI action for marking an existing calendar_event as a Life Event. The source event must be inside the caller's user, project, and tag scope before mutation. A new Life Event inherits the source event owner and permitted links; the relationship is stored through generic entity_links and mirrored to the calendar event link list.",
           requestBody: {
             required: true,
             content: {
@@ -15548,7 +15577,7 @@ export function buildOpenApiDocument() {
         get: {
           summary: "Read Life Event travel status",
           description:
-            "Returns scheduled travel status by default. Optional live providers such as OpenSky, FlightAware AeroAPI, AeroDataBox, Aviationstack, or ADS-B Exchange are provider abstractions and require configuration, rate limiting, and caching.",
+            "Returns scheduled travel status only when the Life Event is inside the caller's user, project, and tag scope. Optional live providers such as OpenSky, FlightAware AeroAPI, AeroDataBox, Aviationstack, or ADS-B Exchange are provider abstractions and require configuration, rate limiting, and caching.",
           responses: {
             "200": jsonResponse(
               {

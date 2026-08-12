@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { CalendarPage } from "@/pages/calendar-page";
 import { SettingsCalendarPage } from "@/pages/settings-calendar-page";
 import { describeGoogleRouteRequirement } from "@/components/calendar/calendar-connection-flow-dialog";
@@ -432,9 +432,20 @@ function renderWithRouter(element: React.ReactNode, initialEntry: string) {
         <Routes>
           <Route path="/calendar" element={element} />
           <Route path="/settings/calendar" element={element} />
+          <Route path="/life-events" element={<RouteLocationProbe />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
+  );
+}
+
+function RouteLocationProbe() {
+  const location = useLocation();
+  return (
+    <div data-testid="route-location">
+      {location.pathname}
+      {location.search}
+    </div>
   );
 }
 
@@ -865,6 +876,143 @@ describe("calendar routing surfaces", () => {
       "aria-pressed",
       "true"
     );
+  });
+
+  it("shows unprojected Life Events once in month and week views with scoped navigation", async () => {
+    useForgeShellMock.mockReturnValue({
+      snapshot: createSnapshot(),
+      selectedUserIds: ["user_calendar_scope"],
+      refresh: vi.fn().mockResolvedValue(undefined)
+    });
+    getCalendarOverviewMock.mockResolvedValue({
+      calendar: {
+        generatedAt: "2026-05-03T09:00:00.000Z",
+        providers: [],
+        connections: [],
+        calendars: [],
+        events: [
+          {
+            id: "event_projected_launch",
+            connectionId: null,
+            calendarId: null,
+            remoteId: null,
+            ownership: "forge",
+            originType: "native",
+            status: "confirmed",
+            title: "Projected project launch",
+            description: "",
+            location: "",
+            place: {
+              label: "",
+              address: "",
+              timezone: "Europe/Zurich",
+              latitude: null,
+              longitude: null,
+              source: "",
+              externalPlaceId: ""
+            },
+            startAt: "2026-05-03T08:00:00.000Z",
+            endAt: "2026-05-03T09:00:00.000Z",
+            timezone: "Europe/Zurich",
+            isAllDay: false,
+            availability: "busy",
+            eventType: "life_event",
+            categories: ["life_event"],
+            sourceMappings: [],
+            links: [],
+            actionProfile: null,
+            remoteUpdatedAt: null,
+            deletedAt: null,
+            createdAt: "2026-05-01T00:00:00.000Z",
+            updatedAt: "2026-05-01T00:00:00.000Z"
+          }
+        ],
+        workBlockTemplates: [],
+        workBlockInstances: [],
+        timeboxes: []
+      }
+    });
+    getLifeEventsTimelineMock.mockResolvedValue({
+      timeline: {
+        events: [
+          {
+            id: "lifeevent_unprojected_promotion",
+            title: "Independent promotion",
+            startsAt: "2026-05-03T10:00:00.000Z",
+            endsAt: "2026-05-03T11:00:00.000Z",
+            timezone: "Europe/Zurich",
+            isAllDay: false,
+            status: "confirmed",
+            primaryCalendarEventId: null,
+            deletedAt: null
+          },
+          {
+            id: "lifeevent_projected_launch",
+            title: "Duplicate Life Event projection",
+            startsAt: "2026-05-03T08:00:00.000Z",
+            endsAt: "2026-05-03T09:00:00.000Z",
+            timezone: "Europe/Zurich",
+            isAllDay: false,
+            status: "confirmed",
+            primaryCalendarEventId: "event_projected_launch",
+            deletedAt: null
+          }
+        ],
+        groups: []
+      }
+    });
+
+    renderWithRouter(<CalendarPage />, "/calendar?view=month&date=2026-05-03");
+
+    expect(
+      await screen.findByText("Independent promotion")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Projected project launch")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Duplicate Life Event projection")
+    ).not.toBeInTheDocument();
+    expect(getLifeEventsTimelineMock).toHaveBeenCalledWith({
+      from: "2026-04-27T00:00:00.000Z",
+      to: "2026-06-08T00:00:00.000Z",
+      limit: 500,
+      userIds: ["user_calendar_scope"]
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Sunday, May 3, 2026: 2 scheduled items\. Open week\./i
+      })
+    );
+    const week = await screen.findByTestId("calendar-week-grid");
+    const lifeEventAction = await within(week).findByRole("button", {
+      name: /Independent promotion/i
+    });
+    expect(lifeEventAction).toHaveClass("min-h-11");
+    fireEvent.click(lifeEventAction);
+    expect(await screen.findByTestId("route-location")).toHaveTextContent(
+      "/life-events?focus=lifeevent_unprojected_promotion"
+    );
+  });
+
+  it("labels a failed Life Event layer as an incomplete calendar and offers retry", async () => {
+    getLifeEventsTimelineMock.mockRejectedValueOnce(
+      new Error("Life Event timeline unavailable")
+    );
+
+    renderWithRouter(<CalendarPage />, "/calendar");
+
+    const alert = await screen.findByRole("alert");
+    expect(
+      within(alert).getByText(
+        "Life Events are temporarily missing from this calendar."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/before treating this as the complete schedule/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Retry Life Events" })
+    ).toBeInTheDocument();
   });
 
   it("places timezone-aware calendar events on their event-local day", async () => {

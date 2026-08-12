@@ -448,6 +448,7 @@ import {
   lifeEventFromCalendarInputSchema,
   lifeEventTicketImportInputSchema,
   lifeEventTimelineQuerySchema,
+  listLifeEvents,
   listLifeEventTimeline,
   syncLifeEventCalendar
 } from "./repositories/life-events.js";
@@ -12579,6 +12580,11 @@ export async function buildServer(
     if (!ownership || !routePath.startsWith(`${ownership.routeBase}/:`)) {
       return;
     }
+    if (ownership.entityType === "life_event") {
+      // Life Event routes resolve legacy Calendar-derived scope through the
+      // current, live Calendar event and its links inside their route handler.
+      return;
+    }
     const auth = managers.authentication.authenticate(
       request.headers as Record<string, unknown>
     );
@@ -13574,6 +13580,233 @@ export async function buildServer(
     runs: ReturnType<typeof listTaskRuns>,
     context: ReturnType<typeof authenticateRequest>
   ) => runs.filter((run) => Boolean(getTaskForAuth(run.taskId, context)));
+  const lifeEventLinkedTargetsForAuth = (
+    context: ReturnType<typeof authenticateRequest>
+  ) => {
+    const policy = context.token?.scopePolicy;
+    if (
+      !policy ||
+      (policy.projectIds.length === 0 && policy.tagIds.length === 0)
+    ) {
+      return undefined;
+    }
+    const availableProjects = listProjectSummaries();
+    const availableProjectIds = new Set(
+      availableProjects.map((project) => project.id)
+    );
+    const availableTagIds = new Set(listTags().map((tag) => tag.id));
+    const projectIdsForScope = policy.projectIds.filter((projectId) =>
+      availableProjectIds.has(projectId)
+    );
+    const tagIdsForScope = policy.tagIds.filter((tagId) =>
+      availableTagIds.has(tagId)
+    );
+    if (projectIdsForScope.length === 0 && tagIdsForScope.length === 0) {
+      return [];
+    }
+    const scope = {
+      projectIds: projectIdsForScope,
+      tagIds: tagIdsForScope
+    };
+    const projects = applyProjectScope(availableProjects, scope);
+    const projectIds = new Set(projects.map((project) => project.id));
+    const goalIds = new Set(projects.map((project) => project.goalId));
+    const goals = applyGoalScope(listGoals(), scope, goalIds);
+    for (const goal of goals) {
+      goalIds.add(goal.id);
+    }
+    const tasks = applyTaskScope(listTasks(), scope);
+    const taskIds = new Set(tasks.map((task) => task.id));
+    const habits = applyHabitScope(listHabits(), scope, goalIds, taskIds);
+    const strategies = applyStrategyScope(listStrategies(), scope, goalIds);
+    return [
+      ...[...projectIds].map((entityId) => ({
+        entityType: "project",
+        entityId
+      })),
+      ...[...goalIds].map((entityId) => ({
+        entityType: "goal",
+        entityId
+      })),
+      ...[...taskIds].map((entityId) => ({
+        entityType: "task",
+        entityId
+      })),
+      ...habits.map((habit) => ({
+        entityType: "habit",
+        entityId: habit.id
+      })),
+      ...strategies.map((strategy) => ({
+        entityType: "strategy",
+        entityId: strategy.id
+      })),
+      ...tagIdsForScope.map((entityId) => ({
+        entityType: "tag",
+        entityId
+      }))
+    ];
+  };
+  const lifeEventMatchesAuthScope = (
+    lifeEvent: ReturnType<typeof getLifeEventById>,
+    context: ReturnType<typeof authenticateRequest>
+  ) => {
+    if (!lifeEvent) {
+      return false;
+    }
+    const policy = context.token?.scopePolicy;
+    if (!policy) {
+      return true;
+    }
+    if (
+      policy.userIds.length > 0 &&
+      filterOwnedEntities("life_event", [lifeEvent], policy.userIds).length ===
+        0
+    ) {
+      return false;
+    }
+    const linkedTargets = lifeEventLinkedTargetsForAuth(context);
+    if (linkedTargets === undefined) {
+      return true;
+    }
+    const allowed = new Set(
+      linkedTargets.map((target) => `${target.entityType}:${target.entityId}`)
+    );
+    return lifeEvent.links.some((link) => {
+      if (allowed.has(`${link.targetEntityType}:${link.targetEntityId}`)) {
+        return true;
+      }
+      if (link.targetEntityType !== "calendar_event") {
+        return false;
+      }
+      const calendarEvent = getCalendarEventById(link.targetEntityId);
+      if (!calendarEvent || calendarEvent.deletedAt) {
+        return false;
+      }
+      return Boolean(
+        calendarEvent.links.some((calendarLink) =>
+          allowed.has(`${calendarLink.entityType}:${calendarLink.entityId}`)
+        )
+      );
+    });
+  };
+  const getLifeEventForAuth = (
+    id: string,
+    context: ReturnType<typeof authenticateRequest>
+  ) => {
+    const lifeEvent = getLifeEventById(id);
+    return lifeEventMatchesAuthScope(lifeEvent, context)
+      ? lifeEvent
+      : undefined;
+  };
+  const calendarEventMatchesAuthScope = (
+    calendarEvent: ReturnType<typeof getCalendarEventById>,
+    context: ReturnType<typeof authenticateRequest>
+  ) => {
+    if (!calendarEvent) {
+      return false;
+    }
+    if (calendarEvent.deletedAt) {
+      return false;
+    }
+    const policy = context.token?.scopePolicy;
+    if (!policy) {
+      return true;
+    }
+    if (
+      policy.userIds.length > 0 &&
+      filterOwnedEntities("calendar_event", [calendarEvent], policy.userIds)
+        .length === 0
+    ) {
+      return false;
+    }
+    const linkedTargets = lifeEventLinkedTargetsForAuth(context);
+    if (linkedTargets === undefined) {
+      return true;
+    }
+    const allowed = new Set(
+      linkedTargets.map((target) => `${target.entityType}:${target.entityId}`)
+    );
+    return calendarEvent.links.some((link) =>
+      allowed.has(`${link.entityType}:${link.entityId}`)
+    );
+  };
+  const projectLifeEventForAuth = <
+    T extends NonNullable<ReturnType<typeof getLifeEventById>>
+  >(
+    lifeEvent: T,
+    context: ReturnType<typeof authenticateRequest>
+  ): T => {
+    const policy = context.token?.scopePolicy;
+    if (!policy) {
+      return lifeEvent;
+    }
+    const linkedTargets = lifeEventLinkedTargetsForAuth(context);
+    const allowedLinkedTargets =
+      linkedTargets === undefined
+        ? null
+        : new Set(
+            linkedTargets.map(
+              (target) => `${target.entityType}:${target.entityId}`
+            )
+          );
+    const links = lifeEvent.links.filter((link) => {
+      const linkedCalendarEvent =
+        link.targetEntityType === "calendar_event"
+          ? getCalendarEventById(link.targetEntityId)
+          : null;
+      if (linkedCalendarEvent?.deletedAt) {
+        return false;
+      }
+      if (
+        allowedLinkedTargets &&
+        !allowedLinkedTargets.has(
+          `${link.targetEntityType}:${link.targetEntityId}`
+        ) &&
+        !(
+          link.targetEntityType === "calendar_event" &&
+          linkedCalendarEvent?.links.some((calendarLink) =>
+            allowedLinkedTargets.has(
+              `${calendarLink.entityType}:${calendarLink.entityId}`
+            )
+          )
+        )
+      ) {
+        return false;
+      }
+      if (
+        policy.userIds.length > 0 &&
+        filterOwnedEntities(
+          link.targetEntityType,
+          [{ id: link.targetEntityId }],
+          policy.userIds
+        ).length === 0
+      ) {
+        return false;
+      }
+      return !getDeletedEntityRecord(
+        link.targetEntityType,
+        link.targetEntityId
+      );
+    });
+    const primaryCalendarEvent = lifeEvent.primaryCalendarEventId
+      ? getCalendarEventById(lifeEvent.primaryCalendarEventId)
+      : null;
+    const primaryCalendarEventIsAvailable =
+      !lifeEvent.primaryCalendarEventId ||
+      calendarEventMatchesAuthScope(primaryCalendarEvent, context);
+    return {
+      ...lifeEvent,
+      links,
+      primaryCalendarEventId: primaryCalendarEventIsAvailable
+        ? lifeEvent.primaryCalendarEventId
+        : null,
+      calendarMatchConfidence: primaryCalendarEventIsAvailable
+        ? lifeEvent.calendarMatchConfidence
+        : null,
+      unavailableLinkCount:
+        lifeEvent.unavailableLinkCount + lifeEvent.links.length - links.length
+    };
+  };
   const hasTokenScope = (
     context: ReturnType<typeof authenticateRequest>,
     scope: string
@@ -26595,45 +26828,77 @@ export async function buildServer(
     return { task };
   });
   app.get("/api/v1/life-events/timeline", async (request) => {
-    requireScopedAccess(
+    const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["read", "write"],
       { route: "/api/v1/life-events/timeline" }
     );
+    const query = lifeEventTimelineQuerySchema.parse(request.query ?? {});
+    const rawQuery = request.query as Record<string, unknown>;
+    const requestedUserIds = resolveScopedUserIds(rawQuery);
+    const resolvedUserIds = resolveEffectiveUserIdsForReads(rawQuery, auth);
+    const userIds =
+      requestedUserIds && requestedUserIds.length > 0 && !resolvedUserIds
+        ? EMPTY_SCOPED_USER_IDS
+        : resolvedUserIds;
+    const linkedTargets = lifeEventLinkedTargetsForAuth(auth);
+    const timeline = listLifeEventTimeline(query, {
+      userIds,
+      linkedTargets,
+      enforceLinkedTargets: linkedTargets !== undefined
+    });
     return {
-      timeline: listLifeEventTimeline(
-        lifeEventTimelineQuerySchema.parse(request.query ?? {})
-      )
+      timeline: {
+        ...timeline,
+        events: timeline.events.map((lifeEvent) =>
+          projectLifeEventForAuth(lifeEvent, auth)
+        )
+      }
     };
   });
   app.get("/api/v1/life-events/:id", async (request, reply) => {
-    requireScopedAccess(
+    const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["read", "write"],
       { route: "/api/v1/life-events/:id" }
     );
     const { id } = request.params as { id: string };
-    const lifeEvent = getLifeEventById(id);
+    const lifeEvent = getLifeEventForAuth(id, auth);
     if (!lifeEvent) {
       reply.code(404);
       return { error: "Life Event not found" };
     }
-    return { lifeEvent };
+    return { lifeEvent: projectLifeEventForAuth(lifeEvent, auth) };
   });
   app.post("/api/v1/life-events/:id/calendar-sync", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/life-events/:id/calendar-sync"
-    });
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/life-events/:id/calendar-sync" }
+    );
     const { id } = request.params as { id: string };
+    const lifeEvent = getLifeEventForAuth(id, auth);
+    if (!lifeEvent) {
+      reply.code(404);
+      return { error: "Life Event not found" };
+    }
     const result = syncLifeEventCalendar(
       id,
-      lifeEventCalendarSyncInputSchema.parse(request.body ?? {})
+      lifeEventCalendarSyncInputSchema.parse(request.body ?? {}),
+      {
+        event: projectLifeEventForAuth(lifeEvent, auth),
+        calendarEventAllowed: (calendarEvent) =>
+          calendarEventMatchesAuthScope(calendarEvent, auth)
+      }
     );
     if (!result) {
       reply.code(404);
       return { error: "Life Event not found" };
     }
-    return result;
+    return {
+      ...result,
+      lifeEvent: projectLifeEventForAuth(result.lifeEvent, auth)
+    };
   });
   app.post(
     "/api/v1/life-events/from-calendar-event",
@@ -26643,15 +26908,39 @@ export async function buildServer(
         ["write"],
         { route: "/api/v1/life-events/from-calendar-event" }
       );
+      const input = lifeEventFromCalendarInputSchema.parse(request.body ?? {});
+      if (
+        !calendarEventMatchesAuthScope(
+          getCalendarEventById(input.calendarEventId),
+          auth
+        )
+      ) {
+        reply.code(404);
+        return { error: "Calendar event not found" };
+      }
+      const existingLifeEvent = listLifeEvents().find(
+        (lifeEvent) =>
+          lifeEvent.primaryCalendarEventId === input.calendarEventId
+      );
+      if (
+        existingLifeEvent &&
+        !lifeEventMatchesAuthScope(existingLifeEvent, auth)
+      ) {
+        reply.code(404);
+        return { error: "Calendar event not found" };
+      }
       const result = createLifeEventFromCalendar(
-        lifeEventFromCalendarInputSchema.parse(request.body ?? {}),
+        input,
         toActivityContext(auth)
       );
       if (!result) {
         reply.code(404);
         return { error: "Calendar event not found" };
       }
-      return result;
+      return {
+        ...result,
+        lifeEvent: projectLifeEventForAuth(result.lifeEvent, auth)
+      };
     }
   );
   app.post("/api/v1/life-events/import-ticket", async (request, reply) => {
@@ -26674,12 +26963,16 @@ export async function buildServer(
     return result;
   });
   app.get("/api/v1/life-events/:id/travel-status", async (request, reply) => {
-    requireScopedAccess(
+    const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["read", "write"],
       { route: "/api/v1/life-events/:id/travel-status" }
     );
     const { id } = request.params as { id: string };
+    if (!getLifeEventForAuth(id, auth)) {
+      reply.code(404);
+      return { error: "Life Event not found" };
+    }
     const status = getLifeEventTravelStatus(id);
     if (!status) {
       reply.code(404);

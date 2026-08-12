@@ -287,6 +287,15 @@ function getEventBadgeLabel(
     : formatProviderBadgeLabel(event.originType);
 }
 
+function lifeEventCalendarSpan(lifeEvent: LifeEvent) {
+  return {
+    startAt: lifeEvent.startsAt,
+    endAt: lifeEvent.endsAt,
+    timezone: lifeEvent.timezone,
+    isAllDay: lifeEvent.isAllDay
+  };
+}
+
 function formatWorkBlockKindLabel(kind: WorkBlockKind) {
   switch (kind) {
     case "main_activity":
@@ -450,12 +459,18 @@ export function CalendarPage() {
     queryFn: () => getLifeForce(selectedUserIds)
   });
   const lifeEventsQuery = useQuery({
-    queryKey: ["life-events-timeline", range.from, range.to],
+    queryKey: [
+      "life-events-timeline",
+      range.from,
+      range.to,
+      ...selectedUserIds
+    ],
     queryFn: async () =>
       (
         await getLifeEventsTimeline({
           ...range,
-          limit: 500
+          limit: 500,
+          userIds: selectedUserIds
         })
       ).timeline
   });
@@ -1034,6 +1049,17 @@ export function CalendarPage() {
           },
     [calendarData]
   );
+  const visibleLifeEvents = useMemo(() => {
+    const visibleCalendarEventIds = new Set(
+      overview.events.map((event) => event.id)
+    );
+    return (lifeEventsQuery.data?.events ?? []).filter(
+      (lifeEvent) =>
+        !lifeEvent.deletedAt &&
+        (!lifeEvent.primaryCalendarEventId ||
+          !visibleCalendarEventIds.has(lifeEvent.primaryCalendarEventId))
+    );
+  }, [lifeEventsQuery.data?.events, overview.events]);
   const calendarTitleById = useMemo(
     () =>
       new Map(
@@ -1453,6 +1479,32 @@ export function CalendarPage() {
         badge={`${overview.connections.length} connection${overview.connections.length === 1 ? "" : "s"}`}
       />
 
+      {lifeEventsQuery.isError ? (
+        <Card
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-[color-mix(in_srgb,var(--danger)_34%,var(--ui-border-subtle)_66%)] !bg-[var(--ui-danger-soft)] p-4"
+        >
+          <div>
+            <div className="font-medium text-[var(--ui-ink-strong)]">
+              Life Events are temporarily missing from this calendar.
+            </div>
+            <div className="mt-1 text-sm text-[var(--ui-ink-medium)]">
+              Provider and Forge events, work blocks, and task timeboxes are
+              still current. Retry the Life Event layer before treating this as
+              the complete schedule.
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            className="min-h-11"
+            onClick={() => void lifeEventsQuery.refetch()}
+          >
+            Retry Life Events
+          </Button>
+        </Card>
+      ) : null}
+
       {lifeForceQuery.data?.lifeForce ? (
         <Card
           className="grid grid-cols-2 gap-3 rounded-[28px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-1)] p-3 shadow-[var(--ui-shadow-soft)] sm:p-4 md:grid-cols-3"
@@ -1503,8 +1555,8 @@ export function CalendarPage() {
           eyebrow={calendarView === "month" ? "Month view" : "Week view"}
           description={
             calendarView === "month"
-              ? "Scan six complete weeks at once, then open any day for the full editable week. Provider events, work blocks, and task timeboxes share the same month grid."
-              : "The calendar is the priority surface here. Connected provider events, recurring work blocks, and owned task timeboxes all stay visible together."
+              ? "Scan six complete weeks at once, then open any day for the full editable week. Provider and Forge events, Life Events, work blocks, and task timeboxes share the same month grid."
+              : "The calendar is the priority surface here. Provider and Forge events, Life Events, recurring work blocks, and owned task timeboxes all stay visible together."
           }
           weekStart={weekStart}
           view={calendarView}
@@ -1565,6 +1617,15 @@ export function CalendarPage() {
                   Refreshing {calendarView}
                 </Badge>
               ) : null}
+              {lifeEventsQuery.isFetching ? (
+                <Badge
+                  className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
+                  aria-live="polite"
+                >
+                  <RefreshCcw className="mr-1 size-3.5 animate-spin" />
+                  Refreshing Life Events
+                </Badge>
+              ) : null}
               {clipboardEntry ? (
                 <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                   {clipboardEntry.mode === "cut" ? "Cut" : "Copied"} ·{" "}
@@ -1595,6 +1656,7 @@ export function CalendarPage() {
             days={monthDays}
             month={currentMonth}
             events={overview.events}
+            lifeEvents={visibleLifeEvents}
             workBlocks={overview.workBlockInstances}
             timeboxes={overview.timeboxes}
             timeZone={browserTimeZone}
@@ -1613,6 +1675,12 @@ export function CalendarPage() {
               const dayEvents = overview.events.filter(
                 (event) =>
                   !event.deletedAt && calendarEventOverlapsDate(event, dayKey)
+              );
+              const dayLifeEvents = visibleLifeEvents.filter((lifeEvent) =>
+                calendarEventOverlapsDate(
+                  lifeEventCalendarSpan(lifeEvent),
+                  dayKey
+                )
               );
               const dayBlocks = overview.workBlockInstances.filter(
                 (block) => block.dateKey === dayKey
@@ -2008,6 +2076,57 @@ export function CalendarPage() {
                       </div>
                     ))}
 
+                    {dayLifeEvents.map((lifeEvent) => (
+                      <button
+                        key={lifeEvent.id}
+                        type="button"
+                        data-calendar-item="true"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          navigate(
+                            `/life-events?focus=${encodeURIComponent(lifeEvent.id)}`
+                          );
+                        }}
+                        className="min-h-11 min-w-0 overflow-hidden rounded-[18px] border border-[color-mix(in_srgb,var(--primary)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-accent-soft)] px-3 py-2 text-left text-sm text-[var(--ui-ink-strong)] transition hover:border-[color-mix(in_srgb,var(--primary)_52%,var(--ui-border-strong)_48%)] hover:bg-[var(--ui-accent-soft-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/45"
+                      >
+                        <div className="flex min-w-0 items-start gap-2">
+                          <Milestone
+                            className="mt-0.5 size-4 shrink-0 text-[var(--primary)]"
+                            aria-hidden="true"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="line-clamp-2 [overflow-wrap:anywhere] font-medium">
+                              {lifeEvent.title}
+                            </div>
+                            <div className="mt-1 text-[var(--ui-ink-soft)]">
+                              {calendarEventTimeLabelForDate(
+                                lifeEventCalendarSpan(lifeEvent),
+                                dayKey
+                              )}
+                            </div>
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                              <Badge
+                                size="sm"
+                                className="bg-[var(--ui-surface-2)] px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-medium)]"
+                              >
+                                Life Event
+                              </Badge>
+                              <Badge
+                                size="sm"
+                                className="bg-[var(--ui-surface-2)] px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-medium)]"
+                              >
+                                {lifeEvent.status}
+                              </Badge>
+                            </div>
+                          </div>
+                          <ArrowUpRight
+                            className="size-4 shrink-0 text-[var(--ui-ink-muted)]"
+                            aria-hidden="true"
+                          />
+                        </div>
+                      </button>
+                    ))}
+
                     {dayTimeboxes.map((timebox) => (
                       <div
                         key={timebox.id}
@@ -2119,6 +2238,7 @@ export function CalendarPage() {
 
                     {dayBlocks.length === 0 &&
                     dayEvents.length === 0 &&
+                    dayLifeEvents.length === 0 &&
                     dayTimeboxes.length === 0 ? (
                       <div className="min-h-[10rem] rounded-[18px] border border-dashed border-[var(--ui-border-subtle)] px-3 py-4 text-sm leading-8 text-[var(--ui-ink-muted)]">
                         Nothing scheduled here yet. Click inside this day to

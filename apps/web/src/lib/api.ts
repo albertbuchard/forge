@@ -1748,6 +1748,7 @@ export function getLifeEventsTimeline(input?: {
   limit?: number;
   offset?: number;
   eventTypes?: string[];
+  userIds?: string[];
 }) {
   const search = new URLSearchParams();
   if (input?.from) {
@@ -1768,6 +1769,7 @@ export function getLifeEventsTimeline(input?: {
   for (const eventType of input?.eventTypes ?? []) {
     search.append("eventTypes", eventType);
   }
+  appendUserIds(search, input?.userIds);
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ timeline: LifeEventTimelinePayload }>(
     `/api/v1/life-events/timeline${suffix}`
