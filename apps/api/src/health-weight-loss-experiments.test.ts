@@ -151,7 +151,13 @@ test("nutrition experiment contract preserves agent fields across API surfaces",
         status: "complete",
         metricKey: "sleepQuality",
         conclusion:
-          "The intervention improved training but reduced sleep quality"
+          "The intervention improved training but reduced sleep quality",
+        adherence: {
+          plannedExposures: 3,
+          completedExposures: 3,
+          baselineObservationCount: 2,
+          interventionObservationCount: 2
+        }
       }
     });
     assert.equal(patchedResponse.statusCode, 200);

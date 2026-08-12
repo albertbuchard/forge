@@ -553,7 +553,10 @@ test("ChatGPT food parser uses one model call when catalog nutrition completes e
     assert.equal(almonds.proteinGrams, 5.09);
     assert.equal(almonds.carbohydrateGrams, 5.18);
     assert.equal(almonds.fatGrams, 11.98);
-    assert.match(parsed.candidate.notes, /Resolved "Kagi Chief 13g Protein Bar"/);
+    assert.match(
+      parsed.candidate.notes,
+      /Resolved "Kagi Chief 13g Protein Bar"/
+    );
     assert.match(parsed.candidate.notes, /Resolved "almonds" to Almonds/);
   } finally {
     await app.close();
@@ -781,6 +784,7 @@ test("weight loss overview keeps formula resting baseline despite partial Health
           wearableRestingDayCount: number;
           wearableRestingCoverageQualifiedDayCount: number;
           estimatedTdeeKcal: number | null;
+          activeBaselineDecision: string;
           baselineActiveCaloriesKcal: number;
           todayActiveCaloriesKcal: number;
           todayActiveSurplusKcal: number;
@@ -841,7 +845,11 @@ test("weight loss overview keeps formula resting baseline despite partial Health
     );
     assert.equal(
       overviewBody.weightLoss.energyModel.baselineActiveCaloriesKcal,
-      895
+      388
+    );
+    assert.equal(
+      overviewBody.weightLoss.energyModel.activeBaselineDecision,
+      "configured_default_sparse_evidence"
     );
     assert.equal(
       overviewBody.weightLoss.energyModel.todayActiveCaloriesKcal,

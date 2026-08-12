@@ -10801,7 +10801,10 @@ function buildOperatorContext(
     projectIds: [],
     tagIds: []
   },
-  options: { noteScope?: NoteReadScope } = {}
+  options: {
+    noteScope?: NoteReadScope;
+    projectNoteForRead?: (note: Note) => Note;
+  } = {}
 ) {
   const now = new Date();
   const users = listUsers();
@@ -10897,6 +10900,22 @@ function buildOperatorContext(
     return Boolean(note && isNoteVisibleToScope(note, options.noteScope));
   });
 
+  const recentActivity = filterStructuredNoteTargetActivityForRead(
+    filterNoteActivityEventsForScope(
+      listActivityEvents(
+        {
+          limit: 60,
+          userIds: scopedUserIdsForReads
+        },
+        {
+          noteScope: options.noteScope ?? { userIds: scopedUserIdsForReads }
+        }
+      ),
+      options.noteScope ?? { userIds: scopedUserIdsForReads }
+    ),
+    options.projectNoteForRead
+  ).slice(0, 20);
+
   return {
     generatedAt,
     activeProjects: activeProjects.slice(0, 8),
@@ -10911,22 +10930,42 @@ function buildOperatorContext(
       blocked: tasks.filter((task) => task.status === "blocked").slice(0, 20),
       done: tasks.filter((task) => task.status === "done").slice(0, 20)
     },
-    recentActivity: filterNoteActivityEventsForScope(
-      listActivityEvents(
-        {
-          limit: 60,
-          userIds: scopedUserIdsForReads
-        },
-        {
-          noteScope: options.noteScope ?? { userIds: scopedUserIdsForReads }
-        }
-      ),
-      options.noteScope ?? { userIds: scopedUserIdsForReads }
-    ).slice(0, 20),
+    recentActivity,
     recentTaskRuns,
     recommendedNextTask,
     xp: { ...xp, recentLedger }
   };
+}
+
+function filterStructuredNoteTargetActivityForRead(
+  events: ReturnType<typeof listActivityEvents>,
+  projectNoteForRead?: (note: Note) => Note
+) {
+  if (!projectNoteForRead) {
+    return events;
+  }
+  return events.filter((event) => {
+    const noteId =
+      typeof event.metadata.noteId === "string"
+        ? event.metadata.noteId.trim()
+        : event.entityType === "note"
+          ? event.entityId
+          : "";
+    if (!noteId) {
+      return true;
+    }
+    if (event.entityType === "note" && event.entityId === noteId) {
+      return true;
+    }
+    const note = getNoteByIdIncludingDeleted(noteId, { skipCleanup: true });
+    if (!note) {
+      return false;
+    }
+    return projectNoteForRead(note).links.some(
+      (link) =>
+        link.entityType === event.entityType && link.entityId === event.entityId
+    );
+  });
 }
 
 function buildUserDirectoryPayload() {
@@ -11891,7 +11930,10 @@ function buildOperatorOverview(request: {
     new Set(tasks.map((task) => task.id))
   );
   const operator = compactOperatorContext(
-    buildOperatorContext(readScope, { noteScope: request.noteScope })
+    buildOperatorContext(readScope, {
+      noteScope: request.noteScope,
+      projectNoteForRead: request.projectNoteForRead
+    })
   );
   const overview = getOverviewContext(now, {
     userIds,
@@ -12058,7 +12100,10 @@ function buildOperatorOverview(request: {
         projects: overview.projects.slice(0, 8).map(compactProject),
         topTasks: overview.topTasks.slice(0, 8).map(compactTask),
         dueHabits: overview.dueHabits.slice(0, 8).map(compactHabit),
-        recentEvidence: overview.recentEvidence
+        recentEvidence: filterStructuredNoteTargetActivityForRead(
+          overview.recentEvidence,
+          request.projectNoteForRead
+        )
           .slice(0, 10)
           .map(compactActivityEvent),
         achievements: overview.achievements.slice(0, 6),
@@ -13565,12 +13610,15 @@ export async function buildServer(
     );
     const requestedLimit = query.limit;
     const noteScope = noteReadScopeForAuth(context, userIds);
-    const visible = filterNoteActivityEventsForScope(
-      listActivityEvents(
-        { ...query, userIds, limit: query.limit },
-        { noteScope }
+    const visible = filterStructuredNoteTargetActivityForRead(
+      filterNoteActivityEventsForScope(
+        listActivityEvents(
+          { ...query, userIds, limit: query.limit },
+          { noteScope }
+        ),
+        noteScope
       ),
-      noteScope
+      (note) => projectNoteForRead(note, context)
     );
     return requestedLimit ? visible.slice(0, requestedLimit) : visible;
   };
@@ -13580,9 +13628,12 @@ export async function buildServer(
     const userIds = resolveEffectiveUserIdsForReads(undefined, context);
     const noteScope = noteReadScopeForAuth(context, userIds);
     return (
-      filterNoteActivityEventsForScope(
-        listActivityEvents({ userIds, limit: 1 }, { noteScope }),
-        noteScope
+      filterStructuredNoteTargetActivityForRead(
+        filterNoteActivityEventsForScope(
+          listActivityEvents({ userIds, limit: 1 }, { noteScope }),
+          noteScope
+        ),
+        (note) => projectNoteForRead(note, context)
       )[0] ?? null
     );
   };
@@ -17472,7 +17523,8 @@ export async function buildServer(
     });
     return {
       context: buildOperatorContext(readScope, {
-        noteScope: noteReadScopeForAuth(auth, scopedUserIdsForReads)
+        noteScope: noteReadScopeForAuth(auth, scopedUserIdsForReads),
+        projectNoteForRead: (note) => projectNoteForRead(note, auth)
       })
     };
   });

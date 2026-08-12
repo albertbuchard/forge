@@ -179,9 +179,8 @@ test("project closeout persists one owned Note with exact generic links and no f
       }
     });
     assert.equal(artifactResponse.statusCode, 201, artifactResponse.body);
-    const artifactId = (
-      artifactResponse.json() as { artifact: { id: string } }
-    ).artifact.id;
+    const artifactId = (artifactResponse.json() as { artifact: { id: string } })
+      .artifact.id;
     const suppliedLinks = [
       {
         entityType: "artifact" as const,
@@ -266,7 +265,8 @@ test("project closeout persists one owned Note with exact generic links and no f
         event.eventType === "note.created" && event.metadata.noteId === note.id
     );
     assert.ok(noteEvent);
-    assert.equal(noteEvent.actor, "PLAN-17 closeout test");
+    assert.match(noteEvent.actor ?? "", /^ses_[0-9a-f-]+$/);
+    assert.notEqual(noteEvent.actor, "PLAN-17 closeout test");
     assert.equal(noteEvent.source, "ui");
 
     for (const workItemId of [issue.id, taskItem.id]) {

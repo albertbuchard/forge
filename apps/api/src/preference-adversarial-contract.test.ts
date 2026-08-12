@@ -812,7 +812,8 @@ test("judgment receipt, activity, and projection changes commit or roll back tog
       payload
     });
     assert.equal(first.statusCode, 201, first.body);
-    assert.equal(retry.statusCode, 201, retry.body);
+    assert.equal(retry.statusCode, 200, retry.body);
+    assert.equal(retry.headers["idempotency-replayed"], "true");
     assert.deepEqual(retry.json(), first.json());
     const committed = countRows();
     assert.equal(committed.judgments, 1);

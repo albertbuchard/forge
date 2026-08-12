@@ -63,6 +63,7 @@ const MAX_ARTIFACT_ENRICHMENT_LABEL_CHARS = 240;
 const MAX_ARTIFACT_ENRICHMENT_LIST_ITEMS = 20;
 const MAX_ARTIFACT_ENRICHMENT_LINKS = 20;
 const MIN_ARTIFACT_RAW_TEXT_SPAN_CHARS = 80;
+const MIN_ARTIFACT_EXACT_RAW_TEXT_CHARS = 16;
 
 const ARTIFACT_LINK_TARGET_TABLES = {
   goal: "goals",
@@ -4079,6 +4080,14 @@ function sanitizeArtifactEnrichmentOutput(
       .replaceAll(/\s+/g, " ")
       .trim()
       .toLowerCase();
+    if (
+      Math.min(normalizedExtractedText.length, normalizedEntry.length) >=
+        MIN_ARTIFACT_EXACT_RAW_TEXT_CHARS &&
+      (normalizedExtractedText.includes(normalizedEntry) ||
+        normalizedEntry.includes(normalizedExtractedText))
+    ) {
+      return true;
+    }
     if (
       normalizedExtractedText.length < MIN_ARTIFACT_RAW_TEXT_SPAN_CHARS ||
       normalizedEntry.length < MIN_ARTIFACT_RAW_TEXT_SPAN_CHARS

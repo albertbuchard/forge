@@ -383,6 +383,24 @@ test("life_event batch create, update, link search, calendar sync, and ticket im
     assert.equal(uploadResponse.statusCode, 201);
     const artifact = (uploadResponse.json() as { artifact: { id: string } })
       .artifact;
+    const ticketPreviewResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/life-events/import-ticket",
+      headers: { cookie: operatorCookie },
+      payload: {
+        artifactId: artifact.id,
+        createDraft: false,
+        useLlm: false
+      }
+    });
+    assert.equal(
+      ticketPreviewResponse.statusCode,
+      200,
+      ticketPreviewResponse.body
+    );
+    const previewFingerprint = (
+      ticketPreviewResponse.json() as { previewFingerprint: string }
+    ).previewFingerprint;
     const ticketResponse = await app.inject({
       method: "POST",
       url: "/api/v1/life-events/import-ticket",
@@ -390,7 +408,8 @@ test("life_event batch create, update, link search, calendar sync, and ticket im
       payload: {
         artifactId: artifact.id,
         createDraft: true,
-        useLlm: false
+        useLlm: false,
+        previewFingerprint
       }
     });
     assert.equal(ticketResponse.statusCode, 200);

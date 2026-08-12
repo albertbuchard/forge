@@ -24,6 +24,15 @@ async function applyMigrationsBefore086(database: DatabaseSync) {
   }
 }
 
+async function applyMigrationsAfter086(database: DatabaseSync) {
+  const files = (await readdir(migrationsDir))
+    .filter((file) => file.endsWith(".sql") && file > migrationName)
+    .sort();
+  for (const file of files) {
+    database.exec(await readFile(path.join(migrationsDir, file), "utf8"));
+  }
+}
+
 test("migration 086 upgrades existing preference catalogs without losing rows", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-pref-catalog-migration-")
@@ -149,6 +158,7 @@ test("migration 086 upgrades existing preference catalogs without losing rows", 
     database.exec(
       await readFile(path.join(migrationsDir, migrationName), "utf8")
     );
+    await applyMigrationsAfter086(database);
 
     const catalog = database
       .prepare(
@@ -323,7 +333,28 @@ test("migration 086 upgrades existing preference catalogs without losing rows", 
       .all("catalog_pre086_archived") as Array<{ catalog_item_id: string }>;
     assert.deepEqual(
       legacyArchiveMembers.map((row) => row.catalog_item_id),
+      []
+    );
+    const independentlyArchivedLegacyItems = database
+      .prepare(
+        `SELECT entity_id, delete_reason
+         FROM deleted_entities
+         WHERE entity_type = 'preference_catalog_item'
+           AND entity_id IN (?, ?)
+         ORDER BY entity_id ASC`
+      )
+      .all(
+        "catalog_item_pre086_archived_a",
+        "catalog_item_pre086_archived_b"
+      ) as Array<{ entity_id: string; delete_reason: string }>;
+    assert.deepEqual(
+      independentlyArchivedLegacyItems.map((row) => row.entity_id),
       ["catalog_item_pre086_archived_a", "catalog_item_pre086_archived_b"]
+    );
+    assert.ok(
+      independentlyArchivedLegacyItems.every((row) =>
+        row.delete_reason.includes("independently archived")
+      )
     );
 
     const legacyDeletedRecord = database
