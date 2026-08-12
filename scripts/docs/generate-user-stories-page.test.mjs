@@ -55,8 +55,8 @@ test("the authoritative contract has the expected current and planned inventory"
   assert.equal(count("lifecycle", "current"), 204);
   assert.equal(count("lifecycle", "planned"), 0);
   assert.equal(count("readiness", "Verified"), 24);
-  assert.equal(count("readiness", "In review"), 159);
-  assert.equal(count("readiness", "Needs audit"), 18);
+  assert.equal(count("readiness", "In review"), 164);
+  assert.equal(count("readiness", "Needs audit"), 13);
   assert.equal(count("readiness", "Limited"), 0);
   assert.equal(count("readiness", "Externally blocked"), 3);
   assert.equal(new Set(stories.map((story) => story.prefix)).size, 23);
@@ -76,7 +76,7 @@ test("the authoritative contract has the expected current and planned inventory"
   );
 
   const knowledgeAudit = stories.find((story) => story.id === "KNOW-01");
-  assert.equal(knowledgeAudit.readiness, "Needs audit");
+  assert.equal(knowledgeAudit.readiness, "In review");
 });
 
 test("the generated page is deterministic and contains every story exactly once", async () => {
@@ -247,7 +247,7 @@ test("the client supports search, empty recovery, reset focus, and safe anchors"
     '[data-metric-readiness="In review"]'
   );
   inReviewMetric.click();
-  assert.equal(visibleStories(defaultDom.window.document).length, 159);
+  assert.equal(visibleStories(defaultDom.window.document).length, 164);
   assert.equal(inReviewMetric.getAttribute("aria-current"), "true");
   assert.equal(defaultDom.window.location.search, "?readiness=In+review");
   defaultDom.window.document.querySelector('[data-metric-scope="all"]').click();
