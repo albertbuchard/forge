@@ -694,6 +694,19 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
           )
       },
       {
+        method: "POST",
+        pattern:
+          /^\/forge\/v1\/workbench\/flows\/([^/]+)\/runs\/([^/]+)\/cancel$/,
+        upstreamPath: "/api/v1/workbench/flows/:id/runs/:runId/cancel",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(
+            `/api/v1/workbench/flows/${match[1]}/runs/${match[2]}/cancel`,
+            url
+          )
+      },
+      {
         method: "GET",
         pattern:
           /^\/forge\/v1\/workbench\/flows\/([^/]+)\/runs\/([^/]+)\/nodes$/,

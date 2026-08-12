@@ -265,6 +265,31 @@ test("process output has one combined budget and runtime overruns terminate", as
   }
 });
 
+test("a shared cancellation signal terminates a running machine command", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "forge-capability-cancellation-")
+  );
+  try {
+    const controller = new AbortController();
+    const reason = new Error("Workbench run cancelled");
+    const startedAt = Date.now();
+    const execution = runBoundedProcess({
+      executable: "/bin/sh",
+      arguments: ["-c", "sleep 10"],
+      cwd: root,
+      environment: { PATH: "/usr/bin:/bin" },
+      maximumRuntimeMilliseconds: 30_000,
+      maximumOutputBytes: 128,
+      signal: controller.signal
+    });
+    setTimeout(() => controller.abort(reason), 25);
+    await assert.rejects(execution, (error) => error === reason);
+    assert.ok(Date.now() - startedAt < 2_000);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("declarative commands use exact arguments, a sanitized environment, and bounded output", async () => {
   const root = await mkdtemp(
     path.join(os.tmpdir(), "forge-capability-command-")

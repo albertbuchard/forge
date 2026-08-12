@@ -1088,7 +1088,8 @@ describe("forge onboarding contract", () => {
         deleteFlow: "/api/v1/workbench/flows/:id",
         runFlow: "/api/v1/workbench/flows/:id/run",
         runByPayload: "/api/v1/workbench/run",
-        chatFlow: "/api/v1/workbench/flows/:id/chat"
+        chatFlow: "/api/v1/workbench/flows/:id/chat",
+        cancelRun: "/api/v1/workbench/flows/:id/runs/:runId/cancel"
       })
     );
     expect(routeModel.specializedDomainSurfaces.workbench.methodRoutes).toEqual(
@@ -1099,6 +1100,7 @@ describe("forge onboarding contract", () => {
         deleteFlow: "DELETE /api/v1/workbench/flows/:id",
         runFlow: "POST /api/v1/workbench/flows/:id/run",
         chatFlow: "POST /api/v1/workbench/flows/:id/chat",
+        cancelRun: "POST /api/v1/workbench/flows/:id/runs/:runId/cancel",
         nodeResult: "GET /api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId",
         latestNodeOutput: "GET /api/v1/workbench/flows/:id/nodes/:nodeId/output"
       })
@@ -1122,6 +1124,7 @@ describe("forge onboarding contract", () => {
         "runHistory",
         "runs",
         "runDetail",
+        "cancelRun",
         "runNodes",
         "nodeResult",
         "publishedOutput",

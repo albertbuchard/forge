@@ -661,9 +661,7 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
             ? [
                 {
                   role: "user",
-                  content: [
-                    { type: "input_text", text: "Connection test." }
-                  ]
+                  content: [{ type: "input_text", text: "Connection test." }]
                 }
               ]
             : "Reply with the single word ok.",
@@ -742,6 +740,7 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
     systemPrompt,
     prompt,
     format,
+    signal,
     logger
   }: NonNullable<WikiLlmProvider["runText"]> extends (
     input: infer T
@@ -798,7 +797,9 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
         text: buildTextConfiguration({ profile, format }),
         ...(isCodexProfile(profile) ? {} : { max_output_tokens: 1200 })
       }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)])
+        : AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
     if (!response.ok) {
       await response.body?.cancel().catch(() => undefined);

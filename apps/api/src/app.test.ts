@@ -124,9 +124,8 @@ async function buildServer(
     }
   };
   testOperatorAuthority.set(app, authority);
-  let latestMobilePairing:
-    | { sessionId: string; pairingToken: string }
-    | null = null;
+  let latestMobilePairing: { sessionId: string; pairingToken: string } | null =
+    null;
   const inject = app.inject.bind(app);
   app.inject = (async (request: string | InjectOptions) => {
     if (typeof request === "string") {
@@ -158,7 +157,7 @@ async function buildServer(
     const requestUrl =
       typeof request.url === "string"
         ? request.url
-        : request.url?.pathname ?? "";
+        : (request.url?.pathname ?? "");
     const payloadPairing =
       request.payload &&
       typeof request.payload === "object" &&
@@ -6891,7 +6890,10 @@ test("sleep view keeps same-day sessions inspectable while trends use the strong
       (relation) => relation.sleepId === napSession?.id
     );
     assert.equal(representative?.sleepId, sleep.latestNight?.sleepId);
-    assert.equal(overlapRelation?.representativeSleepId, representative?.sleepId);
+    assert.equal(
+      overlapRelation?.representativeSleepId,
+      representative?.sleepId
+    );
     assert.equal(overlapRelation?.role, "overlapping_record");
     assert.equal(overlapRelation?.overlapRatio, 1);
     assert.equal(napRelation?.role, "additional_session");
@@ -20890,10 +20892,7 @@ test("batch entity routes require auth and return validation failures with machi
       code: string;
       error: string;
     };
-    assert.equal(
-      unauthenticatedBody.code,
-      "gateway_authentication_required"
-    );
+    assert.equal(unauthenticatedBody.code, "gateway_authentication_required");
     assert.match(unauthenticatedBody.error, /valid paired Forge credential/i);
 
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -21403,11 +21402,7 @@ test("settings and local agent token management persist through the versioned AP
         }
       }
     });
-    assert.equal(
-      updatedViaToken.statusCode,
-      403,
-      updatedViaToken.body
-    );
+    assert.equal(updatedViaToken.statusCode, 403, updatedViaToken.body);
     assert.equal(
       (updatedViaToken.json() as { code: string }).code,
       "gateway_profile_forbidden"
@@ -22606,6 +22601,10 @@ test("settings and local agent token management persist through the versioned AP
     assert.equal(
       onboardingBody.onboarding.verificationPaths.workbenchRunDetail,
       "/api/v1/workbench/flows/:id/runs/:runId"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.workbenchCancelRun,
+      "/api/v1/workbench/flows/:id/runs/:runId/cancel"
     );
     assert.equal(
       onboardingBody.onboarding.verificationPaths.workbenchNodeResult,

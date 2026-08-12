@@ -45,7 +45,8 @@ const EXECUTOR_ROUTES = new Set([
   "POST /api/v1/aiproc/:slug/run",
   "POST /api/v1/workbench/run",
   "POST /api/v1/workbench/flows/:id/run",
-  "POST /api/v1/workbench/flows/:id/chat"
+  "POST /api/v1/workbench/flows/:id/chat",
+  "POST /api/v1/workbench/flows/:id/runs/:runId/cancel"
 ]);
 
 const REVIEWED_VIEWER_SAFE_POST_ROUTES = new Set([
@@ -98,8 +99,7 @@ export function profileAllowsRoute(
 ) {
   if (isCompanionBootstrapRoute(contract)) {
     return (
-      principal.kind === "paired_client" &&
-      isCompanionBootstrapGrant(principal)
+      principal.kind === "paired_client" && isCompanionBootstrapGrant(principal)
     );
   }
   const risk = routeAuthorizationRisk(contract);

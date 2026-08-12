@@ -67,6 +67,11 @@ export type WorkbenchRunSummary = {
   result: { primaryText: string } | null;
   hasResult: boolean;
   error: string | null;
+  deadlineAt: string;
+  cancellationRequestedAt: string | null;
+  cancellationActor: string | null;
+  cancellationSource: AiConnectorRun["cancellationSource"];
+  cancellationReason: string | null;
   flowUpdatedAt: string | null;
   createdAt: string;
   completedAt: string | null;
@@ -173,6 +178,11 @@ export function buildWorkbenchRunSummary(input: {
   outputPreview: string | null;
   hasResult: boolean;
   error: string | null;
+  deadlineAt: string;
+  cancellationRequestedAt: string | null;
+  cancellationActor: string | null;
+  cancellationSource: AiConnectorRun["cancellationSource"];
+  cancellationReason: string | null;
   flowUpdatedAt: string | null;
   createdAt: string;
   completedAt: string | null;
@@ -200,6 +210,11 @@ export function buildWorkbenchRunSummary(input: {
     result: input.hasResult ? { primaryText: boundedPreview } : null,
     hasResult: input.hasResult,
     error: boundedError || null,
+    deadlineAt: input.deadlineAt,
+    cancellationRequestedAt: input.cancellationRequestedAt,
+    cancellationActor: input.cancellationActor,
+    cancellationSource: input.cancellationSource,
+    cancellationReason: input.cancellationReason,
     flowUpdatedAt: input.flowUpdatedAt,
     createdAt: input.createdAt,
     completedAt: input.completedAt

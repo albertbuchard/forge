@@ -9,6 +9,24 @@ import { closeDatabase, getDatabase } from "./db.js";
 import { recoverInterruptedAiConnectorRuns } from "./repositories/ai-connectors.js";
 import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
 
+async function waitForRunningRun(flowId: string, timeoutMs = 3_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const row = getDatabase()
+      .prepare(
+        `SELECT id, deadline_at
+         FROM ai_connector_runs
+         WHERE connector_id = ? AND status = 'running'
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1`
+      )
+      .get(flowId) as { id: string; deadline_at: string | null } | undefined;
+    if (row) return row;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Timed out waiting for active Workbench run for ${flowId}.`);
+}
+
 test("FLOW-04 preserves one durable run receipt across replay, contention, restart, and retry", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-flow-04-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
@@ -291,6 +309,294 @@ test("FLOW-04 preserves one durable run receipt across replay, contention, resta
       /model connection/i
     );
   } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("FLOW-04 cancellation and whole-flow deadlines stop active work and preserve completed-node evidence", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-flow-04-run-control-")
+  );
+  const previousMockEnv = process.env.FORGE_ENABLE_DEV_MOCKS;
+  process.env.FORGE_ENABLE_DEV_MOCKS = "1";
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const headers = {
+      cookie: issueTestOperatorSessionCookie(app),
+      host: "127.0.0.1:4317"
+    };
+    const connection = await app.inject({
+      method: "POST",
+      url: "/api/v1/settings/models/connections",
+      headers,
+      payload: {
+        label: "FLOW-04 cancellable mock",
+        provider: "mock",
+        model: "mock-ignore-abort"
+      }
+    });
+    assert.equal(connection.statusCode, 201, connection.body);
+    const connectionId = connection.json().connection.id as string;
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/workbench/flows",
+      headers,
+      payload: {
+        title: "Cancellable execution contract",
+        description:
+          "A completed branch precedes one cancellable model branch.",
+        kind: "functor",
+        graph: {
+          nodes: [
+            {
+              id: "good_value",
+              type: "value",
+              position: { x: 60, y: 80 },
+              data: {
+                label: "Preserved value",
+                description: "Completes before the slow branch.",
+                valueType: "string",
+                valueLiteral: "preserved"
+              }
+            },
+            {
+              id: "good_output",
+              type: "output",
+              position: { x: 360, y: 80 },
+              data: {
+                label: "Preserved output",
+                description: "Publishes completed evidence.",
+                outputKey: "preserved"
+              }
+            },
+            {
+              id: "slow_model",
+              type: "functor",
+              position: { x: 60, y: 260 },
+              data: {
+                label: "Cancellable model",
+                description:
+                  "Waits for cancellation or the whole-flow deadline.",
+                prompt: "Return after the bounded mock delay.",
+                enabledToolKeys: [],
+                outputs: [{ key: "answer", label: "Answer", kind: "text" }],
+                modelConfig: {
+                  connectionId,
+                  provider: "mock",
+                  baseUrl: "mock://workbench",
+                  model: "mock-ignore-abort",
+                  thinking: null,
+                  verbosity: null
+                }
+              }
+            },
+            {
+              id: "slow_output",
+              type: "output",
+              position: { x: 360, y: 260 },
+              data: {
+                label: "Slow output",
+                description: "Would publish only if the slow model finishes.",
+                outputKey: "slow"
+              }
+            }
+          ],
+          edges: [
+            {
+              id: "good_edge",
+              source: "good_value",
+              target: "good_output",
+              sourceHandle: "value",
+              targetHandle: "result",
+              label: null
+            },
+            {
+              id: "slow_edge",
+              source: "slow_model",
+              target: "slow_output",
+              sourceHandle: "answer",
+              targetHandle: "result",
+              label: null
+            }
+          ]
+        }
+      }
+    });
+    assert.equal(created.statusCode, 201, created.body);
+    const flowId = created.json().flow.id as string;
+
+    const pendingCancellation = app.inject({
+      method: "POST",
+      url: `/api/v1/workbench/flows/${flowId}/run`,
+      headers,
+      payload: {
+        timeoutMs: 60_000,
+        idempotencyKey: "flow-04-cancelled",
+        debug: true
+      }
+    });
+    const activeCancellation = await waitForRunningRun(flowId);
+    assert.ok(
+      Date.parse(activeCancellation.deadline_at ?? "") > Date.now() + 50_000
+    );
+
+    const unauthenticatedCancel = await app.inject({
+      method: "POST",
+      url: `/api/v1/workbench/flows/${flowId}/runs/${activeCancellation.id}/cancel`,
+      payload: { reason: "Must not be accepted" }
+    });
+    assert.equal(
+      unauthenticatedCancel.statusCode,
+      401,
+      unauthenticatedCancel.body
+    );
+
+    const cancelledAt = Date.now();
+    const cancelled = await app.inject({
+      method: "POST",
+      url: `/api/v1/workbench/flows/${flowId}/runs/${activeCancellation.id}/cancel`,
+      headers,
+      payload: { reason: "Operator stopped the slow branch." }
+    });
+    assert.equal(cancelled.statusCode, 200, cancelled.body);
+    assert.equal(cancelled.headers["idempotency-replayed"], "false");
+    assert.equal(cancelled.json().run.status, "cancelled");
+    assert.equal(
+      cancelled.json().run.cancellationReason,
+      "Operator stopped the slow branch."
+    );
+    assert.equal(cancelled.json().run.cancellationSource, "ui");
+    assert.match(cancelled.json().run.cancellationActor ?? "", /.+/);
+
+    const stoppedRequest = await pendingCancellation;
+    assert.equal(stoppedRequest.statusCode, 409, stoppedRequest.body);
+    assert.equal(stoppedRequest.json().code, "workbench_run_cancelled");
+    assert.ok(Date.now() - cancelledAt < 3_000);
+
+    const cancelReplay = await app.inject({
+      method: "POST",
+      url: `/api/v1/workbench/flows/${flowId}/runs/${activeCancellation.id}/cancel`,
+      headers,
+      payload: { reason: "A changed reason cannot replace the receipt." }
+    });
+    assert.equal(cancelReplay.statusCode, 200, cancelReplay.body);
+    assert.equal(cancelReplay.headers["idempotency-replayed"], "true");
+    assert.equal(
+      cancelReplay.json().run.cancellationReason,
+      "Operator stopped the slow branch."
+    );
+
+    const cancelledNodes = await app.inject({
+      method: "GET",
+      url: `/api/v1/workbench/flows/${flowId}/runs/${activeCancellation.id}/nodes`,
+      headers
+    });
+    assert.equal(cancelledNodes.statusCode, 200, cancelledNodes.body);
+    assert.deepEqual(
+      cancelledNodes
+        .json()
+        .nodeResults.map((node: { nodeId: string }) => node.nodeId),
+      ["good_value", "good_output"]
+    );
+
+    const timedOutStartedAt = Date.now();
+    const timedOut = await app.inject({
+      method: "POST",
+      url: `/api/v1/workbench/flows/${flowId}/run`,
+      headers,
+      payload: {
+        timeoutMs: 1_000,
+        idempotencyKey: "flow-04-timeout",
+        debug: true
+      }
+    });
+    assert.equal(timedOut.statusCode, 408, timedOut.body);
+    assert.equal(timedOut.json().code, "workbench_run_timed_out");
+    assert.ok(Date.now() - timedOutStartedAt < 4_000);
+    const timedOutRunId = timedOut.json().runId as string;
+    const timedOutDetail = await app.inject({
+      method: "GET",
+      url: `/api/v1/workbench/flows/${flowId}/runs/${timedOutRunId}`,
+      headers
+    });
+    assert.equal(timedOutDetail.statusCode, 200, timedOutDetail.body);
+    assert.equal(timedOutDetail.json().run.status, "timed_out");
+    assert.equal(timedOutDetail.json().run.cancellationRequestedAt, null);
+    assert.equal(
+      Date.parse(timedOutDetail.json().run.deadlineAt),
+      Date.parse(timedOutDetail.json().run.createdAt) + 1_000
+    );
+    const timedOutNodes = await app.inject({
+      method: "GET",
+      url: `/api/v1/workbench/flows/${flowId}/runs/${timedOutRunId}/nodes`,
+      headers
+    });
+    assert.equal(timedOutNodes.statusCode, 200, timedOutNodes.body);
+    assert.deepEqual(
+      timedOutNodes
+        .json()
+        .nodeResults.map((node: { nodeId: string }) => node.nodeId),
+      ["good_value", "good_output"]
+    );
+
+    const timeoutReplay = await app.inject({
+      method: "POST",
+      url: `/api/v1/workbench/flows/${flowId}/run`,
+      headers,
+      payload: {
+        timeoutMs: 1_000,
+        idempotencyKey: "flow-04-timeout",
+        debug: true
+      }
+    });
+    assert.equal(timeoutReplay.statusCode, 408, timeoutReplay.body);
+    assert.equal(timeoutReplay.json().replayed, true);
+    assert.equal(timeoutReplay.json().runId, timedOutRunId);
+
+    const changedTimeoutReplay = await app.inject({
+      method: "POST",
+      url: `/api/v1/workbench/flows/${flowId}/run`,
+      headers,
+      payload: {
+        timeoutMs: 2_000,
+        idempotencyKey: "flow-04-timeout",
+        debug: true
+      }
+    });
+    assert.equal(
+      changedTimeoutReplay.statusCode,
+      409,
+      changedTimeoutReplay.body
+    );
+    assert.equal(
+      changedTimeoutReplay.json().code,
+      "workbench_run_idempotency_conflict"
+    );
+
+    const changedRetryTimeout = await app.inject({
+      method: "POST",
+      url: `/api/v1/workbench/flows/${flowId}/run`,
+      headers,
+      payload: {
+        retryOfRunId: timedOutRunId,
+        timeoutMs: 2_000,
+        idempotencyKey: "flow-04-timeout-retry"
+      }
+    });
+    assert.equal(changedRetryTimeout.statusCode, 409, changedRetryTimeout.body);
+    assert.equal(
+      changedRetryTimeout.json().code,
+      "workbench_retry_input_conflict"
+    );
+  } finally {
+    if (previousMockEnv === undefined) {
+      delete process.env.FORGE_ENABLE_DEV_MOCKS;
+    } else {
+      process.env.FORGE_ENABLE_DEV_MOCKS = previousMockEnv;
+    }
     await app.close();
     closeDatabase();
     await rm(rootDir, { recursive: true, force: true });

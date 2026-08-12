@@ -16,7 +16,9 @@ function emit(
 }
 
 function extractSection(prompt: string, label: string) {
-  const match = prompt.match(new RegExp(`${label}:\\n([\\s\\S]*?)(?:\\n\\n[A-Z][^\\n]*:|$)`));
+  const match = prompt.match(
+    new RegExp(`${label}:\\n([\\s\\S]*?)(?:\\n\\n[A-Z][^\\n]*:|$)`)
+  );
   return match?.[1]?.trim() ?? "";
 }
 
@@ -49,6 +51,25 @@ function buildEchoJson(prompt: string) {
       : `Mock consumed user input "${userInput || "none"}".`,
     linkedInputs: linkedInputs || null
   });
+}
+
+async function waitForMockDelay(signal: AbortSignal | undefined) {
+  signal?.throwIfAborted();
+  await new Promise<void>((resolve, reject) => {
+    const finish = () => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    };
+    const timeout = setTimeout(finish, 10_000);
+    const abort = () => {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+      reject(signal?.reason ?? new DOMException("Aborted", "AbortError"));
+    };
+    signal?.addEventListener("abort", abort, { once: true });
+    timeout.unref?.();
+  });
+  signal?.throwIfAborted();
 }
 
 export class MockWorkbenchProvider implements WikiLlmProvider {
@@ -93,8 +114,10 @@ export class MockWorkbenchProvider implements WikiLlmProvider {
     profile: WikiLlmProfileLike;
     systemPrompt?: string;
     prompt: string;
+    signal?: AbortSignal;
     logger?: WikiLlmDiagnosticLogger;
   }): Promise<{ outputText: string }> {
+    input.signal?.throwIfAborted();
     const fixture = resolveFixture(input.profile.model);
     emit(input.logger, "debug", "Running mock workbench prompt.", {
       fixture
@@ -102,6 +125,13 @@ export class MockWorkbenchProvider implements WikiLlmProvider {
 
     if (fixture === "mock-fail") {
       throw new Error("Mock provider forced a failure for this run.");
+    }
+    if (fixture === "mock-slow") {
+      await waitForMockDelay(input.signal);
+      return { outputText: buildEchoJson(input.prompt) };
+    }
+    if (fixture === "mock-ignore-abort") {
+      return await new Promise<never>(() => undefined);
     }
     if (fixture === "mock-malformed") {
       return { outputText: "{mock:" };

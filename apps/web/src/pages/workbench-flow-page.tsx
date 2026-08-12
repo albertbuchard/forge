@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/page-state";
 import {
   useChatWorkbenchFlowMutation,
+  useCancelWorkbenchFlowRunMutation,
   useDeleteWorkbenchFlowMutation,
   useGetSettingsQuery,
   useGetWorkbenchFlowQuery,
@@ -29,7 +30,9 @@ export function WorkbenchFlowPage() {
   const boxes = useWorkbenchNodeCatalog();
 
   const flowQuery = useGetWorkbenchFlowQuery(flowId, {
-    skip: flowId.length === 0
+    skip: flowId.length === 0,
+    pollingInterval: 2_000,
+    skipPollingIfUnfocused: true
   });
   const versionsQuery = useListWorkbenchFlowVersionsQuery(
     { flowId, limit: 20 },
@@ -41,6 +44,7 @@ export function WorkbenchFlowPage() {
   const [restoreFlow] = useRestoreWorkbenchFlowVersionMutation();
   const [runFlow] = useRunWorkbenchFlowMutation();
   const [chatFlow] = useChatWorkbenchFlowMutation();
+  const [cancelRun] = useCancelWorkbenchFlowRunMutation();
   const revisionRef = useRef({ flowId: "", revision: 0 });
 
   useEffect(() => {
@@ -160,6 +164,9 @@ export function WorkbenchFlowPage() {
             flowId,
             input
           }).unwrap();
+        }}
+        onCancelRun={async (runId, reason) => {
+          await cancelRun({ flowId, runId, reason }).unwrap();
         }}
       />
       <WorkbenchFlowVersionHistory

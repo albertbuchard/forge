@@ -14,6 +14,7 @@ import type {
   ForgeBoxCatalogEntry
 } from "@/lib/types";
 import { WorkbenchFlowEditor } from "@/components/workbench/workbench-flow-editor";
+import { WorkbenchRunFlowDialog } from "@/components/workbench/workbench-dialogs";
 
 const mockRunNodesQuery = vi.fn();
 const mockRunNodeQuery = vi.fn();
@@ -272,10 +273,13 @@ function renderEditor(input?: {
   runs?: AiConnectorRunSummary[];
   onRun?: ReturnType<typeof vi.fn>;
   onChat?: ReturnType<typeof vi.fn>;
+  onCancelRun?: ReturnType<typeof vi.fn>;
   onDelete?: ReturnType<typeof vi.fn>;
 }) {
   const onRun = input?.onRun ?? vi.fn().mockResolvedValue(undefined);
   const onChat = input?.onChat ?? vi.fn().mockResolvedValue(undefined);
+  const onCancelRun =
+    input?.onCancelRun ?? vi.fn().mockResolvedValue(undefined);
   const onDelete = input?.onDelete ?? vi.fn().mockResolvedValue(undefined);
   render(
     <MemoryRouter>
@@ -288,10 +292,37 @@ function renderEditor(input?: {
         onDelete={onDelete}
         onRun={onRun}
         onChat={onChat}
+        onCancelRun={onCancelRun}
       />
     </MemoryRouter>
   );
-  return { onRun, onChat, onDelete };
+  return { onRun, onChat, onCancelRun, onDelete };
+}
+
+function runSummary(
+  patch: Partial<AiConnectorRunSummary> = {}
+): AiConnectorRunSummary {
+  return {
+    id: "run_active",
+    connectorId: "flow_test",
+    mode: "run",
+    status: "running",
+    conversationId: null,
+    retryOfRunId: null,
+    outputPreview: "",
+    result: null,
+    hasResult: false,
+    error: null,
+    deadlineAt: "2026-04-10T10:10:00.000Z",
+    cancellationRequestedAt: null,
+    cancellationActor: null,
+    cancellationSource: null,
+    cancellationReason: null,
+    flowUpdatedAt: BASE_FLOW.updatedAt,
+    createdAt: "2026-04-10T10:05:00.000Z",
+    completedAt: null,
+    ...patch
+  };
 }
 
 describe("WorkbenchFlowEditor", () => {
@@ -435,6 +466,11 @@ describe("WorkbenchFlowEditor", () => {
         nodeResults: []
       },
       error: null,
+      deadlineAt: "2026-04-10T10:10:00.000Z",
+      cancellationRequestedAt: null,
+      cancellationActor: null,
+      cancellationSource: null,
+      cancellationReason: null,
       createdAt: "2026-04-10T10:05:00.000Z",
       completedAt: "2026-04-10T10:05:01.000Z"
     };
@@ -465,6 +501,11 @@ describe("WorkbenchFlowEditor", () => {
           result: { primaryText: "Project summary" },
           hasResult: true,
           error: null,
+          deadlineAt: "2026-04-10T10:10:00.000Z",
+          cancellationRequestedAt: null,
+          cancellationActor: null,
+          cancellationSource: null,
+          cancellationReason: null,
           flowUpdatedAt: BASE_FLOW.updatedAt,
           createdAt: "2026-04-10T10:05:00.000Z",
           completedAt: "2026-04-10T10:05:01.000Z"
@@ -507,6 +548,136 @@ describe("WorkbenchFlowEditor", () => {
 
     resolveRun?.();
     await waitFor(() => expect(pendingButton).not.toBeInTheDocument());
+  });
+
+  it("sends the selected whole-flow deadline with normal and chat execution", async () => {
+    const { onRun, onChat } = renderEditor();
+
+    fireEvent.click(screen.getByRole("button", { name: "Run flow" }));
+    fireEvent.change(await screen.findByPlaceholderText("Topic"), {
+      target: { value: "deadline contract" }
+    });
+    fireEvent.change(screen.getByLabelText(/^Whole-flow time limit/), {
+      target: { value: "60000" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Run" }));
+    await waitFor(() =>
+      expect(onRun).toHaveBeenCalledWith(
+        expect.objectContaining({ timeoutMs: 60_000 })
+      )
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Run flow" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Chat" }));
+    await waitFor(() =>
+      expect(onChat).toHaveBeenCalledWith(
+        expect.objectContaining({ timeoutMs: 60_000 })
+      )
+    );
+  });
+
+  it("lets the user stop an active run from the editor", async () => {
+    const onCancelRun = vi.fn().mockResolvedValue(undefined);
+    const active = runSummary();
+    renderEditor({ runs: [active], onCancelRun });
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop run" }));
+    await waitFor(() =>
+      expect(onCancelRun).toHaveBeenCalledWith(
+        "run_active",
+        "Stopped from the Workbench flow editor."
+      )
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Latest run · running" })
+    );
+    expect(await screen.findByText("Run inspector")).toBeInTheDocument();
+  });
+
+  it("keeps an active-run stop control inside an already open run dialog", async () => {
+    const onCancelRun = vi.fn();
+    render(
+      <WorkbenchRunFlowDialog
+        open
+        onOpenChange={vi.fn()}
+        runError={null}
+        graphIssues={[]}
+        hasAiNodes={false}
+        modelConnectionCount={0}
+        publicInputs={[]}
+        runInputs={{}}
+        onRunInputChange={vi.fn()}
+        shouldShowLegacyUserInput={false}
+        userInput=""
+        onUserInputChange={vi.fn()}
+        debugEnabled
+        onDebugEnabledChange={vi.fn()}
+        timeoutMs={300_000}
+        onTimeoutMsChange={vi.fn()}
+        activeRun={runSummary()}
+        cancelPending={false}
+        cancelError={null}
+        onCancelRun={onCancelRun}
+        onRun={vi.fn()}
+        onChat={vi.fn()}
+        pending
+        runs={[runSummary()]}
+      />
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Stop active run" })
+    );
+    expect(onCancelRun).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Chat" })).toBeDisabled();
+  });
+
+  it("shows cancelled attribution and offers a stored-input retry", async () => {
+    const cancelled = runSummary({
+      status: "cancelled",
+      error: "This Workbench run was cancelled.",
+      cancellationRequestedAt: "2026-04-10T10:06:00.000Z",
+      cancellationActor: "Workbench operator",
+      cancellationSource: "ui",
+      cancellationReason: "Stopped after reviewing partial output.",
+      completedAt: "2026-04-10T10:06:00.000Z"
+    });
+    mockRunQuery.mockReturnValue({
+      data: {
+        run: {
+          ...cancelled,
+          userInput: "stored input",
+          inputs: { topic: "stored topic" },
+          context: { source: "test" },
+          flowSnapshot: null,
+          result: null
+        },
+        readMetadata: null
+      },
+      isFetching: false
+    });
+    const { onRun } = renderEditor({ runs: [cancelled] });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Latest run · cancelled" })
+    );
+    expect(
+      await screen.findByText(/Cancelled by Workbench operator/)
+    ).toHaveTextContent("Stopped after reviewing partial output.");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry with same input" })
+    );
+    await waitFor(() =>
+      expect(onRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          retryOfRunId: "run_active",
+          userInput: "stored input",
+          inputs: { topic: "stored topic" },
+          context: { source: "test" }
+        })
+      )
+    );
   });
 
   it("requires the exact title before deleting a saved flow", async () => {

@@ -2270,7 +2270,7 @@ export function buildOpenApiDocument() {
       lifecycleActor: nullable({ type: "string" }),
       lifecycleSource: nullable({
         type: "string",
-        enum: ["ui", "agent", "system"]
+        enum: ["ui", "openclaw", "agent", "system"]
       }),
       createdAt: { type: "string", format: "date-time" },
       updatedAt: { type: "string", format: "date-time" }
@@ -13248,6 +13248,11 @@ export function buildOpenApiDocument() {
       "flowSnapshot",
       "result",
       "error",
+      "deadlineAt",
+      "cancellationRequestedAt",
+      "cancellationActor",
+      "cancellationSource",
+      "cancellationReason",
       "createdAt",
       "completedAt"
     ],
@@ -13255,7 +13260,10 @@ export function buildOpenApiDocument() {
       id: { type: "string", minLength: 1 },
       connectorId: { type: "string", minLength: 1 },
       mode: { type: "string", enum: ["run", "chat"] },
-      status: { type: "string", enum: ["running", "completed", "failed"] },
+      status: {
+        type: "string",
+        enum: ["running", "completed", "failed", "cancelled", "timed_out"]
+      },
       userInput: { type: "string" },
       inputs: { type: "object", additionalProperties: true },
       context: { type: "object", additionalProperties: true },
@@ -13284,6 +13292,17 @@ export function buildOpenApiDocument() {
       }),
       result: nullable({ type: "object", additionalProperties: true }),
       error: nullable({ type: "string" }),
+      deadlineAt: { type: "string", format: "date-time" },
+      cancellationRequestedAt: nullable({
+        type: "string",
+        format: "date-time"
+      }),
+      cancellationActor: nullable({ type: "string" }),
+      cancellationSource: nullable({
+        type: "string",
+        enum: ["ui", "openclaw", "agent", "system"]
+      }),
+      cancellationReason: nullable({ type: "string", maxLength: 500 }),
       createdAt: { type: "string", format: "date-time" },
       completedAt: nullable({ type: "string", format: "date-time" })
     }
@@ -13306,6 +13325,14 @@ export function buildOpenApiDocument() {
         description:
           "Stable browser or client key. Exact completed replays return the original run; changed-payload reuse is rejected."
       }),
+      timeoutMs: {
+        type: "integer",
+        minimum: 1000,
+        maximum: 900000,
+        default: 300000,
+        description:
+          "Whole-flow deadline in milliseconds. Forge aborts supported model, network, and machine-command work at this deadline, records timed_out, and preserves completed-node evidence."
+      },
       debug: { type: "boolean", default: false }
     }
   };
@@ -13333,6 +13360,11 @@ export function buildOpenApiDocument() {
       "result",
       "hasResult",
       "error",
+      "deadlineAt",
+      "cancellationRequestedAt",
+      "cancellationActor",
+      "cancellationSource",
+      "cancellationReason",
       "flowUpdatedAt",
       "createdAt",
       "completedAt"
@@ -13341,7 +13373,10 @@ export function buildOpenApiDocument() {
       id: { type: "string", minLength: 1 },
       connectorId: { type: "string", minLength: 1 },
       mode: { type: "string", enum: ["run", "chat"] },
-      status: { type: "string", enum: ["running", "completed", "failed"] },
+      status: {
+        type: "string",
+        enum: ["running", "completed", "failed", "cancelled", "timed_out"]
+      },
       conversationId: nullable({ type: "string" }),
       retryOfRunId: nullable({ type: "string" }),
       outputPreview: { type: "string", maxLength: 332 },
@@ -13355,6 +13390,17 @@ export function buildOpenApiDocument() {
       }),
       hasResult: { type: "boolean" },
       error: nullable({ type: "string", maxLength: 512 }),
+      deadlineAt: { type: "string", format: "date-time" },
+      cancellationRequestedAt: nullable({
+        type: "string",
+        format: "date-time"
+      }),
+      cancellationActor: nullable({ type: "string" }),
+      cancellationSource: nullable({
+        type: "string",
+        enum: ["ui", "openclaw", "agent", "system"]
+      }),
+      cancellationReason: nullable({ type: "string", maxLength: 500 }),
       flowUpdatedAt: nullable({ type: "string", format: "date-time" }),
       createdAt: { type: "string", format: "date-time" },
       completedAt: nullable({ type: "string", format: "date-time" })
@@ -13537,7 +13583,7 @@ export function buildOpenApiDocument() {
       publishedOutputCount: { type: "integer", minimum: 0 },
       lastRunStatus: nullable({
         type: "string",
-        enum: ["running", "completed", "failed"]
+        enum: ["running", "completed", "failed", "cancelled", "timed_out"]
       }),
       lastRunAt: nullable({ type: "string", format: "date-time" }),
       createdAt: { type: "string", format: "date-time" },
@@ -17788,7 +17834,7 @@ export function buildOpenApiDocument() {
         post: {
           summary: "Run one Workbench flow by id",
           description:
-            "Only one run per flow and mode may be active. A stable idempotency key replays the exact completed receipt, while changed input conflicts. Failed runs retain their input and may be retried explicitly without input drift.",
+            "Only one run per flow and mode may be active. A stable idempotency key replays the exact terminal receipt, while changed input conflicts. Failed, cancelled, and timed-out runs retain their input and may be retried explicitly without input drift. timeoutMs defaults to five minutes; a deadline returns 408 and preserves completed-node evidence.",
           requestBody: {
             required: false,
             content: {
@@ -17817,6 +17863,7 @@ export function buildOpenApiDocument() {
               "Workbench flow execution"
             ),
             "404": { $ref: "#/components/responses/Error" },
+            "408": { $ref: "#/components/responses/Error" },
             "409": { $ref: "#/components/responses/Error" },
             "422": { $ref: "#/components/responses/Error" }
           }
@@ -17826,7 +17873,7 @@ export function buildOpenApiDocument() {
         post: {
           summary: "Run one Workbench flow by payload with flowId",
           description:
-            "Uses the same single-flight and durable idempotency contract as the saved-flow run route.",
+            "Uses the same single-flight, deadline, cancellation, completed-node evidence, and durable idempotency contract as the saved-flow run route.",
           requestBody: {
             required: true,
             content: {
@@ -17857,6 +17904,7 @@ export function buildOpenApiDocument() {
               "Workbench flow execution"
             ),
             "404": { $ref: "#/components/responses/Error" },
+            "408": { $ref: "#/components/responses/Error" },
             "409": { $ref: "#/components/responses/Error" },
             "422": { $ref: "#/components/responses/Error" }
           }
@@ -17866,7 +17914,7 @@ export function buildOpenApiDocument() {
         post: {
           summary: "Continue or start one Workbench chat flow",
           description:
-            "Only one chat run per flow may be active. Stable idempotency keys replay exact completed receipts, and failed chat retries reuse stored input.",
+            "Only one chat run per flow may be active. Stable idempotency keys replay exact terminal receipts; failed, cancelled, and timed-out chat retries reuse stored input. timeoutMs enforces the same whole-flow deadline as normal execution.",
           requestBody: {
             required: false,
             content: {
@@ -17884,6 +17932,7 @@ export function buildOpenApiDocument() {
               "Workbench chat response"
             ),
             "404": { $ref: "#/components/responses/Error" },
+            "408": { $ref: "#/components/responses/Error" },
             "409": { $ref: "#/components/responses/Error" },
             "422": { $ref: "#/components/responses/Error" }
           }
@@ -17952,6 +18001,50 @@ export function buildOpenApiDocument() {
               "Workbench run detail"
             ),
             "404": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/workbench/flows/{id}/runs/{runId}/cancel": {
+        post: {
+          summary: "Cancel one active Workbench run",
+          description:
+            "Requires write authority and an exact flow/run pair. The first accepted request atomically stores a cancelled terminal receipt with actor, source, time, and optional reason, then propagates a common cancellation signal through supported model, network, and machine-command execution. Exact repeat cancellation returns the stored receipt with Idempotency-Replayed: true. Completed, failed, or timed-out runs return 409. Completed-node evidence remains readable.",
+          requestBody: jsonRequestBody(
+            {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                reason: {
+                  type: "string",
+                  maxLength: 500,
+                  default: "",
+                  description:
+                    "Optional human-readable reason stored in the terminal receipt."
+                }
+              }
+            },
+            false
+          ),
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["flow", "run", "readMetadata"],
+                properties: {
+                  flow: { type: "object", additionalProperties: true },
+                  run: { $ref: "#/components/schemas/WorkbenchRun" },
+                  readMetadata: nullable({
+                    $ref: "#/components/schemas/WorkbenchReadMetadata"
+                  })
+                }
+              },
+              "Cancelled Workbench run receipt"
+            ),
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" }
           }
         }
       },

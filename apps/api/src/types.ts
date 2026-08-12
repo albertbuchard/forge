@@ -3019,7 +3019,7 @@ export const aiConnectorRunSchema = z.object({
   id: nonEmptyTrimmedString,
   connectorId: nonEmptyTrimmedString,
   mode: z.enum(["run", "chat"]),
-  status: z.enum(["running", "completed", "failed"]),
+  status: z.enum(["running", "completed", "failed", "cancelled", "timed_out"]),
   userInput: z.string(),
   inputs: z.record(z.string(), z.unknown()).default({}),
   context: z.record(z.string(), z.unknown()).default({}),
@@ -3028,6 +3028,11 @@ export const aiConnectorRunSchema = z.object({
   flowSnapshot: aiConnectorFlowSnapshotSchema.nullable().default(null),
   result: aiConnectorRunResultSchema.nullable(),
   error: z.string().nullable(),
+  deadlineAt: z.string().default(""),
+  cancellationRequestedAt: z.string().nullable().default(null),
+  cancellationActor: z.string().nullable().default(null),
+  cancellationSource: activitySourceSchema.nullable().default(null),
+  cancellationReason: z.string().nullable().default(null),
   createdAt: z.string(),
   completedAt: z.string().nullable()
 });
@@ -5703,7 +5708,12 @@ export const runAiConnectorSchema = z.object({
   conversationId: trimmedString.nullable().default(null),
   retryOfRunId: trimmedString.nullable().default(null),
   idempotencyKey: nonEmptyTrimmedString.max(128).nullable().default(null),
+  timeoutMs: z.number().int().min(1_000).max(900_000).optional(),
   debug: z.boolean().default(false)
+});
+
+export const cancelAiConnectorRunSchema = z.object({
+  reason: trimmedString.max(500).default("")
 });
 
 export const createAgentTokenSchema = z.object({

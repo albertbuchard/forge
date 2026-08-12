@@ -10,6 +10,7 @@ import {
   Save,
   Send,
   Sparkles,
+  Square,
   SquareTerminal,
   Trash2,
   Wand2
@@ -352,6 +353,12 @@ export function WorkbenchRunFlowDialog({
   onUserInputChange,
   debugEnabled,
   onDebugEnabledChange,
+  timeoutMs,
+  onTimeoutMsChange,
+  activeRun,
+  cancelPending,
+  cancelError,
+  onCancelRun,
   onRun,
   onChat,
   pending,
@@ -371,6 +378,12 @@ export function WorkbenchRunFlowDialog({
   onUserInputChange: (userInput: string) => void;
   debugEnabled: boolean;
   onDebugEnabledChange: (debugEnabled: boolean) => void;
+  timeoutMs: number;
+  onTimeoutMsChange: (timeoutMs: number) => void;
+  activeRun: AiConnectorRunSummary | null;
+  cancelPending: boolean;
+  cancelError: string | null;
+  onCancelRun: () => void;
   onRun: () => void;
   onChat: () => void;
   pending: boolean;
@@ -387,6 +400,14 @@ export function WorkbenchRunFlowDialog({
         {runError ? (
           <div className="rounded-[20px] border border-[color-mix(in_srgb,var(--danger)_28%,transparent)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm leading-6 text-[var(--danger)]">
             {runError}
+          </div>
+        ) : null}
+        {cancelError ? (
+          <div
+            role="alert"
+            className="rounded-[20px] border border-[color-mix(in_srgb,var(--danger)_28%,transparent)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm leading-6 text-[var(--danger)]"
+          >
+            {cancelError}
           </div>
         ) : null}
         {!runError && graphIssues.length > 0 ? (
@@ -525,21 +546,48 @@ export function WorkbenchRunFlowDialog({
           />
           Return debug trace
         </label>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="primary"
-            pending={pending}
-            pendingLabel="Running"
-            onClick={onRun}
+        <FlowField
+          label="Whole-flow time limit"
+          description="Forge stops the entire run at this deadline and keeps completed-node evidence in the run inspector."
+        >
+          <select
+            value={String(timeoutMs)}
+            onChange={(event) => onTimeoutMsChange(Number(event.target.value))}
+            className={WORKBENCH_FIELD_CLASS}
           >
-            <Play className="size-4" />
-            Run
-          </Button>
+            <option value="60000">1 minute</option>
+            <option value="300000">5 minutes</option>
+            <option value="900000">15 minutes</option>
+          </select>
+        </FlowField>
+        <div className="flex flex-wrap gap-2">
+          {activeRun ? (
+            <Button
+              type="button"
+              variant="primary"
+              pending={cancelPending}
+              pendingLabel="Stopping"
+              onClick={onCancelRun}
+            >
+              <Square className="size-4" />
+              Stop active run
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="primary"
+              pending={pending}
+              pendingLabel="Running"
+              onClick={onRun}
+            >
+              <Play className="size-4" />
+              Run
+            </Button>
+          )}
           <Button
             type="button"
             variant="secondary"
-            disabled={pending}
+            disabled={pending || Boolean(activeRun)}
             onClick={onChat}
           >
             <MessageSquare className="size-4" />
@@ -553,7 +601,9 @@ export function WorkbenchRunFlowDialog({
               className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3"
             >
               <div className="flex items-center justify-between gap-3 text-[12px] text-[var(--ui-ink-faint)]">
-                <span>{run.mode}</span>
+                <span>
+                  {run.mode} · {run.status.replace("_", " ")}
+                </span>
                 <span>{new Date(run.createdAt).toLocaleString()}</span>
               </div>
               <div className="mt-2 text-sm text-[var(--ui-ink-medium)]">

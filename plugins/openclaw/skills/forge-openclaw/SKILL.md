@@ -370,7 +370,9 @@ Concrete route-key examples for internal use:
 - Workbench latest node output:
   `{"routeKey":"latestNodeOutput","pathParams":{"id":"flow_research_digest","nodeId":"node_summary"}}`
 - Workbench run execution:
-  `{"routeKey":"runFlow","pathParams":{"id":"flow_research_digest"},"body":{"input":{"topic":"question flow quality"}}}`
+  `{"routeKey":"runFlow","pathParams":{"id":"flow_research_digest"},"body":{"input":{"topic":"question flow quality"},"timeoutMs":300000}}`
+- Workbench active-run cancellation:
+  `{"routeKey":"cancelRun","pathParams":{"id":"flow_research_digest","runId":"run_123"},"body":{"reason":"The operator stopped this run after the required result was already available."}}`
 - Workbench one-off input execution:
   `{"routeKey":"runByPayload","body":{"flow":{"title":"One-off digest","nodes":[]},"input":{"topic":"question flow quality"}}}`
 - Workbench flow chat follow-up:
@@ -1309,4 +1311,4 @@ Additional first-class surfaces:
 - Movement is a specialized domain surface, not batch CRUD. Use the dedicated movement route family for day, month, all-time, timeline, places, trip detail, selection aggregates, user-defined overlays, and repair actions. The runtime paths live under `/api/v1/movement/*`, and the OpenClaw HTTP mirror exposes the same family under `/forge/v1/movement/*`.
 - Life Events use both paths deliberately. Use shared batch CRUD for normal `life_event` create, update, search, soft delete, restore, and generic `entity_links`. Use `/api/v1/life-events/*` only for chronology reads, one-event reads, calendar sync, calendar-to-Life-Event conversion, ticket artifact import, and travel-status reads. The OpenClaw HTTP mirror exposes the same family under `/forge/v1/life-events/*`.
 - Life Force is a specialized domain surface, not batch CRUD. Use `GET /api/v1/life-force` for the overview, `PATCH /api/v1/life-force/profile` for durable profile changes, `PUT /api/v1/life-force/templates/:weekday` for weekday curves, and `POST /api/v1/life-force/fatigue-signals` for right-now fatigue or recovery signals. The OpenClaw HTTP mirror uses `/forge/v1/life-force/*`.
-- Workbench is a specialized domain surface, not batch CRUD. Use `/api/v1/workbench/*` for flow catalog reads, flow CRUD, execution, run history, published outputs, node results, and latest-node-output reads. The OpenClaw HTTP mirror uses `/forge/v1/workbench/*`.
+- Workbench is a specialized domain surface, not batch CRUD. Use `/api/v1/workbench/*` for flow catalog reads, flow CRUD, execution, explicit cancellation, run history, published outputs, node results, and latest-node-output reads. The OpenClaw HTTP mirror uses `/forge/v1/workbench/*`. Execution and chat accept a whole-flow `timeoutMs` from 1,000 to 900,000 milliseconds, defaulting to 300,000. Use `cancelRun` only for one exact active run. Treat `cancelled` and `timed_out` as immutable terminal receipts, preserve completed-node evidence, and retry only from the stored input contract.

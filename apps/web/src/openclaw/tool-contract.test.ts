@@ -1802,6 +1802,7 @@ describe("openclaw tool contracts", () => {
         "runHistory",
         "runs",
         "runDetail",
+        "cancelRun",
         "runNodes",
         "nodeResult",
         "latestNodeOutput"

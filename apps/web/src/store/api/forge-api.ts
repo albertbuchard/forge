@@ -12,6 +12,7 @@ import type {
 } from "@/lib/types";
 import {
   chatWorkbenchFlow,
+  cancelWorkbenchFlowRun,
   claimTaskRun,
   completeTaskRun,
   createGoal,
@@ -444,6 +445,16 @@ export const forgeApi = createApi({
         { type: "WorkbenchFlow", id: flowId }
       ]
     }),
+    cancelWorkbenchFlowRun: builder.mutation<
+      AsyncResult<typeof cancelWorkbenchFlowRun>,
+      { flowId: string; runId: string; reason?: string }
+    >({
+      queryFn: ({ flowId, runId, reason }) =>
+        resolveResult(() => cancelWorkbenchFlowRun(flowId, runId, reason)),
+      invalidatesTags: (_result, _error, { flowId }) => [
+        { type: "WorkbenchFlow", id: flowId }
+      ]
+    }),
     chatWorkbenchFlow: builder.mutation<
       AsyncResult<typeof chatWorkbenchFlow>,
       {
@@ -489,6 +500,7 @@ export const {
   useListWorkbenchFlowsQuery,
   useHeartbeatTaskRunMutation,
   useChatWorkbenchFlowMutation,
+  useCancelWorkbenchFlowRunMutation,
   useDeleteWorkbenchFlowMutation,
   usePatchGoalMutation,
   usePatchProjectMutation,

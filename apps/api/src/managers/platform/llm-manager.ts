@@ -69,6 +69,7 @@ export interface WikiLlmProvider {
     systemPrompt?: string;
     prompt: string;
     format?: Record<string, unknown>;
+    signal?: AbortSignal;
     logger?: WikiLlmDiagnosticLogger;
   }): Promise<{
     outputText: string;
@@ -230,6 +231,7 @@ export class LlmManager extends AbstractManager {
       systemPrompt?: string;
       prompt: string;
       format?: Record<string, unknown>;
+      signal?: AbortSignal;
     },
     logger?: WikiLlmDiagnosticLogger
   ) {
@@ -250,6 +252,7 @@ export class LlmManager extends AbstractManager {
       systemPrompt: input.systemPrompt,
       prompt: input.prompt,
       format: input.format,
+      signal: input.signal,
       logger
     });
   }

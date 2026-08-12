@@ -15075,6 +15075,7 @@
                 "type": "string",
                 "enum": [
                   "ui",
+                  "openclaw",
                   "agent",
                   "system"
                 ]
@@ -33942,6 +33943,11 @@
           "flowSnapshot",
           "result",
           "error",
+          "deadlineAt",
+          "cancellationRequestedAt",
+          "cancellationActor",
+          "cancellationSource",
+          "cancellationReason",
           "createdAt",
           "completedAt"
         ],
@@ -33966,7 +33972,9 @@
             "enum": [
               "running",
               "completed",
-              "failed"
+              "failed",
+              "cancelled",
+              "timed_out"
             ]
           },
           "userInput": {
@@ -34066,6 +34074,58 @@
               }
             ]
           },
+          "deadlineAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cancellationRequestedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cancellationActor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cancellationSource": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "ui",
+                  "openclaw",
+                  "agent",
+                  "system"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cancellationReason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -34135,6 +34195,13 @@
               }
             ]
           },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 900000,
+            "default": 300000,
+            "description": "Whole-flow deadline in milliseconds. Forge aborts supported model, network, and machine-command work at this deadline, records timed_out, and preserves completed-node evidence."
+          },
           "debug": {
             "type": "boolean",
             "default": false
@@ -34193,6 +34260,13 @@
               }
             ]
           },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 900000,
+            "default": 300000,
+            "description": "Whole-flow deadline in milliseconds. Forge aborts supported model, network, and machine-command work at this deadline, records timed_out, and preserves completed-node evidence."
+          },
           "debug": {
             "type": "boolean",
             "default": false
@@ -34220,6 +34294,11 @@
           "result",
           "hasResult",
           "error",
+          "deadlineAt",
+          "cancellationRequestedAt",
+          "cancellationActor",
+          "cancellationSource",
+          "cancellationReason",
           "flowUpdatedAt",
           "createdAt",
           "completedAt"
@@ -34245,7 +34324,9 @@
             "enum": [
               "running",
               "completed",
-              "failed"
+              "failed",
+              "cancelled",
+              "timed_out"
             ]
           },
           "conversationId": {
@@ -34300,6 +34381,58 @@
               {
                 "type": "string",
                 "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deadlineAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cancellationRequestedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cancellationActor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cancellationSource": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "ui",
+                  "openclaw",
+                  "agent",
+                  "system"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cancellationReason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
               },
               {
                 "type": "null"
@@ -34695,7 +34828,9 @@
                 "enum": [
                   "running",
                   "completed",
-                  "failed"
+                  "failed",
+                  "cancelled",
+                  "timed_out"
                 ]
               },
               {
@@ -58219,7 +58354,7 @@
     "/api/v1/workbench/flows/{id}/run": {
       "post": {
         "summary": "Run one Workbench flow by id",
-        "description": "Only one run per flow and mode may be active. A stable idempotency key replays the exact completed receipt, while changed input conflicts. Failed runs retain their input and may be retried explicitly without input drift.",
+        "description": "Only one run per flow and mode may be active. A stable idempotency key replays the exact terminal receipt, while changed input conflicts. Failed, cancelled, and timed-out runs retain their input and may be retried explicitly without input drift. timeoutMs defaults to five minutes; a deadline returns 408 and preserves completed-node evidence.",
         "requestBody": {
           "required": false,
           "content": {
@@ -58269,6 +58404,9 @@
           "404": {
             "$ref": "#/components/responses/Error"
           },
+          "408": {
+            "$ref": "#/components/responses/Error"
+          },
           "409": {
             "$ref": "#/components/responses/Error"
           },
@@ -58285,7 +58423,7 @@
     "/api/v1/workbench/run": {
       "post": {
         "summary": "Run one Workbench flow by payload with flowId",
-        "description": "Uses the same single-flight and durable idempotency contract as the saved-flow run route.",
+        "description": "Uses the same single-flight, deadline, cancellation, completed-node evidence, and durable idempotency contract as the saved-flow run route.",
         "requestBody": {
           "required": true,
           "content": {
@@ -58335,6 +58473,9 @@
           "404": {
             "$ref": "#/components/responses/Error"
           },
+          "408": {
+            "$ref": "#/components/responses/Error"
+          },
           "409": {
             "$ref": "#/components/responses/Error"
           },
@@ -58351,7 +58492,7 @@
     "/api/v1/workbench/flows/{id}/chat": {
       "post": {
         "summary": "Continue or start one Workbench chat flow",
-        "description": "Only one chat run per flow may be active. Stable idempotency keys replay exact completed receipts, and failed chat retries reuse stored input.",
+        "description": "Only one chat run per flow may be active. Stable idempotency keys replay exact terminal receipts; failed, cancelled, and timed-out chat retries reuse stored input. timeoutMs enforces the same whole-flow deadline as normal execution.",
         "requestBody": {
           "required": false,
           "content": {
@@ -58375,6 +58516,9 @@
             }
           },
           "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "408": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -58495,6 +58639,84 @@
           "Workbench"
         ],
         "operationId": "getworkbench_flows_id_runs_runId"
+      }
+    },
+    "/api/v1/workbench/flows/{id}/runs/{runId}/cancel": {
+      "post": {
+        "summary": "Cancel one active Workbench run",
+        "description": "Requires write authority and an exact flow/run pair. The first accepted request atomically stores a cancelled terminal receipt with actor, source, time, and optional reason, then propagates a common cancellation signal through supported model, network, and machine-command execution. Exact repeat cancellation returns the stored receipt with Idempotency-Replayed: true. Completed, failed, or timed-out runs return 409. Completed-node evidence remains readable.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "default": "",
+                    "description": "Optional human-readable reason stored in the terminal receipt."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cancelled Workbench run receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "flow",
+                    "run",
+                    "readMetadata"
+                  ],
+                  "properties": {
+                    "flow": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "run": {
+                      "$ref": "#/components/schemas/WorkbenchRun"
+                    },
+                    "readMetadata": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/WorkbenchReadMetadata"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Workbench"
+        ],
+        "operationId": "postworkbench_flows_id_runs_runId_cancel"
       }
     },
     "/api/v1/workbench/flows/{id}/runs/{runId}/nodes": {

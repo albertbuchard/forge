@@ -23,6 +23,7 @@ import {
   type AiConnectorPublicInput,
   type AiConnectorRun,
   type AiConnectorRunResult,
+  type ActivitySource,
   type CreateAiConnectorInput,
   type ForgeBoxPortDefinition,
   type RunAiConnectorInput,
@@ -124,13 +125,14 @@ type AiConnectorExecutionServices = {
   llm: TextPromptRunner;
   secrets: SecretsManager;
   machineCapabilities?: MachineCapabilitySession;
+  signal?: AbortSignal;
 };
 
 type AiConnectorRunRow = {
   id: string;
   connector_id: string;
   mode: "run" | "chat";
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "cancelled" | "timed_out";
   user_input: string;
   inputs_json: string;
   context_json: string;
@@ -145,6 +147,11 @@ type AiConnectorRunRow = {
   idempotency_key: string | null;
   request_fingerprint: string | null;
   request_json: string | null;
+  deadline_at: string | null;
+  cancellation_requested_at: string | null;
+  cancellation_actor: string | null;
+  cancellation_source: ActivitySource | null;
+  cancellation_reason: string | null;
 };
 
 type AiConnectorRunSummaryRow = Omit<
@@ -194,6 +201,62 @@ type AiConnectorRunReceipt = {
 
 const INTERRUPTED_WORKBENCH_RUN_ERROR =
   "Forge restarted before this Workbench run completed.";
+const CANCELLED_WORKBENCH_RUN_ERROR = "This Workbench run was cancelled.";
+const TIMED_OUT_WORKBENCH_RUN_ERROR =
+  "This Workbench run reached its whole-flow time limit.";
+
+type WorkbenchRunAbortKind = "cancelled" | "timed_out";
+
+class WorkbenchRunAbortError extends Error {
+  constructor(readonly kind: WorkbenchRunAbortKind) {
+    super(
+      kind === "cancelled"
+        ? CANCELLED_WORKBENCH_RUN_ERROR
+        : TIMED_OUT_WORKBENCH_RUN_ERROR
+    );
+    this.name = "WorkbenchRunAbortError";
+  }
+}
+
+const activeWorkbenchRuns = new Map<string, AbortController>();
+
+function throwIfRunAborted(signal: AbortSignal | undefined) {
+  if (!signal?.aborted) {
+    return;
+  }
+  if (signal.reason instanceof WorkbenchRunAbortError) {
+    throw signal.reason;
+  }
+  throw new WorkbenchRunAbortError("cancelled");
+}
+
+async function raceWorkbenchExecutionWithAbort<T>(
+  execution: Promise<T>,
+  signal: AbortSignal
+) {
+  let abort: (() => void) | undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    abort = () => {
+      try {
+        throwIfRunAborted(signal);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+    signal.addEventListener("abort", abort, { once: true });
+  });
+  try {
+    return await Promise.race([execution, aborted]);
+  } finally {
+    if (abort) {
+      signal.removeEventListener("abort", abort);
+    }
+  }
+}
 
 class AiConnectorExecutionFailure extends Error {
   constructor(
@@ -326,12 +389,14 @@ function assertRetryDoesNotOverrideStoredInput(
         canonicalJson(stored.boxSnapshots)) ||
     (requested.conversationId !== null &&
       requested.conversationId !== stored.conversationId) ||
+    (requested.timeoutMs !== undefined &&
+      requested.timeoutMs !== stored.timeoutMs) ||
     (requested.debug && requested.debug !== stored.debug);
   if (conflicting) {
     throw new HttpError(
       409,
       "workbench_retry_input_conflict",
-      "A Workbench retry must reuse the failed run's stored input. Start a new run to use changed input."
+      "A Workbench retry must reuse the terminal run's stored input and whole-flow timeout. Start a new run to use changed input."
     );
   }
 }
@@ -343,6 +408,7 @@ function buildStoredRunRequest(input: RunAiConnectorInput) {
     context: input.context,
     boxSnapshots: input.boxSnapshots,
     conversationId: input.conversationId,
+    timeoutMs: input.timeoutMs ?? 300_000,
     debug: input.debug
   };
 }
@@ -582,6 +648,11 @@ function mapRun(row: AiConnectorRunRow): AiConnectorRun {
     flowSnapshot: parseJson(row.flow_snapshot_json, null),
     result: parseJson(row.result_json, null),
     error: row.error,
+    deadlineAt: row.deadline_at ?? row.created_at,
+    cancellationRequestedAt: row.cancellation_requested_at,
+    cancellationActor: row.cancellation_actor,
+    cancellationSource: row.cancellation_source,
+    cancellationReason: row.cancellation_reason,
     createdAt: row.created_at,
     completedAt: row.completed_at
   });
@@ -598,6 +669,11 @@ function buildWorkbenchRunSummaryFromRun(run: AiConnectorRun) {
     outputPreview: run.result?.primaryText ?? null,
     hasResult: run.result !== null,
     error: run.error,
+    deadlineAt: run.deadlineAt,
+    cancellationRequestedAt: run.cancellationRequestedAt,
+    cancellationActor: run.cancellationActor,
+    cancellationSource: run.cancellationSource,
+    cancellationReason: run.cancellationReason,
     flowUpdatedAt: run.flowSnapshot?.updatedAt ?? null,
     createdAt: run.createdAt,
     completedAt: run.completedAt
@@ -747,6 +823,11 @@ function buildConnectorLastRunSummary(run: AiConnectorRun | null) {
   ).value;
   return aiConnectorRunSchema.parse({
     ...run,
+    deadlineAt: run.deadlineAt || run.completedAt || run.createdAt,
+    cancellationRequestedAt: run.cancellationRequestedAt ?? null,
+    cancellationActor: run.cancellationActor ?? null,
+    cancellationSource: run.cancellationSource ?? null,
+    cancellationReason: run.cancellationReason ?? null,
     userInput: "",
     inputs: {},
     context: {},
@@ -794,6 +875,8 @@ export function listAiConnectorRunsPage(
     .prepare(
       `SELECT id, connector_id, mode, status, conversation_id,
               retry_of_run_id, flow_updated_at, error, created_at, completed_at,
+              deadline_at, cancellation_requested_at, cancellation_actor,
+              cancellation_source, cancellation_reason,
               CASE WHEN result_json IS NULL THEN 0 ELSE 1 END AS has_result,
               substr(json_extract(result_json, '$.primaryText'), 1, 321) AS output_preview
        FROM ai_connector_runs
@@ -813,6 +896,11 @@ export function listAiConnectorRunsPage(
       outputPreview: row.output_preview,
       hasResult: row.has_result === 1,
       error: row.error,
+      deadlineAt: row.deadline_at ?? row.created_at,
+      cancellationRequestedAt: row.cancellation_requested_at,
+      cancellationActor: row.cancellation_actor,
+      cancellationSource: row.cancellation_source,
+      cancellationReason: row.cancellation_reason,
       flowUpdatedAt: row.flow_updated_at,
       createdAt: row.created_at,
       completedAt: row.completed_at
@@ -845,6 +933,75 @@ function getAiConnectorRunRowById(connectorId: string, runId: string) {
 export function getAiConnectorRunById(connectorId: string, runId: string) {
   const row = getAiConnectorRunRowById(connectorId, runId);
   return row ? mapRun(row) : null;
+}
+
+export function cancelAiConnectorRun(
+  connectorId: string,
+  runId: string,
+  input: {
+    actor: string | null;
+    source: ActivitySource;
+    reason: string;
+  }
+) {
+  const now = new Date().toISOString();
+  const reason = input.reason.trim() || null;
+  const result = runInTransaction(() => {
+    const existing = getAiConnectorRunRowById(connectorId, runId);
+    if (!existing) {
+      return { status: "not_found" } as const;
+    }
+    if (existing.status === "cancelled") {
+      return {
+        status: "cancelled",
+        run: mapRun(existing),
+        replayed: true
+      } as const;
+    }
+    if (existing.status !== "running") {
+      return {
+        status: "terminal_conflict",
+        run: mapRun(existing)
+      } as const;
+    }
+    const update = getDatabase()
+      .prepare(
+        `UPDATE ai_connector_runs
+         SET status = 'cancelled', error = ?, completed_at = ?,
+             cancellation_requested_at = ?, cancellation_actor = ?,
+             cancellation_source = ?, cancellation_reason = ?
+         WHERE id = ? AND connector_id = ? AND status = 'running'`
+      )
+      .run(
+        CANCELLED_WORKBENCH_RUN_ERROR,
+        now,
+        now,
+        input.actor,
+        input.source,
+        reason,
+        runId,
+        connectorId
+      );
+    if (update.changes !== 1) {
+      const competing = getAiConnectorRunRowById(connectorId, runId)!;
+      return competing.status === "cancelled"
+        ? ({
+            status: "cancelled",
+            run: mapRun(competing),
+            replayed: true
+          } as const)
+        : ({ status: "terminal_conflict", run: mapRun(competing) } as const);
+    }
+    const cancelled = mapRun(getAiConnectorRunRowById(connectorId, runId)!);
+    updateConnectorLastRun(connectorId, cancelled);
+    return { status: "cancelled", run: cancelled, replayed: false } as const;
+  });
+  if (result.status === "cancelled") {
+    activeWorkbenchRuns
+      .get(runId)
+      ?.abort(new WorkbenchRunAbortError("cancelled"));
+  }
+  return result;
 }
 
 function getAiConnectorRunRowByIdempotency(input: {
@@ -1194,8 +1351,10 @@ function insertRun(
         id, connector_id, mode, status, user_input, inputs_json, context_json,
         conversation_id, retry_of_run_id, flow_snapshot_json, flow_updated_at,
         result_json, error, created_at, completed_at, idempotency_key,
-        request_fingerprint, request_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        request_fingerprint, request_json, deadline_at,
+        cancellation_requested_at, cancellation_actor, cancellation_source,
+        cancellation_reason
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         connector_id = excluded.connector_id,
         mode = excluded.mode,
@@ -1213,7 +1372,12 @@ function insertRun(
         completed_at = excluded.completed_at,
         idempotency_key = COALESCE(excluded.idempotency_key, ai_connector_runs.idempotency_key),
         request_fingerprint = COALESCE(excluded.request_fingerprint, ai_connector_runs.request_fingerprint),
-        request_json = COALESCE(excluded.request_json, ai_connector_runs.request_json)`
+        request_json = COALESCE(excluded.request_json, ai_connector_runs.request_json),
+        deadline_at = excluded.deadline_at,
+        cancellation_requested_at = excluded.cancellation_requested_at,
+        cancellation_actor = excluded.cancellation_actor,
+        cancellation_source = excluded.cancellation_source,
+        cancellation_reason = excluded.cancellation_reason`
       )
       .run(
         input.id,
@@ -1233,7 +1397,12 @@ function insertRun(
         input.completedAt,
         receipt.idempotencyKey,
         receipt.requestFingerprint,
-        receipt.requestJson
+        receipt.requestJson,
+        input.deadlineAt,
+        input.cancellationRequestedAt,
+        input.cancellationActor,
+        input.cancellationSource,
+        input.cancellationReason
       );
     if (input.result) {
       const insertNodeResult = database.prepare(
@@ -1262,6 +1431,92 @@ function insertRun(
     updateConnectorLastRun(input.connectorId, input);
   });
   return input;
+}
+
+function persistRunNodeResult(
+  runId: string,
+  connectorId: string,
+  nodeResult: AiConnectorRunResult["nodeResults"][number],
+  createdAt: string
+) {
+  getDatabase()
+    .prepare(
+      `INSERT INTO ai_connector_node_results (
+        run_id, connector_id, node_id, node_type, label, result_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(run_id, node_id) DO UPDATE SET
+        connector_id = excluded.connector_id,
+        node_type = excluded.node_type,
+        label = excluded.label,
+        result_json = excluded.result_json,
+        created_at = excluded.created_at`
+    )
+    .run(
+      runId,
+      connectorId,
+      nodeResult.nodeId,
+      nodeResult.nodeType,
+      nodeResult.label,
+      JSON.stringify(nodeResult),
+      createdAt
+    );
+}
+
+function finalizeRun(input: AiConnectorRun) {
+  const database = getDatabase();
+  return runInTransaction(() => {
+    const update = database
+      .prepare(
+        `UPDATE ai_connector_runs
+         SET status = ?, conversation_id = ?, result_json = ?, error = ?,
+             completed_at = ?, cancellation_requested_at = ?,
+             cancellation_actor = ?, cancellation_source = ?,
+             cancellation_reason = ?
+         WHERE id = ? AND connector_id = ? AND status = 'running'`
+      )
+      .run(
+        input.status,
+        input.conversationId,
+        input.result ? JSON.stringify(input.result) : null,
+        input.error,
+        input.completedAt,
+        input.cancellationRequestedAt,
+        input.cancellationActor,
+        input.cancellationSource,
+        input.cancellationReason,
+        input.id,
+        input.connectorId
+      );
+    if (update.changes !== 1) {
+      return false;
+    }
+    if (input.result) {
+      const insertNodeResult = database.prepare(
+        `INSERT INTO ai_connector_node_results (
+          run_id, connector_id, node_id, node_type, label, result_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(run_id, node_id) DO UPDATE SET
+          connector_id = excluded.connector_id,
+          node_type = excluded.node_type,
+          label = excluded.label,
+          result_json = excluded.result_json,
+          created_at = excluded.created_at`
+      );
+      for (const nodeResult of input.result.nodeResults) {
+        insertNodeResult.run(
+          input.id,
+          input.connectorId,
+          nodeResult.nodeId,
+          nodeResult.nodeType,
+          nodeResult.label,
+          JSON.stringify(nodeResult),
+          input.completedAt ?? input.createdAt
+        );
+      }
+    }
+    updateConnectorLastRun(input.connectorId, input);
+    return true;
+  });
 }
 
 function tryParseStructuredAgentResponse(value: string) {
@@ -1674,8 +1929,10 @@ function normalizeConnectorGraph(graph: AiConnector["graph"]) {
 async function executeMachineTool(
   tool: "machine_read_file" | "machine_write_file" | "machine_exec",
   args: Record<string, unknown>,
-  capabilities: MachineCapabilitySession | undefined
+  capabilities: MachineCapabilitySession | undefined,
+  signal?: AbortSignal
 ) {
+  throwIfRunAborted(signal);
   if (!capabilities) {
     throw new Error(
       "Machine capabilities require a verified Forge capability session."
@@ -1687,6 +1944,7 @@ async function executeMachineTool(
       throw new Error("machine_read_file requires a string path.");
     }
     const content = await capabilities.readTextFile(targetPath);
+    throwIfRunAborted(signal);
     return { path: targetPath, content };
   }
   if (tool === "machine_write_file") {
@@ -1694,7 +1952,9 @@ async function executeMachineTool(
     if (!targetPath || typeof args.content !== "string") {
       throw new Error("machine_write_file requires { path, content }.");
     }
-    return capabilities.writeTextFile(targetPath, args.content);
+    const receipt = await capabilities.writeTextFile(targetPath, args.content);
+    throwIfRunAborted(signal);
+    return receipt;
   }
   if (typeof args.command !== "string" || args.command.trim().length === 0) {
     throw new Error("machine_exec requires a command string.");
@@ -1705,8 +1965,10 @@ async function executeMachineTool(
     command: args.command,
     cwd,
     maximumRuntimeMilliseconds: 15_000,
-    maximumOutputBytes: 256_000
+    maximumOutputBytes: 256_000,
+    signal
   });
+  throwIfRunAborted(signal);
   return {
     cwd,
     stdout: result.stdout.trim(),
@@ -1784,12 +2046,14 @@ function getConversationBasePrompt(input: {
 
 async function createOpenAiConversation(
   profile: WikiLlmProfileLike,
-  apiKey: string
+  apiKey: string,
+  signal?: AbortSignal
 ) {
   const response = await fetch(buildConversationsUrl(profile), {
     method: "POST",
     headers: buildRequestHeaders(profile, apiKey),
-    body: JSON.stringify({})
+    body: JSON.stringify({}),
+    signal
   });
   if (!response.ok) {
     const message = await response.text();
@@ -1813,10 +2077,11 @@ async function runOpenAiConversationPrompt(input: {
   systemPrompt?: string;
   prompt: string;
   conversationId: string | null;
+  signal?: AbortSignal;
 }) {
   const conversationId =
     input.conversationId ??
-    (await createOpenAiConversation(input.profile, input.apiKey));
+    (await createOpenAiConversation(input.profile, input.apiKey, input.signal));
   const response = await fetch(buildResponsesUrl(input.profile), {
     method: "POST",
     headers: buildRequestHeaders(input.profile, input.apiKey),
@@ -1848,7 +2113,8 @@ async function runOpenAiConversationPrompt(input: {
           ? { verbosity: input.profile.metadata.verbosity }
           : undefined,
       ...(isCodexProfile(input.profile) ? {} : { max_output_tokens: 1200 })
-    })
+    }),
+    signal: input.signal
   });
   if (!response.ok) {
     const message = await response.text();
@@ -1930,6 +2196,7 @@ async function runModelNode(input: {
   services: AiConnectorExecutionServices;
   conversation: AiConnectorConversation | null;
 }) {
+  throwIfRunAborted(input.services.signal);
   const { profile, apiKey } = resolveConnectorModelProfile(
     input.node,
     input.services.secrets
@@ -1945,6 +2212,7 @@ async function runModelNode(input: {
   let conversationId = input.conversation?.externalConversationId ?? null;
 
   for (let step = 0; step < MAX_TOOL_STEPS; step += 1) {
+    throwIfRunAborted(input.services.signal);
     const systemPrompt = [
       input.node.data.systemPrompt?.trim() || "",
       activeTools.length > 0
@@ -1985,7 +2253,8 @@ async function runModelNode(input: {
         apiKey,
         systemPrompt,
         prompt,
-        conversationId
+        conversationId,
+        signal: input.services.signal
       });
       rawText = result.text;
       conversationId = result.conversationId;
@@ -1994,7 +2263,8 @@ async function runModelNode(input: {
         await input.services.llm.runTextPrompt(profile, {
           explicitApiKey: apiKey,
           systemPrompt,
-          prompt
+          prompt,
+          signal: input.services.signal
         })
       ).outputText.trim();
     }
@@ -2028,7 +2298,8 @@ async function runModelNode(input: {
             | "machine_write_file"
             | "machine_exec",
           structured.args,
-          input.services.machineCapabilities
+          input.services.machineCapabilities,
+          input.services.signal
         )
       : await executeForgeBoxTool(
           selectedTool.boxId,
@@ -2041,6 +2312,7 @@ async function runModelNode(input: {
             }
           }
         );
+    throwIfRunAborted(input.services.signal);
 
     transcript.push(
       `Tool call ${structured.tool}: ${JSON.stringify(structured.args)}`,
@@ -2312,8 +2584,12 @@ function createConversationRecord(input: {
 async function executeConnector(
   connector: AiConnector,
   rawInput: RunAiConnectorInput,
-  services: AiConnectorExecutionServices
+  services: AiConnectorExecutionServices,
+  onNodeCompleted?: (
+    nodeResult: AiConnectorRunResult["nodeResults"][number]
+  ) => void
 ) {
+  throwIfRunAborted(services.signal);
   validateConnectorGraph(connector.graph);
   const parsedInput = runAiConnectorSchema.parse(rawInput);
   const incoming = new Map<string, AiConnectorEdge[]>();
@@ -2395,6 +2671,7 @@ async function executeConnector(
   }
 
   const evaluateNode = async (nodeId: string): Promise<ConnectorNodeValue> => {
+    throwIfRunAborted(services.signal);
     const existing = values.get(nodeId);
     if (existing) {
       return existing;
@@ -2752,6 +3029,7 @@ async function executeConnector(
     }
 
     values.set(nodeId, resolved);
+    throwIfRunAborted(services.signal);
     debugNodes.push({
       nodeId: node.id,
       nodeType: node.type,
@@ -2765,7 +3043,7 @@ async function executeConnector(
       logs: resolved.logs,
       error: null
     });
-    nodeResults.push({
+    const completedNode = {
       nodeId: node.id,
       nodeType: node.type,
       label: node.data.label,
@@ -2777,12 +3055,15 @@ async function executeConnector(
       logs: resolved.logs,
       error: null,
       timingMs: Date.now() - startedAt
-    });
+    } satisfies AiConnectorRunResult["nodeResults"][number];
+    nodeResults.push(completedNode);
+    onNodeCompleted?.(completedNode);
     return resolved;
   };
 
   try {
     for (const outputNode of outputNodes) {
+      throwIfRunAborted(services.signal);
       await evaluateNode(outputNode.id);
     }
   } catch (error) {
@@ -3250,22 +3531,29 @@ export async function runAiConnector(
     throw new HttpError(
       404,
       "workbench_retry_not_found",
-      "The failed Workbench run could not be found."
+      "The terminal Workbench run could not be found."
     );
   }
   const retryRun = retryRow ? mapRun(retryRow) : null;
-  if (retryRun && retryRun.status !== "failed") {
+  if (retryRun && retryRun.status === "completed") {
     throw new HttpError(
       409,
       "workbench_retry_status_conflict",
-      "Only a failed Workbench run can be retried."
+      "Only a failed, cancelled, or timed-out Workbench run can be retried."
+    );
+  }
+  if (retryRun?.status === "running") {
+    throw new HttpError(
+      409,
+      "workbench_retry_status_conflict",
+      "A running Workbench run must finish or be cancelled before retry."
     );
   }
   if (retryRun && retryRun.mode !== mode) {
     throw new HttpError(
       409,
       "workbench_retry_mode_conflict",
-      "Workbench retry mode must match the failed run mode."
+      "Workbench retry mode must match the terminal run mode."
     );
   }
   const effectiveRequest = retryRow
@@ -3316,6 +3604,22 @@ export async function runAiConnector(
         { runId: run.id, replayed: true, retryable: true }
       );
     }
+    if (run.status === "cancelled") {
+      throw new HttpError(
+        409,
+        "workbench_run_cancelled",
+        "The Workbench run was cancelled. Open run history for its terminal receipt, then retry it explicitly.",
+        { runId: run.id, replayed: true, retryable: true }
+      );
+    }
+    if (run.status === "timed_out") {
+      throw new HttpError(
+        408,
+        "workbench_run_timed_out",
+        "The Workbench run reached its whole-flow time limit. Open run history for completed-node evidence, then retry it explicitly.",
+        { runId: run.id, replayed: true, retryable: true }
+      );
+    }
     return {
       connector: getAiConnectorById(connectorId)!,
       run,
@@ -3358,6 +3662,10 @@ export async function runAiConnector(
     );
   }
 
+  const createdAt = new Date();
+  const deadlineAt = new Date(
+    createdAt.getTime() + effectiveRequest.timeoutMs
+  ).toISOString();
   const pendingRun = aiConnectorRunSchema.parse({
     id: `aicr_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
     connectorId,
@@ -3377,7 +3685,12 @@ export async function runAiConnector(
     },
     result: null,
     error: null,
-    createdAt: new Date().toISOString(),
+    deadlineAt,
+    cancellationRequestedAt: null,
+    cancellationActor: null,
+    cancellationSource: null,
+    cancellationReason: null,
+    createdAt: createdAt.toISOString(),
     completedAt: null
   });
   try {
@@ -3405,11 +3718,32 @@ export async function runAiConnector(
     throw error;
   }
 
+  const runController = new AbortController();
+  const runSignal = services.signal
+    ? AbortSignal.any([services.signal, runController.signal])
+    : runController.signal;
+  const timeout = setTimeout(() => {
+    runController.abort(new WorkbenchRunAbortError("timed_out"));
+  }, effectiveRequest.timeoutMs);
+  timeout.unref?.();
+  activeWorkbenchRuns.set(pendingRun.id, runController);
   try {
-    const execution = await executeConnector(
-      connector,
-      effectiveInput,
-      services
+    const execution = await raceWorkbenchExecutionWithAbort(
+      executeConnector(
+        connector,
+        effectiveInput,
+        { ...services, signal: runSignal },
+        (nodeResult) => {
+          throwIfRunAborted(runSignal);
+          persistRunNodeResult(
+            pendingRun.id,
+            connectorId,
+            nodeResult,
+            new Date().toISOString()
+          );
+        }
+      ),
+      runSignal
     );
     const completedRun = aiConnectorRunSchema.parse({
       ...pendingRun,
@@ -3418,7 +3752,16 @@ export async function runAiConnector(
       conversationId: execution.conversation?.id ?? pendingRun.conversationId,
       completedAt: new Date().toISOString()
     });
-    insertRun(completedRun, receipt);
+    if (!finalizeRun(completedRun)) {
+      const terminal = getAiConnectorRunById(connectorId, pendingRun.id)!;
+      if (terminal.status === "cancelled") {
+        throw new WorkbenchRunAbortError("cancelled");
+      }
+      if (terminal.status === "timed_out") {
+        throw new WorkbenchRunAbortError("timed_out");
+      }
+      throw new Error("Workbench run reached an unexpected terminal state.");
+    }
     return {
       connector: getAiConnectorById(connectorId)!,
       run: completedRun,
@@ -3426,6 +3769,45 @@ export async function runAiConnector(
       replayed: false
     };
   } catch (error) {
+    const abortError =
+      error instanceof WorkbenchRunAbortError
+        ? error
+        : runSignal.aborted &&
+            runSignal.reason instanceof WorkbenchRunAbortError
+          ? runSignal.reason
+          : null;
+    if (abortError) {
+      const current = getAiConnectorRunById(connectorId, pendingRun.id)!;
+      const terminalRun = aiConnectorRunSchema.parse({
+        ...pendingRun,
+        status: abortError.kind,
+        result:
+          error instanceof AiConnectorExecutionFailure
+            ? error.partialResult
+            : current.result,
+        error: abortError.message,
+        completedAt: new Date().toISOString(),
+        cancellationRequestedAt:
+          abortError.kind === "cancelled"
+            ? (current.cancellationRequestedAt ?? new Date().toISOString())
+            : current.cancellationRequestedAt,
+        cancellationActor: current.cancellationActor,
+        cancellationSource: current.cancellationSource,
+        cancellationReason: current.cancellationReason
+      });
+      finalizeRun(terminalRun);
+      const stored = getAiConnectorRunById(connectorId, pendingRun.id)!;
+      throw new HttpError(
+        stored.status === "timed_out" ? 408 : 409,
+        stored.status === "timed_out"
+          ? "workbench_run_timed_out"
+          : "workbench_run_cancelled",
+        stored.status === "timed_out"
+          ? "The Workbench run reached its whole-flow time limit. Open run history for completed-node evidence, then retry it explicitly."
+          : "The Workbench run was cancelled. Open run history for its terminal receipt, then retry it explicitly.",
+        { runId: stored.id, replayed: false, retryable: true }
+      );
+    }
     const failedRun = aiConnectorRunSchema.parse({
       ...pendingRun,
       status: "failed",
@@ -3436,12 +3818,25 @@ export async function runAiConnector(
       error: error instanceof Error ? error.message : "Connector run failed",
       completedAt: new Date().toISOString()
     });
-    insertRun(failedRun, receipt);
+    if (!finalizeRun(failedRun)) {
+      const terminal = getAiConnectorRunById(connectorId, pendingRun.id)!;
+      throw new HttpError(
+        terminal.status === "timed_out" ? 408 : 409,
+        terminal.status === "timed_out"
+          ? "workbench_run_timed_out"
+          : "workbench_run_cancelled",
+        terminal.error ?? "The Workbench run stopped.",
+        { runId: terminal.id, replayed: false, retryable: true }
+      );
+    }
     throw new HttpError(
       422,
       "workbench_run_failed",
       "The Workbench run failed. Open run history for its node evidence, then retry it explicitly.",
       { runId: failedRun.id, replayed: false, retryable: true }
     );
+  } finally {
+    clearTimeout(timeout);
+    activeWorkbenchRuns.delete(pendingRun.id);
   }
 }

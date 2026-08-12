@@ -815,6 +815,7 @@ internally before asking questions:
 - `attentionInbox` and `attention_inbox`
 - `entityNavigation` and `entity_navigation`
 - `todayPriority` and `today_priority`
+- `dailyBriefing` and `daily_briefing`
 - `operatorOverview` and `operator_overview`
 - `operatorContext` and `operator_context`
 - `calendarOverview` and `calendar_overview`
@@ -3613,7 +3614,7 @@ Arc:
 
 1. Ask what they are trying to learn, repair, publish, or run through Workbench
    before you narrow to flow discovery, editing, execution, or results.
-2. Ask whether the job is flow discovery, one flow edit, execution, run history, published output, node-level inspection, latest-node-output lookup, or a follow-up message in a saved flow chat.
+2. Ask whether the job is flow discovery, one flow edit, execution, cancellation, run history, published output, node-level inspection, latest-node-output lookup, or a follow-up message in a saved flow chat.
 3. Ask which flow, slug, run, or node the request is about.
 4. Ask whether they need the stable flow contract, one run result, one published
    output, one node result, or the latest node output.
@@ -3654,6 +3655,8 @@ Lane-to-route map:
   `DELETE /api/v1/workbench/flows/:id` for an existing saved flow
 - run a known flow:
   `/api/v1/workbench/flows/:id/run`
+- stop one exact active run:
+  `POST /api/v1/workbench/flows/:id/runs/:runId/cancel`
 - run from a one-off input contract:
   `/api/v1/workbench/run`
 - send one follow-up message into a saved flow chat:
@@ -3688,6 +3691,9 @@ Direct action rules:
   inputs, use `GET /api/v1/workbench/catalog/boxes`. Do not blur those into one vague
   "catalog" read when the user needs a runnable flow versus an input-box contract.
 - If the user wants to execute a known saved flow, use `/api/v1/workbench/flows/:id/run`.
+- For execution or chat, set one whole-flow deadline from 1,000 to 900,000 milliseconds; omitted `timeoutMs` stores the five-minute default. Explain that the deadline covers the whole graph.
+- If the user asks to stop active work, call `cancelRun` for the exact flow and run. Do not claim cancellation until the terminal receipt returns. Preserve its actor, source, reason, deadline, and completed-node evidence, and do not rewrite a `cancelled` or `timed_out` receipt.
+- Retry a cancelled or timed-out run only from its stored input. Reusing an idempotency key with a changed input or deadline is a conflict, not a new run.
 - If the user wants one-off input execution without depending on a saved flow id, use
   `POST /api/v1/workbench/run` through the dedicated one-off execution lane and keep
   the user-facing question about the one-off input contract.
@@ -3944,7 +3950,7 @@ Arc:
 
 1. For direct capture, read the exact active parent `preference_catalog`. Search
    `preference_catalog_item` inside that parent with `linkedTo: { entityType:
-   "preference_catalog", id: catalogId }`, reflect the supplied label, and ask one
+"preference_catalog", id: catalogId }`, reflect the supplied label, and ask one
    accuracy or consent question.
 2. Forge requires only `catalogId` and `label`. Do not ask why the option deserves
    inclusion or require a description, tags, `featureWeights`, position, rationale,
@@ -3992,8 +3998,8 @@ Route note:
 - `preference_catalog_item` is normal stored Preferences CRUD. Use shared batch
   search, create, update, soft delete, and restore.
 - Parent-scoped search uses `forge_search_entities` with `entityTypes:
-  ["preference_catalog_item"]` and `linkedTo: { entityType: "preference_catalog",
-  id: catalogId }`.
+["preference_catalog_item"]` and `linkedTo: { entityType: "preference_catalog",
+id: catalogId }`.
 - `catalogId` is immutable after create. Moving an item to another catalog requires
   a separately accepted replacement create and optional soft delete of the old item.
 - An archived parent blocks item restore. Restore and verify the parent catalog first

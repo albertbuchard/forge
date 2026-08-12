@@ -41,6 +41,7 @@ export type RemoteCodeRequest = {
   readableRoots: readonly string[];
   writableRoots: readonly string[];
   networkPolicy: "deny_all" | "broker_only";
+  signal?: AbortSignal;
 };
 
 export type CapabilityProcessResult = {
@@ -100,6 +101,7 @@ export type MachineCapabilitySession = {
     cwd: string;
     maximumRuntimeMilliseconds: number;
     maximumOutputBytes: number;
+    signal?: AbortSignal;
   }): Promise<CapabilityProcessResult>;
 };
 
@@ -376,6 +378,7 @@ export async function runBoundedProcess(input: {
   environment: Readonly<Record<string, string>>;
   maximumRuntimeMilliseconds: number;
   maximumOutputBytes: number;
+  signal?: AbortSignal;
 }) {
   return new Promise<CapabilityProcessResult>((resolve, reject) => {
     const child = spawn(input.executable, [...input.arguments], {
@@ -399,6 +402,12 @@ export async function runBoundedProcess(input: {
       }
       child.kill("SIGKILL");
     };
+    const abort = () => terminate();
+    if (input.signal?.aborted) {
+      terminate();
+    } else {
+      input.signal?.addEventListener("abort", abort, { once: true });
+    }
     const outputBudget = { remaining: input.maximumOutputBytes };
     const stdout = collectBounded(outputBudget, () => {
       limitReached = true;
@@ -417,10 +426,16 @@ export async function runBoundedProcess(input: {
     timeout.unref?.();
     child.once("error", (error) => {
       clearTimeout(timeout);
+      input.signal?.removeEventListener("abort", abort);
       reject(error);
     });
     child.once("close", (code, signal) => {
       clearTimeout(timeout);
+      input.signal?.removeEventListener("abort", abort);
+      if (input.signal?.aborted) {
+        reject(input.signal.reason);
+        return;
+      }
       if (signal && timedOut && !limitReached) {
         reject(
           new CapabilityDeniedError(
@@ -762,6 +777,7 @@ export class CapabilityExecutor {
       cwd: string;
       maximumRuntimeMilliseconds: number;
       maximumOutputBytes: number;
+      signal?: AbortSignal;
     }
   ) {
     requireLocalOwnerLegacy(authority);
@@ -783,7 +799,8 @@ export class CapabilityExecutor {
         1,
         16 * 1024 * 1024,
         "Maximum output"
-      )
+      ),
+      signal: input.signal
     });
   }
 }

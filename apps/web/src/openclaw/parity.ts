@@ -239,6 +239,11 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
       purpose: "workbench"
     },
     {
+      method: "POST",
+      path: "/api/v1/workbench/flows/:id/runs/:runId/cancel",
+      purpose: "workbench"
+    },
+    {
       method: "GET",
       path: "/api/v1/workbench/flows/:id/runs/:runId/nodes",
       purpose: "workbench"

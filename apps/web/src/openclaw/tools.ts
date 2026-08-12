@@ -262,6 +262,19 @@ const workbenchRouteSpecs = {
   listFlows: { method: "GET", path: "/api/v1/workbench/flows" },
   flowDetail: { method: "GET", path: "/api/v1/workbench/flows/:id" },
   flowById: { method: "GET", path: "/api/v1/workbench/flows/:id" },
+  flowVersions: {
+    method: "GET",
+    path: "/api/v1/workbench/flows/:id/versions"
+  },
+  flowVersion: {
+    method: "GET",
+    path: "/api/v1/workbench/flows/:id/versions/:revision"
+  },
+  restoreFlow: {
+    method: "POST",
+    path: "/api/v1/workbench/flows/:id/restore",
+    requiresToken: true
+  },
   flowBySlug: {
     method: "GET",
     path: "/api/v1/workbench/flows/by-slug/:slug"
@@ -305,6 +318,11 @@ const workbenchRouteSpecs = {
   runDetail: {
     method: "GET",
     path: "/api/v1/workbench/flows/:id/runs/:runId"
+  },
+  cancelRun: {
+    method: "POST",
+    path: "/api/v1/workbench/flows/:id/runs/:runId/cancel",
+    requiresToken: true
   },
   runNodes: {
     method: "GET",
@@ -1823,7 +1841,7 @@ export function registerForgePluginTools(
     name: "forge_call_workbench_route",
     label: "Forge Workbench Route",
     description:
-      "Call one allowed dedicated Workbench route after the conversation has narrowed to flow catalog, flow CRUD, execution, run history, published output, node result, or latest node output. Flow and box catalogs are bounded pages: start with limit 24, use their published q and repeated facet filters, and continue with offset only while hasMore is true. Workbench exposes enabled or disabled endpoint state, not includeArchived. Do not use batch CRUD for Workbench.",
+      "Call one allowed dedicated Workbench route after the conversation has narrowed to flow catalog, flow CRUD, execution, active-run cancellation, run history, published output, node result, or latest node output. Flow and box catalogs are bounded pages: start with limit 24, use their published q and repeated facet filters, and continue with offset only while hasMore is true. Workbench exposes enabled or disabled endpoint state, not includeArchived. Do not use batch CRUD for Workbench.",
     routeSpecs: workbenchRouteSpecs
   });
 

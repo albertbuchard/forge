@@ -49,9 +49,19 @@ Supported query parameters:
 
 Built-in boxes use source `forge`. A published saved-flow output uses source `flow_output` and includes `sourceFlowId` plus `sourceFlowEnabled`.
 
+## Run control and recovery
+
+Saved-flow execution, one-off execution, and saved-flow chat all accept `timeoutMs`. The API accepts 1,000 to 900,000 milliseconds and stores a 300,000-millisecond deadline when the field is omitted. The Workbench run dialog offers one-, five-, and fifteen-minute choices. The deadline covers the whole flow, not each node separately.
+
+While a run is active, a human operator or an authorized executor agent can call `POST /api/v1/workbench/flows/:id/runs/:runId/cancel`. The first accepted cancellation atomically records a `cancelled` terminal receipt with its request time, authenticated actor, source, and optional reason. Repeating the same cancellation returns that immutable receipt with `Idempotency-Replayed: true`; a different terminal outcome returns a conflict instead of rewriting history. A deadline produces `timed_out` without claiming that a human or agent cancelled the run.
+
+Forge propagates one cancellation signal through node evaluation, model-provider network requests, local machine commands, and installed remote execution workers. Already completed node results are stored as each node finishes, so cancellation, timeout, or a later node failure does not erase useful evidence. A process or external worker that cannot stop synchronously is still prevented from committing a successful run after Forge has recorded cancellation or timeout.
+
+`cancelled` and `timed_out` runs can be retried from their stored input. Exact idempotent replay returns the original terminal receipt. Reusing an idempotency key with a changed payload or deadline is rejected. Use the run-detail and run-node reads to distinguish completed work from the node where execution stopped.
+
 ## Agent access
 
-OpenClaw, Hermes, Codex, and MCP clients use `forge_call_workbench_route` with route key `listFlows` or `boxCatalog`. Put catalog filters in `query`. Start with `limit: 24`, follow `hasMore`, and use the returned item count to advance `offset`.
+OpenClaw, Hermes, Codex, and MCP clients use `forge_call_workbench_route`. Use `listFlows` or `boxCatalog` for discovery, `runFlow`, `runByPayload`, or `chatFlow` for execution, `cancelRun` to stop one exact active run, and the run-detail or run-node keys for read-back. Put catalog filters in `query`. Start with `limit: 24`, follow `hasMore`, and use the returned item count to advance `offset`.
 
 Do not send `includeArchived`; that is not part of the Workbench contract. Use `status: "enabled"` or `status: "disabled"` for flow endpoint state. Catalog reads require Forge read access. Create, update, delete, execute, and chat routes require the corresponding write authority.
 

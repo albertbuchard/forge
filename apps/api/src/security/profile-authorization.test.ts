@@ -99,7 +99,8 @@ test("profile rules keep ordinary workflows available while isolating execution 
   for (const execution of [
     contract("POST", "/api/v1/workbench/run"),
     contract("POST", "/api/v1/workbench/flows/:id/run"),
-    contract("POST", "/api/v1/workbench/flows/:id/chat")
+    contract("POST", "/api/v1/workbench/flows/:id/chat"),
+    contract("POST", "/api/v1/workbench/flows/:id/runs/:runId/cancel")
   ]) {
     assert.equal(routeAuthorizationRisk(execution), "executor");
     assert.equal(
@@ -206,10 +207,7 @@ test("the gateway enforces paired-client profiles without breaking the bounded l
 });
 
 test("the companion bootstrap grant authorizes exactly one route capability", () => {
-  const pairingRoute = contract(
-    "POST",
-    "/api/v1/health/pairing-sessions"
-  );
+  const pairingRoute = contract("POST", "/api/v1/health/pairing-sessions");
   assert.equal(pairingRoute.action, "companion.pair");
   assert.doesNotThrow(
     authorize({
@@ -225,29 +223,22 @@ test("the companion bootstrap grant authorizes exactly one route capability", ()
   );
 
   for (const denied of [
-    principal(
-      "trusted_personal_assistant",
-      "paired_client",
-      ["profile:trusted_personal_assistant"]
-    ),
-    principal(
-      "trusted_personal_assistant",
-      "paired_client",
-      [
-        "companion.pair",
-        "profile:trusted_personal_assistant",
-        "read"
-      ]
-    ),
+    principal("trusted_personal_assistant", "paired_client", [
+      "profile:trusted_personal_assistant"
+    ]),
+    principal("trusted_personal_assistant", "paired_client", [
+      "companion.pair",
+      "profile:trusted_personal_assistant",
+      "read"
+    ]),
     principal("operator", "paired_client", [
       "companion.pair",
       "profile:operator"
     ]),
-    principal(
-      "trusted_personal_assistant",
-      "legacy_agent_token",
-      ["companion.pair", "profile:trusted_personal_assistant"]
-    ),
+    principal("trusted_personal_assistant", "legacy_agent_token", [
+      "companion.pair",
+      "profile:trusted_personal_assistant"
+    ]),
     principal(
       "trusted_personal_assistant",
       "paired_client",

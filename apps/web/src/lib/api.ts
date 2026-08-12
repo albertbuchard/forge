@@ -5107,6 +5107,7 @@ export function runWorkbenchFlow(
     conversationId?: string | null;
     retryOfRunId?: string | null;
     idempotencyKey?: string | null;
+    timeoutMs?: number;
     debug?: boolean;
   }
 ) {
@@ -5121,6 +5122,20 @@ export function runWorkbenchFlow(
   });
 }
 
+export function cancelWorkbenchFlowRun(
+  connectorId: string,
+  runId: string,
+  reason = ""
+) {
+  return request<{
+    flow: import("./types").AiConnector;
+    run: import("./types").AiConnectorRun;
+  }>(`/api/v1/workbench/flows/${connectorId}/runs/${runId}/cancel`, {
+    method: "POST",
+    body: JSON.stringify({ reason })
+  });
+}
+
 export function chatWorkbenchFlow(
   connectorId: string,
   input: {
@@ -5131,6 +5146,7 @@ export function chatWorkbenchFlow(
     conversationId?: string | null;
     retryOfRunId?: string | null;
     idempotencyKey?: string | null;
+    timeoutMs?: number;
     debug?: boolean;
   }
 ) {

@@ -17,6 +17,7 @@ import {
   Play,
   RotateCcw,
   Save,
+  Square,
   Settings2,
   Trash2,
   Undo2
@@ -110,6 +111,7 @@ type WorkbenchRunRequest = {
   conversationId?: string | null;
   retryOfRunId?: string | null;
   idempotencyKey?: string | null;
+  timeoutMs?: number;
   debug?: boolean;
 };
 
@@ -138,7 +140,8 @@ export function WorkbenchFlowEditor({
   onSave,
   onDelete,
   onRun,
-  onChat
+  onChat,
+  onCancelRun
 }: {
   flow: AiConnector;
   boxes: ForgeBoxCatalogEntry[];
@@ -154,6 +157,7 @@ export function WorkbenchFlowEditor({
   onDelete: () => Promise<void>;
   onRun: (input: WorkbenchRunRequest) => Promise<void>;
   onChat: (input: WorkbenchRunRequest) => Promise<void>;
+  onCancelRun: (runId: string, reason: string) => Promise<void>;
 }) {
   const [title, setTitle] = useState(flow.title);
   const [description, setDescription] = useState(flow.description);
@@ -189,8 +193,11 @@ export function WorkbenchFlowEditor({
   const [userInput, setUserInput] = useState("");
   const [runInputs, setRunInputs] = useState<Record<string, unknown>>({});
   const [debugEnabled, setDebugEnabled] = useState(true);
+  const [runTimeoutMs, setRunTimeoutMs] = useState(300_000);
   const [runError, setRunError] = useState<string | null>(null);
   const [runPending, setRunPending] = useState(false);
+  const [cancelPending, setCancelPending] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deletePending, setDeletePending] = useState(false);
@@ -335,6 +342,7 @@ export function WorkbenchFlowEditor({
     [nodes, selectedNodeId]
   );
   const latestRun = runs[0] ?? null;
+  const activeRun = runs.find((run) => run.status === "running") ?? null;
   const runHistoryQuery = useGetWorkbenchFlowRunsQuery(
     { flowId: flow.id, limit: 12, offset: historyOffset },
     { skip: !traceOpen }
@@ -470,7 +478,9 @@ export function WorkbenchFlowEditor({
       setLastDeletedGraph({ nodes, edges });
       setNodes((current) => current.filter((node) => node.id !== nodeId));
       setEdges((current) =>
-        current.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
+        current.filter(
+          (edge) => edge.source !== nodeId && edge.target !== nodeId
+        )
       );
       setSelectedNodeId((current) => (current === nodeId ? null : current));
       setSelectedEdgeId(null);
@@ -1037,6 +1047,7 @@ export function WorkbenchFlowEditor({
           withStableRunKey(mode, {
             userInput: shouldShowLegacyUserInput ? userInput : "",
             inputs: nextInputs,
+            timeoutMs: runTimeoutMs,
             debug: debugEnabled
           })
         );
@@ -1045,6 +1056,7 @@ export function WorkbenchFlowEditor({
           withStableRunKey(mode, {
             userInput: shouldShowLegacyUserInput ? userInput : "",
             inputs: nextInputs,
+            timeoutMs: runTimeoutMs,
             debug: debugEnabled
           })
         );
@@ -1058,34 +1070,54 @@ export function WorkbenchFlowEditor({
     }
   }
 
-  async function handleRetrySelectedChat() {
+  async function handleRetrySelectedRun() {
     const failedRun = runDetailQuery.data?.run;
     if (
       retryPending ||
       !failedRun ||
-      failedRun.mode !== "chat" ||
-      failedRun.status !== "failed"
+      !["failed", "cancelled", "timed_out"].includes(failedRun.status)
     ) {
       return;
     }
     setRetryPending(true);
     setRetryError(null);
     try {
-      await onChat(
-        withStableRunKey("chat", {
-          userInput: failedRun.userInput,
-          inputs: failedRun.inputs,
-          context: failedRun.context,
-          conversationId: failedRun.conversationId,
-          retryOfRunId: failedRun.id,
-          debug: Boolean(failedRun.result?.debugTrace)
-        })
-      );
-      runAttemptRef.current.chat = null;
+      const retry = withStableRunKey(failedRun.mode, {
+        userInput: failedRun.userInput,
+        inputs: failedRun.inputs,
+        context: failedRun.context,
+        conversationId: failedRun.conversationId,
+        retryOfRunId: failedRun.id,
+        debug: Boolean(failedRun.result?.debugTrace)
+      });
+      if (failedRun.mode === "chat") {
+        await onChat(retry);
+      } else {
+        await onRun(retry);
+      }
+      runAttemptRef.current[failedRun.mode] = null;
     } catch (error) {
       setRetryError(formatWorkbenchRunError(error));
     } finally {
       setRetryPending(false);
+    }
+  }
+
+  async function handleCancelActiveRun() {
+    if (!activeRun || cancelPending) {
+      return;
+    }
+    setCancelPending(true);
+    setCancelError(null);
+    try {
+      await onCancelRun(
+        activeRun.id,
+        "Stopped from the Workbench flow editor."
+      );
+    } catch (error) {
+      setCancelError(formatWorkbenchRunError(error));
+    } finally {
+      setCancelPending(false);
     }
   }
 
@@ -1136,15 +1168,28 @@ export function WorkbenchFlowEditor({
               Latest {latestRun.mode} · {latestRun.status}
             </button>
           ) : null}
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={runPending}
-            onClick={() => setRunOpen(true)}
-          >
-            <Play className="size-4" />
-            Run
-          </Button>
+          {activeRun ? (
+            <Button
+              type="button"
+              variant="secondary"
+              pending={cancelPending}
+              pendingLabel="Stopping…"
+              onClick={() => void handleCancelActiveRun()}
+            >
+              <Square className="size-4" />
+              Stop run
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={runPending}
+              onClick={() => setRunOpen(true)}
+            >
+              <Play className="size-4" />
+              Run
+            </Button>
+          )}
           <Button
             type="button"
             variant="primary"
@@ -1157,6 +1202,14 @@ export function WorkbenchFlowEditor({
           </Button>
         </div>
       </div>
+      {cancelError ? (
+        <div
+          role="alert"
+          className="rounded-[18px] border border-[color-mix(in_srgb,var(--danger)_28%,transparent)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--danger)]"
+        >
+          {cancelError}
+        </div>
+      ) : null}
 
       <div className="relative h-[76vh] overflow-hidden rounded-[32px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)]">
         {displayedGraphIssues.length > 0 ? (
@@ -1823,6 +1876,12 @@ export function WorkbenchFlowEditor({
         onUserInputChange={setUserInput}
         debugEnabled={debugEnabled}
         onDebugEnabledChange={setDebugEnabled}
+        timeoutMs={runTimeoutMs}
+        onTimeoutMsChange={setRunTimeoutMs}
+        activeRun={activeRun}
+        cancelPending={cancelPending}
+        cancelError={cancelError}
+        onCancelRun={() => void handleCancelActiveRun()}
         onRun={() => void handleRunAction("run")}
         onChat={() => void handleRunAction("chat")}
         pending={runPending}
@@ -1857,7 +1916,10 @@ export function WorkbenchFlowEditor({
                     >
                       <div className="flex items-center justify-between gap-3 text-[12px] text-[var(--ui-ink-soft)]">
                         <span>{run.mode}</span>
-                        <span>{new Date(run.createdAt).toLocaleString()}</span>
+                        <span>{run.status.replace("_", " ")}</span>
+                      </div>
+                      <div className="mt-1 text-[11px] text-[var(--ui-ink-faint)]">
+                        {new Date(run.createdAt).toLocaleString()}
                       </div>
                       <div className="mt-2 text-sm text-[var(--ui-ink-medium)]">
                         {run.outputPreview || run.error || "No output yet."}
@@ -1954,18 +2016,20 @@ export function WorkbenchFlowEditor({
                       </pre>
                     </details>
                   ) : null}
-                  {selectedRun.mode === "chat" &&
-                  selectedRun.status === "failed" ? (
+                  {runDetailQuery.data?.run &&
+                  ["failed", "cancelled", "timed_out"].includes(
+                    selectedRun.status
+                  ) ? (
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <Button
                         type="button"
                         variant="secondary"
                         size="sm"
                         disabled={retryPending || !runDetailQuery.data?.run}
-                        onClick={() => void handleRetrySelectedChat()}
+                        onClick={() => void handleRetrySelectedRun()}
                       >
                         <RotateCcw className="size-4" />
-                        {retryPending ? "Retrying" : "Retry with same context"}
+                        {retryPending ? "Retrying" : "Retry with same input"}
                       </Button>
                       <Link
                         to="/settings/models"
@@ -1973,6 +2037,29 @@ export function WorkbenchFlowEditor({
                       >
                         Check model settings
                       </Link>
+                    </div>
+                  ) : null}
+                  {runDetailQuery.data?.run.cancellationRequestedAt ? (
+                    <div className="mt-3 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-code-bg)] px-3 py-2 text-[12px] leading-5 text-[var(--ui-ink-soft)]">
+                      Cancelled by{" "}
+                      {runDetailQuery.data.run.cancellationActor ||
+                        "an authenticated actor"}
+                      {runDetailQuery.data.run.cancellationSource
+                        ? ` through ${runDetailQuery.data.run.cancellationSource}`
+                        : ""}
+                      .
+                      {runDetailQuery.data.run.cancellationReason
+                        ? ` ${runDetailQuery.data.run.cancellationReason}`
+                        : ""}
+                    </div>
+                  ) : selectedRun.status === "timed_out" ? (
+                    <div className="mt-3 rounded-[16px] border border-[color-mix(in_srgb,var(--warning)_28%,transparent)] bg-[var(--ui-warning-soft)] px-3 py-2 text-[12px] leading-5 text-[var(--warning)]">
+                      The whole-flow deadline was{" "}
+                      {new Date(
+                        runDetailQuery.data?.run.deadlineAt ??
+                          selectedRun.deadlineAt
+                      ).toLocaleString()}
+                      . Completed-node evidence remains below.
                     </div>
                   ) : null}
                   {retryError ? (

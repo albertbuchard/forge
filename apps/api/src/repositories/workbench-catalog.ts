@@ -35,7 +35,13 @@ export type WorkbenchFlowCatalogItem = {
   edgeCount: number;
   publicInputCount: number;
   publishedOutputCount: number;
-  lastRunStatus: "running" | "completed" | "failed" | null;
+  lastRunStatus:
+    | "running"
+    | "completed"
+    | "failed"
+    | "cancelled"
+    | "timed_out"
+    | null;
   lastRunAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -284,7 +290,9 @@ export function listWorkbenchFlowCatalogPage(
       lastRunStatus:
         row.last_run_status === "running" ||
         row.last_run_status === "completed" ||
-        row.last_run_status === "failed"
+        row.last_run_status === "failed" ||
+        row.last_run_status === "cancelled" ||
+        row.last_run_status === "timed_out"
           ? row.last_run_status
           : null,
       lastRunAt: row.last_run_at,

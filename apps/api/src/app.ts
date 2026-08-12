@@ -53,6 +53,7 @@ import {
   MAX_AI_CONNECTOR_VERSION_LIMIT,
   MAX_AI_CONNECTOR_RUN_HISTORY_LIMIT,
   createAiConnector,
+  cancelAiConnectorRun,
   deleteAiConnector,
   getAiConnectorById,
   getAiConnectorVersion,
@@ -685,6 +686,7 @@ import {
   createAgentRuntimeSessionSchema,
   createAgentTokenSchema,
   createAiConnectorSchema,
+  cancelAiConnectorRunSchema,
   restoreAiConnectorVersionSchema,
   createAiProcessorLinkSchema,
   createAiProcessorSchema,
@@ -3676,7 +3678,7 @@ function buildPreferredReadPath(entityType: string) {
     case "life_force":
       return "Read /api/v1/life-force first when the current energy picture matters; focused write lanes are /api/v1/life-force/profile, /api/v1/life-force/templates/:weekday, and /api/v1/life-force/fatigue-signals.";
     case "workbench":
-      return "/api/v1/workbench/flows | /api/v1/workbench/flows/:id | /api/v1/workbench/flows/:id/versions | /api/v1/workbench/flows/:id/versions/:revision | /api/v1/workbench/flows/:id/restore | /api/v1/workbench/flows/by-slug/:slug | /api/v1/workbench/flows/:id/output | /api/v1/workbench/flows/:id/runs | /api/v1/workbench/flows/:id/runs/:runId | /api/v1/workbench/flows/:id/runs/:runId/nodes | /api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId | /api/v1/workbench/flows/:id/nodes/:nodeId/output | /api/v1/workbench/catalog/boxes";
+      return "/api/v1/workbench/flows | /api/v1/workbench/flows/:id | /api/v1/workbench/flows/:id/versions | /api/v1/workbench/flows/:id/versions/:revision | /api/v1/workbench/flows/:id/restore | /api/v1/workbench/flows/by-slug/:slug | /api/v1/workbench/flows/:id/output | /api/v1/workbench/flows/:id/runs | /api/v1/workbench/flows/:id/runs/:runId | /api/v1/workbench/flows/:id/runs/:runId/cancel | /api/v1/workbench/flows/:id/runs/:runId/nodes | /api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId | /api/v1/workbench/flows/:id/nodes/:nodeId/output | /api/v1/workbench/catalog/boxes";
     case "course":
       return "/api/v1/courses | /api/v1/courses/:courseId | /api/v1/courses/:courseId/learn | /api/v1/courses/:courseId/voice-session | /api/v1/courses/:courseId/export";
     case "concept":
@@ -3704,7 +3706,7 @@ const QUESTION_FLOW_SPECIALIZED_ROUTE_HINTS = {
   life_force:
     "Specialized route surface: lifeForce. Route tool: forge_call_life_force_route. Route keys: overview, profile, weekdayTemplate, fatigueSignal.",
   workbench:
-    "Specialized route surface: workbench. Route tool: forge_call_workbench_route. Route keys: listFlows, flowDetail, flowById, flowVersions, flowVersion, restoreFlow, flowBySlug, publishedOutput, runHistory, runs, runDetail, runNodes, nodeResult, latestNodeOutput, boxCatalog, createFlow, updateFlow, deleteFlow, runFlow, runByPayload, chatFlow. Catalog and version-history reads are paged; follow hasMore with the returned offset plus item count.",
+    "Specialized route surface: workbench. Route tool: forge_call_workbench_route. Route keys: listFlows, flowDetail, flowById, flowVersions, flowVersion, restoreFlow, flowBySlug, publishedOutput, runHistory, runs, runDetail, cancelRun, runNodes, nodeResult, latestNodeOutput, boxCatalog, createFlow, updateFlow, deleteFlow, runFlow, runByPayload, chatFlow. Catalog and version-history reads are paged; follow hasMore with the returned offset plus item count.",
   course:
     "Specialized route surface: courses. Route tool: forge_call_course_route. Route keys: listCourses, courseDetail, learningSession, voiceLearningSession, submitAttempt, upgradeEnrollment, importCourse, exportCourse, listConcepts, conceptDetail. Use learningSession for visual coaching. For voice, start voiceLearningSession with the exact week and day, teach one returned learner-safe block at a time in source order, and submit only Albert's confirmed, lightly formatted answer text through submitAttempt with the returned token and exact identifiers. Never store or submit audio or a separate voice transcript.",
   concept:
@@ -7083,7 +7085,7 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     whenToUse:
       "Use for Workbench saved-flow discovery, flow creation or edits, one-off runs, saved-flow execution, chat follow-ups, run detail, node results, latest node output, and published output. Do not use batch CRUD for Workbench.",
     inputShape:
-      '{ routeKey: "listFlows"|"flowDetail"|"flowById"|"flowVersions"|"flowVersion"|"restoreFlow"|"flowBySlug"|"publishedOutput"|"runHistory"|"runs"|"runDetail"|"runNodes"|"nodeResult"|"latestNodeOutput"|"boxCatalog"|"createFlow"|"updateFlow"|"deleteFlow"|"runFlow"|"runByPayload"|"chatFlow", pathParams?: { id?: string, revision?: string, slug?: string, runId?: string, nodeId?: string }, query?: object, body?: object }',
+      '{ routeKey: "listFlows"|"flowDetail"|"flowById"|"flowVersions"|"flowVersion"|"restoreFlow"|"flowBySlug"|"publishedOutput"|"runHistory"|"runs"|"runDetail"|"cancelRun"|"runNodes"|"nodeResult"|"latestNodeOutput"|"boxCatalog"|"createFlow"|"updateFlow"|"deleteFlow"|"runFlow"|"runByPayload"|"chatFlow", pathParams?: { id?: string, revision?: string, slug?: string, runId?: string, nodeId?: string }, query?: object, body?: object }',
     requiredFields: ["routeKey"],
     notes: [
       "Choose routeKey from live onboarding specializedDomainSurfaces.workbench.routeKeys and methodRoutes.",
@@ -7091,6 +7093,7 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       "Use runByPayload for one-off execution; createFlow only when the user wants a reusable saved flow.",
       "For updateFlow and deleteFlow, first read flowDetail and carry its exact revision as body.expectedRevision. After a revision conflict, reread instead of retrying blindly.",
       "Use flowVersions for bounded history, flowVersion for one exact saved contract, and restoreFlow with both revision and the current expectedRevision. Restore creates a new revision and never erases later history.",
+      "Use cancelRun only for an exact active run after reading runDetail or runHistory. Supply the flow id and run id through pathParams and an optional human-readable reason in body.reason; a terminal run cannot be cancelled.",
       "Use publishedOutput, nodeResult, latestNodeOutput, runDetail, or runHistory reads before editing when the user is inspecting an existing artifact.",
       "After a Workbench run or edit, read back the flow detail, run detail, node output, published output, or run history when that verifies the user's practical goal."
     ],
@@ -9077,6 +9080,7 @@ function buildAgentOnboardingPayload(request: {
             "runHistory",
             "runs",
             "runDetail",
+            "cancelRun",
             "runNodes",
             "nodeResult",
             "latestNodeOutput",
@@ -9108,6 +9112,7 @@ function buildAgentOnboardingPayload(request: {
             runHistory: "GET /api/v1/workbench/flows/:id/runs",
             runs: "GET /api/v1/workbench/flows/:id/runs",
             runDetail: "GET /api/v1/workbench/flows/:id/runs/:runId",
+            cancelRun: "POST /api/v1/workbench/flows/:id/runs/:runId/cancel",
             runNodes: "GET /api/v1/workbench/flows/:id/runs/:runId/nodes",
             nodeResult:
               "GET /api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId",
@@ -9145,7 +9150,8 @@ function buildAgentOnboardingPayload(request: {
             restoreFlow: "/api/v1/workbench/flows/:id/restore",
             runFlow: "/api/v1/workbench/flows/:id/run",
             runByPayload: "/api/v1/workbench/run",
-            chatFlow: "/api/v1/workbench/flows/:id/chat"
+            chatFlow: "/api/v1/workbench/flows/:id/chat",
+            cancelRun: "/api/v1/workbench/flows/:id/runs/:runId/cancel"
           },
           notes: [
             "Workbench is a dedicated execution surface, not a batch CRUD entity family.",
@@ -9162,6 +9168,7 @@ function buildAgentOnboardingPayload(request: {
             "Use flowVersions and flowVersion to inspect retained contracts. restoreFlow creates a new revision from a retained snapshot and requires both the selected revision and the current expectedRevision.",
             "For flow deletion, confirm the saved flow and whether published outputs or run history need preservation elsewhere before using the delete route.",
             "For saved flow chat follow-ups, use POST /api/v1/workbench/flows/:id/chat only when the user wants to continue a flow-specific conversation. Do not turn that into a new run, note, or generic entity update unless the user asks.",
+            "Every run accepts timeoutMs from 1,000 to 900,000 milliseconds, defaulting to 300,000. Use cancelRun only for an exact active run; a cancellation or deadline keeps the durable terminal receipt and all completed-node evidence.",
             "Prefer the dedicated output and node-result routes over reverse-engineering raw traces.",
             "If the user only wants a published output, latest node output, or run detail, do not reopen a flow-edit intake before reading that artifact.",
             "After a Workbench read, translate the artifact into one next action: rerun with clearer input, inspect a specific node, edit the saved flow, publish or preserve the output, or stop because the answer is already sufficient. Ask only for the missing input, node, run, preservation choice, or confirmation that would change that action.",
@@ -9406,6 +9413,7 @@ function buildAgentOnboardingPayload(request: {
       workbenchRunHistory: "/api/v1/workbench/flows/:id/runs",
       workbenchRuns: "/api/v1/workbench/flows/:id/runs",
       workbenchRunDetail: "/api/v1/workbench/flows/:id/runs/:runId",
+      workbenchCancelRun: "/api/v1/workbench/flows/:id/runs/:runId/cancel",
       workbenchNodeResult:
         "/api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId",
       workbenchLatestNodeOutput:
@@ -25061,6 +25069,43 @@ export async function buildServer(
       return {
         [singularKey]: connector,
         ...detail
+      };
+    });
+    app.post(`${basePath}/:id/runs/:runId/cancel`, async (request, reply) => {
+      const auth = requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        { route: `${basePath}/:id/runs/:runId/cancel` }
+      );
+      const params = request.params as { id: string; runId: string };
+      const connector = getAiConnectorById(params.id);
+      if (!connector) {
+        reply.code(404);
+        return { error: `${noun} not found` };
+      }
+      const result = cancelAiConnectorRun(connector.id, params.runId, {
+        actor: auth.actor ?? null,
+        source: auth.source,
+        ...cancelAiConnectorRunSchema.parse(request.body ?? {})
+      });
+      if (result.status === "not_found") {
+        reply.code(404);
+        return { error: `${noun} run not found` };
+      }
+      if (result.status === "terminal_conflict") {
+        throw new HttpError(
+          409,
+          "workbench_run_terminal_conflict",
+          `This Workbench run is already ${result.run.status} and cannot be cancelled.`,
+          { runId: result.run.id, status: result.run.status }
+        );
+      }
+      reply.header("Idempotency-Replayed", result.replayed ? "true" : "false");
+      const detail = getAiConnectorRunDetail(connector.id, result.run.id);
+      return {
+        [singularKey]: connector,
+        run: detail?.run ?? result.run,
+        readMetadata: detail?.readMetadata ?? null
       };
     });
     app.get(`${basePath}/:id/runs/:runId/nodes`, async (request, reply) => {

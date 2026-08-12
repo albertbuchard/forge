@@ -397,6 +397,7 @@ describe("forge plugin route parity", () => {
       "GET /api/v1/workbench/flows/:id/output",
       "GET /api/v1/workbench/flows/:id/runs",
       "GET /api/v1/workbench/flows/:id/runs/:runId",
+      "POST /api/v1/workbench/flows/:id/runs/:runId/cancel",
       "GET /api/v1/workbench/flows/:id/runs/:runId/nodes",
       "GET /api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId",
       "GET /api/v1/workbench/flows/:id/nodes/:nodeId/output"

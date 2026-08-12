@@ -44,6 +44,7 @@ const EXPLICIT_DYNAMIC_ROUTE_FAMILIES: Array<{
       "`${basePath}/:id/output`",
       "`${basePath}/:id/runs`",
       "`${basePath}/:id/runs/:runId`",
+      "`${basePath}/:id/runs/:runId/cancel`",
       "`${basePath}/:id/runs/:runId/nodes`",
       "`${basePath}/:id/runs/:runId/nodes/:nodeId`",
       "`${basePath}/:id/nodes/:nodeId/output`"
@@ -62,6 +63,10 @@ const EXPLICIT_DYNAMIC_ROUTE_FAMILIES: Array<{
       {
         method: "GET",
         routePath: "/api/v1/workbench/flows/:id/runs/:runId"
+      },
+      {
+        method: "POST",
+        routePath: "/api/v1/workbench/flows/:id/runs/:runId/cancel"
       },
       {
         method: "GET",

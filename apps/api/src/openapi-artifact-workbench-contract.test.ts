@@ -10,7 +10,9 @@ import { issueTestOperatorSessionCookie } from "./security/test-operator-authori
 type JsonSchema = {
   $ref?: string;
   additionalProperties?: boolean;
+  anyOf?: JsonSchema[];
   default?: number;
+  description?: string;
   enum?: unknown[];
   items?: JsonSchema;
   maxItems?: number;
@@ -23,13 +25,17 @@ type JsonSchema = {
 };
 
 type OpenApiOperation = {
+  description?: string;
   parameters?: Array<{ name?: string; schema?: JsonSchema }>;
   requestBody?: {
     content?: { "application/json"?: { schema?: JsonSchema } };
   };
   responses?: Record<
     string,
-    { content?: { "application/json"?: { schema?: JsonSchema } } }
+    {
+      description?: string;
+      content?: { "application/json"?: { schema?: JsonSchema } };
+    }
   >;
 };
 
@@ -108,7 +114,13 @@ test("OpenAPI matches artifact bounds and bounded history response contracts", a
     );
     assert.deepEqual(
       Object.keys(schemas.LifeEventTicketImportInput?.properties ?? {}).sort(),
-      ["artifactId", "createDraft", "llmProfileId", "useLlm"]
+      [
+        "artifactId",
+        "createDraft",
+        "llmProfileId",
+        "previewFingerprint",
+        "useLlm"
+      ]
     );
     const artifactListLimit = document.paths[
       "/api/v1/artifacts"
@@ -281,6 +293,32 @@ test("OpenAPI matches artifact bounds and bounded history response contracts", a
     ]);
     assert.equal(schemas.WorkbenchRun?.additionalProperties, false);
     assert.ok(schemas.WorkbenchRun?.required?.includes("connectorId"));
+    assert.ok(schemas.WorkbenchRun?.required?.includes("deadlineAt"));
+    assert.deepEqual(schemas.WorkbenchRun?.properties?.status?.enum, [
+      "running",
+      "completed",
+      "failed",
+      "cancelled",
+      "timed_out"
+    ]);
+    assert.deepEqual(
+      schemas.WorkbenchRunSummary?.properties?.cancellationSource?.anyOf?.[0]
+        ?.enum,
+      ["ui", "openclaw", "agent", "system"]
+    );
+    assert.deepEqual(
+      schemas.WorkbenchRunRequest?.properties?.timeoutMs,
+      expectObject({ minimum: 1_000, maximum: 900_000, default: 300_000 })
+    );
+    const cancelRun =
+      document.paths["/api/v1/workbench/flows/{id}/runs/{runId}/cancel"]?.post;
+    assert.equal(
+      cancelRun?.responses?.["200"]?.description,
+      "Cancelled Workbench run receipt"
+    );
+    assert.ok(
+      cancelRun?.description?.toLowerCase().includes("completed-node evidence")
+    );
 
     const flowDetail = document.paths["/api/v1/workbench/flows/{id}"]?.get;
     const flowDetailSchema =
@@ -299,3 +337,12 @@ test("OpenAPI matches artifact bounds and bounded history response contracts", a
     await rm(rootDir, { recursive: true, force: true });
   }
 });
+
+function expectObject(expected: Record<string, unknown>) {
+  return {
+    ...expected,
+    type: "integer",
+    description:
+      "Whole-flow deadline in milliseconds. Forge aborts supported model, network, and machine-command work at this deadline, records timed_out, and preserves completed-node evidence."
+  };
+}

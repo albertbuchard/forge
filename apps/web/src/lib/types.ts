@@ -4627,7 +4627,7 @@ export interface AiConnectorRun {
   id: string;
   connectorId: string;
   mode: "run" | "chat";
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "cancelled" | "timed_out";
   userInput: string;
   inputs: Record<string, unknown>;
   context: Record<string, unknown>;
@@ -4645,6 +4645,11 @@ export interface AiConnectorRun {
   } | null;
   result: AiConnectorRunResult | null;
   error: string | null;
+  deadlineAt: string;
+  cancellationRequestedAt: string | null;
+  cancellationActor: string | null;
+  cancellationSource: "ui" | "openclaw" | "agent" | "system" | null;
+  cancellationReason: string | null;
   createdAt: string;
   completedAt: string | null;
 }
@@ -4662,13 +4667,18 @@ export interface AiConnectorRunSummary {
   id: string;
   connectorId: string;
   mode: "run" | "chat";
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "cancelled" | "timed_out";
   conversationId: string | null;
   retryOfRunId: string | null;
   outputPreview: string;
   result: { primaryText: string } | null;
   hasResult: boolean;
   error: string | null;
+  deadlineAt: string;
+  cancellationRequestedAt: string | null;
+  cancellationActor: string | null;
+  cancellationSource: "ui" | "openclaw" | "agent" | "system" | null;
+  cancellationReason: string | null;
   flowUpdatedAt: string | null;
   createdAt: string;
   completedAt: string | null;
@@ -4776,7 +4786,13 @@ export interface WorkbenchFlowCatalogItem {
   edgeCount: number;
   publicInputCount: number;
   publishedOutputCount: number;
-  lastRunStatus: "running" | "completed" | "failed" | null;
+  lastRunStatus:
+    | "running"
+    | "completed"
+    | "failed"
+    | "cancelled"
+    | "timed_out"
+    | null;
   lastRunAt: string | null;
   createdAt: string;
   updatedAt: string;
