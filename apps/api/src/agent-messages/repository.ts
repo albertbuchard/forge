@@ -957,7 +957,11 @@ export function listAgentMessages(input: {
   const commonWhere = ["messages.deleted_at IS NULL"];
   const commonParameters: Array<string | number> = [];
   if (input.status) {
-    commonWhere.push("messages.status = ?");
+    commonWhere.push(
+      input.box === "inbox"
+        ? "snapshot_states.next_status = ?"
+        : "messages.status = ?"
+    );
     commonParameters.push(input.status);
   }
   if (cursor?.box === "outbox") {
@@ -989,9 +993,9 @@ export function listAgentMessages(input: {
     const cursorParameters: Array<string | number> = [];
     if (inboxCursor) {
       where.push(
-        `(latest_events.inbox_event_at < ?
-          OR (latest_events.inbox_event_at = ? AND latest_events.inbox_event_id < ?)
-          OR (latest_events.inbox_event_at = ? AND latest_events.inbox_event_id = ? AND messages.id < ?))`
+        `(latest_events.occurred_at < ?
+          OR (latest_events.occurred_at = ? AND latest_events.id < ?)
+          OR (latest_events.occurred_at = ? AND latest_events.id = ? AND messages.id < ?))`
       );
       cursorParameters.push(
         inboxCursor.eventAt,
@@ -1002,33 +1006,37 @@ export function listAgentMessages(input: {
         inboxCursor.id
       );
     }
-    sql = `WITH ranked_inbox_events AS (
-         SELECT events.message_id,
-                events.sequence,
-                events.id AS inbox_event_id,
-                events.occurred_at AS inbox_event_at,
-                ROW_NUMBER() OVER (
+    sql = `WITH snapshot_events AS (
+         SELECT events.*,
+                MAX(CASE
+                  WHEN events.actor_kind = 'agent'
+                   AND events.event_kind IN (${eligiblePlaceholders})
+                  THEN events.sequence
+                END) OVER (
                   PARTITION BY events.message_id
-                  ORDER BY events.sequence DESC
-                ) AS inbox_rank
+                ) AS latest_inbox_sequence,
+                MAX(events.sequence) OVER (
+                  PARTITION BY events.message_id
+                ) AS latest_state_sequence
          FROM agent_message_events events
-         WHERE events.actor_kind = 'agent'
-           AND events.event_kind IN (${eligiblePlaceholders})
-           AND events.rowid <= ?
+         WHERE events.rowid <= ?
        )
        SELECT messages.*,
               latest_events.sequence AS unread_sequence,
-              latest_events.inbox_event_id,
-              latest_events.inbox_event_at
+              latest_events.id AS inbox_event_id,
+              latest_events.occurred_at AS inbox_event_at
        FROM agent_messages messages
-       JOIN ranked_inbox_events latest_events
+       JOIN snapshot_events latest_events
          ON latest_events.message_id = messages.id
-        AND latest_events.inbox_rank = 1
+        AND latest_events.sequence = latest_events.latest_inbox_sequence
+       JOIN snapshot_events snapshot_states
+         ON snapshot_states.message_id = messages.id
+        AND snapshot_states.sequence = snapshot_states.latest_state_sequence
        LEFT JOIN agent_message_reads reads
          ON reads.owner_user_id = messages.owner_user_id AND reads.message_id = messages.id
        WHERE ${where.join(" AND ")}
-       ORDER BY latest_events.inbox_event_at DESC,
-                latest_events.inbox_event_id DESC,
+       ORDER BY latest_events.occurred_at DESC,
+                latest_events.id DESC,
                 messages.id DESC
        LIMIT ?`;
     parameters = [

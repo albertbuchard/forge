@@ -1155,7 +1155,7 @@ test("inbox cursors order by newest unread activity and freeze the event horizon
 
     const firstPage = await app.inject({
       method: "GET",
-      url: "/api/v1/agent-messages?box=inbox&limit=2",
+      url: "/api/v1/agent-messages?box=inbox&status=in_progress&limit=2",
       headers: { cookie }
     });
     assert.equal(firstPage.statusCode, 200, firstPage.body);
@@ -1192,10 +1192,36 @@ test("inbox cursors order by newest unread activity and freeze the event horizon
       ...newClaim,
       occurredAt: "2026-03-03T00:00:00.000Z"
     });
+    const handledAfterPage = await app.inject({
+      method: "POST",
+      url: `/api/v1/agent-messages/${secondTieMessageId}/handle`,
+      headers: { authorization: `Bearer ${agent.token}` },
+      payload: {
+        operationKey: "inbox-tie-second-handle-operation",
+        receiptKey: "inbox-tie-second-handle-receipt",
+        leaseSecret: secondTieClaim.leaseSecret,
+        claimGeneration: secondTieClaim.claimGeneration,
+        resultMarkdown: "Handled after the first filtered Inbox page.",
+        transcriptText: "",
+        transcriptProvider: "",
+        transcriptDisclosure: ""
+      }
+    });
+    assert.equal(handledAfterPage.statusCode, 200, handledAfterPage.body);
+    getDatabase()
+      .prepare(
+        `UPDATE agent_message_events SET occurred_at = ?
+         WHERE message_id = ? AND sequence = ?`
+      )
+      .run(
+        "2026-03-04T00:00:00.000Z",
+        secondTieMessageId,
+        handledAfterPage.json().eventSequence as number
+      );
 
     const secondPage = await app.inject({
       method: "GET",
-      url: `/api/v1/agent-messages?box=inbox&limit=2&cursor=${encodeURIComponent(firstPageBody.nextCursor)}`,
+      url: `/api/v1/agent-messages?box=inbox&status=in_progress&limit=2&cursor=${encodeURIComponent(firstPageBody.nextCursor)}`,
       headers: { cookie }
     });
     assert.equal(secondPage.statusCode, 200, secondPage.body);
@@ -1222,6 +1248,23 @@ test("inbox cursors order by newest unread activity and freeze the event horizon
     assert.equal(new Set(traversed).size, 4);
     assert.equal(traversed.includes(newMessageId), false);
 
+    const refreshedFiltered = await app.inject({
+      method: "GET",
+      url: "/api/v1/agent-messages?box=inbox&status=in_progress&limit=10",
+      headers: { cookie }
+    });
+    assert.equal(refreshedFiltered.statusCode, 200, refreshedFiltered.body);
+    const refreshedFilteredIds = (
+      refreshedFiltered.json().items as Array<{ id: string }>
+    ).map((message) => message.id);
+    assert.deepEqual(refreshedFilteredIds.slice(0, 4), [
+      newMessageId,
+      firstTieMessageId,
+      oldestMessageId,
+      newestMessageId
+    ]);
+    assert.equal(refreshedFilteredIds.includes(secondTieMessageId), false);
+
     const refreshed = await app.inject({
       method: "GET",
       url: "/api/v1/agent-messages?box=inbox&limit=10",
@@ -1230,9 +1273,15 @@ test("inbox cursors order by newest unread activity and freeze the event horizon
     assert.equal(refreshed.statusCode, 200, refreshed.body);
     assert.deepEqual(
       (refreshed.json().items as Array<{ id: string }>)
-        .slice(0, 4)
+        .slice(0, 5)
         .map((message) => message.id),
-      [newMessageId, firstTieMessageId, oldestMessageId, newestMessageId]
+      [
+        secondTieMessageId,
+        newMessageId,
+        firstTieMessageId,
+        oldestMessageId,
+        newestMessageId
+      ]
     );
 
     const wrongFilter = await app.inject({
