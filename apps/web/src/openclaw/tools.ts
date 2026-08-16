@@ -6,6 +6,7 @@ import {
 } from "@sinclair/typebox";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import {
+  callConfiguredForgeAgentMessageAudio,
   callConfiguredForgeApi,
   expectForgeSuccess,
   requireApiToken,
@@ -408,6 +409,59 @@ const artifactRouteSpecs = {
   },
   versions: { method: "GET", path: "/api/v1/artifacts/:id/versions" },
   audit: { method: "GET", path: "/api/v1/artifacts/:id/audit" }
+} as const satisfies Record<string, SpecializedRouteSpec>;
+
+const agentMessageRouteSpecs = {
+  poll: {
+    method: "GET",
+    path: "/api/v1/agent-messages/poll",
+    requiresAgentToken: true
+  },
+  detail: {
+    method: "GET",
+    path: "/api/v1/agent-messages/:id/detail",
+    requiresAgentToken: true
+  },
+  claim: {
+    method: "POST",
+    path: "/api/v1/agent-messages/:id/claim",
+    requiresAgentToken: true
+  },
+  renewClaim: {
+    method: "POST",
+    path: "/api/v1/agent-messages/:id/lease",
+    requiresAgentToken: true
+  },
+  addProgress: {
+    method: "POST",
+    path: "/api/v1/agent-messages/:id/progress",
+    requiresAgentToken: true
+  },
+  acknowledge: {
+    method: "POST",
+    path: "/api/v1/agent-messages/:id/acknowledge",
+    requiresAgentToken: true
+  },
+  downloadVoice: {
+    method: "POST",
+    path: "/api/v1/agent-messages/:id/voice",
+    requiresAgentToken: true
+  },
+  handle: {
+    method: "POST",
+    path: "/api/v1/agent-messages/:id/handle",
+    requiresAgentToken: true
+  },
+  fail: {
+    method: "POST",
+    path: "/api/v1/agent-messages/:id/fail",
+    requiresAgentToken: true
+  },
+  forward: {
+    method: "POST",
+    path: "/api/v1/agent-messages/:id/forward",
+    requiresAgentToken: true
+  }
 } as const satisfies Record<string, SpecializedRouteSpec>;
 
 const lifeEventRouteSpecs = {
@@ -1568,7 +1622,7 @@ async function callSpecializedRoute(
   }
   if (spec.requiresAgentToken && config.apiToken.trim().length === 0) {
     throw new Error(
-      "People and peer-sharing agent tools require a configured Forge agent token with the route's published local scopes; an operator session cannot substitute for that token."
+      "This scoped agent tool requires a configured Forge agent token with the route's published local scopes; an operator session cannot substitute for that token."
     );
   }
   if (spec.requiresToken && !spec.requiresAgentToken) {
@@ -1644,6 +1698,71 @@ function registerSpecializedRouteTool(
           (params ?? {}) as Record<string, unknown>
         )
       );
+    }
+  });
+}
+
+function registerAgentMessageRouteTool(
+  api: ForgePluginToolApi,
+  config: ForgePluginConfig
+) {
+  api.registerTool({
+    name: "forge_call_agent_messages_route",
+    label: "Forge Agent Messages Route",
+    description:
+      "Poll, inspect, atomically claim, renew, update, acknowledge, complete, fail, forward, or download the lease-authorized first-class voice Artifact for slow asynchronous Agent Messages. Use a fresh 256-bit random leaseSecret and stable operationKey for claim, keep terminal receipt keys stable across exact retries, and never execute work without a current claim. Voice is preserved as an Artifact. A direct audio block is returned only by downloadVoice; whether the connected runtime can understand it is runtime-dependent and consumes that runtime's normal allowance. Forge never promises free transcription and never uploads voice to a third party silently. If no explicitly configured transcription path exists, leave the message pending or forward it instead of discarding the voice.",
+    parameters: specializedRouteParametersSchema(agentMessageRouteSpecs),
+    async execute(_toolCallId, params) {
+      const values = (params ?? {}) as Record<string, unknown>;
+      if (normalizeText(values.routeKey) !== "downloadVoice") {
+        return jsonResult(
+          await callSpecializedRoute(config, agentMessageRouteSpecs, values)
+        );
+      }
+      if (config.apiToken.trim().length === 0) {
+        throw new Error(
+          "Agent Messages require a configured Forge agent token with the published message and sensitive-media scopes; an operator session cannot substitute for that token."
+        );
+      }
+      const path = resolveRouteTemplate(
+        agentMessageRouteSpecs.downloadVoice.path,
+        (values.pathParams ?? {}) as Record<string, unknown>
+      );
+      const body = (values.body ?? {}) as Record<string, unknown>;
+      const leaseSecret = normalizeText(body.leaseSecret);
+      const claimGeneration = body.claimGeneration;
+      if (
+        leaseSecret.length < 43 ||
+        typeof claimGeneration !== "number" ||
+        !Number.isInteger(claimGeneration) ||
+        claimGeneration < 1
+      ) {
+        throw new Error(
+          "downloadVoice requires body.leaseSecret and a positive integer body.claimGeneration from the current claim receipt."
+        );
+      }
+      const audio = await callConfiguredForgeAgentMessageAudio(config, {
+        path,
+        body: { leaseSecret, claimGeneration }
+      });
+      const metadata = {
+        ok: true,
+        artifactId: audio.artifactId,
+        mimeType: audio.mimeType,
+        byteSize: audio.byteSize,
+        contentSha256: audio.contentSha256,
+        runtimeAudioUnderstanding:
+          "runtime-dependent; no transcription or no-charge promise is implied"
+      };
+      const data = Buffer.from(audio.bytes).toString("base64");
+      audio.bytes.fill(0);
+      return {
+        content: [
+          { type: "text", text: JSON.stringify(metadata, null, 2) },
+          { type: "audio", data, mimeType: audio.mimeType }
+        ],
+        details: metadata
+      } as AgentToolResult<typeof metadata>;
     }
   });
 }
@@ -1860,6 +1979,8 @@ export function registerForgePluginTools(
       "Call one allowed dedicated Artifact Store route for paged metadata listing with limit/offset, trusted upload, metadata update, static rescan, LLM metadata enrichment, generic entity-link replacement, trust state, versions, or audit. For createWithBytes, put one stable per-file idempotencyKey in the body and reuse it only for an exact transport retry; Forge normalizes agent provenance and rejects changed-payload key reuse. Use shared batch CRUD for artifact metadata delete/restore. Agents may read contentProtection metadata and password hints, but must not receive, store, submit, or route artifact passwords. Do not expose download, password download, decrypt, open, execute, preview, or transform stored file bytes as an agent.",
     routeSpecs: artifactRouteSpecs
   });
+
+  registerAgentMessageRouteTool(api, config);
 
   registerSpecializedRouteTool(api, config, {
     name: "forge_call_life_event_route",

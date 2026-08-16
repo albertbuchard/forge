@@ -337,6 +337,16 @@ function agentPaths() {
         responses: { "200": response("Compact claim-eligible messages") }
       }
     },
+    [`${base}/{id}/detail`]: {
+      get: {
+        tags: ["Agent Messages"],
+        summary: "Read the addressed message and its immutable audit history",
+        description: "Requires agentMessages.poll and exact recipient plus owner scope.",
+        security: agentSecurity,
+        parameters: [idParameter],
+        responses: { "200": response("Message detail and ordered audit events") }
+      }
+    },
     [`${base}/{id}/claim`]: {
       post: {
         tags: ["Agent Messages"],

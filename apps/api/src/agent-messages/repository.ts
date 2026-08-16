@@ -856,6 +856,8 @@ export function listAgentMessages(input: {
        ), 0) > COALESCE(reads.last_read_event_sequence, 0)`
     );
     parameters.push(...eligible);
+  } else {
+    where.push("messages.sender_kind = 'human_user'");
   }
   parameters.push(...eligible, input.limit, input.offset);
   const rows = getDatabase()
@@ -934,6 +936,22 @@ export function getAgentMessageDetail(ownerUserId: string, messageId: string) {
     })),
     relatedMessages: related.map((row) => messagePublic(row))
   };
+}
+
+export function getAgentMessageDetailForAgent(input: {
+  messageId: string;
+  agentId: string;
+  ownerUserIds: string[];
+}) {
+  const message = requireMessage(input.messageId);
+  if (
+    message.deleted_at ||
+    message.recipient_agent_id !== input.agentId ||
+    !input.ownerUserIds.includes(message.owner_user_id)
+  ) {
+    throw new HttpError(404, "agent_message_not_found", "Agent Message not found.");
+  }
+  return getAgentMessageDetail(message.owner_user_id, message.id);
 }
 
 function existingOperationReceipt(input: {

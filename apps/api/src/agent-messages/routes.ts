@@ -15,6 +15,7 @@ import {
   failAgentMessage,
   forwardAgentMessage,
   getAgentMessageDetail,
+  getAgentMessageDetailForAgent,
   getAgentMessageSettings,
   handleAgentMessage,
   listAgentMessages,
@@ -158,12 +159,31 @@ function requireAgent(
   };
 }
 
+function withoutCompanionCompatibilityFields(
+  value: unknown,
+  companionRoute: boolean
+) {
+  if (!companionRoute || !value || typeof value !== "object" || Array.isArray(value)) {
+    return value ?? {};
+  }
+  const {
+    sessionId: _sessionId,
+    pairingToken: _pairingToken,
+    ...payload
+  } = value as Record<string, unknown>;
+  return payload;
+}
+
 function registerOwnerRoutes(
   app: FastifyInstance,
   dependencies: AgentMessageRouteDependencies,
   prefix: "/api/v1/agent-messages" | "/api/v1/mobile/agent-messages",
   owner: (request: FastifyRequest) => ReturnType<typeof operatorActor>
 ) {
+  const companionRoute = prefix.startsWith("/api/v1/mobile/");
+  const input = (value: unknown) =>
+    withoutCompanionCompatibilityFields(value, companionRoute);
+
   app.get(`${prefix}/agents`, async (request) => {
     const context = owner(request);
     return { agents: listConnectedAgents(context.ownerUserId) };
@@ -176,7 +196,7 @@ function registerOwnerRoutes(
 
   app.patch(`${prefix}/settings`, async (request) => {
     const context = owner(request);
-    const body = agentMessageSettingsPatchSchema.parse(request.body ?? {});
+    const body = agentMessageSettingsPatchSchema.parse(input(request.body));
     return updateAgentMessageSettings({
       ownerUserId: context.ownerUserId,
       defaultAgentId: body.defaultAgentId,
@@ -186,7 +206,7 @@ function registerOwnerRoutes(
 
   app.get(prefix, async (request) => {
     const context = owner(request);
-    const query = listAgentMessagesQuerySchema.parse(request.query ?? {});
+    const query = listAgentMessagesQuerySchema.parse(input(request.query));
     return listAgentMessages({ ownerUserId: context.ownerUserId, ...query });
   });
 
@@ -199,7 +219,7 @@ function registerOwnerRoutes(
   app.post(`${prefix}/:id/read`, async (request) => {
     const context = owner(request);
     const params = idParamsSchema.parse(request.params ?? {});
-    const body = markAgentMessageReadSchema.parse(request.body ?? {});
+    const body = markAgentMessageReadSchema.parse(input(request.body));
     return markAgentMessageRead({
       ownerUserId: context.ownerUserId,
       messageId: params.id,
@@ -211,7 +231,7 @@ function registerOwnerRoutes(
 
   app.post(`${prefix}/voice-reservations`, async (request, reply) => {
     const context = owner(request);
-    const body = createVoiceReservationSchema.parse(request.body ?? {});
+    const body = createVoiceReservationSchema.parse(input(request.body));
     const result = createVoiceReservation({
       ownerUserId: context.ownerUserId,
       ...body
@@ -227,7 +247,7 @@ function registerOwnerRoutes(
     async (request, reply) => {
       const context = owner(request);
       const params = reservationParamsSchema.parse(request.params ?? {});
-      const body = activateVoiceReservationSchema.parse(request.body ?? {});
+      const body = activateVoiceReservationSchema.parse(input(request.body));
       const result = await activateVoiceReservation({
         ownerUserId: context.ownerUserId,
         reservationId: params.id,
@@ -241,7 +261,7 @@ function registerOwnerRoutes(
 
   app.post(prefix, async (request, reply) => {
     const context = owner(request);
-    const body = createAgentMessageSchema.parse(request.body ?? {});
+    const body = createAgentMessageSchema.parse(input(request.body));
     const result = createAgentMessage({
       ownerUserId: context.ownerUserId,
       senderUserId: context.senderUserId,
@@ -257,7 +277,7 @@ function registerOwnerRoutes(
   app.post(`${prefix}/:id/reassign`, async (request) => {
     const context = owner(request);
     const params = idParamsSchema.parse(request.params ?? {});
-    const body = reassignAgentMessageSchema.parse(request.body ?? {});
+    const body = reassignAgentMessageSchema.parse(input(request.body));
     return reassignAgentMessage({
       ownerUserId: context.ownerUserId,
       messageId: params.id,
@@ -269,7 +289,7 @@ function registerOwnerRoutes(
   app.post(`${prefix}/:id/retry`, async (request, reply) => {
     const context = owner(request);
     const params = idParamsSchema.parse(request.params ?? {});
-    const body = retryAgentMessageSchema.parse(request.body ?? {});
+    const body = retryAgentMessageSchema.parse(input(request.body));
     const result = retryAgentMessage({
       ownerUserId: context.ownerUserId,
       messageId: params.id,
@@ -284,7 +304,7 @@ function registerOwnerRoutes(
   app.delete(`${prefix}/:id`, async (request) => {
     const context = owner(request);
     const params = idParamsSchema.parse(request.params ?? {});
-    const body = deleteAgentMessageSchema.parse(request.body ?? {});
+    const body = deleteAgentMessageSchema.parse(input(request.body));
     return deleteAgentMessage({
       ownerUserId: context.ownerUserId,
       messageId: params.id,
@@ -315,6 +335,16 @@ export async function registerAgentMessageRoutes(
       agentId: agent.agentId,
       ownerUserIds: agent.ownerUserIds,
       limit: query.limit
+    });
+  });
+
+  app.get("/api/v1/agent-messages/:id/detail", async (request) => {
+    const agent = requireAgent(dependencies, request, ["agentMessages.poll"]);
+    const params = idParamsSchema.parse(request.params ?? {});
+    return getAgentMessageDetailForAgent({
+      messageId: params.id,
+      agentId: agent.agentId,
+      ownerUserIds: agent.ownerUserIds
     });
   });
 

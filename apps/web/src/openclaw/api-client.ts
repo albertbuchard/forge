@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { userInfo } from "node:os";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +10,16 @@ import { forgeRemoteAuthorization } from "./remote-client-credential.js";
 
 const DEFAULT_REQUEST_BODY_LIMIT = 256_000;
 const DEFAULT_RESPONSE_BODY_LIMIT = 2_000_000;
+const AGENT_MESSAGE_AUDIO_RESPONSE_LIMIT = 25 * 1024 * 1024;
+const AGENT_MESSAGE_AUDIO_PATH = /^\/api\/v1\/agent-messages\/[A-Za-z0-9_-]{1,200}\/voice$/u;
+const AGENT_MESSAGE_AUDIO_MIME_TYPES = new Set([
+  "audio/mp4",
+  "audio/aac",
+  "audio/mpeg",
+  "audio/wav",
+  "audio/webm",
+  "audio/ogg"
+]);
 const FORGE_PLUGIN_VERSION = readForgePluginVersion();
 
 export type ForgeHttpMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
@@ -85,6 +96,15 @@ export type CallConfiguredForgeApiArgs = Omit<
 export type ForgeProxyResponse = {
   status: number;
   body: unknown;
+};
+
+export type ForgeAgentMessageAudioResponse = {
+  status: 200;
+  bytes: Uint8Array;
+  mimeType: string;
+  byteSize: number;
+  contentSha256: string;
+  artifactId: string;
 };
 
 type PluginErrorPayload = {
@@ -253,6 +273,40 @@ async function readReadableStreamBody(stream: ReadableStream<Uint8Array>, maxByt
   return new TextDecoder().decode(merged);
 }
 
+async function readReadableStreamBytes(
+  stream: ReadableStream<Uint8Array>,
+  maxBytes: number
+) {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        throw new ForgePluginError(
+          502,
+          "forge_agent_message_audio_too_large",
+          `Agent Message audio exceeded ${maxBytes} bytes.`
+        );
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const merged = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return merged;
+}
+
 async function readResponseBody(response: Response, maxBytes = DEFAULT_RESPONSE_BODY_LIMIT) {
   if (!response.body) {
     return null;
@@ -405,6 +459,174 @@ export async function callConfiguredForgeApi(config: ForgePluginConfig, args: Ca
       await ensureConfiguredForgeIdentity(config);
     }
   );
+}
+
+export async function callConfiguredForgeAgentMessageAudio(
+  config: ForgePluginConfig,
+  input: {
+    path: string;
+    body: {
+      leaseSecret: string;
+      claimGeneration: number;
+    };
+  }
+): Promise<ForgeAgentMessageAudioResponse> {
+  if (!AGENT_MESSAGE_AUDIO_PATH.test(input.path)) {
+    throw new ForgePluginError(
+      400,
+      "forge_agent_message_audio_path_rejected",
+      "The binary audio reader is limited to one Agent Messages voice route."
+    );
+  }
+  if (
+    config.apiToken.trim().length === 0 &&
+    (config.remoteCredentialId?.trim().length ?? 0) === 0
+  ) {
+    throw new ForgePluginError(
+      401,
+      "forge_agent_message_token_required",
+      "Agent Message audio requires an authenticated agent credential; an operator session cannot substitute."
+    );
+  }
+  await ensureForgeRuntimeReady(config);
+  await ensureConfiguredForgeIdentity(config);
+  const args: CallForgeApiArgs = {
+    baseUrl: config.baseUrl,
+    dataRoot: config.dataRoot,
+    apiToken: config.apiToken,
+    remoteCredentialId: config.remoteCredentialId ?? "",
+    actorLabel: config.actorLabel,
+    timeoutMs: Math.max(config.timeoutMs, 60_000),
+    method: "POST",
+    path: input.path,
+    body: input.body
+  };
+  requireSafeCredentialTransport(args);
+  const targetUrl = new URL(input.path, normalizeBaseUrl(config.baseUrl));
+  const remoteAuthorization =
+    args.remoteCredentialId && !args.apiToken
+      ? await forgeRemoteAuthorization({
+          credentialId: args.remoteCredentialId,
+          baseUrl: args.baseUrl,
+          method: "POST",
+          targetUri: targetUrl.toString(),
+          timeoutMs: args.timeoutMs ?? 60_000
+        })
+      : null;
+  const controller = new AbortController();
+  const timeoutMs = Math.max(1_000, args.timeoutMs ?? 60_000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(targetUrl, {
+      method: "POST",
+      headers: {
+        ...buildRequestHeaders(args),
+        accept: "audio/mp4, audio/aac, audio/mpeg, audio/wav, audio/webm, audio/ogg",
+        ...(remoteAuthorization ?? {})
+      },
+      body: JSON.stringify(input.body),
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      const errorBody = await readResponseBody(response);
+      const result: ForgeProxyResponse = {
+        status: response.status,
+        body:
+          errorBody ??
+          buildErrorBody(
+            "forge_agent_message_audio_error",
+            `Forge API ${response.status} returned no error body.`
+          )
+      };
+      expectForgeSuccess(result);
+    }
+    const mimeType = (response.headers.get("content-type") ?? "")
+      .split(";", 1)[0]!
+      .trim()
+      .toLowerCase();
+    if (!AGENT_MESSAGE_AUDIO_MIME_TYPES.has(mimeType)) {
+      throw new ForgePluginError(
+        502,
+        "forge_agent_message_audio_type_invalid",
+        "Forge returned an unsupported Agent Message audio content type."
+      );
+    }
+    const declaredLength = Number(response.headers.get("content-length"));
+    if (
+      !Number.isSafeInteger(declaredLength) ||
+      declaredLength < 1 ||
+      declaredLength > AGENT_MESSAGE_AUDIO_RESPONSE_LIMIT
+    ) {
+      throw new ForgePluginError(
+        502,
+        "forge_agent_message_audio_length_invalid",
+        "Forge returned a missing or out-of-policy Agent Message audio length."
+      );
+    }
+    const contentSha256 = (
+      response.headers.get("x-forge-content-sha256") ?? ""
+    ).toLowerCase();
+    const artifactId = response.headers.get("x-forge-artifact-id") ?? "";
+    if (!/^[a-f0-9]{64}$/u.test(contentSha256) || !artifactId.trim()) {
+      throw new ForgePluginError(
+        502,
+        "forge_agent_message_audio_identity_missing",
+        "Forge did not return the required Artifact and SHA-256 identity."
+      );
+    }
+    if (!response.body) {
+      throw new ForgePluginError(
+        502,
+        "forge_agent_message_audio_empty",
+        "Forge returned no Agent Message audio body."
+      );
+    }
+    const bytes = await readReadableStreamBytes(
+      response.body,
+      AGENT_MESSAGE_AUDIO_RESPONSE_LIMIT
+    );
+    if (bytes.byteLength !== declaredLength) {
+      throw new ForgePluginError(
+        502,
+        "forge_agent_message_audio_length_mismatch",
+        "Agent Message audio length did not match the authenticated response."
+      );
+    }
+    const actualSha256 = createHash("sha256")
+      .update(bytes)
+      .digest("hex");
+    if (actualSha256 !== contentSha256) {
+      bytes.fill(0);
+      throw new ForgePluginError(
+        502,
+        "forge_agent_message_audio_hash_mismatch",
+        "Agent Message audio failed its SHA-256 integrity check."
+      );
+    }
+    return {
+      status: 200,
+      bytes,
+      mimeType,
+      byteSize: bytes.byteLength,
+      contentSha256,
+      artifactId
+    };
+  } catch (error) {
+    if (error instanceof ForgePluginError) throw error;
+    const message =
+      error instanceof Error && error.name === "AbortError"
+        ? `Forge Agent Message audio timed out after ${timeoutMs}ms.`
+        : error instanceof Error
+          ? error.message
+          : String(error);
+    throw new ForgePluginError(
+      502,
+      "forge_agent_message_audio_unreachable",
+      message
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function ensureConfiguredForgeIdentity(

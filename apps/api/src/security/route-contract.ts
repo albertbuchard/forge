@@ -102,6 +102,7 @@ const MIXED_PEER_PROTOCOL_ROUTES = new Set(
 
 const LEGACY_SCOPE_COMPATIBILITY = new Map<string, readonly string[]>([
   ["GET /api/v1/agent-messages/poll", ["agentMessages.poll"]],
+  ["GET /api/v1/agent-messages/:id/detail", ["agentMessages.poll"]],
   ["POST /api/v1/agent-messages/:id/claim", ["agentMessages.claim"]],
   ["POST /api/v1/agent-messages/:id/lease", ["agentMessages.claim"]],
   ["POST /api/v1/agent-messages/:id/progress", ["agentMessages.progress"]],

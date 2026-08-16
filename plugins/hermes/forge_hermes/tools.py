@@ -1161,7 +1161,7 @@ def _execute_spec(spec: Dict[str, Any], args: Dict[str, Any]) -> Dict[str, Any]:
     if spec.get("requires_agent_token") and not config.api_token.strip():
         raise ForgePluginError(
             "forge_scoped_agent_token_required",
-            "People and peer-sharing agent tools require a configured Forge agent token with the route's published local scopes; an operator session cannot substitute for that token.",
+            "This scoped agent tool requires a configured Forge agent token with the route's published local scopes; an operator session cannot substitute for that token.",
         )
 
     path = _resolve_path(spec, args)

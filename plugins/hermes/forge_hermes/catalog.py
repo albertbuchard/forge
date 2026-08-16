@@ -275,6 +275,31 @@ ARTIFACT_ROUTE_EXAMPLES: List[Dict[str, Any]] = [
     },
 ]
 
+AGENT_MESSAGE_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
+    "poll": {"method": "GET", "path": "/api/v1/agent-messages/poll"},
+    "detail": {"method": "GET", "path": "/api/v1/agent-messages/:id/detail"},
+    "claim": {"method": "POST", "path": "/api/v1/agent-messages/:id/claim", "write": True},
+    "renewClaim": {"method": "POST", "path": "/api/v1/agent-messages/:id/lease", "write": True},
+    "addProgress": {"method": "POST", "path": "/api/v1/agent-messages/:id/progress", "write": True},
+    "acknowledge": {"method": "POST", "path": "/api/v1/agent-messages/:id/acknowledge", "write": True},
+    "handle": {"method": "POST", "path": "/api/v1/agent-messages/:id/handle", "write": True},
+    "fail": {"method": "POST", "path": "/api/v1/agent-messages/:id/fail", "write": True},
+    "forward": {"method": "POST", "path": "/api/v1/agent-messages/:id/forward", "write": True},
+}
+
+AGENT_MESSAGE_ROUTE_EXAMPLES: List[Dict[str, Any]] = [
+    {"routeKey": "poll", "query": {"limit": 20}},
+    {
+        "routeKey": "claim",
+        "pathParams": {"id": "amsg_example"},
+        "body": {
+            "operationKey": "stable-claim-operation-key",
+            "leaseSecret": "<fresh-256-bit-random-secret>",
+            "leaseSeconds": 300,
+        },
+    },
+]
+
 LIFE_EVENT_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
     "timeline": {"method": "GET", "path": "/api/v1/life-events/timeline"},
     "read": {"method": "GET", "path": "/api/v1/life-events/:id"},
@@ -1760,6 +1785,18 @@ TOOL_CATALOG: List[ToolSpec] = [
         "path_builder": lambda args: specialized_route_path(ARTIFACT_ROUTE_SPECS, args),
         "body_builder": specialized_route_body,
         "write_builder": lambda args: specialized_route_write(ARTIFACT_ROUTE_SPECS, args),
+    },
+    {
+        "name": "forge_call_agent_messages_route",
+        "description": "Poll, inspect, atomically claim, renew, update, acknowledge, complete, fail, or forward slow asynchronous Agent Messages. Use a fresh 256-bit random lease secret and stable operation keys, and never execute without a current claim. The current Hermes tool transport is text-only, so it deliberately does not return sensitive voice bytes or claim transcription support. Preserve voice as its Forge Artifact; if voice is necessary, keep the message pending or forward it to an explicitly audio-capable connected agent. Never upload voice to a third party silently and never promise free transcription.",
+        "parameters": specialized_route_parameters(
+            AGENT_MESSAGE_ROUTE_SPECS, AGENT_MESSAGE_ROUTE_EXAMPLES
+        ),
+        "method_builder": lambda args: specialized_route_method(AGENT_MESSAGE_ROUTE_SPECS, args),
+        "path_builder": lambda args: specialized_route_path(AGENT_MESSAGE_ROUTE_SPECS, args),
+        "body_builder": specialized_route_body,
+        "write_builder": lambda args: specialized_route_write(AGENT_MESSAGE_ROUTE_SPECS, args),
+        "requires_agent_token": True,
     },
     {
         "name": "forge_call_life_event_route",

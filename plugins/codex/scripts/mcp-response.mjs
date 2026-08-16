@@ -73,6 +73,21 @@ export function toMcpContent(result, limits = resolveMcpResponseLimits()) {
       : [{ type: "text", text: safeStringify(result?.details ?? null) }];
 
   return source.map((item) => {
+    if (
+      item &&
+      typeof item === "object" &&
+      item.type === "audio" &&
+      typeof item.data === "string" &&
+      typeof item.mimeType === "string" &&
+      item.data.length > 0 &&
+      item.mimeType.startsWith("audio/")
+    ) {
+      return {
+        type: "audio",
+        data: item.data,
+        mimeType: item.mimeType
+      };
+    }
     const text =
       item && typeof item === "object" && item.type === "text" && "text" in item
         ? typeof item.text === "string"
