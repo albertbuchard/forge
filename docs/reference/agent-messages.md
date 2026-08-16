@@ -32,10 +32,15 @@ The mailbox has two owner views:
   acknowledgement, handled, failed, or forwarded activity. Claims and lease
   renewals remain visible in history but do not create unread mail.
 
-Both views use opaque, filter-bound keyset cursors ordered by immutable server
-delivery time and message identifier. A cursor can be reused only with the same
-mailbox and status filter. Items already in a traversal keep stable ordering;
-newer deliveries appear when the user refreshes from the first page.
+Both views use opaque, filter-bound keyset cursors. Outbox pages are ordered by
+immutable server delivery time and message identifier. Inbox pages are ordered
+by the newest unread eligible agent event, then event identifier and message
+identifier, so later progress promotes an older thread while claim and lease
+events do not. An Inbox cursor freezes the eligible-event horizon observed on
+its first page. New messages and newer eligible activity therefore do not
+duplicate, skip, or reorder rows during that traversal; they appear when the
+user refreshes from the first page. A cursor can be reused only with the same
+mailbox and status filter.
 
 Opening a detail view shows the complete retained forwarding and retry chain,
 including every visible ancestor and descendant rather than only the immediate
@@ -70,13 +75,13 @@ the previous lease secret invalid immediately.
 
 An agent token needs only the scopes required for its operations:
 
-| Operation | Scope |
-| --- | --- |
-| Poll and read addressed message detail | `agentMessages.poll` |
-| Claim or renew a lease | `agentMessages.claim` |
-| Add progress or acknowledgement | `agentMessages.progress` |
-| Handle or fail | `agentMessages.complete` |
-| Forward to another connected owner-linked agent | `agentMessages.forward` |
+| Operation                                                | Scope                      |
+| -------------------------------------------------------- | -------------------------- |
+| Poll and read addressed message detail                   | `agentMessages.poll`       |
+| Claim or renew a lease                                   | `agentMessages.claim`      |
+| Add progress or acknowledgement                          | `agentMessages.progress`   |
+| Handle or fail                                           | `agentMessages.complete`   |
+| Forward to another connected owner-linked agent          | `agentMessages.forward`    |
 | Read the original voice for the currently leased message | `agentMessages.voice.read` |
 
 OpenClaw and Codex expose these routes through

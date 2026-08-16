@@ -500,10 +500,14 @@ secret digest. Authorization is checked before any stored receipt is returned,
 so a key cannot cross agent or owner authority. Terminal receipt keys prevent a
 retried worker from applying the same terminal side effect twice.
 
-Inbox and outbox use opaque, filter-bound keyset cursors ordered by immutable
-delivery time and message identifier. Detail and outbox ancestry resolve the
-complete retained forwarding/retry chain, including descendants reached through
-a deleted intermediate while suppressing the deleted message itself.
+Inbox and outbox use opaque, filter-bound keyset cursors. Outbox order uses
+immutable delivery time and message identifier. Inbox order uses the newest
+unread eligible agent event, event identifier, and message identifier, excluding
+claim and lease activity. An Inbox traversal freezes its first page's event
+horizon so concurrent eligible activity appears on refresh without duplicating,
+skipping, or reordering the current pages. Detail and outbox ancestry resolve
+the complete retained forwarding/retry chain, including descendants reached
+through a deleted intermediate while suppressing the deleted message itself.
 
 Each original voice is a first-class sensitive Artifact with immutable hash,
 verified media metadata, and a normal entity link to its message. Accepted

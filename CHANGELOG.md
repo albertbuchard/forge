@@ -7,9 +7,11 @@
   routing and complete detail history.
 - Added atomic claim leases, generation fencing, exact idempotency receipts,
   progress, acknowledgement, reassignment with lease revocation, forwarding,
-  handling, failure, retry children, actor-bound terminal receipts, filter-bound
-  keyset cursors, complete forwarded/retry chains, and restart-safe retention
-  cleanup.
+  handling, failure, retry children, actor-bound terminal receipts, complete
+  forwarded/retry chains, and restart-safe retention cleanup. Box-specific
+  keyset cursors retain immutable delivery order in Outbox and promote the
+  newest unread eligible agent activity in Inbox through a stable traversal
+  horizon.
 - Added strict 25 MiB/600-second container-and-codec verification and a
   lease-bound sensitive media route without weakening Forge's human-only
   generic Artifact downloads.

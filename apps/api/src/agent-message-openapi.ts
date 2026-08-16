@@ -178,7 +178,7 @@ function ownerPaths(prefix: string, mobile: boolean) {
       get: {
         tags: ["Agent Messages"],
         summary: "List the Agent Messages inbox or outbox",
-        description: `${protocolDescription}Outbox contains every retained message in owner-authored forwarding and retry chains. Inbox contains distinct threads whose latest agent-authored progress, acknowledgement, handled, failed, or forwarded event is newer than the owner read cursor. Claim and lease events never create unread state. Pages use a filter-bound opaque cursor over immutable creation time and id, so a newer delivery does not shift already traversed rows; refresh from the first page to include newer deliveries.`,
+        description: `${protocolDescription}Outbox contains every retained message in owner-authored forwarding and retry chains and orders them by immutable creation time and message id. Inbox contains distinct threads whose latest agent-authored progress, acknowledgement, handled, failed, or forwarded event is newer than the owner read cursor, ordered by that event's time, event id, and message id. Claim and lease events never create unread state. Each filter-bound opaque Inbox cursor freezes the first page's eligible-event horizon, so new messages or later eligible activity cannot duplicate, skip, or reorder rows in the current traversal; refresh from the first page to surface them.`,
         security,
         parameters: [
           {
@@ -204,7 +204,7 @@ function ownerPaths(prefix: string, mobile: boolean) {
             name: "cursor",
             in: "query",
             description:
-              "Opaque nextCursor from the preceding page, bound to box and status.",
+              "Opaque nextCursor from the preceding page, bound to box and status. Inbox cursors also preserve the traversal's first-page event horizon.",
             schema: { type: "string", minLength: 1, maxLength: 500 }
           }
         ],
