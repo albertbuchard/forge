@@ -7,7 +7,7 @@ app:
   extension_bundle_ids: []
 
 version:
-  marketing: "1.0.170"
+  marketing: "1.0.171"
 
 release:
   default_mode: testflight
