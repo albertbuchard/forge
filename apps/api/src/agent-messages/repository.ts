@@ -699,19 +699,6 @@ export function createAgentMessage(input: {
         .prepare("SELECT * FROM agent_message_voice_reservations WHERE id = ?")
         .get(input.voiceReservationId) as ReservationRow | undefined)
     : undefined;
-  if (
-    reservation &&
-    (reservation.owner_user_id !== input.ownerUserId ||
-      reservation.status !== "active" ||
-      !reservation.artifact_id ||
-      Date.parse(reservation.expires_at) <= (input.now ?? new Date()).getTime())
-  ) {
-    throw new HttpError(
-      409,
-      "agent_message_voice_reservation_not_active",
-      "The selected voice reservation is not active for this owner."
-    );
-  }
   const requestFingerprint = fingerprint({
     recipientAgentId: recipient.id,
     bodyText: input.bodyText,
@@ -738,6 +725,19 @@ export function createAgentMessage(input: {
         );
       }
       return { message: messagePublic(existing), replayed: true };
+    }
+    if (
+      reservation &&
+      (reservation.owner_user_id !== input.ownerUserId ||
+        reservation.status !== "active" ||
+        !reservation.artifact_id ||
+        Date.parse(reservation.expires_at) <= at.getTime())
+    ) {
+      throw new HttpError(
+        409,
+        "agent_message_voice_reservation_not_active",
+        "The selected voice reservation is not active for this owner."
+      );
     }
     if (reservation) {
       const claimed = getDatabase()
@@ -862,11 +862,11 @@ export function listAgentMessages(input: {
   limit: number;
   offset: number;
 }) {
-  const parameters: Array<string | number> = [input.ownerUserId];
+  const whereParameters: Array<string | number> = [input.ownerUserId];
   const where = ["messages.owner_user_id = ?", "messages.deleted_at IS NULL"];
   if (input.status) {
     where.push("messages.status = ?");
-    parameters.push(input.status);
+    whereParameters.push(input.status);
   }
   const eligiblePlaceholders = INBOX_ACTIVITY_EVENT_KINDS.map(() => "?").join(", ");
   const eligible = [...INBOX_ACTIVITY_EVENT_KINDS];
@@ -880,11 +880,16 @@ export function listAgentMessages(input: {
            AND events.event_kind IN (${eligiblePlaceholders})
        ), 0) > COALESCE(reads.last_read_event_sequence, 0)`
     );
-    parameters.push(...eligible);
+    whereParameters.push(...eligible);
   } else {
     where.push("messages.sender_kind = 'human_user'");
   }
-  parameters.push(...eligible, input.limit, input.offset);
+  const parameters = [
+    ...eligible,
+    ...whereParameters,
+    input.limit,
+    input.offset
+  ];
   const rows = getDatabase()
     .prepare(
       `SELECT messages.*,
@@ -2027,7 +2032,11 @@ export function deleteAgentMessage(input: {
 }
 
 export async function purgeExpiredAgentMessages(
-  input: { now?: Date; limit?: number } = {}
+  input: {
+    now?: Date;
+    limit?: number;
+    artifactServices?: Parameters<typeof reconcileAgentMessageVoicePurgeJobs>[0];
+  } = {}
 ) {
   const now = input.now ?? new Date();
   const at = now.toISOString();
@@ -2191,7 +2200,10 @@ export async function purgeExpiredAgentMessages(
       now
     })
   );
-  const cleanup = await reconcileAgentMessageVoicePurgeJobs({}, limit * 2);
+  const cleanup = await reconcileAgentMessageVoicePurgeJobs(
+    input.artifactServices ?? {},
+    limit * 2
+  );
   return {
     purgedMessageIds: prepared.purgedMessageIds,
     expiredReservationIds: prepared.expiredReservationIds,
