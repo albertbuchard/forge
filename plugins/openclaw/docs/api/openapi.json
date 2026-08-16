@@ -50640,7 +50640,7 @@
           "Agent Messages"
         ],
         "summary": "List the Agent Messages inbox or outbox",
-        "description": "Requires the authenticated Forge owner. Outbox contains owner-authored threads. Inbox contains distinct threads whose latest agent-authored progress, acknowledgement, handled, failed, or forwarded event is newer than the owner read cursor. Claim and lease events never create unread state.",
+        "description": "Requires the authenticated Forge owner. Outbox contains every retained message in owner-authored forwarding and retry chains. Inbox contains distinct threads whose latest agent-authored progress, acknowledgement, handled, failed, or forwarded event is newer than the owner read cursor. Claim and lease events never create unread state. Pages use a filter-bound opaque cursor over immutable creation time and id, so a newer delivery does not shift already traversed rows; refresh from the first page to include newer deliveries.",
         "security": [
           {
             "operatorSession": []
@@ -50686,12 +50686,13 @@
             }
           },
           {
-            "name": "offset",
+            "name": "cursor",
             "in": "query",
+            "description": "Opaque nextCursor from the preceding page, bound to box and status.",
             "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
             }
           }
         ],
@@ -50702,7 +50703,178 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": false,
+                  "required": [
+                    "box",
+                    "items",
+                    "unreadThreadCount",
+                    "limit",
+                    "cursor",
+                    "nextCursor",
+                    "hasMore"
+                  ],
+                  "properties": {
+                    "box": {
+                      "type": "string",
+                      "enum": [
+                        "inbox",
+                        "outbox"
+                      ]
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "required": [
+                          "id",
+                          "ownerUserId",
+                          "sender",
+                          "initialRecipient",
+                          "recipient",
+                          "bodyText",
+                          "voiceArtifact",
+                          "status",
+                          "revision",
+                          "retentionUntil",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "ownerUserId": {
+                            "type": "string"
+                          },
+                          "sender": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "initialRecipient": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "recipient": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "bodyText": {
+                            "type": "string",
+                            "maxLength": 50000
+                          },
+                          "voiceArtifact": {
+                            "anyOf": [
+                              {
+                                "type": "null"
+                              },
+                              {
+                                "type": "object",
+                                "required": [
+                                  "id",
+                                  "mimeType",
+                                  "byteSize",
+                                  "verifiedDurationMs",
+                                  "sensitivity"
+                                ],
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "mimeType": {
+                                    "type": "string"
+                                  },
+                                  "byteSize": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 26214400
+                                  },
+                                  "declaredDurationMs": {
+                                    "type": [
+                                      "integer",
+                                      "null"
+                                    ],
+                                    "minimum": 0
+                                  },
+                                  "verifiedDurationMs": {
+                                    "type": [
+                                      "integer",
+                                      "null"
+                                    ],
+                                    "minimum": 1,
+                                    "maximum": 600000
+                                  },
+                                  "sensitivity": {
+                                    "type": "string",
+                                    "const": "sensitive_media"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "delivered",
+                              "claimed",
+                              "in_progress",
+                              "acknowledged",
+                              "handled",
+                              "failed",
+                              "forwarded"
+                            ]
+                          },
+                          "revision": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "unreadInboxEventSequence": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 1
+                          },
+                          "retentionUntil": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    },
+                    "unreadThreadCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "limit": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 100
+                    },
+                    "cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    }
+                  }
                 }
               }
             }
@@ -51301,7 +51473,7 @@
           "Agent Messages"
         ],
         "summary": "Upload and verify the original audio for a reservation",
-        "description": "Requires the authenticated Forge owner. The JSON body is bounded at 35 MiB; decoded media is bounded at 25 MiB and must pass signature, MIME/extension, container/codec, and verified duration at or below 600 seconds.",
+        "description": "Requires the authenticated Forge owner. The JSON body is bounded at 35 MiB; decoded media is bounded at 25 MiB and must pass signature, MIME/extension, container/codec, and verified duration at or below 600 seconds. Allowed combinations are M4A/AAC, AAC/ADTS, MP3/MPEG Layer III, WAV/PCM or IEEE float, WebM/Opus, and Ogg/Opus.",
         "security": [
           {
             "operatorSession": []
@@ -51610,7 +51782,7 @@
           "Agent Messages"
         ],
         "summary": "List the Agent Messages inbox or outbox",
-        "description": "Requires a signed, replay-protected verified Forge companion request. The owner is derived from the pairing and cannot be supplied by the phone. Outbox contains owner-authored threads. Inbox contains distinct threads whose latest agent-authored progress, acknowledgement, handled, failed, or forwarded event is newer than the owner read cursor. Claim and lease events never create unread state.",
+        "description": "Requires a signed, replay-protected verified Forge companion request. The owner is derived from the pairing and cannot be supplied by the phone. Outbox contains every retained message in owner-authored forwarding and retry chains. Inbox contains distinct threads whose latest agent-authored progress, acknowledgement, handled, failed, or forwarded event is newer than the owner read cursor. Claim and lease events never create unread state. Pages use a filter-bound opaque cursor over immutable creation time and id, so a newer delivery does not shift already traversed rows; refresh from the first page to include newer deliveries.",
         "parameters": [
           {
             "name": "box",
@@ -51651,12 +51823,13 @@
             }
           },
           {
-            "name": "offset",
+            "name": "cursor",
             "in": "query",
+            "description": "Opaque nextCursor from the preceding page, bound to box and status.",
             "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
             }
           }
         ],
@@ -51667,7 +51840,178 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": false,
+                  "required": [
+                    "box",
+                    "items",
+                    "unreadThreadCount",
+                    "limit",
+                    "cursor",
+                    "nextCursor",
+                    "hasMore"
+                  ],
+                  "properties": {
+                    "box": {
+                      "type": "string",
+                      "enum": [
+                        "inbox",
+                        "outbox"
+                      ]
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "required": [
+                          "id",
+                          "ownerUserId",
+                          "sender",
+                          "initialRecipient",
+                          "recipient",
+                          "bodyText",
+                          "voiceArtifact",
+                          "status",
+                          "revision",
+                          "retentionUntil",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "ownerUserId": {
+                            "type": "string"
+                          },
+                          "sender": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "initialRecipient": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "recipient": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "bodyText": {
+                            "type": "string",
+                            "maxLength": 50000
+                          },
+                          "voiceArtifact": {
+                            "anyOf": [
+                              {
+                                "type": "null"
+                              },
+                              {
+                                "type": "object",
+                                "required": [
+                                  "id",
+                                  "mimeType",
+                                  "byteSize",
+                                  "verifiedDurationMs",
+                                  "sensitivity"
+                                ],
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "mimeType": {
+                                    "type": "string"
+                                  },
+                                  "byteSize": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 26214400
+                                  },
+                                  "declaredDurationMs": {
+                                    "type": [
+                                      "integer",
+                                      "null"
+                                    ],
+                                    "minimum": 0
+                                  },
+                                  "verifiedDurationMs": {
+                                    "type": [
+                                      "integer",
+                                      "null"
+                                    ],
+                                    "minimum": 1,
+                                    "maximum": 600000
+                                  },
+                                  "sensitivity": {
+                                    "type": "string",
+                                    "const": "sensitive_media"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "delivered",
+                              "claimed",
+                              "in_progress",
+                              "acknowledged",
+                              "handled",
+                              "failed",
+                              "forwarded"
+                            ]
+                          },
+                          "revision": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "unreadInboxEventSequence": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 1
+                          },
+                          "retentionUntil": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    },
+                    "unreadThreadCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "limit": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 100
+                    },
+                    "cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    }
+                  }
                 }
               }
             }
@@ -52241,7 +52585,7 @@
           "Agent Messages"
         ],
         "summary": "Upload and verify the original audio for a reservation",
-        "description": "Requires a signed, replay-protected verified Forge companion request. The owner is derived from the pairing and cannot be supplied by the phone. The JSON body is bounded at 35 MiB; decoded media is bounded at 25 MiB and must pass signature, MIME/extension, container/codec, and verified duration at or below 600 seconds.",
+        "description": "Requires a signed, replay-protected verified Forge companion request. The owner is derived from the pairing and cannot be supplied by the phone. The JSON body is bounded at 35 MiB; decoded media is bounded at 25 MiB and must pass signature, MIME/extension, container/codec, and verified duration at or below 600 seconds. Allowed combinations are M4A/AAC, AAC/ADTS, MP3/MPEG Layer III, WAV/PCM or IEEE float, WebM/Opus, and Ogg/Opus.",
         "parameters": [
           {
             "name": "id",

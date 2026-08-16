@@ -32,11 +32,18 @@ The mailbox has two owner views:
   acknowledgement, handled, failed, or forwarded activity. Claims and lease
   renewals remain visible in history but do not create unread mail.
 
-Opening a detail view shows the sender, initial and current recipient,
-timestamps, original-message relationships, current state, result or failure,
-optional transcript disclosure, and the ordered audit history. Mark-read uses
-the event sequence that the user actually saw, so a concurrent later update is
-not accidentally marked read.
+Both views use opaque, filter-bound keyset cursors ordered by immutable server
+delivery time and message identifier. A cursor can be reused only with the same
+mailbox and status filter. Items already in a traversal keep stable ordering;
+newer deliveries appear when the user refreshes from the first page.
+
+Opening a detail view shows the complete retained forwarding and retry chain,
+including every visible ancestor and descendant rather than only the immediate
+parent or child. It includes sender, initial and current recipient, timestamps,
+immutable relationships, current state, result or failure, optional transcript
+disclosure, and ordered audit history. Mark-read uses the event sequence that
+the user actually saw, so a concurrent later update is not accidentally marked
+read.
 
 ## Delivery And Work States
 
@@ -98,14 +105,25 @@ the same live lease. A claim committed just before a response is lost can be
 recovered by repeating the exact operation key and secret. An expired lease can
 be taken over; a stale claimant cannot continue mutating the message.
 
+Every operation receipt is bound to the authenticated actor kind and identifier,
+the message, and the canonical request fingerprint. Terminal receipts also bind
+the stable agent identity, claim generation, and a keyed digest of the lease
+secret. Forge authorizes the current token, linked owner, recipient, and
+operation before returning an earlier receipt, so another owner or agent cannot
+discover or replay a committed result merely by learning an idempotency key.
+
 ## Voice Artifacts And Transcription
 
-Voice activation accepts M4A/AAC, MP3, WAV, WebM/Opus, and OGG/Opus. The decoded
-body may not exceed 25 MiB and verified duration may not exceed 600,000
-milliseconds. Forge checks the byte signature, container, codec, declared MIME
-type and filename extension, then records the verified duration and immutable
-SHA-256 identity. Malformed, truncated, spoofed, unsupported, oversized, or
-unverifiable media is rejected before it becomes agent-readable.
+Voice activation accepts only these extension, MIME, container, and codec
+combinations: `.m4a` with `audio/mp4` and AAC; `.aac` with `audio/aac` and AAC
+in ADTS or an M4A container; `.mp3` with `audio/mpeg` and MPEG Layer III; `.wav`
+with `audio/wav` and PCM or IEEE-float samples; `.webm` with `audio/webm` and
+Opus; and `.ogg` with `audio/ogg` and Opus. The decoded body may not exceed 25
+MiB and verified duration may not exceed 600,000 milliseconds. Forge checks the
+byte signature, container, codec, declared MIME type and filename extension,
+then records the verified duration and immutable SHA-256 identity. Malformed,
+truncated, spoofed, unsupported, oversized, or unverifiable media is rejected
+before it becomes agent-readable.
 
 General agent Artifact download remains forbidden. Voice bytes are available
 only through the Agent Messages voice operation when all of these facts still
@@ -156,7 +174,7 @@ Artifact identifier, or audio.
 
 ## Idempotent Voice Creation
 
-Browser and iPhone voice sends use three durable steps:
+Browser and iPhone voice sends use the same three server-side idempotent steps:
 
 1. Reserve one owner-scoped voice identity with a stable idempotency key.
 2. Activate it with the bounded, verified original bytes using that same key.
@@ -168,6 +186,14 @@ returns `409`. An activated reservation is not described as a sent message until
 the message create succeeds. Unconsumed reservations expire after 24 hours and
 are cleaned only after Forge proves that no retained message or other policy
 reference still needs the Artifact.
+
+The browser keeps the reservation key, reservation identifier, original audio,
+and message key stable through an ambiguous reserve, activation, or create
+response while the composer remains mounted. It clears that attempt only after
+success or when the payload changes. This is retry-safe network behavior, not a
+durable browser offline outbox: closing or reloading the page can discard the
+local unsent attempt. Only the iPhone client makes the encrypted on-device
+durability guarantee described above.
 
 ## Retention, Deletion, And Forwarding
 

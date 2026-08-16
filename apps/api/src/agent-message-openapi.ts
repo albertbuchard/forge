@@ -178,7 +178,7 @@ function ownerPaths(prefix: string, mobile: boolean) {
       get: {
         tags: ["Agent Messages"],
         summary: "List the Agent Messages inbox or outbox",
-        description: `${protocolDescription}Outbox contains every retained message in owner-authored forwarding and retry chains. Inbox contains distinct threads whose latest agent-authored progress, acknowledgement, handled, failed, or forwarded event is newer than the owner read cursor. Claim and lease events never create unread state. Pages use a filter-bound opaque cursor over immutable creation time and id, so inserts and status updates cannot duplicate or skip older matching rows during traversal.`,
+        description: `${protocolDescription}Outbox contains every retained message in owner-authored forwarding and retry chains. Inbox contains distinct threads whose latest agent-authored progress, acknowledgement, handled, failed, or forwarded event is newer than the owner read cursor. Claim and lease events never create unread state. Pages use a filter-bound opaque cursor over immutable creation time and id, so a newer delivery does not shift already traversed rows; refresh from the first page to include newer deliveries.`,
         security,
         parameters: [
           {

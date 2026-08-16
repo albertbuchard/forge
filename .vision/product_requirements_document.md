@@ -494,13 +494,22 @@ SQLite transaction, generation fencing, and durable exact-replay receipts.
 Progress, acknowledgement, lease renewal, reassignment, forwarding, handling,
 and failure also use stable operation keys and canonical request fingerprints.
 Exactly repeated requests return the earlier safe result; changed reuse is a
-conflict. Terminal receipt keys prevent a retried worker from applying the same
-terminal side effect twice.
+conflict. Receipts are bound to the authenticated actor, and terminal receipt
+fingerprints also bind the stable agent, claim generation, and keyed lease
+secret digest. Authorization is checked before any stored receipt is returned,
+so a key cannot cross agent or owner authority. Terminal receipt keys prevent a
+retried worker from applying the same terminal side effect twice.
+
+Inbox and outbox use opaque, filter-bound keyset cursors ordered by immutable
+delivery time and message identifier. Detail and outbox ancestry resolve the
+complete retained forwarding/retry chain, including descendants reached through
+a deleted intermediate while suppressing the deleted message itself.
 
 Each original voice is a first-class sensitive Artifact with immutable hash,
 verified media metadata, and a normal entity link to its message. Accepted
-formats are M4A/AAC, MP3, WAV, WebM/Opus, and OGG/Opus, with a 25 MiB decoded
-limit and a verified 600,000 millisecond duration limit. The Agent Messages
+formats are M4A/AAC, AAC in ADTS or M4A, MP3 with MPEG Layer III, WAV with PCM
+or IEEE-float samples, WebM/Opus, and OGG/Opus, with a 25 MiB decoded limit and
+a verified 600,000 millisecond duration limit. The Agent Messages
 voice route is the only agent byte exception: owner, recipient, scope, live
 lease secret, generation, nonterminal state, retention, media, size, and hash
 must all match. Generic agent Artifact download stays forbidden.
@@ -514,8 +523,10 @@ voice and message remain pending and actionable.
 
 Browser and iPhone creation use an idempotent 24-hour voice reservation,
 verified activation with the same reservation key, and atomic message creation
-with a separate stable key. The iPhone writes the complete unsent item to an
-AES-GCM queue whose 256-bit key is protected by
+with a separate stable key. The browser preserves those identities and original
+audio through ambiguous network responses only while its composer remains
+mounted; page reload is not a durable browser offline queue. The iPhone writes
+the complete unsent item to an AES-GCM queue whose 256-bit key is protected by
 `AfterFirstUnlockThisDeviceOnly`; the queue file uses complete-until-first-
 authentication Data Protection. It does not create a second persistent
 plaintext staging file. Delivery is attempted when the app is active,
