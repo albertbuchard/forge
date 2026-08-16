@@ -5,7 +5,9 @@ import { recordEventLog } from "../repositories/event-log.js";
 import {
   createArtifactFromUpload,
   decodeArtifactUploadBase64,
+  reconcileAgentMessageVoicePurgeJobs,
   readArtifactDownload,
+  scheduleAgentMessageVoiceArtifactPurge,
   type ArtifactContext
 } from "../services/artifacts.js";
 import { verifyAgentMessageMedia } from "./media.js";
@@ -660,6 +662,23 @@ function appendEvent(input: {
   return sequence;
 }
 
+function linkVoiceArtifactToMessage(input: {
+  artifactId: string | null;
+  messageId: string;
+  actorLabel: string;
+  at: string;
+}) {
+  if (!input.artifactId) return;
+  getDatabase()
+    .prepare(
+      `INSERT OR IGNORE INTO entity_links (
+         source_entity_type, source_entity_id, target_entity_type, target_entity_id,
+         anchor_key, relationship, created_by_actor, created_at
+       ) VALUES ('artifact', ?, 'agent_message', ?, '', 'original_voice', ?, ?)`
+    )
+    .run(input.artifactId, input.messageId, input.actorLabel, input.at);
+}
+
 export function createAgentMessage(input: {
   ownerUserId: string;
   senderUserId: string;
@@ -810,6 +829,12 @@ function insertNewMessage(input: {
       timestamp,
       timestamp
     );
+  linkVoiceArtifactToMessage({
+    artifactId: input.reservation?.artifact_id ?? null,
+    messageId: input.messageId,
+    actorLabel: input.actor.label,
+    at: timestamp
+  });
   appendEvent({
     messageId: input.messageId,
     kind: input.retriedFromMessageId ? "retried" : "created",
@@ -946,6 +971,7 @@ export function getAgentMessageDetailForAgent(input: {
   const message = requireMessage(input.messageId);
   if (
     message.deleted_at ||
+    Date.parse(message.retention_until) <= Date.now() ||
     message.recipient_agent_id !== input.agentId ||
     !input.ownerUserIds.includes(message.owner_user_id)
   ) {
@@ -1125,9 +1151,13 @@ export function pollAgentMessages(input: {
   };
 }
 
-function requireAgentMessage(messageId: string, agentId: string) {
+function requireAgentMessage(messageId: string, agentId: string, now = new Date()) {
   const row = requireMessage(messageId);
-  if (row.recipient_agent_id !== agentId || row.deleted_at) {
+  if (
+    row.recipient_agent_id !== agentId ||
+    row.deleted_at ||
+    Date.parse(row.retention_until) <= now.getTime()
+  ) {
     throw new HttpError(404, "agent_message_not_found", "Agent Message not found.");
   }
   if (["handled", "failed", "forwarded"].includes(row.status)) {
@@ -1164,8 +1194,8 @@ export function claimAgentMessage(input: {
       requestFingerprint
     });
     if (replay) return { ...replay, replayed: true };
-    const message = requireAgentMessage(input.messageId, input.agentId);
     const now = input.now ?? new Date();
+    const message = requireAgentMessage(input.messageId, input.agentId, now);
     const hasLiveLease =
       message.claim_secret_digest !== null &&
       message.claim_expires_at !== null &&
@@ -1291,7 +1321,11 @@ function nonterminalAgentOperation(input: {
       requestFingerprint
     });
     if (replay) return { ...replay, replayed: true };
-    const message = requireAgentMessage(input.messageId, input.agentId);
+    const message = requireAgentMessage(
+      input.messageId,
+      input.agentId,
+      input.now ?? new Date()
+    );
     verifyLiveLease({ ...input, message });
     const now = input.now ?? new Date();
     const at = now.toISOString();
@@ -1493,7 +1527,11 @@ function terminalAgentOperation(input: {
   return inImmediateTransaction(() => {
     const replay = existingTerminalReceipt(input);
     if (replay) return { ...replay, replayed: true };
-    const message = requireAgentMessage(input.messageId, input.agentId);
+    const message = requireAgentMessage(
+      input.messageId,
+      input.agentId,
+      input.now ?? new Date()
+    );
     verifyLiveLease({ ...input, message });
     const at = nowIso(input.now);
     const revision = message.revision + 1;
@@ -1590,7 +1628,11 @@ export function forwardAgentMessage(input: {
   return inImmediateTransaction(() => {
     const replay = existingTerminalReceipt({ ...input, requestFingerprint });
     if (replay) return { ...replay, replayed: true };
-    const message = requireAgentMessage(input.messageId, input.agentId);
+    const message = requireAgentMessage(
+      input.messageId,
+      input.agentId,
+      input.now ?? new Date()
+    );
     verifyLiveLease({ ...input, message });
     const recipient = agentForOwner(input.recipientAgentId, message.owner_user_id);
     if (recipient.id === input.agentId) {
@@ -1646,6 +1688,12 @@ export function forwardAgentMessage(input: {
         timestamp,
         timestamp
       );
+    linkVoiceArtifactToMessage({
+      artifactId: message.voice_artifact_id,
+      messageId: childId,
+      actorLabel: input.actor.label,
+      at: timestamp
+    });
     appendEvent({
       messageId: childId,
       kind: "forwarded",
@@ -1897,6 +1945,12 @@ export function retryAgentMessage(input: {
         timestamp,
         timestamp
       );
+    linkVoiceArtifactToMessage({
+      artifactId: source.voice_artifact_id,
+      messageId: childId,
+      actorLabel: input.actor.label,
+      at: timestamp
+    });
     const eventSequence = appendEvent({
       messageId: childId,
       kind: "retried",
@@ -1972,6 +2026,180 @@ export function deleteAgentMessage(input: {
   });
 }
 
+export async function purgeExpiredAgentMessages(
+  input: { now?: Date; limit?: number } = {}
+) {
+  const now = input.now ?? new Date();
+  const at = now.toISOString();
+  const limit = Math.max(1, Math.min(100, Math.trunc(input.limit ?? 25)));
+  const prepared = inImmediateTransaction(() => {
+    const rows = getDatabase()
+      .prepare(
+        `SELECT messages.*, artifacts.content_sha256 AS voice_content_sha256
+         FROM agent_messages AS messages
+         LEFT JOIN artifacts ON artifacts.id = messages.voice_artifact_id
+         WHERE messages.retention_purged_at IS NULL
+           AND messages.retention_until <= ?
+         ORDER BY messages.retention_until, messages.id
+         LIMIT ?`
+      )
+      .all(at, limit) as Array<MessageRow & { voice_content_sha256: string | null }>;
+    const systemActor: AgentMessageActor = {
+      kind: "system",
+      id: null,
+      label: "Agent Messages retention",
+      source: "system"
+    };
+    for (const message of rows) {
+      const purgeReceiptSha256 = fingerprint({
+        messageId: message.id,
+        bodyText: message.body_text,
+        progressSummary: message.progress_summary,
+        resultMarkdown: message.result_markdown,
+        transcriptText: message.transcript_text,
+        transcriptProvider: message.transcript_provider,
+        transcriptDisclosure: message.transcript_disclosure,
+        failureCode: message.failure_code,
+        failureMessage: message.failure_message,
+        voiceArtifactId: message.voice_artifact_id,
+        voiceContentSha256: message.voice_content_sha256,
+        voiceByteSize: message.voice_byte_size,
+        retentionUntil: message.retention_until
+      });
+      appendEvent({
+        messageId: message.id,
+        kind: "retention_purged",
+        actor: systemActor,
+        priorStatus: message.status,
+        nextStatus: message.status,
+        metadata: {
+          purgeReceiptSha256,
+          purgedVoiceArtifactId: message.voice_artifact_id,
+          purgedVoiceContentSha256: message.voice_content_sha256
+        },
+        at
+      });
+      getDatabase()
+        .prepare(
+          `UPDATE agent_messages
+           SET body_text = '', voice_artifact_id = NULL, voice_mime_type = '',
+               voice_byte_size = NULL, voice_declared_duration_ms = NULL,
+               voice_verified_duration_ms = NULL, progress_summary = '',
+               result_markdown = '', transcript_text = '', transcript_provider = '',
+               transcript_disclosure = '', failure_code = '', failure_message = '',
+               retention_purged_at = ?, purge_receipt_sha256 = ?,
+               purged_voice_artifact_id = ?, purged_voice_content_sha256 = ?,
+               purged_voice_byte_size = ?, deleted_at = COALESCE(deleted_at, ?),
+               deleted_by_kind = CASE WHEN deleted_at IS NULL THEN 'system' ELSE deleted_by_kind END,
+               deleted_by_id = CASE WHEN deleted_at IS NULL THEN NULL ELSE deleted_by_id END,
+               deletion_reason = CASE WHEN deletion_reason = ''
+                 THEN 'Retention period expired.' ELSE deletion_reason END,
+               claim_secret_digest = NULL, claimed_by_agent_id = NULL,
+               claim_expires_at = NULL, revision = revision + 1, updated_at = ?
+           WHERE id = ? AND retention_purged_at IS NULL`
+        )
+        .run(
+          at,
+          purgeReceiptSha256,
+          message.voice_artifact_id,
+          message.voice_content_sha256,
+          message.voice_byte_size,
+          at,
+          at,
+          message.id
+        );
+      recordEventLog({
+        eventKind: "agent_message.retention_purged",
+        entityType: "agent_message",
+        entityId: message.id,
+        actor: systemActor.label,
+        source: "system",
+        metadata: {
+          purgeReceiptSha256,
+          originalVoicePreservedUntil: message.retention_until
+        }
+      }, now);
+    }
+
+    const expiredReservations = getDatabase()
+      .prepare(
+        `SELECT id FROM agent_message_voice_reservations
+         WHERE status IN ('pending', 'active') AND expires_at <= ?
+         ORDER BY expires_at, id LIMIT ?`
+      )
+      .all(at, limit) as Array<{ id: string }>;
+    const expireReservation = getDatabase().prepare(
+      `UPDATE agent_message_voice_reservations
+       SET status = 'expired', updated_at = ?
+       WHERE id = ? AND status IN ('pending', 'active') AND expires_at <= ?`
+    );
+    for (const reservation of expiredReservations) {
+      expireReservation.run(at, reservation.id, at);
+    }
+
+    const candidates = getDatabase()
+      .prepare(
+        `SELECT artifact_id, owner_user_id FROM (
+           SELECT purged_voice_artifact_id AS artifact_id, owner_user_id
+           FROM agent_messages
+           WHERE retention_purged_at IS NOT NULL
+             AND purged_voice_artifact_id IS NOT NULL
+           UNION
+           SELECT artifact_id, owner_user_id
+           FROM agent_message_voice_reservations
+           WHERE status = 'expired' AND artifact_id IS NOT NULL
+         ) AS candidates
+         WHERE NOT EXISTS (
+           SELECT 1 FROM agent_messages
+           WHERE voice_artifact_id = candidates.artifact_id
+             AND retention_purged_at IS NULL
+         )
+           AND NOT EXISTS (
+             SELECT 1 FROM agent_message_voice_reservations
+             WHERE artifact_id = candidates.artifact_id
+               AND status IN ('pending', 'active')
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM entity_links
+             WHERE (
+               source_entity_type = 'artifact'
+               AND source_entity_id = candidates.artifact_id
+               AND NOT (
+                 target_entity_type = 'agent_message'
+                 AND relationship = 'original_voice'
+               )
+             ) OR (
+               target_entity_type = 'artifact'
+               AND target_entity_id = candidates.artifact_id
+             )
+           )
+         ORDER BY artifact_id
+         LIMIT ?`
+      )
+      .all(limit * 2) as Array<{ artifact_id: string; owner_user_id: string }>;
+    return {
+      purgedMessageIds: rows.map((row) => row.id),
+      expiredReservationIds: expiredReservations.map((row) => row.id),
+      candidates
+    };
+  });
+
+  const artifacts = prepared.candidates.map((candidate) =>
+    scheduleAgentMessageVoiceArtifactPurge({
+      artifactId: candidate.artifact_id,
+      ownerUserId: candidate.owner_user_id,
+      now
+    })
+  );
+  const cleanup = await reconcileAgentMessageVoicePurgeJobs({}, limit * 2);
+  return {
+    purgedMessageIds: prepared.purgedMessageIds,
+    expiredReservationIds: prepared.expiredReservationIds,
+    artifacts,
+    cleanup
+  };
+}
+
 export async function readAgentMessageVoice(input: {
   messageId: string;
   agentId: string;
@@ -1981,7 +2209,11 @@ export async function readAgentMessageVoice(input: {
   ownerUserIds: string[];
   now?: Date;
 }) {
-  const message = requireAgentMessage(input.messageId, input.agentId);
+  const message = requireAgentMessage(
+    input.messageId,
+    input.agentId,
+    input.now ?? new Date()
+  );
   if (!input.ownerUserIds.includes(message.owner_user_id)) {
     throw new HttpError(404, "agent_message_not_found", "Agent Message not found.");
   }

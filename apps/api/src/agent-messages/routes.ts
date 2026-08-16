@@ -23,6 +23,7 @@ import {
   markAgentMessageRead,
   pollAgentMessages,
   progressAgentMessage,
+  purgeExpiredAgentMessages,
   readAgentMessageVoice,
   reassignAgentMessage,
   renewAgentMessageLease,
@@ -207,6 +208,7 @@ function registerOwnerRoutes(
   app.get(prefix, async (request) => {
     const context = owner(request);
     const query = listAgentMessagesQuerySchema.parse(input(request.query));
+    await purgeExpiredAgentMessages();
     return listAgentMessages({ ownerUserId: context.ownerUserId, ...query });
   });
 
@@ -318,6 +320,7 @@ export async function registerAgentMessageRoutes(
   app: FastifyInstance,
   dependencies: AgentMessageRouteDependencies
 ) {
+  await purgeExpiredAgentMessages();
   registerOwnerRoutes(app, dependencies, "/api/v1/agent-messages", (request) =>
     requireOperator(dependencies, request)
   );
@@ -331,6 +334,7 @@ export async function registerAgentMessageRoutes(
   app.get("/api/v1/agent-messages/poll", async (request) => {
     const agent = requireAgent(dependencies, request, ["agentMessages.poll"]);
     const query = pollQuerySchema.parse(request.query ?? {});
+    await purgeExpiredAgentMessages();
     return pollAgentMessages({
       agentId: agent.agentId,
       ownerUserIds: agent.ownerUserIds,

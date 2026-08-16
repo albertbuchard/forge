@@ -24,6 +24,7 @@ import {
   type EntityLinkRecord
 } from "../repositories/entity-links.js";
 import {
+  clearEntityOwner,
   getEntityOwnerId,
   setEntityOwner
 } from "../repositories/entity-ownership.js";
@@ -1170,6 +1171,15 @@ type PendingArtifactBlobCleanup = {
   storedContentSha256: string;
   storedByteSize: number;
   blobCreatedByOperation: boolean;
+};
+
+type AgentMessageVoicePurgeJob = {
+  id: string;
+  artifactId: string;
+  contentSha256: string;
+  storageKey: string;
+  storedContentSha256: string;
+  storedByteSize: number;
 };
 
 type StoredArtifactBlob = PendingArtifactBlobCleanup & {
@@ -2919,6 +2929,289 @@ export async function reconcilePendingArtifactBlobCleanups(
     dispositions.push({
       id: pending.id,
       disposition: await reconcilePendingArtifactBlobCleanup(pending, services)
+    });
+  }
+  return dispositions;
+}
+
+function readAgentMessageVoicePurgeJob(id: string) {
+  return getDatabase()
+    .prepare(
+      `SELECT id, artifact_id, content_sha256, storage_key,
+              stored_content_sha256, stored_byte_size
+       FROM agent_message_voice_purge_jobs
+       WHERE id = ?`
+    )
+    .get(id) as
+    | {
+        id: string;
+        artifact_id: string;
+        content_sha256: string;
+        storage_key: string;
+        stored_content_sha256: string;
+        stored_byte_size: number;
+      }
+    | undefined;
+}
+
+function mapAgentMessageVoicePurgeJob(
+  row: NonNullable<ReturnType<typeof readAgentMessageVoicePurgeJob>>
+): AgentMessageVoicePurgeJob {
+  return {
+    id: row.id,
+    artifactId: row.artifact_id,
+    contentSha256: row.content_sha256,
+    storageKey: row.storage_key,
+    storedContentSha256: row.stored_content_sha256,
+    storedByteSize: row.stored_byte_size
+  };
+}
+
+/**
+ * Atomically detaches metadata for an Agent Messages voice Artifact only after
+ * every message/reservation/policy reference has gone away. Physical blob
+ * removal is deliberately deferred to the lock-protected journal reconciler.
+ */
+export function scheduleAgentMessageVoiceArtifactPurge(input: {
+  artifactId: string;
+  ownerUserId: string;
+  now?: Date;
+}) {
+  const at = input.now?.toISOString() ?? nowIso();
+  return runInTransaction(() => {
+    const artifact = getArtifactRow(input.artifactId);
+    if (!artifact) {
+      return { artifactId: input.artifactId, disposition: "missing", jobs: 0 } as const;
+    }
+    if (
+      artifact.source_kind !== "agent_message_voice" ||
+      getEntityOwnerId("artifact", artifact.id) !== input.ownerUserId
+    ) {
+      return {
+        artifactId: input.artifactId,
+        disposition: "policy_reference",
+        jobs: 0
+      } as const;
+    }
+    const retainedMessage = getDatabase()
+      .prepare(
+        `SELECT 1 FROM agent_messages
+         WHERE voice_artifact_id = ? AND retention_purged_at IS NULL
+         LIMIT 1`
+      )
+      .get(artifact.id);
+    const retainedReservation = getDatabase()
+      .prepare(
+        `SELECT 1 FROM agent_message_voice_reservations
+         WHERE artifact_id = ? AND status IN ('pending', 'active')
+         LIMIT 1`
+      )
+      .get(artifact.id);
+    const linkedElsewhere = getDatabase()
+      .prepare(
+        `SELECT 1 FROM entity_links
+         WHERE (
+           source_entity_type = 'artifact' AND source_entity_id = ?
+           AND NOT (
+             target_entity_type = 'agent_message'
+             AND relationship = 'original_voice'
+           )
+         )
+            OR (target_entity_type = 'artifact' AND target_entity_id = ?)
+         LIMIT 1`
+      )
+      .get(artifact.id, artifact.id);
+    if (retainedMessage || retainedReservation || linkedElsewhere) {
+      return {
+        artifactId: artifact.id,
+        disposition: "policy_reference",
+        jobs: 0
+      } as const;
+    }
+
+    const blobs = getDatabase()
+      .prepare(
+        `SELECT storage_key, content_sha256, stored_content_sha256, stored_byte_size
+         FROM artifacts WHERE id = ?
+         UNION
+         SELECT storage_key, content_sha256, stored_content_sha256, stored_byte_size
+         FROM artifact_versions WHERE artifact_id = ?`
+      )
+      .all(artifact.id, artifact.id) as Array<{
+      storage_key: string;
+      content_sha256: string;
+      stored_content_sha256: string;
+      stored_byte_size: number;
+    }>;
+    const insertJob = getDatabase().prepare(
+      `INSERT OR IGNORE INTO agent_message_voice_purge_jobs (
+         id, artifact_id, content_sha256, storage_key,
+         stored_content_sha256, stored_byte_size, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    let jobs = 0;
+    for (const blob of blobs) {
+      const result = insertJob.run(
+        `amvp_${randomUUID().replaceAll("-", "").slice(0, 16)}`,
+        artifact.id,
+        blob.content_sha256,
+        blob.storage_key,
+        blob.stored_content_sha256,
+        blob.stored_byte_size,
+        at,
+        at
+      );
+      jobs += Number(result.changes);
+    }
+    getDatabase()
+      .prepare(
+        `UPDATE agent_message_voice_reservations
+         SET artifact_id = NULL, updated_at = ?
+         WHERE artifact_id = ? AND status IN ('consumed', 'expired')`
+      )
+      .run(at, artifact.id);
+    getDatabase()
+      .prepare(
+        `DELETE FROM entity_links
+         WHERE (source_entity_type = 'artifact' AND source_entity_id = ?)
+            OR (target_entity_type = 'artifact' AND target_entity_id = ?)`
+      )
+      .run(artifact.id, artifact.id);
+    getDatabase().prepare("DELETE FROM artifacts WHERE id = ?").run(artifact.id);
+    clearEntityOwner("artifact", artifact.id);
+    recordEventLog({
+      eventKind: "artifact.retention_purged",
+      entityType: "artifact" as CrudEntityType,
+      entityId: artifact.id,
+      actor: "Agent Messages retention",
+      source: "system",
+      metadata: toEventMetadata({
+        contentSha256: artifact.content_sha256,
+        storageCleanupJournaled: true,
+        cleanupJobCount: jobs
+      })
+    });
+    return { artifactId: artifact.id, disposition: "scheduled", jobs } as const;
+  });
+}
+
+async function reconcileAgentMessageVoicePurgeJob(
+  pending: AgentMessageVoicePurgeJob,
+  services: ArtifactServiceDependencies
+) {
+  const releaseLock = await acquireArtifactBlobLock(pending.storageKey);
+  try {
+    const row = readAgentMessageVoicePurgeJob(pending.id);
+    if (!row) return "already_resolved" as const;
+    const current = mapAgentMessageVoicePurgeJob(row);
+    if (current.storageKey !== storageKeyForHash(current.storedContentSha256)) {
+      throw Object.assign(new Error("Agent Message purge binding is invalid."), {
+        code: "agent_message_purge_binding_invalid"
+      });
+    }
+    const referenced = getDatabase()
+      .prepare(
+        `SELECT 1 FROM artifacts WHERE storage_key = ?
+         UNION ALL
+         SELECT 1 FROM artifact_versions WHERE storage_key = ?
+         UNION ALL
+         SELECT 1 FROM artifact_blob_retentions WHERE storage_key = ?
+         LIMIT 1`
+      )
+      .get(current.storageKey, current.storageKey, current.storageKey);
+    if (referenced) {
+      getDatabase()
+        .prepare("DELETE FROM agent_message_voice_purge_jobs WHERE id = ?")
+        .run(current.id);
+      return "referenced" as const;
+    }
+    const removeFile =
+      services.removeArtifactUploadFile ??
+      services.removeEncryptedUploadFile ??
+      ((target: string) => rm(target, { force: true }));
+    const storagePath = resolveStoragePath(current.storageKey);
+    const existed = existsSync(storagePath);
+    await removeFile(storagePath);
+    runInTransaction(() => {
+      const referenceAfterRemoval = getDatabase()
+        .prepare(
+          `SELECT 1 FROM artifacts WHERE storage_key = ?
+           UNION ALL
+           SELECT 1 FROM artifact_versions WHERE storage_key = ?
+           UNION ALL
+           SELECT 1 FROM artifact_blob_retentions WHERE storage_key = ?
+           LIMIT 1`
+        )
+        .get(current.storageKey, current.storageKey, current.storageKey);
+      if (referenceAfterRemoval) {
+        throw Object.assign(
+          new Error("Agent Message voice blob became referenced during cleanup."),
+          { code: "agent_message_purge_reference_race" }
+        );
+      }
+      getDatabase()
+        .prepare(
+          `DELETE FROM artifact_blobs
+           WHERE storage_key = ?
+             AND NOT EXISTS (SELECT 1 FROM artifacts WHERE storage_key = ?)
+             AND NOT EXISTS (SELECT 1 FROM artifact_versions WHERE storage_key = ?)
+             AND NOT EXISTS (SELECT 1 FROM artifact_blob_retentions WHERE storage_key = ?)`
+        )
+        .run(
+          current.storageKey,
+          current.storageKey,
+          current.storageKey,
+          current.storageKey
+        );
+      getDatabase()
+        .prepare("DELETE FROM agent_message_voice_purge_jobs WHERE id = ?")
+        .run(current.id);
+    });
+    return existed ? ("removed" as const) : ("missing" as const);
+  } catch (error) {
+    getDatabase()
+      .prepare(
+        `UPDATE agent_message_voice_purge_jobs
+         SET attempt_count = attempt_count + 1,
+             last_error_code = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(
+        safeArtifactFailureCode(error, "agent_message_purge_failed"),
+        nowIso(),
+        pending.id
+      );
+    return "pending" as const;
+  } finally {
+    await releaseLock();
+  }
+}
+
+export async function reconcileAgentMessageVoicePurgeJobs(
+  services: ArtifactServiceDependencies = {},
+  limit = MAX_PENDING_ARTIFACT_BLOB_CLEANUPS
+) {
+  const boundedLimit = Math.max(
+    1,
+    Math.min(MAX_PENDING_ARTIFACT_BLOB_CLEANUPS, Math.trunc(limit))
+  );
+  const rows = getDatabase()
+    .prepare(
+      `SELECT id, artifact_id, content_sha256, storage_key,
+              stored_content_sha256, stored_byte_size
+       FROM agent_message_voice_purge_jobs
+       ORDER BY created_at ASC, id ASC
+       LIMIT ?`
+    )
+    .all(boundedLimit) as Array<
+    NonNullable<ReturnType<typeof readAgentMessageVoicePurgeJob>>
+  >;
+  const dispositions: Array<{ id: string; disposition: string }> = [];
+  for (const row of rows) {
+    const pending = mapAgentMessageVoicePurgeJob(row);
+    dispositions.push({
+      id: pending.id,
+      disposition: await reconcileAgentMessageVoicePurgeJob(pending, services)
     });
   }
   return dispositions;

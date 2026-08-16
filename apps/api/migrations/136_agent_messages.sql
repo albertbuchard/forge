@@ -71,6 +71,11 @@ CREATE TABLE IF NOT EXISTS agent_messages (
   client_idempotency_key TEXT NOT NULL,
   request_fingerprint TEXT NOT NULL CHECK (length(request_fingerprint) = 64),
   retention_until TEXT NOT NULL,
+  retention_purged_at TEXT,
+  purge_receipt_sha256 TEXT CHECK (purge_receipt_sha256 IS NULL OR length(purge_receipt_sha256) = 64),
+  purged_voice_artifact_id TEXT,
+  purged_voice_content_sha256 TEXT CHECK (purged_voice_content_sha256 IS NULL OR length(purged_voice_content_sha256) = 64),
+  purged_voice_byte_size INTEGER CHECK (purged_voice_byte_size IS NULL OR purged_voice_byte_size >= 0),
   deleted_at TEXT,
   deleted_by_kind TEXT,
   deleted_by_id TEXT,
@@ -82,7 +87,11 @@ CREATE TABLE IF NOT EXISTS agent_messages (
   forwarded_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  CHECK (length(trim(body_text)) > 0 OR voice_artifact_id IS NOT NULL),
+  CHECK (
+    length(trim(body_text)) > 0
+    OR voice_artifact_id IS NOT NULL
+    OR retention_purged_at IS NOT NULL
+  ),
   CHECK (
     (sender_kind = 'human_user' AND sender_user_id IS NOT NULL AND sender_agent_id IS NULL)
     OR (sender_kind = 'agent' AND sender_agent_id IS NOT NULL AND sender_user_id IS NULL)
@@ -160,6 +169,20 @@ CREATE TABLE IF NOT EXISTS agent_message_terminal_receipts (
   UNIQUE (message_id, receipt_key)
 ) STRICT;
 
+CREATE TABLE IF NOT EXISTS agent_message_voice_purge_jobs (
+  id TEXT PRIMARY KEY,
+  artifact_id TEXT NOT NULL,
+  content_sha256 TEXT NOT NULL CHECK (length(content_sha256) = 64),
+  storage_key TEXT NOT NULL,
+  stored_content_sha256 TEXT NOT NULL CHECK (length(stored_content_sha256) = 64),
+  stored_byte_size INTEGER NOT NULL CHECK (stored_byte_size >= 0),
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  last_error_code TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (artifact_id, storage_key)
+) STRICT;
+
 CREATE INDEX IF NOT EXISTS idx_agent_messages_owner_outbox
   ON agent_messages(owner_user_id, deleted_at, updated_at DESC, id DESC);
 
@@ -179,3 +202,6 @@ CREATE INDEX IF NOT EXISTS idx_agent_message_reservations_expiry
 
 CREATE INDEX IF NOT EXISTS idx_agent_message_receipts_lookup
   ON agent_message_operation_receipts(message_id, operation_kind, operation_key);
+
+CREATE INDEX IF NOT EXISTS idx_agent_message_voice_purge_jobs_created
+  ON agent_message_voice_purge_jobs(created_at, id);
