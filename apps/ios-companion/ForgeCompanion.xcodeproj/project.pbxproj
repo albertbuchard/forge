@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A81600000000000000000001 /* AgentMessages.swift in Sources */ = {isa = PBXBuildFile; fileRef = A81600000000000000000002 /* AgentMessages.swift */; };
 		A70700000000000000000001 /* ForgeWatch_Watch_AppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A70700000000000000000002 /* ForgeWatch_Watch_AppTests.swift */; };
 		026ADCCD654CFCD77957E9CC /* rose-pine-x.json in Resources */ = {isa = PBXBuildFile; fileRef = 8ABBADB2AB81FE641E5B2527 /* rose-pine-x.json */; };
 		063708E0646D9174E0F996C7 /* rose-pine-dawn.json in Resources */ = {isa = PBXBuildFile; fileRef = AF3C1DCE3B23349C44A0E440 /* rose-pine-dawn.json */; };
@@ -216,6 +217,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A81600000000000000000002 /* AgentMessages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentMessages.swift; sourceTree = "<group>"; };
 		A70700000000000000000002 /* ForgeWatch_Watch_AppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeWatch_Watch_AppTests.swift; sourceTree = "<group>"; };
 		A70700000000000000000003 /* ForgeWatch Watch AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "ForgeWatch Watch AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		0273258C74CFF59B515D3923 /* lobster-dark-dxSKfHK-.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "lobster-dark-dxSKfHK-.json"; sourceTree = "<group>"; };
@@ -507,6 +509,7 @@
 		6731BAF5E5A28D30558D535E /* ForgeCompanion */ = {
 			isa = PBXGroup;
 			children = (
+				A81600000000000000000002 /* AgentMessages.swift */,
 				993F6F1A53311219E315BBF3 /* Assets.xcassets */,
 				EB6330E339B74351A9737AEF /* CompanionAppModel.swift */,
 				2E3B5D8FC9E40AE175BE3227 /* CompanionAppRoot.swift */,
@@ -1021,6 +1024,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A81600000000000000000001 /* AgentMessages.swift in Sources */,
 				31DD17A609B0896155384020 /* CompanionAppModel.swift in Sources */,
 				3B98589423316C410EFC2442 /* CompanionAppRoot.swift in Sources */,
 				75A76BDBA4705C8FDDA1A250 /* CompanionBackgroundScheduler.swift in Sources */,

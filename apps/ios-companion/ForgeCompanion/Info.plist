@@ -77,6 +77,8 @@
 	<string>Forge Companion uses location to detect stays, trips, and meaningful places for reflective movement history in Forge.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>Forge Companion uses motion activity to distinguish travel, walking, stationary periods, and movement context for truthful trip and stay capture.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Forge Companion records voice notes that you explicitly send as encrypted Agent Messages. The original recording remains a sensitive Forge Artifact.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

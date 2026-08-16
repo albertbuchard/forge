@@ -36,6 +36,7 @@ struct CompanionAppRoot: View {
             .environmentObject(appModel)
         }
         .onAppear {
+            appModel.agentMessageStore.configure(pairing: appModel.pairing)
             peoplePeerStore.configureWatchRelay { snapshot in
                 appModel.watchSessionManager.updatePeopleGlance(
                     snapshot,
@@ -56,6 +57,7 @@ struct CompanionAppRoot: View {
             companionDebugLog("CompanionAppRoot", "setupVisible -> \(nextValue)")
         }
         .onChange(of: appModel.pairing?.sessionId) { _, sessionId in
+            appModel.agentMessageStore.configure(pairing: appModel.pairing)
             peoplePeerStore.configure(
                 pairing: appModel.pairing,
                 ownerUserId: appModel.pairingOwnerUserId

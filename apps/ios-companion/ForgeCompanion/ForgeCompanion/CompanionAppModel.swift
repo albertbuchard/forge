@@ -854,6 +854,7 @@ final class CompanionAppModel: ObservableObject {
     let screenTimeStore: ScreenTimeStore
     let syncClient: ForgeSyncClient
     let watchSessionManager: WatchSessionManager
+    let agentMessageStore = AgentMessageStore()
     let qrScanner = QRPairingScanner()
     let backgroundScheduler = CompanionBackgroundScheduler()
     let discoveryService = ForgeServerDiscovery()
@@ -873,7 +874,8 @@ final class CompanionAppModel: ObservableObject {
     private var hasActiveBackgroundSyncWork: Bool {
         activeSyncTask != nil ||
             activeHealthSyncSessionId?.isEmpty == false ||
-            hasHistoricalWorkoutImportActive
+            hasHistoricalWorkoutImportActive ||
+            agentMessageStore.queued.isEmpty == false
     }
     private var maintenanceTask: Task<Void, Never>?
     private var healthSyncTransferTickerTask: Task<Void, Never>?
@@ -926,6 +928,12 @@ final class CompanionAppModel: ObservableObject {
         let syncClient = ForgeSyncClient()
         self.syncClient = syncClient
         watchSessionManager = WatchSessionManager(syncClient: syncClient)
+        agentMessageStore.requestBackgroundDelivery = { [weak self] in
+            self?.backgroundScheduler.schedule(
+                activeSync: true,
+                reason: "encrypted Agent Message queued"
+            )
+        }
         companionDebugLog("CompanionAppModel", "init start")
         movementStore.objectWillChange
             .receive(on: DispatchQueue.main)
@@ -991,7 +999,11 @@ final class CompanionAppModel: ObservableObject {
             onRefresh: { [weak self] in
                 guard let self else { return false }
                 companionDebugLog("CompanionAppModel", "background refresh closure invoked")
-                return await self.performBackgroundRefresh()
+                let syncSucceeded = await self.performBackgroundRefresh()
+                let messagesSucceeded = await self.agentMessageStore.flush(
+                    reason: "iOS background task"
+                )
+                return syncSucceeded || messagesSucceeded
             },
             onExpiration: { [weak self] in
                 Task { @MainActor [weak self] in
@@ -1266,6 +1278,7 @@ final class CompanionAppModel: ObservableObject {
     func handleAppDidBecomeActive() {
         companionDebugLog("CompanionAppModel", "handleAppDidBecomeActive")
         screenTimeStore.handleAppDidBecomeActive()
+        agentMessageStore.configure(pairing: pairing)
         startMaintenanceLoop(reason: "app became active")
         cancelActiveSyncIfStalled(now: Date(), reason: "app became active")
         Task {
@@ -1281,6 +1294,7 @@ final class CompanionAppModel: ObservableObject {
 
     func handleAppWillLeaveForeground() {
         companionDebugLog("CompanionAppModel", "handleAppWillLeaveForeground")
+        Task { await agentMessageStore.prepareForBackground() }
         guard pairing != nil else {
             return
         }

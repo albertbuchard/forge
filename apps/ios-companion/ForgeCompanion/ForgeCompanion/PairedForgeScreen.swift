@@ -14,6 +14,7 @@ private enum PairedForgeSheet: String, Identifiable {
 struct PairedForgeScreen: View {
     @EnvironmentObject private var appModel: CompanionAppModel
     @EnvironmentObject private var peoplePeerStore: PeoplePeerStore
+    @EnvironmentObject private var agentMessageStore: AgentMessageStore
 
     let reopenSetup: () -> Void
 
@@ -25,6 +26,7 @@ struct PairedForgeScreen: View {
     @State private var lifeTimelineVisible = false
     @State private var screenshotScenarioApplied = false
     @State private var targetedForgeURL: URL?
+    @State private var agentMessagesVisible = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -73,6 +75,10 @@ struct PairedForgeScreen: View {
                 close: { lifeTimelineVisible = false }
             )
             .environmentObject(appModel)
+        }
+        .fullScreenCover(isPresented: $agentMessagesVisible) {
+            AgentMessagesMailboxView()
+                .environmentObject(agentMessageStore)
         }
         .onAppear {
 #if DEBUG
@@ -171,6 +177,15 @@ struct PairedForgeScreen: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Open Companion control center")
+
+            Button {
+                agentMessagesVisible = true
+            } label: {
+                nativeControlIcon(systemName: "mic.fill")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Talk to agent")
+            .accessibilityIdentifier("ForgeAgentMessagesButton")
 
             Button {
                 requestWebReload(kind: .standard)
