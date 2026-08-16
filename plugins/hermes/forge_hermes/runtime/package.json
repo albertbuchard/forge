@@ -1,6 +1,6 @@
 {
   "name": "forge-hermes-runtime",
-  "version": "0.3.63",
+  "version": "0.3.64",
   "private": true,
   "type": "module",
   "dependencies": {
@@ -41,6 +41,7 @@
     "jose": "6.2.3",
     "libsodium-wrappers-sumo": "^0.8.4",
     "lucide-react": "^0.525.0",
+    "music-metadata": "11.14.0",
     "node-ical": "^0.26.1",
     "qrcode": "^1.5.4",
     "react": "^19.1.0",

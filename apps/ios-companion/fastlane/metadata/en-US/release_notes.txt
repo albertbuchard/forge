@@ -1,4 +1,4 @@
-Forge Companion 1.0.173 adds Agent Messages, a native asynchronous inbox and outbox for sending text, a voice note, or both to a connected Forge agent.
+Forge Companion 1.0.174 adds Agent Messages, a native asynchronous inbox and outbox for sending text, a voice note, or both to a connected Forge agent.
 
 Talk to agent starts recording immediately when microphone access is available, while text remains usable when it is not. Choose the default agent or another connected agent, then follow delivery, progress, acknowledgement, result, failure, forwarding, and history from the native mailbox.
 
