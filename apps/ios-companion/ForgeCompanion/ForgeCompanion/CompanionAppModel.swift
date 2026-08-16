@@ -964,6 +964,11 @@ final class CompanionAppModel: ObservableObject {
         .receive(on: DispatchQueue.main)
         .sink { [weak self] _ in
             companionDebugLog("CompanionAppModel", "protected data became available")
+            Task { @MainActor [weak self] in
+                _ = await self?.agentMessageStore.flush(
+                    reason: "protected data became available"
+                )
+            }
             self?.scheduleAutomaticSync(
                 reason: "device unlocked",
                 debounceNanoseconds: AutoSyncPolicy.immediateDebounceNanoseconds,
@@ -2327,6 +2332,9 @@ final class CompanionAppModel: ObservableObject {
     }
 
     private func handleBackgroundSyncExpiration(reason: String) {
+        Task { @MainActor [weak self] in
+            await self?.agentMessageStore.cancelForBackgroundExpiration()
+        }
         cancelActiveSync(
             reason: reason,
             userMessage: "Sync paused in the background. Forge will resume from the last accepted chunk."

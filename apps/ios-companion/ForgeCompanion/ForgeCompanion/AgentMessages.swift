@@ -4,6 +4,7 @@ import CryptoKit
 import Foundation
 import Network
 import SwiftUI
+import UIKit
 import UserNotifications
 
 let agentMessageVoiceMaximumBytes = 25 * 1024 * 1024
@@ -14,6 +15,7 @@ enum AgentMessageDeliveryState: String, Codable {
     case queued
     case waitingForConnectivity
     case waitingForWiFi
+    case waitingForProtectedData
     case waitingForBackgroundTime
     case sending
     case failed
@@ -23,6 +25,7 @@ enum AgentMessageDeliveryState: String, Codable {
         case .queued: return "Queued securely"
         case .waitingForConnectivity: return "Waiting for connectivity"
         case .waitingForWiFi: return "Waiting for Wi-Fi approval"
+        case .waitingForProtectedData: return "Waiting for protected data"
         case .waitingForBackgroundTime: return "Waiting for iOS background time"
         case .sending: return "Uploading"
         case .failed: return "Needs retry"
@@ -174,7 +177,7 @@ struct AgentMessageMailboxSettings: Codable {
     let backgroundDelivery: String
 }
 
-private struct AgentMessageListEnvelope: Decodable {
+struct AgentMessageListEnvelope: Decodable {
     let items: [AgentMessageRecord]
     let unreadThreadCount: Int
 }
@@ -215,7 +218,42 @@ private enum AgentMessageClientError: LocalizedError {
     }
 }
 
-private final class AgentMessageClient {
+protocol AgentMessageClientProviding: AnyObject {
+    func agents(pairing: PairingPayload) async throws -> [AgentMessageAgent]
+    func settings(pairing: PairingPayload) async throws -> AgentMessageMailboxSettings
+    func updateDefaultAgent(
+        _ agentId: String,
+        pairing: PairingPayload
+    ) async throws -> AgentMessageMailboxSettings
+    func list(
+        box: String,
+        pairing: PairingPayload
+    ) async throws -> AgentMessageListEnvelope
+    func detail(
+        messageId: String,
+        pairing: PairingPayload
+    ) async throws -> AgentMessageDetail
+    func markRead(
+        message: AgentMessageRecord,
+        operationKey: String,
+        pairing: PairingPayload
+    ) async throws
+    func createReservation(
+        item: QueuedAgentMessage,
+        pairing: PairingPayload
+    ) async throws -> String
+    func activateReservation(
+        reservationId: String,
+        item: QueuedAgentMessage,
+        pairing: PairingPayload
+    ) async throws
+    func createMessage(
+        item: QueuedAgentMessage,
+        pairing: PairingPayload
+    ) async throws -> AgentMessageRecord
+}
+
+final class AgentMessageClient: AgentMessageClientProviding {
     private let decoder = JSONDecoder()
     private let encoder: JSONEncoder = {
         let value = JSONEncoder()
@@ -539,6 +577,7 @@ actor AgentMessageEncryptedQueue {
     }
 
     private let keychain: AgentMessageQueueKeyStoring
+    private let encryptedWriter: (Data, URL) throws -> Void
     private let keyName = "queue-aes-gcm-v1"
     private let fileURL: URL
     private var loaded = false
@@ -548,9 +587,16 @@ actor AgentMessageEncryptedQueue {
         fileURL: URL? = nil,
         keychain: AgentMessageQueueKeyStoring = KeychainStore(
             service: "com.albertbuchard.ForgeCompanion.agent-messages"
-        )
+        ),
+        encryptedWriter: @escaping (Data, URL) throws -> Void = { data, url in
+            try data.write(
+                to: url,
+                options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+            )
+        }
     ) {
         self.keychain = keychain
+        self.encryptedWriter = encryptedWriter
         if let fileURL {
             self.fileURL = fileURL
         } else {
@@ -571,23 +617,29 @@ actor AgentMessageEncryptedQueue {
 
     func enqueue(_ item: QueuedAgentMessage) throws -> [QueuedAgentMessage] {
         try ensureLoaded()
-        items.append(item)
-        try persist()
+        var updated = items
+        updated.removeAll { $0.id == item.id }
+        updated.append(item)
+        try persist(updated)
+        items = updated
         return items
     }
 
     func update(_ item: QueuedAgentMessage) throws -> [QueuedAgentMessage] {
         try ensureLoaded()
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return items }
-        items[index] = item
-        try persist()
+        var updated = items
+        updated[index] = item
+        try persist(updated)
+        items = updated
         return items
     }
 
     func remove(id: UUID) throws -> [QueuedAgentMessage] {
         try ensureLoaded()
-        items.removeAll { $0.id == id }
-        try persist()
+        let updated = items.filter { $0.id != id }
+        try persist(updated)
+        items = updated
         return items
     }
 
@@ -635,19 +687,29 @@ actor AgentMessageEncryptedQueue {
         return key
     }
 
-    private func persist() throws {
+    private func persist(_ updatedItems: [QueuedAgentMessage]) throws {
         let directory = fileURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(
             at: directory,
             withIntermediateDirectories: true,
             attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
         )
-        let clear = try JSONEncoder().encode(Envelope(version: 1, items: items))
-        let encrypted = try AES.GCM.seal(clear, using: queueKey()).combined!
-        try encrypted.write(
-            to: fileURL,
-            options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+        let clear = try JSONEncoder().encode(
+            Envelope(version: 1, items: updatedItems)
         )
+        let encrypted = try AES.GCM.seal(clear, using: queueKey()).combined!
+        try encryptedWriter(encrypted, fileURL)
+        let persisted = try Data(contentsOf: fileURL)
+        guard persisted == encrypted else {
+            throw NSError(
+                domain: "ForgeAgentMessages.Queue",
+                code: 4,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "The encrypted Agent Messages queue could not be verified."
+                ]
+            )
+        }
     }
 }
 
@@ -664,15 +726,27 @@ final class AgentMessageStore: ObservableObject {
     @Published var pathSatisfied = false
     @Published var pathExpensive = false
 
-    private let vault = AgentMessageEncryptedQueue()
-    private let client = AgentMessageClient()
-    private let monitor = NWPathMonitor()
+    private let vault: AgentMessageEncryptedQueue
+    private let client: AgentMessageClientProviding
+    private let monitor: NWPathMonitor
+    private let protectedDataAvailable: @MainActor () -> Bool
     private let monitorQueue = DispatchQueue(label: "forge.agent-messages.network")
     private var pairing: PairingPayload?
     private var sendingTask: Task<Bool, Never>?
     var requestBackgroundDelivery: (() -> Void)?
 
-    init() {
+    init(
+        vault: AgentMessageEncryptedQueue = AgentMessageEncryptedQueue(),
+        client: AgentMessageClientProviding = AgentMessageClient(),
+        protectedDataAvailable: @escaping @MainActor () -> Bool = {
+            UIApplication.shared.isProtectedDataAvailable
+        },
+        startNetworkMonitor: Bool = true
+    ) {
+        self.vault = vault
+        self.client = client
+        self.protectedDataAvailable = protectedDataAvailable
+        monitor = NWPathMonitor()
         monitor.pathUpdateHandler = { [weak self] path in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -681,13 +755,16 @@ final class AgentMessageStore: ObservableObject {
                 if pathSatisfied { _ = await flush(reason: "connectivity returned") }
             }
         }
-        monitor.start(queue: monitorQueue)
+        if startNetworkMonitor { monitor.start(queue: monitorQueue) }
         Task { await restoreQueue() }
     }
 
     deinit { monitor.cancel() }
 
-    func configure(pairing: PairingPayload?) {
+    func configure(
+        pairing: PairingPayload?,
+        refreshImmediately: Bool = true
+    ) {
         self.pairing = pairing
         guard pairing != nil else {
             agents = []
@@ -696,9 +773,11 @@ final class AgentMessageStore: ObservableObject {
             settings = nil
             return
         }
-        Task {
-            await refresh()
-            _ = await flush(reason: "paired or foregrounded")
+        if refreshImmediately {
+            Task {
+                await refresh()
+                _ = await flush(reason: "paired or foregrounded")
+            }
         }
     }
 
@@ -748,7 +827,9 @@ final class AgentMessageStore: ObservableObject {
         )
         queued = try await vault.enqueue(item)
         requestBackgroundDelivery?()
-        _ = await flush(reason: "new encrypted message")
+        Task { [weak self] in
+            _ = await self?.flush(reason: "new encrypted message")
+        }
     }
 
     func flush(reason: String) async -> Bool {
@@ -780,6 +861,16 @@ final class AgentMessageStore: ObservableObject {
             catch { latestError = error.localizedDescription }
         }
         if queued.isEmpty == false { requestBackgroundDelivery?() }
+    }
+
+    func cancelForBackgroundExpiration() async {
+        let active = sendingTask
+        active?.cancel()
+        if let active { _ = await active.value }
+        if queued.isEmpty == false {
+            await setWaitingState(.waitingForBackgroundTime)
+            requestBackgroundDelivery?()
+        }
     }
 
     func refresh() async {
@@ -835,13 +926,27 @@ final class AgentMessageStore: ObservableObject {
         } catch { latestError = "iOS did not enable Agent Message notifications." }
     }
 
-    private func restoreQueue() async {
-        do { queued = try await vault.snapshot() }
+    func restoreQueue() async {
+        do {
+            let restored = try await vault.snapshot()
+            queued = restored
+            for var item in restored where item.state == .sending {
+                item.state = .waitingForBackgroundTime
+                item.lastError = nil
+                queued = try await vault.update(item)
+            }
+            if queued.isEmpty == false { requestBackgroundDelivery?() }
+        }
         catch { latestError = error.localizedDescription }
     }
 
     private func sendQueued(reason: String) async -> Bool {
         guard let pairing else { return false }
+        guard protectedDataAvailable() else {
+            await setWaitingState(.waitingForProtectedData)
+            requestBackgroundDelivery?()
+            return false
+        }
         guard pathSatisfied else {
             await setWaitingState(.waitingForConnectivity)
             return false
@@ -858,6 +963,14 @@ final class AgentMessageStore: ObservableObject {
         }
         for original in snapshot {
             var item = original
+            if Task.isCancelled {
+                item.state = .waitingForBackgroundTime
+                item.lastError = nil
+                do { queued = try await vault.update(item) }
+                catch { latestError = error.localizedDescription }
+                allSucceeded = false
+                break
+            }
             if let waitingState = agentMessageNetworkWaitingState(
                 for: item,
                 pathSatisfied: pathSatisfied,
@@ -894,14 +1007,23 @@ final class AgentMessageStore: ObservableObject {
                 _ = try await client.createMessage(item: item, pairing: pairing)
                 queued = try await vault.remove(id: item.id)
             } catch {
-                item.state = isConnectivityError(error) ? .waitingForConnectivity : .failed
-                item.lastError = userMessage(error)
+                if error is CancellationError || Task.isCancelled {
+                    item.state = .waitingForBackgroundTime
+                    item.lastError = nil
+                } else {
+                    item.state = isConnectivityError(error)
+                        ? .waitingForConnectivity
+                        : .failed
+                    item.lastError = userMessage(error)
+                }
                 do { queued = try await vault.update(item) }
                 catch { latestError = error.localizedDescription }
                 allSucceeded = false
+                if error is CancellationError || Task.isCancelled { break }
             }
         }
-        await refresh()
+        if Task.isCancelled == false { await refresh() }
+        if queued.isEmpty == false { requestBackgroundDelivery?() }
         return allSucceeded
     }
 
@@ -950,7 +1072,54 @@ func agentMessageNotificationBody(for message: AgentMessageRecord) -> String {
         + message.status.replacingOccurrences(of: "_", with: " ").capitalized
 }
 
-private final class AgentVoiceRecorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
+struct AgentMessagePreparedRecording {
+    let data: Data
+    let duration: TimeInterval
+    let fileURL: URL
+}
+
+func agentMessageReadProtectedRecording(
+    at fileURL: URL,
+    duration: TimeInterval
+) throws -> AgentMessagePreparedRecording {
+    let data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
+    guard data.count <= agentMessageVoiceMaximumBytes else {
+        throw NSError(
+            domain: "ForgeAgentMessages.Recorder",
+            code: 2,
+            userInfo: [NSLocalizedDescriptionKey: "This voice note exceeds the 25 MB limit."]
+        )
+    }
+    return AgentMessagePreparedRecording(
+        data: data,
+        duration: duration,
+        fileURL: fileURL
+    )
+}
+
+func agentMessageCleanupAbandonedRecordings(
+    in directory: URL,
+    preserving: URL? = nil,
+    now: Date = Date(),
+    maximumAge: TimeInterval = 24 * 60 * 60
+) {
+    guard let files = try? FileManager.default.contentsOfDirectory(
+        at: directory,
+        includingPropertiesForKeys: [.contentModificationDateKey],
+        options: [.skipsHiddenFiles]
+    ) else { return }
+    for file in files where file != preserving {
+        let modified = try? file.resourceValues(
+            forKeys: [.contentModificationDateKey]
+        ).contentModificationDate
+        guard let modified, now.timeIntervalSince(modified) >= maximumAge else {
+            continue
+        }
+        try? FileManager.default.removeItem(at: file)
+    }
+}
+
+final class AgentVoiceRecorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     @Published private(set) var isRecording = false
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var recordingURL: URL?
@@ -959,6 +1128,15 @@ private final class AgentVoiceRecorder: NSObject, ObservableObject, AVAudioRecor
     private var recorder: AVAudioRecorder?
     private var timer: Timer?
     private var startedAt: Date?
+
+    init(
+        testingRecordingURL: URL? = nil,
+        testingDuration: TimeInterval = 0
+    ) {
+        recordingURL = testingRecordingURL
+        duration = testingDuration
+        super.init()
+    }
 
     func start() async {
         errorMessage = nil
@@ -977,6 +1155,10 @@ private final class AgentVoiceRecorder: NSObject, ObservableObject, AVAudioRecor
                 at: directory,
                 withIntermediateDirectories: true,
                 attributes: [.protectionKey: FileProtectionType.complete]
+            )
+            agentMessageCleanupAbandonedRecordings(
+                in: directory,
+                preserving: recordingURL
             )
             let url = directory.appendingPathComponent("voice-\(UUID().uuidString).m4a")
             let recorder = try AVAudioRecorder(
@@ -1031,22 +1213,19 @@ private final class AgentVoiceRecorder: NSObject, ObservableObject, AVAudioRecor
         finishRecording(successfully: false)
     }
 
-    func consumeRecording() throws -> (Data, TimeInterval)? {
+    func prepareRecordingForQueue() throws -> AgentMessagePreparedRecording? {
         guard let recordingURL else { return nil }
-        defer {
-            try? FileManager.default.removeItem(at: recordingURL)
-            self.recordingURL = nil
-            duration = 0
-        }
-        let data = try Data(contentsOf: recordingURL, options: [.mappedIfSafe])
-        guard data.count <= agentMessageVoiceMaximumBytes else {
-            throw NSError(
-                domain: "ForgeAgentMessages.Recorder",
-                code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "This voice note exceeds the 25 MB limit."]
-            )
-        }
-        return (data, duration)
+        return try agentMessageReadProtectedRecording(
+            at: recordingURL,
+            duration: duration
+        )
+    }
+
+    func confirmRecordingQueued(_ prepared: AgentMessagePreparedRecording) {
+        guard recordingURL == prepared.fileURL else { return }
+        try? FileManager.default.removeItem(at: prepared.fileURL)
+        recordingURL = nil
+        duration = 0
     }
 
     func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
@@ -1232,14 +1411,15 @@ struct AgentMessageComposerView: View {
         sendInFlight = true
         defer { sendInFlight = false }
         do {
-            let voice = try recorder.consumeRecording()
+            let voice = try recorder.prepareRecordingForQueue()
             try await store.enqueue(
                 recipientAgentId: recipientId,
                 bodyText: bodyText,
-                voiceData: voice?.0,
-                voiceDuration: voice?.1,
+                voiceData: voice?.data,
+                voiceDuration: voice?.duration,
                 allowCellular: allowCellular
             )
+            if let voice { recorder.confirmRecordingQueued(voice) }
             statusMessage = store.pathSatisfied
                 ? "Encrypted locally; Forge is attempting delivery now."
                 : "Encrypted locally and queued until connectivity returns."

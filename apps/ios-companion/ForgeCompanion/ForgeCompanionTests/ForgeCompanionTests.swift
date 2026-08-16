@@ -58,15 +58,232 @@ private final class PeerMemorySecretStore: PeerSecretStoring {
 
 private final class AgentMessageMemoryKeyStore: AgentMessageQueueKeyStoring {
     private(set) var values: [String: Data] = [:]
+    var allowsSave = true
 
     @discardableResult
     func save(_ data: Data, forKey key: String) -> Bool {
+        guard allowsSave else { return false }
         values[key] = data
         return true
     }
 
     func load(forKey key: String) -> Data? {
         values[key]
+    }
+}
+
+private final class AgentMessageTestEncryptedWriter {
+    var shouldFail = false
+
+    func write(_ data: Data, to url: URL) throws {
+        if shouldFail {
+            throw NSError(
+                domain: "ForgeCompanionTests.AgentMessages",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Injected encrypted queue write failure"]
+            )
+        }
+        try data.write(
+            to: url,
+            options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+        )
+    }
+}
+
+private enum AgentMessageTestPhase: Hashable {
+    case reservation
+    case activation
+    case message
+}
+
+private enum AgentMessageTestInterruption {
+    case none
+    case suspendOnce(AgentMessageTestPhase)
+    case responseLossOnce(AgentMessageTestPhase)
+}
+
+private final class AgentMessageTestClient: AgentMessageClientProviding {
+    private let lock = NSLock()
+    private var interruption: AgentMessageTestInterruption
+    private var interruptionFired = false
+    private var reachedPhases: Set<AgentMessageTestPhase> = []
+    private var reservationKeys: Set<String> = []
+    private var activationKeys: Set<String> = []
+    private var messageKeys: Set<String> = []
+
+    init(interruption: AgentMessageTestInterruption = .none) {
+        self.interruption = interruption
+    }
+
+    func agents(pairing: PairingPayload) async throws -> [AgentMessageAgent] {
+        [
+            AgentMessageAgent(
+                id: "agent_primary",
+                label: "Primary agent",
+                provider: "test",
+                agentType: "assistant",
+                connected: true,
+                lastSeenAt: nil
+            )
+        ]
+    }
+
+    func settings(pairing: PairingPayload) async throws -> AgentMessageMailboxSettings {
+        AgentMessageMailboxSettings(
+            defaultAgent: .init(id: "agent_primary", label: "Primary agent"),
+            retentionDays: 365,
+            backgroundDelivery: "opportunistic_ios_scheduling"
+        )
+    }
+
+    func updateDefaultAgent(
+        _ agentId: String,
+        pairing: PairingPayload
+    ) async throws -> AgentMessageMailboxSettings {
+        AgentMessageMailboxSettings(
+            defaultAgent: .init(id: agentId, label: "Primary agent"),
+            retentionDays: 365,
+            backgroundDelivery: "opportunistic_ios_scheduling"
+        )
+    }
+
+    func list(
+        box: String,
+        pairing: PairingPayload
+    ) async throws -> AgentMessageListEnvelope {
+        AgentMessageListEnvelope(items: [], unreadThreadCount: 0)
+    }
+
+    func detail(
+        messageId: String,
+        pairing: PairingPayload
+    ) async throws -> AgentMessageDetail {
+        let message = record(id: messageId)
+        return AgentMessageDetail(message: message, events: [], relatedMessages: [message])
+    }
+
+    func markRead(
+        message: AgentMessageRecord,
+        operationKey: String,
+        pairing: PairingPayload
+    ) async throws {}
+
+    func createReservation(
+        item: QueuedAgentMessage,
+        pairing: PairingPayload
+    ) async throws -> String {
+        record(phase: .reservation, key: item.reservationIdempotencyKey)
+        try await interruptIfNeeded(.reservation)
+        return "reservation_\(item.reservationIdempotencyKey)"
+    }
+
+    func activateReservation(
+        reservationId: String,
+        item: QueuedAgentMessage,
+        pairing: PairingPayload
+    ) async throws {
+        record(phase: .activation, key: item.reservationIdempotencyKey)
+        try await interruptIfNeeded(.activation)
+    }
+
+    func createMessage(
+        item: QueuedAgentMessage,
+        pairing: PairingPayload
+    ) async throws -> AgentMessageRecord {
+        record(phase: .message, key: item.messageIdempotencyKey)
+        try await interruptIfNeeded(.message)
+        return record(id: "message_\(item.messageIdempotencyKey)")
+    }
+
+    func reached(_ phase: AgentMessageTestPhase) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return reachedPhases.contains(phase)
+    }
+
+    func logicalCounts() -> (reservations: Int, activations: Int, messages: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (reservationKeys.count, activationKeys.count, messageKeys.count)
+    }
+
+    private func record(phase: AgentMessageTestPhase, key: String) {
+        lock.lock()
+        reachedPhases.insert(phase)
+        switch phase {
+        case .reservation: reservationKeys.insert(key)
+        case .activation: activationKeys.insert(key)
+        case .message: messageKeys.insert(key)
+        }
+        lock.unlock()
+    }
+
+    private func interruptionForFirstMatchingCall(
+        _ phase: AgentMessageTestPhase
+    ) -> AgentMessageTestInterruption {
+        lock.lock()
+        defer { lock.unlock() }
+        guard interruptionFired == false else { return .none }
+        switch interruption {
+        case .suspendOnce(let expected) where expected == phase:
+            interruptionFired = true
+            return interruption
+        case .responseLossOnce(let expected) where expected == phase:
+            interruptionFired = true
+            return interruption
+        default:
+            return .none
+        }
+    }
+
+    private func interruptIfNeeded(_ phase: AgentMessageTestPhase) async throws {
+        switch interruptionForFirstMatchingCall(phase) {
+        case .none:
+            return
+        case .suspendOnce:
+            try await Task.sleep(for: .seconds(30))
+        case .responseLossOnce:
+            throw URLError(.networkConnectionLost)
+        }
+    }
+
+    private func record(id: String) -> AgentMessageRecord {
+        AgentMessageRecord(
+            id: id,
+            sender: AgentMessageParty(
+                kind: "human_user",
+                userId: "user_operator",
+                agentId: nil,
+                label: "Forge Companion"
+            ),
+            initialRecipient: AgentMessageRecipient(
+                agentId: "agent_primary",
+                label: "Primary agent"
+            ),
+            recipient: AgentMessageRecipient(
+                agentId: "agent_primary",
+                label: "Primary agent"
+            ),
+            forwardedFromMessageId: nil,
+            retriedFromMessageId: nil,
+            bodyText: "",
+            voiceArtifact: nil,
+            status: "delivered",
+            revision: 1,
+            progressSummary: "",
+            resultMarkdown: "",
+            transcript: nil,
+            failure: nil,
+            unreadInboxEventSequence: nil,
+            retentionUntil: "2027-08-16T12:00:00.000Z",
+            deliveredAt: "2026-08-16T12:00:00.000Z",
+            acknowledgedAt: nil,
+            handledAt: nil,
+            failedAt: nil,
+            forwardedAt: nil,
+            createdAt: "2026-08-16T12:00:00.000Z",
+            updatedAt: "2026-08-16T12:00:00.000Z"
+        )
     }
 }
 
@@ -12900,6 +13117,279 @@ final class ForgeCompanionTests: XCTestCase {
             transportMode: "iroh",
             transport: nil
         )
+    }
+
+    private func makeQueuedAgentMessage(
+        id: UUID = UUID(),
+        state: AgentMessageDeliveryState = .queued
+    ) -> QueuedAgentMessage {
+        let keyStem = id.uuidString.lowercased()
+        return QueuedAgentMessage(
+            id: id,
+            messageIdempotencyKey: "ios-message-\(keyStem)",
+            reservationIdempotencyKey: "ios-reserve-\(keyStem)",
+            recipientAgentId: "agent_primary",
+            bodyText: "Sensitive queued instructions",
+            voiceData: Data("sensitive-original-voice".utf8),
+            voiceMimeType: "audio/mp4",
+            voiceDurationMilliseconds: 1_250,
+            originalFileName: "agent-message-\(keyStem).m4a",
+            allowCellular: true,
+            createdAt: Date(timeIntervalSince1970: 1_776_000_000),
+            voiceReservationId: nil,
+            state: state,
+            attemptCount: 0,
+            lastError: nil
+        )
+    }
+
+    private func waitForAgentMessagePhase(
+        _ phase: AgentMessageTestPhase,
+        client: AgentMessageTestClient
+    ) async throws {
+        for _ in 0..<200 {
+            if client.reached(phase) { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTFail("Agent Messages client did not reach \(phase)")
+        throw NSError(
+            domain: "ForgeCompanionTests.AgentMessages",
+            code: 2,
+            userInfo: [NSLocalizedDescriptionKey: "Timed out waiting for \(phase)"]
+        )
+    }
+
+    func testAgentMessageRecordingSurvivesEncryptionFailuresUntilVerifiedQueueWrite() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ForgeAgentMessageDurabilityTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let recordingURL = root.appendingPathComponent("protected-recording.m4a")
+        let recordingBytes = Data("only-copy-of-original-voice".utf8)
+        try recordingBytes.write(to: recordingURL, options: [.completeFileProtection])
+        let recorder = AgentVoiceRecorder(
+            testingRecordingURL: recordingURL,
+            testingDuration: 1.25
+        )
+        let prepared = try XCTUnwrap(recorder.prepareRecordingForQueue())
+        let item = QueuedAgentMessage(
+            id: UUID(),
+            messageIdempotencyKey: "ios-message-durability",
+            reservationIdempotencyKey: "ios-reserve-durability",
+            recipientAgentId: "agent_primary",
+            bodyText: "Sensitive queued instructions",
+            voiceData: prepared.data,
+            voiceMimeType: "audio/mp4",
+            voiceDurationMilliseconds: 1_250,
+            originalFileName: "agent-message-durability.m4a",
+            allowCellular: false,
+            createdAt: Date(),
+            voiceReservationId: nil,
+            state: .queued,
+            attemptCount: 0,
+            lastError: nil
+        )
+
+        let keyFailureURL = root.appendingPathComponent("key-failure.aesgcm")
+        let keyStore = AgentMessageMemoryKeyStore()
+        keyStore.allowsSave = false
+        let keyFailureQueue = AgentMessageEncryptedQueue(
+            fileURL: keyFailureURL,
+            keychain: keyStore
+        )
+        do {
+            _ = try await keyFailureQueue.enqueue(item)
+            XCTFail("Expected the injected Keychain save failure")
+        } catch {}
+        XCTAssertEqual(try Data(contentsOf: recordingURL), recordingBytes)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: keyFailureURL.path))
+        keyStore.allowsSave = true
+        let afterKeyRetry = try await keyFailureQueue.enqueue(item)
+        XCTAssertEqual(afterKeyRetry.count, 1)
+
+        let writeFailureURL = root.appendingPathComponent("write-failure.aesgcm")
+        let writer = AgentMessageTestEncryptedWriter()
+        writer.shouldFail = true
+        let writeFailureQueue = AgentMessageEncryptedQueue(
+            fileURL: writeFailureURL,
+            keychain: AgentMessageMemoryKeyStore(),
+            encryptedWriter: writer.write
+        )
+        do {
+            _ = try await writeFailureQueue.enqueue(item)
+            XCTFail("Expected the injected encrypted-file write failure")
+        } catch {}
+        XCTAssertEqual(try Data(contentsOf: recordingURL), recordingBytes)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: writeFailureURL.path))
+        writer.shouldFail = false
+        let afterWriteRetry = try await writeFailureQueue.enqueue(item)
+        XCTAssertEqual(afterWriteRetry.count, 1)
+        let ciphertext = try Data(contentsOf: writeFailureURL)
+        XCTAssertNil(ciphertext.range(of: recordingBytes))
+        XCTAssertNil(ciphertext.range(of: Data(item.bodyText.utf8)))
+
+        recorder.confirmRecordingQueued(prepared)
+        XCTAssertNil(recorder.recordingURL)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: recordingURL.path))
+    }
+
+    @MainActor
+    func testAgentMessageBackgroundExpirationPreservesStableReplayAcrossEveryPhase() async throws {
+        for phase in [
+            AgentMessageTestPhase.reservation,
+            .activation,
+            .message
+        ] {
+            let root = FileManager.default.temporaryDirectory
+                .appendingPathComponent("ForgeAgentMessageExpirationTests-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let queue = AgentMessageEncryptedQueue(
+                fileURL: root.appendingPathComponent("outbox.aesgcm"),
+                keychain: AgentMessageMemoryKeyStore()
+            )
+            let item = makeQueuedAgentMessage()
+            _ = try await queue.enqueue(item)
+            let client = AgentMessageTestClient(interruption: .suspendOnce(phase))
+            let store = AgentMessageStore(
+                vault: queue,
+                client: client,
+                protectedDataAvailable: { true },
+                startNetworkMonitor: false
+            )
+            var scheduleCount = 0
+            store.requestBackgroundDelivery = { scheduleCount += 1 }
+            store.configure(
+                pairing: makeWatchHandoffPairing(),
+                refreshImmediately: false
+            )
+            store.pathSatisfied = true
+            await store.restoreQueue()
+
+            let flush = Task { await store.flush(reason: "test background window") }
+            try await waitForAgentMessagePhase(phase, client: client)
+            await store.cancelForBackgroundExpiration()
+            let interruptedFlushResult = await flush.value
+            XCTAssertFalse(interruptedFlushResult)
+            let interrupted = try await queue.snapshot()
+            let retained = try XCTUnwrap(interrupted.first)
+            XCTAssertEqual(retained.id, item.id)
+            XCTAssertEqual(retained.messageIdempotencyKey, item.messageIdempotencyKey)
+            XCTAssertEqual(
+                retained.reservationIdempotencyKey,
+                item.reservationIdempotencyKey
+            )
+            XCTAssertEqual(retained.state, .waitingForBackgroundTime)
+            XCTAssertGreaterThan(scheduleCount, 0)
+
+            let retryResult = await store.flush(reason: "later permitted execution")
+            XCTAssertTrue(retryResult)
+            let completed = try await queue.snapshot()
+            XCTAssertTrue(completed.isEmpty)
+            let counts = client.logicalCounts()
+            XCTAssertEqual(counts.reservations, 1)
+            XCTAssertEqual(counts.activations, 1)
+            XCTAssertEqual(counts.messages, 1)
+            XCTAssertEqual(
+                try FileManager.default.contentsOfDirectory(atPath: root.path)
+                    .filter { $0 != "outbox.aesgcm" },
+                []
+            )
+        }
+    }
+
+    @MainActor
+    func testAgentMessageRelaunchReplaysAmbiguousResponsesWithoutChangingIdentity() async throws {
+        for phase in [
+            AgentMessageTestPhase.reservation,
+            .activation,
+            .message
+        ] {
+            let root = FileManager.default.temporaryDirectory
+                .appendingPathComponent("ForgeAgentMessageReplayTests-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let queue = AgentMessageEncryptedQueue(
+                fileURL: root.appendingPathComponent("outbox.aesgcm"),
+                keychain: AgentMessageMemoryKeyStore()
+            )
+            let item = makeQueuedAgentMessage()
+            _ = try await queue.enqueue(item)
+            let client = AgentMessageTestClient(interruption: .responseLossOnce(phase))
+            var firstStore: AgentMessageStore? = AgentMessageStore(
+                vault: queue,
+                client: client,
+                protectedDataAvailable: { true },
+                startNetworkMonitor: false
+            )
+            firstStore?.configure(
+                pairing: makeWatchHandoffPairing(),
+                refreshImmediately: false
+            )
+            firstStore?.pathSatisfied = true
+            await firstStore?.restoreQueue()
+            let firstResult = await firstStore?.flush(
+                reason: "ambiguous first response"
+            ) ?? true
+            XCTAssertFalse(firstResult)
+            let ambiguous = try await queue.snapshot()
+            XCTAssertEqual(ambiguous.first?.id, item.id)
+            XCTAssertEqual(
+                ambiguous.first?.messageIdempotencyKey,
+                item.messageIdempotencyKey
+            )
+            firstStore = nil
+
+            let relaunchedStore = AgentMessageStore(
+                vault: queue,
+                client: client,
+                protectedDataAvailable: { true },
+                startNetworkMonitor: false
+            )
+            relaunchedStore.configure(
+                pairing: makeWatchHandoffPairing(),
+                refreshImmediately: false
+            )
+            relaunchedStore.pathSatisfied = true
+            await relaunchedStore.restoreQueue()
+            let replayResult = await relaunchedStore.flush(reason: "relaunch replay")
+            XCTAssertTrue(replayResult)
+            let replayedSnapshot = try await queue.snapshot()
+            XCTAssertTrue(replayedSnapshot.isEmpty)
+            let counts = client.logicalCounts()
+            XCTAssertEqual(counts.reservations, 1)
+            XCTAssertEqual(counts.activations, 1)
+            XCTAssertEqual(counts.messages, 1)
+        }
+    }
+
+    @MainActor
+    func testAgentMessageProtectedDataAndInterruptedSendingStateRemainQueued() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ForgeAgentMessageProtectedDataTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let queue = AgentMessageEncryptedQueue(
+            fileURL: root.appendingPathComponent("outbox.aesgcm"),
+            keychain: AgentMessageMemoryKeyStore()
+        )
+        let item = makeQueuedAgentMessage(state: .sending)
+        _ = try await queue.enqueue(item)
+        let store = AgentMessageStore(
+            vault: queue,
+            client: AgentMessageTestClient(),
+            protectedDataAvailable: { false },
+            startNetworkMonitor: false
+        )
+        store.configure(
+            pairing: makeWatchHandoffPairing(),
+            refreshImmediately: false
+        )
+        store.pathSatisfied = true
+        await store.restoreQueue()
+        XCTAssertEqual(store.queued.first?.state, .waitingForBackgroundTime)
+        let protectedResult = await store.flush(reason: "protected data unavailable")
+        XCTAssertFalse(protectedResult)
+        let protected = try await queue.snapshot()
+        XCTAssertEqual(protected.first?.state, .waitingForProtectedData)
+        XCTAssertEqual(protected.first?.id, item.id)
     }
 
     func testAgentMessageQueueEncryptsVoiceAndPreservesRetryIdentityAcrossReload() async throws {
