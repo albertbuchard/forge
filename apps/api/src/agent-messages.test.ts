@@ -936,13 +936,14 @@ test("opaque mailbox cursors preserve deterministic pages across inserts and upd
     const seen = firstBody.items.map((message) => message.id);
     let cursor: string | null = firstBody.nextCursor;
     while (cursor) {
-      const page = await app.inject({
-        method: "GET",
-        url: `/api/v1/agent-messages?box=outbox&limit=10&cursor=${encodeURIComponent(cursor)}`,
-        headers: { cookie }
-      });
-      assert.equal(page.statusCode, 200, page.body);
-      const body = page.json() as {
+      const pageResponse: Awaited<ReturnType<typeof app.inject>> =
+        await app.inject({
+          method: "GET",
+          url: `/api/v1/agent-messages?box=outbox&limit=10&cursor=${encodeURIComponent(cursor)}`,
+          headers: { cookie }
+        });
+      assert.equal(pageResponse.statusCode, 200, pageResponse.body);
+      const body = pageResponse.json() as {
         items: Array<{ id: string }>;
         nextCursor: string | null;
       };
