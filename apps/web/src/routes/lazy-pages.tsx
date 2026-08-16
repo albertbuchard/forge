@@ -10,6 +10,11 @@ export const AttentionInboxPage = lazy(() =>
     default: module.AttentionInboxPage
   }))
 );
+export const AgentMessagesPage = lazy(() =>
+  import("@/pages/agent-messages-page").then((module) => ({
+    default: module.AgentMessagesPage
+  }))
+);
 export const ArtifactsPage = lazy(() =>
   import("@/pages/artifacts-page").then((module) => ({
     default: module.ArtifactsPage

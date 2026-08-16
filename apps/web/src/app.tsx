@@ -12,6 +12,7 @@ import {
 } from "@/lib/diagnostics";
 import {
   ActivityPage,
+  AgentMessagesPage,
   ArtifactsPage,
   AttentionInboxPage,
   CalendarPage,
@@ -226,6 +227,24 @@ export function App() {
               "Overview",
               "Daily signal, momentum, and current Forge state.",
               <OverviewPage />
+            )}
+          />
+          <Route
+            path="messages"
+            element={surface(
+              "messages-index",
+              "Agent Messages",
+              "Slow asynchronous mail with connected agents.",
+              <AgentMessagesPage />
+            )}
+          />
+          <Route
+            path="messages/:messageId"
+            element={surface(
+              "messages-index",
+              "Agent Message",
+              "Message detail, result, provenance, and audit history.",
+              <AgentMessagesPage />
             )}
           />
           <Route

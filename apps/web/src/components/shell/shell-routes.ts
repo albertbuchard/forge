@@ -16,6 +16,7 @@ import {
   Inbox,
   LayoutDashboard,
   Map,
+  MessageSquareText,
   Milestone,
   Moon,
   Network,
@@ -68,6 +69,13 @@ export const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     label: "Attention",
     detail: ROUTE_VIEW_CATALOG["attention-index"].description,
     icon: Inbox
+  },
+  {
+    id: "messages",
+    to: "/messages",
+    label: "Agent Messages",
+    detail: ROUTE_VIEW_CATALOG["messages-index"].description,
+    icon: MessageSquareText
   },
   {
     id: "life-force",

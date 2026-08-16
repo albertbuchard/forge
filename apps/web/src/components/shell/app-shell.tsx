@@ -22,6 +22,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   GripVertical,
+  Mic,
   RefreshCcw,
   Search
 } from "lucide-react";
@@ -98,7 +99,7 @@ import {
 } from "@/components/shell/task-timer-rail";
 import { UserScopeSelector } from "@/components/shell/user-scope-selector";
 export { UserScopeSelector } from "@/components/shell/user-scope-selector";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
@@ -783,6 +784,14 @@ function ShellFrame({
                       controller={offlineMutationOutbox}
                       onOpen={() => setOfflineMutationCenterOpen(true)}
                     />
+                    <Link
+                      to="/messages?compose=voice"
+                      className={buttonVariants({ variant: "primary", size: "sm" })}
+                      onClick={() => onRouteIntent("/messages?compose=voice")}
+                    >
+                      <Mic className="size-4" />
+                      Talk to agent
+                    </Link>
                     <div
                       ref={setDesktopCreateTriggerTarget}
                       className="shrink-0"
@@ -970,6 +979,18 @@ function ShellFrame({
                           controller={offlineMutationOutbox}
                           onOpen={() => setOfflineMutationCenterOpen(true)}
                         />
+                        <Link
+                          to="/messages?compose=voice"
+                          className={cn(
+                            buttonVariants({ variant: "primary", size: "sm" }),
+                            "size-11 rounded-full p-0"
+                          )}
+                          aria-label="Talk to agent"
+                          title="Talk to agent"
+                          onClick={() => onRouteIntent("/messages?compose=voice")}
+                        >
+                          <Mic className="size-4" />
+                        </Link>
                         <Button
                           variant="secondary"
                           size="sm"

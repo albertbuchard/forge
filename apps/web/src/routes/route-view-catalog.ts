@@ -43,6 +43,14 @@ export const ROUTE_VIEW_CATALOG = {
     tone: "core",
     skeleton: { blocks: 5, columns: 3, sideRail: false }
   },
+  "messages-index": {
+    surfaceId: "messages-index",
+    title: "Agent Messages",
+    description:
+      "Send and review slow asynchronous text and voice mail with connected agents, including delivery state, results, provenance, and audit history.",
+    tone: "execution",
+    skeleton: { blocks: 5, columns: 2, sideRail: true }
+  },
   "courses-index": {
     surfaceId: "courses-index",
     title: "Courses",
@@ -690,6 +698,7 @@ function matches(pattern: RegExp) {
 
 const ROUTE_VIEW_PATH_MATCHERS: RouteViewPathMatcher[] = [
   { viewId: "overview", match: exactly("/", "/overview") },
+  { viewId: "messages-index", match: startsWithSegment("/messages") },
   { viewId: "course-learn", match: matches(/^\/courses\/[^/]+\/learn$/) },
   { viewId: "course-detail", match: matches(/^\/courses\/[^/]+$/) },
   { viewId: "launchpad", match: exactly("/launchpad") },
