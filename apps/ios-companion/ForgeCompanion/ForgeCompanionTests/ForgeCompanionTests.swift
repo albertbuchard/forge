@@ -149,9 +149,16 @@ private final class AgentMessageTestClient: AgentMessageClientProviding {
 
     func list(
         box: String,
+        status: String?,
+        cursor: String?,
         pairing: PairingPayload
     ) async throws -> AgentMessageListEnvelope {
-        AgentMessageListEnvelope(items: [], unreadThreadCount: 0)
+        AgentMessageListEnvelope(
+            items: [],
+            unreadThreadCount: 0,
+            nextCursor: nil,
+            hasMore: false
+        )
     }
 
     func detail(
@@ -13514,6 +13521,26 @@ final class ForgeCompanionTests: XCTestCase {
             AgentMessageDeliveryState.waitingForBackgroundTime.label
                 .localizedCaseInsensitiveContains("immediate")
         )
+    }
+
+    func testAgentMessageListEndpointCarriesOpaqueCursorAndStatus() {
+        let endpoint = agentMessageListEndpoint(
+            box: "inbox",
+            status: "in_progress",
+            cursor: "opaque_cursor-2",
+            limit: 20
+        )
+        let components = URLComponents(string: endpoint)
+        let values = Dictionary(
+            uniqueKeysWithValues: (components?.queryItems ?? []).compactMap { item in
+                item.value.map { (item.name, $0) }
+            }
+        )
+        XCTAssertEqual(components?.path, "/mobile/agent-messages")
+        XCTAssertEqual(values["box"], "inbox")
+        XCTAssertEqual(values["status"], "in_progress")
+        XCTAssertEqual(values["cursor"], "opaque_cursor-2")
+        XCTAssertEqual(values["limit"], "20")
     }
 
     func testAgentMessageNotificationDoesNotExposeContentOrTranscript() {
