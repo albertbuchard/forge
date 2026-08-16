@@ -2,6 +2,15 @@
 
 ## 0.3.64
 
+- Declared the pinned `music-metadata@11.14.0` parser in the published
+  OpenClaw runtime so an isolated install can start Agent Messages media
+  verification instead of exiting on a missing production dependency.
+- Added packed-runtime dependency regression coverage, regenerated the Hermes
+  runtime metadata with the same parser dependency, and aligned the replacement
+  Forge, OpenClaw, Codex, Hermes, Forge Memory, and iOS release versions.
+
+## 0.3.63
+
 - Added Agent Messages, a responsive asynchronous inbox/outbox for text, an
   original voice Artifact, or both, with default or selected connected-agent
   routing and complete detail history.
