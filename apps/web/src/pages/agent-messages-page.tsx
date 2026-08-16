@@ -304,9 +304,8 @@ function AgentMessageComposer({
           declaredMimeType: mimeType,
           declaredDurationMs: Math.min(RECORDING_LIMIT_MS, recordedDurationMs)
         });
-        const activationKey = createAgentMessageOperationKey("voice-activate");
         await activateVoiceReservation(reservation.reservation.id, {
-          idempotencyKey: activationKey,
+          idempotencyKey: reservationKey,
           contentBase64: await blobToBase64(recordedBlob),
           declaredMimeType: mimeType,
           declaredDurationMs: Math.min(RECORDING_LIMIT_MS, recordedDurationMs)

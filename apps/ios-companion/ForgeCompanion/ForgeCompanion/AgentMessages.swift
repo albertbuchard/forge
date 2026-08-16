@@ -34,7 +34,6 @@ struct QueuedAgentMessage: Codable, Identifiable {
     let id: UUID
     let messageIdempotencyKey: String
     let reservationIdempotencyKey: String
-    let activationIdempotencyKey: String
     let recipientAgentId: String
     let bodyText: String
     let voiceData: Data?
@@ -310,7 +309,7 @@ private final class AgentMessageClient {
     ) async throws {
         guard let voiceData = item.voiceData else { return }
         let body = VoiceActivationRequest(
-            idempotencyKey: item.activationIdempotencyKey,
+            idempotencyKey: item.reservationIdempotencyKey,
             contentBase64: voiceData.base64EncodedString(),
             declaredMimeType: item.voiceMimeType ?? "audio/mp4",
             declaredDurationMs: item.voiceDurationMilliseconds ?? 0
@@ -698,7 +697,6 @@ final class AgentMessageStore: ObservableObject {
             id: id,
             messageIdempotencyKey: "ios-message-\(keyStem)",
             reservationIdempotencyKey: "ios-reserve-\(keyStem)",
-            activationIdempotencyKey: "ios-activate-\(keyStem)",
             recipientAgentId: recipientAgentId,
             bodyText: bodyText.trimmingCharacters(in: .whitespacesAndNewlines),
             voiceData: voiceData,
