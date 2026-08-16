@@ -46,8 +46,8 @@
           <a class="story-metric metric-all" href="./user-stories.html" data-metric-scope="all"><strong>206</strong><span>All stories</span></a>
           <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>206</strong><span>Current product</span></a>
           <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>0</strong><span>Planned</span></a>
-          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>24</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>166</strong><span>In review</span></a>
+          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>25</strong><span>Verified</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>165</strong><span>In review</span></a>
           <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>13</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
@@ -2684,17 +2684,17 @@
                   </div>
                 </details>
 
-                <details class="story-card" id="story-agent-09" data-story-id="AGENT-09" data-lifecycle="current" data-readiness="In review" data-family="AGENT">
+                <details class="story-card" id="story-agent-09" data-story-id="AGENT-09" data-lifecycle="current" data-readiness="Verified" data-family="AGENT">
                   <summary class="story-summary">
                     <span class="story-id">AGENT-09</span>
                     <span class="story-summary-outcome">As a user, I can send slow asynchronous text, voice, or combined work to a default or selected connected agent and receive durable progress, acknowledgement, result, failure, or forwarding history without double execution.</span>
-                    <span class="story-state state-in-review">In review</span>
+                    <span class="story-state state-verified">Verified</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a user, I can send slow asynchronous text, voice, or combined work to a default or selected connected agent and receive durable progress, acknowledgement, result, failure, or forwarding history without double execution.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd><code>messages-index</code>, Agent Messages API/OpenAPI, OpenClaw/Codex/Hermes tools, sensitive voice Artifacts.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>owner-scoped inbox/outbox/detail and default routing, strict container-and-codec activation, first-class original voice Artifacts, atomic lease claims, generation fencing, actor-bound exact replay receipts, reassignment with lease revocation, complete forwarding/retry chains, box-specific keyset cursors with newest-unread Inbox activity and a frozen traversal horizon, reference-aware retention, and scoped agent tools are implemented. Focused authorization, race, response-loss, cursor-boundary, retention, real-media, responsive web, MCP, and Hermes checks pass locally; complete the published-package release evidence.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>owner-scoped inbox/outbox/detail and default routing, strict container-and-codec activation, first-class original voice Artifacts, atomic lease claims, generation fencing, actor-bound exact replay receipts, reassignment with lease revocation, complete forwarding/retry chains, box-specific keyset cursors with newest-unread Inbox activity and a frozen traversal horizon, reference-aware retention, and scoped agent tools are released at <code>e0b1c3958b98a6f0c63f872639c51acf55c13dd1</code> under <code>v0.3.64</code>, <code>hermes-v0.3.64</code>, and <code>ios-testflight-v1.0.174</code>. Exact-SHA publication workflows, npm and PyPI provenance, isolated package installs, and TestFlight processing all passed.</dd></div>
                     </dl>
                   </div>
                 </details>
@@ -3066,7 +3066,7 @@
                     <p class="story-expanded-outcome">As an iPhone user, I can record and securely queue an Agent Message while offline, then let Forge retry it when connectivity and iOS execution time return without exposing notification content or promising an Apple background deadline.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Native Agent Messages inbox/outbox/detail/composer, CryptoKit queue, BackgroundTasks, Network, notifications.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>the AES-GCM queue, device-only Keychain key, stable retry identities, text fallback, immediate recording, status filters and opaque cursor paging, complete message chains, cellular policy, foreground/connectivity/background-task drain, generic notifications, and truthful waiting states are implemented. Eight focused tests cover queue/encryption failure, every ambiguous response phase, interruption/relaunch, protected-data and network truth, cursor queries, and notification privacy; the supported iPhone simulator build passes. Complete physical-device suspension, termination, and long-transfer evidence after TestFlight promotion.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the AES-GCM queue, device-only Keychain key, stable retry identities, text fallback, immediate recording, status filters and opaque cursor paging, complete message chains, cellular policy, foreground/connectivity/background-task drain, generic notifications, and truthful waiting states are implemented. Eight focused tests cover queue/encryption failure, every ambiguous response phase, interruption/relaunch, protected-data and network truth, cursor queries, and notification privacy; the supported iPhone simulator build passes, and TestFlight accepted and processed Forge Companion <code>1.0.174</code> build <code>54</code>. Complete physical-device suspension, termination, and long-transfer evidence before promotion to <code>Verified</code>.</dd></div>
                     </dl>
                   </div>
                 </details>

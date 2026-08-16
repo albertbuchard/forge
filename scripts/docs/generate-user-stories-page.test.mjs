@@ -54,8 +54,8 @@ test("the authoritative contract has the expected current and planned inventory"
   assert.equal(new Set(stories.map((story) => story.id)).size, 206);
   assert.equal(count("lifecycle", "current"), 206);
   assert.equal(count("lifecycle", "planned"), 0);
-  assert.equal(count("readiness", "Verified"), 24);
-  assert.equal(count("readiness", "In review"), 166);
+  assert.equal(count("readiness", "Verified"), 25);
+  assert.equal(count("readiness", "In review"), 165);
   assert.equal(count("readiness", "Needs audit"), 13);
   assert.equal(count("readiness", "Limited"), 0);
   assert.equal(count("readiness", "Externally blocked"), 3);
@@ -203,7 +203,7 @@ test("the client restores filters, canonicalizes contradictory URLs, and keeps m
   readiness.value = "Verified";
   readiness.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
 
-  assert.equal(visibleStories(document).length, 24);
+  assert.equal(visibleStories(document).length, 25);
   assert.equal(
     visibleStories(document).every(
       (story) => story.dataset.readiness === "Verified"
@@ -247,7 +247,7 @@ test("the client supports search, empty recovery, reset focus, and safe anchors"
     '[data-metric-readiness="In review"]'
   );
   inReviewMetric.click();
-  assert.equal(visibleStories(defaultDom.window.document).length, 166);
+  assert.equal(visibleStories(defaultDom.window.document).length, 165);
   assert.equal(inReviewMetric.getAttribute("aria-current"), "true");
   assert.equal(defaultDom.window.location.search, "?readiness=In+review");
   defaultDom.window.document.querySelector('[data-metric-scope="all"]').click();
