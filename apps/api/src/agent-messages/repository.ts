@@ -142,13 +142,26 @@ function fingerprint(value: unknown) {
     .digest("hex");
 }
 
-type AgentMessageCursor = {
+type AgentMessageCursorScope = {
   version: 1;
   box: "inbox" | "outbox";
   status: AgentMessageStatus | null;
-  createdAt: string;
   id: string;
 };
+
+type AgentMessageOutboxCursor = AgentMessageCursorScope & {
+  box: "outbox";
+  createdAt: string;
+};
+
+type AgentMessageInboxCursor = AgentMessageCursorScope & {
+  box: "inbox";
+  eventAt: string;
+  eventId: string;
+  snapshotEventRowId: number;
+};
+
+type AgentMessageCursor = AgentMessageOutboxCursor | AgentMessageInboxCursor;
 
 function encodeAgentMessageCursor(cursor: AgentMessageCursor): string {
   return Buffer.from(canonicalJson(cursor), "utf8").toString("base64url");
@@ -163,19 +176,37 @@ function decodeAgentMessageCursor(input: {
   try {
     const parsed = JSON.parse(
       Buffer.from(input.cursor, "base64url").toString("utf8")
-    ) as Partial<AgentMessageCursor>;
+    ) as Partial<AgentMessageCursorScope> & Record<string, unknown>;
     if (
       parsed.version !== 1 ||
       parsed.box !== input.box ||
       parsed.status !== (input.status ?? null) ||
-      typeof parsed.createdAt !== "string" ||
-      !Number.isFinite(Date.parse(parsed.createdAt)) ||
       typeof parsed.id !== "string" ||
       parsed.id.length === 0
     ) {
       throw new Error("invalid cursor scope");
     }
-    return parsed as AgentMessageCursor;
+    if (parsed.box === "outbox") {
+      if (
+        typeof parsed.createdAt !== "string" ||
+        !Number.isFinite(Date.parse(parsed.createdAt))
+      ) {
+        throw new Error("invalid outbox cursor");
+      }
+      return parsed as AgentMessageOutboxCursor;
+    }
+    if (
+      typeof parsed.eventAt !== "string" ||
+      !Number.isFinite(Date.parse(parsed.eventAt)) ||
+      typeof parsed.eventId !== "string" ||
+      parsed.eventId.length === 0 ||
+      typeof parsed.snapshotEventRowId !== "number" ||
+      !Number.isSafeInteger(parsed.snapshotEventRowId) ||
+      parsed.snapshotEventRowId < 0
+    ) {
+      throw new Error("invalid inbox cursor");
+    }
+    return parsed as AgentMessageInboxCursor;
   } catch {
     throw new HttpError(
       400,
@@ -929,7 +960,7 @@ export function listAgentMessages(input: {
     commonWhere.push("messages.status = ?");
     commonParameters.push(input.status);
   }
-  if (cursor) {
+  if (cursor?.box === "outbox") {
     commonWhere.push(
       "(messages.created_at < ? OR (messages.created_at = ? AND messages.id < ?))"
     );
@@ -937,35 +968,75 @@ export function listAgentMessages(input: {
   }
   let sql: string;
   let parameters: Array<string | number>;
+  let inboxSnapshotEventRowId: number | null = null;
   if (input.box === "inbox") {
+    const inboxCursor = cursor?.box === "inbox" ? cursor : null;
+    const snapshotEventRowId =
+      inboxCursor?.snapshotEventRowId ??
+      (
+        getDatabase()
+          .prepare(
+            "SELECT COALESCE(MAX(rowid), 0) AS row_id FROM agent_message_events"
+          )
+          .get() as { row_id: number }
+      ).row_id;
+    inboxSnapshotEventRowId = snapshotEventRowId;
     const where = [
       "messages.owner_user_id = ?",
       ...commonWhere,
-      `COALESCE((
-         SELECT MAX(events.sequence)
-         FROM agent_message_events events
-         WHERE events.message_id = messages.id
-           AND events.actor_kind = 'agent'
-           AND events.event_kind IN (${eligiblePlaceholders})
-       ), 0) > COALESCE(reads.last_read_event_sequence, 0)`
+      "latest_events.sequence > COALESCE(reads.last_read_event_sequence, 0)"
     ];
-    sql = `SELECT messages.*,
-              (SELECT MAX(events.sequence)
-               FROM agent_message_events events
-               WHERE events.message_id = messages.id
-                 AND events.actor_kind = 'agent'
-                 AND events.event_kind IN (${eligiblePlaceholders})) AS unread_sequence
+    const cursorParameters: Array<string | number> = [];
+    if (inboxCursor) {
+      where.push(
+        `(latest_events.inbox_event_at < ?
+          OR (latest_events.inbox_event_at = ? AND latest_events.inbox_event_id < ?)
+          OR (latest_events.inbox_event_at = ? AND latest_events.inbox_event_id = ? AND messages.id < ?))`
+      );
+      cursorParameters.push(
+        inboxCursor.eventAt,
+        inboxCursor.eventAt,
+        inboxCursor.eventId,
+        inboxCursor.eventAt,
+        inboxCursor.eventId,
+        inboxCursor.id
+      );
+    }
+    sql = `WITH ranked_inbox_events AS (
+         SELECT events.message_id,
+                events.sequence,
+                events.id AS inbox_event_id,
+                events.occurred_at AS inbox_event_at,
+                ROW_NUMBER() OVER (
+                  PARTITION BY events.message_id
+                  ORDER BY events.sequence DESC
+                ) AS inbox_rank
+         FROM agent_message_events events
+         WHERE events.actor_kind = 'agent'
+           AND events.event_kind IN (${eligiblePlaceholders})
+           AND events.rowid <= ?
+       )
+       SELECT messages.*,
+              latest_events.sequence AS unread_sequence,
+              latest_events.inbox_event_id,
+              latest_events.inbox_event_at
        FROM agent_messages messages
+       JOIN ranked_inbox_events latest_events
+         ON latest_events.message_id = messages.id
+        AND latest_events.inbox_rank = 1
        LEFT JOIN agent_message_reads reads
          ON reads.owner_user_id = messages.owner_user_id AND reads.message_id = messages.id
        WHERE ${where.join(" AND ")}
-       ORDER BY messages.created_at DESC, messages.id DESC
+       ORDER BY latest_events.inbox_event_at DESC,
+                latest_events.inbox_event_id DESC,
+                messages.id DESC
        LIMIT ?`;
     parameters = [
       ...eligible,
+      snapshotEventRowId,
       input.ownerUserId,
       ...commonParameters,
-      ...eligible,
+      ...cursorParameters,
       pageLimit
     ];
   } else {
@@ -1004,7 +1075,11 @@ export function listAgentMessages(input: {
   const rows = getDatabase()
     .prepare(sql)
     .all(...parameters) as Array<
-    MessageRow & { unread_sequence: number | null }
+    MessageRow & {
+      unread_sequence: number | null;
+      inbox_event_id?: string;
+      inbox_event_at?: string;
+    }
   >;
   const hasMore = rows.length > input.limit;
   const visibleRows = hasMore ? rows.slice(0, input.limit) : rows;
@@ -1033,13 +1108,23 @@ export function listAgentMessages(input: {
     cursor: input.cursor ?? null,
     nextCursor:
       hasMore && last
-        ? encodeAgentMessageCursor({
-            version: 1,
-            box: input.box,
-            status: input.status ?? null,
-            createdAt: last.created_at,
-            id: last.id
-          })
+        ? input.box === "inbox"
+          ? encodeAgentMessageCursor({
+              version: 1,
+              box: "inbox",
+              status: input.status ?? null,
+              eventAt: last.inbox_event_at!,
+              eventId: last.inbox_event_id!,
+              snapshotEventRowId: inboxSnapshotEventRowId!,
+              id: last.id
+            })
+          : encodeAgentMessageCursor({
+              version: 1,
+              box: "outbox",
+              status: input.status ?? null,
+              createdAt: last.created_at,
+              id: last.id
+            })
         : null,
     hasMore
   };

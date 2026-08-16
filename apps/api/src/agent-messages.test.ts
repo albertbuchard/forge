@@ -974,6 +974,281 @@ test("opaque mailbox cursors preserve deterministic pages across inserts and upd
   }
 });
 
+test("inbox cursors order by newest unread activity and freeze the event horizon", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-agent-messages-inbox-cursor-")
+  );
+  const app = await buildServer({
+    dataRoot: rootDir,
+    seedDemoData: true,
+    devrageMetricSync: false
+  });
+  try {
+    const cookie = issueTestOperatorSessionCookie(app);
+    const agent = await issueMessageAgent({
+      app,
+      cookie,
+      label: "Inbox cursor agent"
+    });
+    const createMessage = async (stem: string) => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/agent-messages",
+        headers: { cookie },
+        payload: {
+          idempotencyKey: `${stem}-message-create`,
+          recipientAgentId: agent.agentId,
+          bodyText: `Inbox activity fixture ${stem}`
+        }
+      });
+      assert.equal(response.statusCode, 201, response.body);
+      return response.json().message.id as string;
+    };
+    const claimMessage = async (
+      messageId: string,
+      stem: string,
+      secretCharacter: string
+    ) => {
+      const leaseSecret = secretCharacter.repeat(43);
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/v1/agent-messages/${messageId}/claim`,
+        headers: { authorization: `Bearer ${agent.token}` },
+        payload: {
+          operationKey: `${stem}-message-claim`,
+          leaseSecret,
+          leaseSeconds: 300
+        }
+      });
+      assert.equal(response.statusCode, 200, response.body);
+      return {
+        leaseSecret,
+        claimGeneration: response.json().claimGeneration as number
+      };
+    };
+    const addProgress = async (input: {
+      messageId: string;
+      stem: string;
+      leaseSecret: string;
+      claimGeneration: number;
+      occurredAt: string;
+    }) => {
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/v1/agent-messages/${input.messageId}/progress`,
+        headers: { authorization: `Bearer ${agent.token}` },
+        payload: {
+          operationKey: `${input.stem}-message-progress`,
+          leaseSecret: input.leaseSecret,
+          claimGeneration: input.claimGeneration,
+          progressSummary: `Eligible activity for ${input.stem}.`
+        }
+      });
+      assert.equal(response.statusCode, 200, response.body);
+      getDatabase()
+        .prepare(
+          `UPDATE agent_message_events SET occurred_at = ?
+           WHERE message_id = ? AND sequence = ?`
+        )
+        .run(
+          input.occurredAt,
+          input.messageId,
+          response.json().eventSequence as number
+        );
+    };
+
+    const oldestMessageId = await createMessage("inbox-oldest");
+    const newestMessageId = await createMessage("inbox-newest");
+    const firstTieMessageId = await createMessage("inbox-tie-first");
+    const secondTieMessageId = await createMessage("inbox-tie-second");
+    const claimOnlyMessageId = await createMessage("inbox-claim-only");
+    getDatabase()
+      .prepare("UPDATE agent_messages SET created_at = ? WHERE id = ?")
+      .run("2025-01-01T00:00:00.000Z", oldestMessageId);
+    getDatabase()
+      .prepare("UPDATE agent_messages SET created_at = ? WHERE id = ?")
+      .run("2026-01-01T00:00:00.000Z", newestMessageId);
+
+    const oldestClaim = await claimMessage(
+      oldestMessageId,
+      "inbox-oldest",
+      "a"
+    );
+    const newestClaim = await claimMessage(
+      newestMessageId,
+      "inbox-newest",
+      "b"
+    );
+    const firstTieClaim = await claimMessage(
+      firstTieMessageId,
+      "inbox-tie-first",
+      "c"
+    );
+    const secondTieClaim = await claimMessage(
+      secondTieMessageId,
+      "inbox-tie-second",
+      "d"
+    );
+    await claimMessage(claimOnlyMessageId, "inbox-claim-only", "e");
+
+    await addProgress({
+      messageId: oldestMessageId,
+      stem: "inbox-oldest",
+      ...oldestClaim,
+      occurredAt: "2026-01-03T00:00:00.000Z"
+    });
+    await addProgress({
+      messageId: newestMessageId,
+      stem: "inbox-newest",
+      ...newestClaim,
+      occurredAt: "2026-01-02T00:00:00.000Z"
+    });
+    await addProgress({
+      messageId: firstTieMessageId,
+      stem: "inbox-tie-first",
+      ...firstTieClaim,
+      occurredAt: "2026-01-01T00:00:00.000Z"
+    });
+    await addProgress({
+      messageId: secondTieMessageId,
+      stem: "inbox-tie-second",
+      ...secondTieClaim,
+      occurredAt: "2026-01-01T00:00:00.000Z"
+    });
+
+    const renewal = await app.inject({
+      method: "POST",
+      url: `/api/v1/agent-messages/${newestMessageId}/lease`,
+      headers: { authorization: `Bearer ${agent.token}` },
+      payload: {
+        operationKey: "inbox-newest-lease-renewal",
+        ...newestClaim,
+        leaseSeconds: 300
+      }
+    });
+    assert.equal(renewal.statusCode, 200, renewal.body);
+    getDatabase()
+      .prepare(
+        `UPDATE agent_message_events SET occurred_at = ?
+         WHERE message_id = ? AND sequence = ?`
+      )
+      .run(
+        "2026-02-01T00:00:00.000Z",
+        newestMessageId,
+        renewal.json().eventSequence as number
+      );
+
+    const tieOrder = (
+      getDatabase()
+        .prepare(
+          `SELECT message_id
+           FROM agent_message_events
+           WHERE event_kind = 'progress' AND occurred_at = ?
+           ORDER BY occurred_at DESC, id DESC, message_id DESC`
+        )
+        .all("2026-01-01T00:00:00.000Z") as Array<{ message_id: string }>
+    ).map((row) => row.message_id);
+    assert.deepEqual(
+      new Set(tieOrder),
+      new Set([firstTieMessageId, secondTieMessageId])
+    );
+
+    const firstPage = await app.inject({
+      method: "GET",
+      url: "/api/v1/agent-messages?box=inbox&limit=2",
+      headers: { cookie }
+    });
+    assert.equal(firstPage.statusCode, 200, firstPage.body);
+    const firstPageBody = firstPage.json() as {
+      items: Array<{ id: string }>;
+      nextCursor: string;
+      hasMore: boolean;
+    };
+    assert.equal(firstPageBody.hasMore, true);
+    assert.deepEqual(
+      firstPageBody.items.map((message) => message.id),
+      [oldestMessageId, newestMessageId]
+    );
+    assert.equal(
+      firstPageBody.items.some((message) => message.id === claimOnlyMessageId),
+      false
+    );
+
+    await addProgress({
+      messageId: firstTieMessageId,
+      stem: "inbox-tie-first-later",
+      ...firstTieClaim,
+      occurredAt: "2026-03-02T00:00:00.000Z"
+    });
+    const newMessageId = await createMessage("inbox-new-after-page");
+    const newClaim = await claimMessage(
+      newMessageId,
+      "inbox-new-after-page",
+      "f"
+    );
+    await addProgress({
+      messageId: newMessageId,
+      stem: "inbox-new-after-page",
+      ...newClaim,
+      occurredAt: "2026-03-03T00:00:00.000Z"
+    });
+
+    const secondPage = await app.inject({
+      method: "GET",
+      url: `/api/v1/agent-messages?box=inbox&limit=2&cursor=${encodeURIComponent(firstPageBody.nextCursor)}`,
+      headers: { cookie }
+    });
+    assert.equal(secondPage.statusCode, 200, secondPage.body);
+    const secondPageBody = secondPage.json() as {
+      items: Array<{ id: string }>;
+      nextCursor: string | null;
+      hasMore: boolean;
+    };
+    assert.deepEqual(
+      secondPageBody.items.map((message) => message.id),
+      tieOrder
+    );
+    assert.equal(secondPageBody.hasMore, false);
+    assert.equal(secondPageBody.nextCursor, null);
+    const traversed = [
+      ...firstPageBody.items.map((message) => message.id),
+      ...secondPageBody.items.map((message) => message.id)
+    ];
+    assert.deepEqual(traversed, [
+      oldestMessageId,
+      newestMessageId,
+      ...tieOrder
+    ]);
+    assert.equal(new Set(traversed).size, 4);
+    assert.equal(traversed.includes(newMessageId), false);
+
+    const refreshed = await app.inject({
+      method: "GET",
+      url: "/api/v1/agent-messages?box=inbox&limit=10",
+      headers: { cookie }
+    });
+    assert.equal(refreshed.statusCode, 200, refreshed.body);
+    assert.deepEqual(
+      (refreshed.json().items as Array<{ id: string }>)
+        .slice(0, 4)
+        .map((message) => message.id),
+      [newMessageId, firstTieMessageId, oldestMessageId, newestMessageId]
+    );
+
+    const wrongFilter = await app.inject({
+      method: "GET",
+      url: `/api/v1/agent-messages?box=inbox&status=handled&limit=2&cursor=${encodeURIComponent(firstPageBody.nextCursor)}`,
+      headers: { cookie }
+    });
+    assert.equal(wrongFilter.statusCode, 400, wrongFilter.body);
+    assert.equal(wrongFilter.json().code, "agent_message_cursor_invalid");
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("forwarded voice retention waits for the last message and resumes a failed cleanup on startup", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-agent-messages-retention-")
