@@ -19,8 +19,49 @@ const acceptedMedia = {
   ogg: { mimeType: "audio/ogg", containers: ["Ogg"] }
 } as const;
 
+function normalizedCodecTokens(codec: string, codecProfile: string) {
+  return [codec, codecProfile]
+    .map((value) => value.toLowerCase().replace(/[^a-z0-9]+/gu, ""))
+    .filter(Boolean);
+}
+
+export function isAllowedAgentMessageCodec(
+  extension: keyof typeof acceptedMedia,
+  codec: string,
+  codecProfile = ""
+) {
+  const tokens = normalizedCodecTokens(codec, codecProfile);
+  if (tokens.length === 0) return false;
+  if (extension === "m4a" || extension === "aac") {
+    return tokens.some(
+      (token) =>
+        token === "aac" ||
+        token.includes("aac") ||
+        token.endsWith("aac") ||
+        token.includes("advancedaudiocoding")
+    );
+  }
+  if (extension === "mp3") {
+    return tokens.some(
+      (token) =>
+        token === "mp3" ||
+        token.includes("mpeglayer3") ||
+        /mpeg[0-9]*layer3/u.test(token)
+    );
+  }
+  if (extension === "wav") {
+    return tokens.some(
+      (token) => token.startsWith("pcm") || token.includes("ieeefloat")
+    );
+  }
+  return tokens.some((token) => token.includes("opus"));
+}
+
 function extensionFromFileName(fileName: string) {
-  return path.extname(path.basename(fileName)).replace(/^\./u, "").toLowerCase();
+  return path
+    .extname(path.basename(fileName))
+    .replace(/^\./u, "")
+    .toLowerCase();
 }
 
 function signatureMatches(buffer: Buffer, extension: string) {
@@ -132,10 +173,18 @@ export async function verifyAgentMessageMedia(input: {
   }
   const container = parsed.format.container ?? "";
   const codec = parsed.format.codec ?? parsed.format.codecProfile ?? "";
+  const codecProfile = parsed.format.codecProfile ?? "";
   const containerAccepted = policy.containers.some((candidate) =>
     container.toLowerCase().includes(candidate.toLowerCase())
   );
-  if (!containerAccepted || !codec.trim()) {
+  if (
+    !containerAccepted ||
+    !isAllowedAgentMessageCodec(
+      extension as keyof typeof acceptedMedia,
+      codec,
+      codecProfile
+    )
+  ) {
     throw new HttpError(
       400,
       "agent_message_voice_codec_invalid",

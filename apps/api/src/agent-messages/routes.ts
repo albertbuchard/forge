@@ -155,7 +155,8 @@ function requireAgent(
       kind: "agent" as const,
       id: auth.token.agentId,
       label: auth.token.agentLabel ?? auth.actor ?? "Forge agent",
-      source: auth.source === "openclaw" ? ("openclaw" as const) : ("agent" as const)
+      source:
+        auth.source === "openclaw" ? ("openclaw" as const) : ("agent" as const)
     }
   };
 }
@@ -164,7 +165,12 @@ function withoutCompanionCompatibilityFields(
   value: unknown,
   companionRoute: boolean
 ) {
-  if (!companionRoute || !value || typeof value !== "object" || Array.isArray(value)) {
+  if (
+    !companionRoute ||
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
     return value ?? {};
   }
   const {
@@ -359,6 +365,7 @@ export async function registerAgentMessageRoutes(
     return claimAgentMessage({
       messageId: params.id,
       agentId: agent.agentId,
+      ownerUserIds: agent.ownerUserIds,
       actor: agent.actor,
       leaseDigestKey: dependencies.leaseDigestKey,
       ...body
@@ -372,6 +379,7 @@ export async function registerAgentMessageRoutes(
     return renewAgentMessageLease({
       messageId: params.id,
       agentId: agent.agentId,
+      ownerUserIds: agent.ownerUserIds,
       actor: agent.actor,
       leaseDigestKey: dependencies.leaseDigestKey,
       ...body
@@ -379,12 +387,15 @@ export async function registerAgentMessageRoutes(
   });
 
   app.post("/api/v1/agent-messages/:id/progress", async (request) => {
-    const agent = requireAgent(dependencies, request, ["agentMessages.progress"]);
+    const agent = requireAgent(dependencies, request, [
+      "agentMessages.progress"
+    ]);
     const params = idParamsSchema.parse(request.params ?? {});
     const body = progressAgentMessageSchema.parse(request.body ?? {});
     return progressAgentMessage({
       messageId: params.id,
       agentId: agent.agentId,
+      ownerUserIds: agent.ownerUserIds,
       actor: agent.actor,
       leaseDigestKey: dependencies.leaseDigestKey,
       ...body
@@ -392,12 +403,15 @@ export async function registerAgentMessageRoutes(
   });
 
   app.post("/api/v1/agent-messages/:id/acknowledge", async (request) => {
-    const agent = requireAgent(dependencies, request, ["agentMessages.progress"]);
+    const agent = requireAgent(dependencies, request, [
+      "agentMessages.progress"
+    ]);
     const params = idParamsSchema.parse(request.params ?? {});
     const body = acknowledgeAgentMessageSchema.parse(request.body ?? {});
     return acknowledgeAgentMessage({
       messageId: params.id,
       agentId: agent.agentId,
+      ownerUserIds: agent.ownerUserIds,
       actor: agent.actor,
       leaseDigestKey: dependencies.leaseDigestKey,
       ...body
@@ -405,12 +419,15 @@ export async function registerAgentMessageRoutes(
   });
 
   app.post("/api/v1/agent-messages/:id/handle", async (request) => {
-    const agent = requireAgent(dependencies, request, ["agentMessages.complete"]);
+    const agent = requireAgent(dependencies, request, [
+      "agentMessages.complete"
+    ]);
     const params = idParamsSchema.parse(request.params ?? {});
     const body = handleAgentMessageSchema.parse(request.body ?? {});
     return handleAgentMessage({
       messageId: params.id,
       agentId: agent.agentId,
+      ownerUserIds: agent.ownerUserIds,
       actor: agent.actor,
       leaseDigestKey: dependencies.leaseDigestKey,
       ...body
@@ -418,12 +435,15 @@ export async function registerAgentMessageRoutes(
   });
 
   app.post("/api/v1/agent-messages/:id/fail", async (request) => {
-    const agent = requireAgent(dependencies, request, ["agentMessages.complete"]);
+    const agent = requireAgent(dependencies, request, [
+      "agentMessages.complete"
+    ]);
     const params = idParamsSchema.parse(request.params ?? {});
     const body = failAgentMessageSchema.parse(request.body ?? {});
     return failAgentMessage({
       messageId: params.id,
       agentId: agent.agentId,
+      ownerUserIds: agent.ownerUserIds,
       actor: agent.actor,
       leaseDigestKey: dependencies.leaseDigestKey,
       ...body
@@ -431,12 +451,15 @@ export async function registerAgentMessageRoutes(
   });
 
   app.post("/api/v1/agent-messages/:id/forward", async (request) => {
-    const agent = requireAgent(dependencies, request, ["agentMessages.forward"]);
+    const agent = requireAgent(dependencies, request, [
+      "agentMessages.forward"
+    ]);
     const params = idParamsSchema.parse(request.params ?? {});
     const body = forwardAgentMessageSchema.parse(request.body ?? {});
     return forwardAgentMessage({
       messageId: params.id,
       agentId: agent.agentId,
+      ownerUserIds: agent.ownerUserIds,
       actor: agent.actor,
       leaseDigestKey: dependencies.leaseDigestKey,
       ...body

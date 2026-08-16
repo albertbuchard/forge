@@ -2,10 +2,13 @@ const jsonContent = (schema: Record<string, unknown>) => ({
   "application/json": { schema }
 });
 
-const response = (description: string, schema: Record<string, unknown> = {
-  type: "object",
-  additionalProperties: true
-}) => ({ description, content: jsonContent(schema) });
+const response = (
+  description: string,
+  schema: Record<string, unknown> = {
+    type: "object",
+    additionalProperties: true
+  }
+) => ({ description, content: jsonContent(schema) });
 
 const body = (schema: Record<string, unknown>) => ({
   required: true,
@@ -32,7 +35,8 @@ const leaseFields = {
     type: "string",
     minLength: 43,
     maxLength: 128,
-    description: "Caller-generated base64url cryptographically random lease secret."
+    description:
+      "Caller-generated base64url cryptographically random lease secret."
   },
   claimGeneration: { type: "integer", minimum: 1 }
 };
@@ -66,7 +70,13 @@ const messageSchema = {
         { type: "null" },
         {
           type: "object",
-          required: ["id", "mimeType", "byteSize", "verifiedDurationMs", "sensitivity"],
+          required: [
+            "id",
+            "mimeType",
+            "byteSize",
+            "verifiedDurationMs",
+            "sensitivity"
+          ],
           properties: {
             id: { type: "string" },
             mimeType: { type: "string" },
@@ -104,6 +114,28 @@ const messageSchema = {
 
 const ownerSecurity = [{ operatorSession: [] }];
 const agentSecurity = [{ bearerAuth: [] }];
+const messageListSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "box",
+    "items",
+    "unreadThreadCount",
+    "limit",
+    "cursor",
+    "nextCursor",
+    "hasMore"
+  ],
+  properties: {
+    box: { type: "string", enum: ["inbox", "outbox"] },
+    items: { type: "array", items: messageSchema },
+    unreadThreadCount: { type: "integer", minimum: 0 },
+    limit: { type: "integer", minimum: 1, maximum: 100 },
+    cursor: { type: ["string", "null"] },
+    nextCursor: { type: ["string", "null"] },
+    hasMore: { type: "boolean" }
+  }
+};
 
 function ownerPaths(prefix: string, mobile: boolean) {
   const security = mobile ? undefined : ownerSecurity;
@@ -146,19 +178,39 @@ function ownerPaths(prefix: string, mobile: boolean) {
       get: {
         tags: ["Agent Messages"],
         summary: "List the Agent Messages inbox or outbox",
-        description: `${protocolDescription}Outbox contains owner-authored threads. Inbox contains distinct threads whose latest agent-authored progress, acknowledgement, handled, failed, or forwarded event is newer than the owner read cursor. Claim and lease events never create unread state.`,
+        description: `${protocolDescription}Outbox contains every retained message in owner-authored forwarding and retry chains. Inbox contains distinct threads whose latest agent-authored progress, acknowledgement, handled, failed, or forwarded event is newer than the owner read cursor. Claim and lease events never create unread state. Pages use a filter-bound opaque cursor over immutable creation time and id, so inserts and status updates cannot duplicate or skip older matching rows during traversal.`,
         security,
         parameters: [
           {
             name: "box",
             in: "query",
-            schema: { type: "string", enum: ["inbox", "outbox"], default: "outbox" }
+            schema: {
+              type: "string",
+              enum: ["inbox", "outbox"],
+              default: "outbox"
+            }
           },
-          { name: "status", in: "query", schema: messageSchema.properties.status },
-          { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 30 } },
-          { name: "offset", in: "query", schema: { type: "integer", minimum: 0, default: 0 } }
+          {
+            name: "status",
+            in: "query",
+            schema: messageSchema.properties.status
+          },
+          {
+            name: "limit",
+            in: "query",
+            schema: { type: "integer", minimum: 1, maximum: 100, default: 30 }
+          },
+          {
+            name: "cursor",
+            in: "query",
+            description:
+              "Opaque nextCursor from the preceding page, bound to box and status.",
+            schema: { type: "string", minLength: 1, maxLength: 500 }
+          }
         ],
-        responses: { "200": response("Bounded inbox or outbox page") }
+        responses: {
+          "200": response("Bounded inbox or outbox page", messageListSchema)
+        }
       },
       post: {
         tags: ["Agent Messages"],
@@ -174,7 +226,12 @@ function ownerPaths(prefix: string, mobile: boolean) {
             recipientAgentId: { type: "string" },
             bodyText: { type: "string", maxLength: 50_000 },
             voiceReservationId: { type: "string" },
-            retentionDays: { type: "integer", minimum: 1, maximum: 3650, default: 365 }
+            retentionDays: {
+              type: "integer",
+              minimum: 1,
+              maximum: 3650,
+              default: 365
+            }
           },
           anyOf: [
             { required: ["bodyText"] },
@@ -182,8 +239,14 @@ function ownerPaths(prefix: string, mobile: boolean) {
           ]
         }),
         responses: {
-          "200": response("Exact replay", { type: "object", properties: { message: messageSchema } }),
-          "201": response("Created message", { type: "object", properties: { message: messageSchema } }),
+          "200": response("Exact replay", {
+            type: "object",
+            properties: { message: messageSchema }
+          }),
+          "201": response("Created message", {
+            type: "object",
+            properties: { message: messageSchema }
+          }),
           "409": response("Changed idempotency key or unavailable reservation")
         }
       }
@@ -191,7 +254,8 @@ function ownerPaths(prefix: string, mobile: boolean) {
     [`${prefix}/{id}`]: {
       get: {
         tags: ["Agent Messages"],
-        summary: "Read one message, immutable events, and forward/retry provenance",
+        summary:
+          "Read one message, immutable events, and forward/retry provenance",
         description: protocolDescription,
         security,
         parameters: [idParameter],
@@ -207,7 +271,9 @@ function ownerPaths(prefix: string, mobile: boolean) {
           type: "object",
           additionalProperties: false,
           required: ["reason"],
-          properties: { reason: { type: "string", minLength: 1, maxLength: 1000 } }
+          properties: {
+            reason: { type: "string", minLength: 1, maxLength: 1000 }
+          }
         }),
         responses: { "200": response("Soft deletion receipt") }
       }
@@ -215,7 +281,8 @@ function ownerPaths(prefix: string, mobile: boolean) {
     [`${prefix}/{id}/read`]: {
       post: {
         tags: ["Agent Messages"],
-        summary: "Advance the owner read cursor to an observed inbox-eligible event",
+        summary:
+          "Advance the owner read cursor to an observed inbox-eligible event",
         description: `${protocolDescription}A concurrent newer eligible event remains unread. Lease events are excluded.`,
         security,
         parameters: [idParameter],
@@ -240,12 +307,21 @@ function ownerPaths(prefix: string, mobile: boolean) {
         requestBody: body({
           type: "object",
           additionalProperties: false,
-          required: ["idempotencyKey", "originalFileName", "declaredMimeType", "declaredDurationMs"],
+          required: [
+            "idempotencyKey",
+            "originalFileName",
+            "declaredMimeType",
+            "declaredDurationMs"
+          ],
           properties: {
             idempotencyKey: operationKey,
             originalFileName: { type: "string", minLength: 1, maxLength: 180 },
             declaredMimeType: { type: "string" },
-            declaredDurationMs: { type: "integer", minimum: 0, maximum: 600_000 }
+            declaredDurationMs: {
+              type: "integer",
+              minimum: 0,
+              maximum: 600_000
+            }
           }
         }),
         responses: { "201": response("Pending voice reservation") }
@@ -255,18 +331,27 @@ function ownerPaths(prefix: string, mobile: boolean) {
       put: {
         tags: ["Agent Messages"],
         summary: "Upload and verify the original audio for a reservation",
-        description: `${protocolDescription}The JSON body is bounded at 35 MiB; decoded media is bounded at 25 MiB and must pass signature, MIME/extension, container/codec, and verified duration at or below 600 seconds.`,
+        description: `${protocolDescription}The JSON body is bounded at 35 MiB; decoded media is bounded at 25 MiB and must pass signature, MIME/extension, container/codec, and verified duration at or below 600 seconds. Allowed combinations are M4A/AAC, AAC/ADTS, MP3/MPEG Layer III, WAV/PCM or IEEE float, WebM/Opus, and Ogg/Opus.`,
         security,
         parameters: [idParameter],
         requestBody: body({
           type: "object",
           additionalProperties: false,
-          required: ["idempotencyKey", "contentBase64", "declaredMimeType", "declaredDurationMs"],
+          required: [
+            "idempotencyKey",
+            "contentBase64",
+            "declaredMimeType",
+            "declaredDurationMs"
+          ],
           properties: {
             idempotencyKey: operationKey,
             contentBase64: { type: "string", contentEncoding: "base64" },
             declaredMimeType: { type: "string" },
-            declaredDurationMs: { type: "integer", minimum: 0, maximum: 600_000 }
+            declaredDurationMs: {
+              type: "integer",
+              minimum: 0,
+              maximum: 600_000
+            }
           }
         }),
         responses: { "200": response("Active verified reservation") }
@@ -275,14 +360,20 @@ function ownerPaths(prefix: string, mobile: boolean) {
     [`${prefix}/{id}/reassign`]: {
       post: {
         tags: ["Agent Messages"],
-        summary: "Reassign a nonterminal message, explicitly revoking a live lease when confirmed",
+        summary:
+          "Reassign a nonterminal message, explicitly revoking a live lease when confirmed",
         description: `${protocolDescription}Requires expected revision, reason, and stable operation key. The old lease secret fails immediately.`,
         security,
         parameters: [idParameter],
         requestBody: body({
           type: "object",
           additionalProperties: false,
-          required: ["operationKey", "expectedRevision", "recipientAgentId", "reason"],
+          required: [
+            "operationKey",
+            "expectedRevision",
+            "recipientAgentId",
+            "reason"
+          ],
           properties: {
             operationKey,
             expectedRevision: { type: "integer", minimum: 1 },
@@ -328,11 +419,17 @@ function agentPaths() {
     [`${base}/poll`]: {
       get: {
         tags: ["Agent Messages"],
-        summary: "Poll claim-eligible messages addressed to the authenticated agent",
-        description: "Requires agentMessages.poll. Polling never claims and omits audio bytes.",
+        summary:
+          "Poll claim-eligible messages addressed to the authenticated agent",
+        description:
+          "Requires agentMessages.poll. Polling never claims and omits audio bytes.",
         security: agentSecurity,
         parameters: [
-          { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 20 } }
+          {
+            name: "limit",
+            in: "query",
+            schema: { type: "integer", minimum: 1, maximum: 100, default: 20 }
+          }
         ],
         responses: { "200": response("Compact claim-eligible messages") }
       }
@@ -341,17 +438,21 @@ function agentPaths() {
       get: {
         tags: ["Agent Messages"],
         summary: "Read the addressed message and its immutable audit history",
-        description: "Requires agentMessages.poll and exact recipient plus owner scope.",
+        description:
+          "Requires agentMessages.poll and exact recipient plus owner scope.",
         security: agentSecurity,
         parameters: [idParameter],
-        responses: { "200": response("Message detail and ordered audit events") }
+        responses: {
+          "200": response("Message detail and ordered audit events")
+        }
       }
     },
     [`${base}/{id}/claim`]: {
       post: {
         tags: ["Agent Messages"],
         summary: "Atomically claim a message with a retry-safe lease",
-        description: "Requires agentMessages.claim. The caller supplies a random secret; Forge stores only its keyed digest and a durable exact-replay receipt.",
+        description:
+          "Requires agentMessages.claim. The caller supplies a random secret; Forge stores only its keyed digest and a durable exact-replay receipt.",
         security: agentSecurity,
         parameters: [idParameter],
         requestBody: body({
@@ -361,40 +462,67 @@ function agentPaths() {
           properties: {
             operationKey,
             leaseSecret: leaseFields.leaseSecret,
-            leaseSeconds: { type: "integer", minimum: 60, maximum: 900, default: 300 }
+            leaseSeconds: {
+              type: "integer",
+              minimum: 60,
+              maximum: 900,
+              default: 300
+            }
           }
         }),
-        responses: { "200": response("Claim lease or exact replay"), "409": response("Live competing claim or changed replay") }
+        responses: {
+          "200": response("Claim lease or exact replay"),
+          "409": response("Live competing claim or changed replay")
+        }
       }
     },
     [`${base}/{id}/lease`]: {
       post: {
-        tags: ["Agent Messages"], summary: "Renew the authenticated claim lease",
-        security: agentSecurity, parameters: [idParameter],
-        requestBody: leasedRequest({ leaseSeconds: { type: "integer", minimum: 60, maximum: 900, default: 300 } }),
+        tags: ["Agent Messages"],
+        summary: "Renew the authenticated claim lease",
+        security: agentSecurity,
+        parameters: [idParameter],
+        requestBody: leasedRequest({
+          leaseSeconds: {
+            type: "integer",
+            minimum: 60,
+            maximum: 900,
+            default: 300
+          }
+        }),
         responses: { "200": response("Renewal receipt") }
       }
     },
     [`${base}/{id}/progress`]: {
       post: {
-        tags: ["Agent Messages"], summary: "Append user-visible agent progress",
-        security: agentSecurity, parameters: [idParameter],
-        requestBody: leasedRequest({ progressSummary: { type: "string", minLength: 1, maxLength: 10_000 } }),
+        tags: ["Agent Messages"],
+        summary: "Append user-visible agent progress",
+        security: agentSecurity,
+        parameters: [idParameter],
+        requestBody: leasedRequest({
+          progressSummary: { type: "string", minLength: 1, maxLength: 10_000 }
+        }),
         responses: { "200": response("Progress receipt") }
       }
     },
     [`${base}/{id}/acknowledge`]: {
       post: {
-        tags: ["Agent Messages"], summary: "Acknowledge the message under its live lease",
-        security: agentSecurity, parameters: [idParameter], requestBody: leasedRequest(),
+        tags: ["Agent Messages"],
+        summary: "Acknowledge the message under its live lease",
+        security: agentSecurity,
+        parameters: [idParameter],
+        requestBody: leasedRequest(),
         responses: { "200": response("Acknowledgement receipt") }
       }
     },
     [`${base}/{id}/handle`]: {
       post: {
-        tags: ["Agent Messages"], summary: "Handle the message with an idempotent terminal receipt",
-        description: "Requires agentMessages.complete. Transcript fields require explicit provider/cost/privacy disclosure and never replace the original Artifact.",
-        security: agentSecurity, parameters: [idParameter],
+        tags: ["Agent Messages"],
+        summary: "Handle the message with an idempotent terminal receipt",
+        description:
+          "Requires agentMessages.complete. Transcript fields require explicit provider/cost/privacy disclosure and never replace the original Artifact.",
+        security: agentSecurity,
+        parameters: [idParameter],
         requestBody: leasedRequest({
           receiptKey: operationKey,
           resultMarkdown: { type: "string", maxLength: 100_000 },
@@ -407,8 +535,10 @@ function agentPaths() {
     },
     [`${base}/{id}/fail`]: {
       post: {
-        tags: ["Agent Messages"], summary: "Fail the message with an idempotent terminal receipt",
-        security: agentSecurity, parameters: [idParameter],
+        tags: ["Agent Messages"],
+        summary: "Fail the message with an idempotent terminal receipt",
+        security: agentSecurity,
+        parameters: [idParameter],
         requestBody: leasedRequest({
           receiptKey: operationKey,
           failureCode: { type: "string", minLength: 1, maxLength: 200 },
@@ -419,8 +549,10 @@ function agentPaths() {
     },
     [`${base}/{id}/forward`]: {
       post: {
-        tags: ["Agent Messages"], summary: "Forward to another owner-linked agent as an immutable child",
-        security: agentSecurity, parameters: [idParameter],
+        tags: ["Agent Messages"],
+        summary: "Forward to another owner-linked agent as an immutable child",
+        security: agentSecurity,
+        parameters: [idParameter],
         requestBody: leasedRequest({
           receiptKey: operationKey,
           recipientAgentId: { type: "string" },
@@ -431,20 +563,31 @@ function agentPaths() {
     },
     [`${base}/{id}/voice`]: {
       post: {
-        tags: ["Agent Messages"], summary: "Read only this leased message's verified original voice Artifact",
-        description: "Requires agentMessages.voice.read and exact recipient, claimant, owner scope, secret, generation, nonterminal state, retention, sensitivity, and Artifact integrity. This is not generic Artifact download.",
-        security: agentSecurity, parameters: [idParameter],
+        tags: ["Agent Messages"],
+        summary:
+          "Read only this leased message's verified original voice Artifact",
+        description:
+          "Requires agentMessages.voice.read and exact recipient, claimant, owner scope, secret, generation, nonterminal state, retention, sensitivity, and Artifact integrity. This is not generic Artifact download.",
+        security: agentSecurity,
+        parameters: [idParameter],
         requestBody: body({
-          type: "object", additionalProperties: false,
+          type: "object",
+          additionalProperties: false,
           required: ["leaseSecret", "claimGeneration"],
-          properties: { leaseSecret: leaseFields.leaseSecret, claimGeneration: leaseFields.claimGeneration }
+          properties: {
+            leaseSecret: leaseFields.leaseSecret,
+            claimGeneration: leaseFields.claimGeneration
+          }
         }),
         responses: {
           "200": {
-            description: "Exact original voice bytes. Hash and Artifact id are returned in response headers.",
+            description:
+              "Exact original voice bytes. Hash and Artifact id are returned in response headers.",
             headers: {
               "X-Forge-Artifact-Id": { schema: { type: "string" } },
-              "X-Forge-Content-Sha256": { schema: { type: "string", pattern: "^[a-f0-9]{64}$" } }
+              "X-Forge-Content-Sha256": {
+                schema: { type: "string", pattern: "^[a-f0-9]{64}$" }
+              }
             },
             content: {
               "audio/mp4": { schema: { type: "string", format: "binary" } },

@@ -26,12 +26,21 @@ import {
   Trash2,
   WifiOff
 } from "lucide-react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams
+} from "react-router-dom";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState
+} from "@/components/ui/page-state";
 import { Textarea } from "@/components/ui/textarea";
 import {
   activateVoiceReservation,
@@ -84,12 +93,26 @@ function preferredRecordingMimeType() {
 }
 
 function fileExtension(mimeType: string) {
-  if (mimeType.includes("mp4") || mimeType.includes("aac")) return "m4a";
+  if (mimeType.includes("aac")) return "aac";
+  if (mimeType.includes("mp4")) return "m4a";
   if (mimeType.includes("ogg")) return "ogg";
   if (mimeType.includes("mpeg")) return "mp3";
   if (mimeType.includes("wav")) return "wav";
   return "webm";
 }
+
+type ComposerSendAttempt = {
+  bodyText: string;
+  recipientAgentId: string;
+  voiceBlob: Blob | null;
+  durationMs: number;
+  mimeType: string;
+  originalFileName: string;
+  reservationKey: string;
+  reservationId?: string;
+  contentBase64?: string;
+  messageKey: string;
+};
 
 function formatBytes(value: number) {
   if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`;
@@ -102,7 +125,9 @@ function formatDuration(value: number) {
 }
 
 function agentPresence(agent: ConnectedAgent) {
-  return agent.connected ? "Connected" : "Connected account · currently offline";
+  return agent.connected
+    ? "Connected"
+    : "Connected account · currently offline";
 }
 
 function MessageStatus({ status }: { status: AgentMessageStatus }) {
@@ -111,13 +136,27 @@ function MessageStatus({ status }: { status: AgentMessageStatus }) {
     <Badge
       tone={copy.tone}
       className={cn(
-        status === "handled" && "border-emerald-300 bg-emerald-50 text-emerald-950",
+        status === "handled" &&
+          "border-emerald-300 bg-emerald-50 text-emerald-950",
         status === "failed" && "border-red-300 bg-red-50 text-red-950"
       )}
     >
       {copy.label}
     </Badge>
   );
+}
+
+export function agentMessageNotification(
+  agentLabel: string,
+  status: AgentMessageStatus
+) {
+  return {
+    title: `Agent update from ${agentLabel}`,
+    options: {
+      body: `Agent Message status: ${STATUS_COPY[status].label}.`,
+      tag: "forge-agent-message-update"
+    }
+  } satisfies { title: string; options: NotificationOptions };
 }
 
 function MessageRow({ message }: { message: AgentMessage }) {
@@ -181,9 +220,11 @@ function AgentMessageComposer({
   const startedAtRef = useRef(0);
   const stopTimerRef = useRef<number | null>(null);
   const autoStartedRef = useRef(false);
+  const sendAttemptRef = useRef<ComposerSendAttempt | null>(null);
 
   useEffect(() => {
-    if (!recipientAgentId && defaultAgentId) setRecipientAgentId(defaultAgentId);
+    if (!recipientAgentId && defaultAgentId)
+      setRecipientAgentId(defaultAgentId);
   }, [defaultAgentId, recipientAgentId]);
 
   const stopRecording = useCallback(() => {
@@ -192,7 +233,10 @@ function AgentMessageComposer({
 
   const startRecording = useCallback(async () => {
     setRecordingError(null);
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+    if (
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
       setRecordingError("Voice recording is not available in this browser.");
       return;
     }
@@ -205,7 +249,10 @@ function AgentMessageComposer({
         }
       });
       const mimeType = preferredRecordingMimeType();
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      const recorder = new MediaRecorder(
+        stream,
+        mimeType ? { mimeType } : undefined
+      );
       chunksRef.current = [];
       streamRef.current = stream;
       recorderRef.current = recorder;
@@ -214,14 +261,19 @@ function AgentMessageComposer({
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
       recorder.onerror = () => {
-        setRecordingError("Recording stopped because the browser reported an audio error.");
+        setRecordingError(
+          "Recording stopped because the browser reported an audio error."
+        );
       };
       recorder.onstop = () => {
         if (stopTimerRef.current !== null) {
           window.clearTimeout(stopTimerRef.current);
           stopTimerRef.current = null;
         }
-        const duration = Math.min(RECORDING_LIMIT_MS, Date.now() - startedAtRef.current);
+        const duration = Math.min(
+          RECORDING_LIMIT_MS,
+          Date.now() - startedAtRef.current
+        );
         const blob = new Blob(chunksRef.current, {
           type: recorder.mimeType || "audio/webm"
         });
@@ -233,18 +285,25 @@ function AgentMessageComposer({
         setRecordedDurationMs(duration);
         if (blob.size > VOICE_LIMIT_BYTES) {
           setRecordedBlob(null);
-          setRecordingError("This voice note exceeds the 25 MB limit. Record a shorter note.");
+          setRecordingError(
+            "This voice note exceeds the 25 MB limit. Record a shorter note."
+          );
           return;
         }
         setRecordedBlob(blob);
-        setStatusMessage("Voice note ready. Review it, add text if useful, then send.");
+        setStatusMessage(
+          "Voice note ready. Review it, add text if useful, then send."
+        );
       };
       recorder.start(1000);
       setRecordedBlob(null);
       setRecordedDurationMs(0);
       setRecording(true);
       setStatusMessage("Recording started.");
-      stopTimerRef.current = window.setTimeout(stopRecording, RECORDING_LIMIT_MS);
+      stopTimerRef.current = window.setTimeout(
+        stopRecording,
+        RECORDING_LIMIT_MS
+      );
     } catch (error) {
       setRecordingError(
         error instanceof DOMException && error.name === "NotAllowedError"
@@ -275,8 +334,10 @@ function AgentMessageComposer({
 
   useEffect(
     () => () => {
-      if (stopTimerRef.current !== null) window.clearTimeout(stopTimerRef.current);
-      if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+      if (stopTimerRef.current !== null)
+        window.clearTimeout(stopTimerRef.current);
+      if (recorderRef.current?.state === "recording")
+        recorderRef.current.stop();
       streamRef.current?.getTracks().forEach((track) => track.stop());
     },
     []
@@ -285,41 +346,78 @@ function AgentMessageComposer({
   const sendMutation = useMutation({
     mutationFn: async () => {
       const text = bodyText.trim();
-      if (!text && !recordedBlob) throw new Error("Add text or a voice note before sending.");
-      if (!recipientAgentId) throw new Error("Choose a connected agent before sending.");
+      if (!text && !recordedBlob)
+        throw new Error("Add text or a voice note before sending.");
+      if (!recipientAgentId)
+        throw new Error("Choose a connected agent before sending.");
       if (new TextEncoder().encode(text).byteLength > 50_000) {
         throw new Error("Message text exceeds the 50 KB limit.");
       }
-      if (recordedBlob && recordedBlob.size > CELLULAR_CONFIRM_BYTES && !allowLargeTransfer) {
-        throw new Error("Confirm the large upload before sending this voice note.");
+      if (
+        recordedBlob &&
+        recordedBlob.size > CELLULAR_CONFIRM_BYTES &&
+        !allowLargeTransfer
+      ) {
+        throw new Error(
+          "Confirm the large upload before sending this voice note."
+        );
       }
-      setStatusMessage(recordedBlob ? "Securing and uploading the voice Artifact…" : "Sending message…");
-      let voiceReservationId: string | undefined;
-      if (recordedBlob) {
-        const reservationKey = createAgentMessageOperationKey("voice-reserve");
-        const mimeType = recordedBlob.type.split(";", 1)[0] || "audio/webm";
+      const durationMs = Math.min(RECORDING_LIMIT_MS, recordedDurationMs);
+      const mimeType = recordedBlob?.type.split(";", 1)[0] || "audio/webm";
+      let attempt = sendAttemptRef.current;
+      if (
+        !attempt ||
+        attempt.bodyText !== text ||
+        attempt.recipientAgentId !== recipientAgentId ||
+        attempt.voiceBlob !== recordedBlob ||
+        attempt.durationMs !== durationMs ||
+        attempt.mimeType !== mimeType
+      ) {
+        attempt = {
+          bodyText: text,
+          recipientAgentId,
+          voiceBlob: recordedBlob,
+          durationMs,
+          mimeType,
+          originalFileName: `agent-message-${new Date()
+            .toISOString()
+            .replaceAll(":", "-")}.${fileExtension(mimeType)}`,
+          reservationKey: createAgentMessageOperationKey("voice-reserve"),
+          messageKey: createAgentMessageOperationKey("message-send")
+        };
+        sendAttemptRef.current = attempt;
+      }
+      setStatusMessage(
+        recordedBlob
+          ? "Securing and uploading the voice Artifact…"
+          : "Sending message…"
+      );
+      if (attempt.voiceBlob) {
         const reservation = await createVoiceReservation({
-          idempotencyKey: reservationKey,
-          originalFileName: `agent-message-${new Date().toISOString().replaceAll(":", "-")}.${fileExtension(mimeType)}`,
-          declaredMimeType: mimeType,
-          declaredDurationMs: Math.min(RECORDING_LIMIT_MS, recordedDurationMs)
+          idempotencyKey: attempt.reservationKey,
+          originalFileName: attempt.originalFileName,
+          declaredMimeType: attempt.mimeType,
+          declaredDurationMs: attempt.durationMs
         });
-        await activateVoiceReservation(reservation.reservation.id, {
-          idempotencyKey: reservationKey,
-          contentBase64: await blobToBase64(recordedBlob),
-          declaredMimeType: mimeType,
-          declaredDurationMs: Math.min(RECORDING_LIMIT_MS, recordedDurationMs)
+        attempt.reservationId = reservation.reservation.id;
+        attempt.contentBase64 ??= await blobToBase64(attempt.voiceBlob);
+        await activateVoiceReservation(attempt.reservationId, {
+          idempotencyKey: attempt.reservationKey,
+          contentBase64: attempt.contentBase64,
+          declaredMimeType: attempt.mimeType,
+          declaredDurationMs: attempt.durationMs
         });
-        voiceReservationId = reservation.reservation.id;
       }
-      return createAgentMessage({
-        idempotencyKey: createAgentMessageOperationKey("message-send"),
-        recipientAgentId,
-        bodyText: text,
-        voiceReservationId
+      const result = await createAgentMessage({
+        idempotencyKey: attempt.messageKey,
+        recipientAgentId: attempt.recipientAgentId,
+        bodyText: attempt.bodyText,
+        voiceReservationId: attempt.reservationId
       });
+      return { result, attempt };
     },
-    onSuccess: (result) => {
+    onSuccess: ({ result, attempt }) => {
+      if (sendAttemptRef.current === attempt) sendAttemptRef.current = null;
       setBodyText("");
       setRecordedBlob(null);
       setRecordedDurationMs(0);
@@ -328,7 +426,11 @@ function AgentMessageComposer({
       onSent(result.message);
     },
     onError: (error) => {
-      setStatusMessage(error instanceof Error ? error.message : "Forge could not send this message.");
+      setStatusMessage(
+        error instanceof Error
+          ? error.message
+          : "Forge could not send this message."
+      );
     }
   });
 
@@ -336,7 +438,9 @@ function AgentMessageComposer({
     const file = event.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("audio/")) {
-      setRecordingError("Choose an audio file in M4A, AAC, MP3, WAV, WebM, or Ogg format.");
+      setRecordingError(
+        "Choose an audio file in M4A, AAC, MP3, WAV, WebM, or Ogg format."
+      );
       return;
     }
     if (file.size > VOICE_LIMIT_BYTES) {
@@ -346,16 +450,21 @@ function AgentMessageComposer({
     setRecordedBlob(file);
     setRecordedDurationMs(0);
     setRecordingError(null);
-    setStatusMessage("Audio file ready. Forge will verify its format and duration before delivery.");
+    setStatusMessage(
+      "Audio file ready. Forge will verify its format and duration before delivery."
+    );
   };
 
   return (
     <Card className="border-[color-mix(in_srgb,var(--primary)_24%,var(--ui-border-subtle))] bg-[linear-gradient(145deg,var(--ui-surface-1),color-mix(in_srgb,var(--primary)_7%,var(--ui-surface-1)))]">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="font-display text-lg text-[var(--ui-ink-strong)]">Talk to agent</p>
+          <p className="font-display text-lg text-[var(--ui-ink-strong)]">
+            Talk to agent
+          </p>
           <p className="mt-1 text-sm leading-6 text-[var(--ui-ink-medium)]">
-            Send slow, asynchronous mail. The agent may respond later; this is not live chat.
+            Send slow, asynchronous mail. The agent may respond later; this is
+            not live chat.
           </p>
         </div>
         <MessageSquareText className="size-5 shrink-0 text-[var(--primary)]" />
@@ -378,7 +487,10 @@ function AgentMessageComposer({
       </label>
 
       <label className="mt-4 grid gap-2 text-sm font-medium text-[var(--ui-ink-strong)]">
-        Message <span className="font-normal text-[var(--ui-ink-soft)]">(optional with voice)</span>
+        Message{" "}
+        <span className="font-normal text-[var(--ui-ink-soft)]">
+          (optional with voice)
+        </span>
         <Textarea
           value={bodyText}
           onChange={(event) => setBodyText(event.target.value)}
@@ -393,9 +505,15 @@ function AgentMessageComposer({
           <Button
             type="button"
             variant={recording ? "secondary" : "primary"}
-            onClick={() => (recording ? stopRecording() : void startRecording())}
+            onClick={() =>
+              recording ? stopRecording() : void startRecording()
+            }
           >
-            {recording ? <MicOff className="size-4" /> : <Mic className="size-4" />}
+            {recording ? (
+              <MicOff className="size-4" />
+            ) : (
+              <Mic className="size-4" />
+            )}
             {recording ? "Stop recording" : "Record voice"}
           </Button>
           <label className="interactive-tap inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] px-3 text-sm font-medium text-[var(--ui-ink-strong)] hover:bg-[var(--ui-surface-hover)]">
@@ -404,13 +522,17 @@ function AgentMessageComposer({
             <input
               className="sr-only"
               type="file"
-              accept="audio/mp4,audio/aac,audio/mpeg,audio/wav,audio/webm,audio/ogg,.m4a,.mp3,.wav,.webm,.ogg"
+              accept="audio/mp4,audio/aac,audio/mpeg,audio/wav,audio/webm,audio/ogg,.m4a,.aac,.mp3,.wav,.webm,.ogg"
               onChange={chooseAudioFile}
             />
           </label>
           {recording ? (
-            <span role="status" className="inline-flex items-center gap-2 text-sm font-medium text-red-600">
-              <span className="size-2 animate-pulse rounded-full bg-red-600" /> Recording · stops at 10:00
+            <span
+              role="status"
+              className="inline-flex items-center gap-2 text-sm font-medium text-red-600"
+            >
+              <span className="size-2 animate-pulse rounded-full bg-red-600" />{" "}
+              Recording · stops at 10:00
             </span>
           ) : null}
         </div>
@@ -420,7 +542,12 @@ function AgentMessageComposer({
               Your browser cannot preview this voice note.
             </audio>
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--ui-ink-soft)]">
-              <span>{formatBytes(recordedBlob.size)} · {recordedDurationMs ? formatDuration(recordedDurationMs) : "duration verified on upload"}</span>
+              <span>
+                {formatBytes(recordedBlob.size)} ·{" "}
+                {recordedDurationMs
+                  ? formatDuration(recordedDurationMs)
+                  : "duration verified on upload"}
+              </span>
               <button
                 type="button"
                 className="font-medium text-[var(--primary)] underline-offset-4 hover:underline"
@@ -435,7 +562,9 @@ function AgentMessageComposer({
           </div>
         ) : null}
         {recordingError ? (
-          <p role="alert" className="mt-3 text-sm text-red-700">{recordingError}</p>
+          <p role="alert" className="mt-3 text-sm text-red-700">
+            {recordingError}
+          </p>
         ) : null}
       </div>
 
@@ -448,21 +577,30 @@ function AgentMessageComposer({
             onChange={(event) => setAllowLargeTransfer(event.target.checked)}
           />
           <span>
-            This voice note is over 5 MB. Upload it now even if this connection may be cellular or metered.
+            This voice note is over 5 MB. Upload it now even if this connection
+            may be cellular or metered.
           </span>
         </label>
       ) : null}
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-        <p aria-live="polite" className="min-w-0 flex-1 text-sm text-[var(--ui-ink-medium)]">
-          {statusMessage || "Voice remains a sensitive first-class Artifact linked to this message."}
+        <p
+          aria-live="polite"
+          className="min-w-0 flex-1 text-sm text-[var(--ui-ink-medium)]"
+        >
+          {statusMessage ||
+            "Voice remains a sensitive first-class Artifact linked to this message."}
         </p>
         <Button
           type="button"
           size="lg"
           pending={sendMutation.isPending}
           pendingLabel="Sending…"
-          disabled={recording || (!bodyText.trim() && !recordedBlob) || !recipientAgentId}
+          disabled={
+            recording ||
+            (!bodyText.trim() && !recordedBlob) ||
+            !recipientAgentId
+          }
           onClick={() => sendMutation.mutate()}
         >
           <Send className="size-4" /> Send message
@@ -489,6 +627,23 @@ function MessageDetail({
     refetchInterval: 20_000
   });
   const [recipientId, setRecipientId] = useState("");
+  const operationAttemptsRef = useRef(
+    new Map<string, { payload: string; operationKey: string }>()
+  );
+  const stableOperationKey = (
+    kind: string,
+    payload: Record<string, unknown>
+  ) => {
+    const serialized = JSON.stringify(payload);
+    const existing = operationAttemptsRef.current.get(kind);
+    if (existing?.payload === serialized) return existing.operationKey;
+    const operationKey = createAgentMessageOperationKey(`message-${kind}`);
+    operationAttemptsRef.current.set(kind, {
+      payload: serialized,
+      operationKey
+    });
+    return operationKey;
+  };
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: MESSAGE_QUERY_KEY });
     onChanged();
@@ -497,16 +652,27 @@ function MessageDetail({
     mutationFn: (message: AgentMessage) =>
       markAgentMessageRead({
         messageId: message.id,
-        operationKey: createAgentMessageOperationKey("message-read"),
+        operationKey: stableOperationKey("read", {
+          messageId: message.id,
+          expectedInboxEventSequence: message.unreadInboxEventSequence ?? 0
+        }),
         expectedInboxEventSequence: message.unreadInboxEventSequence ?? 0
       }),
-    onSuccess: refresh
+    onSuccess: async () => {
+      operationAttemptsRef.current.delete("read");
+      await refresh();
+    }
   });
   const reassignMutation = useMutation({
     mutationFn: (message: AgentMessage) =>
       reassignAgentMessage({
         messageId: message.id,
-        operationKey: createAgentMessageOperationKey("message-reassign"),
+        operationKey: stableOperationKey("reassign", {
+          messageId: message.id,
+          expectedRevision: message.revision,
+          recipientAgentId: recipientId,
+          revokeActiveLease: Boolean(message.claim)
+        }),
         expectedRevision: message.revision,
         recipientAgentId: recipientId,
         revokeActiveLease: Boolean(message.claim),
@@ -514,23 +680,33 @@ function MessageDetail({
           ? "Owner explicitly reassigned this message and revoked its active lease."
           : "Owner explicitly reassigned this message."
       }),
-    onSuccess: refresh
+    onSuccess: async () => {
+      operationAttemptsRef.current.delete("reassign");
+      await refresh();
+    }
   });
   const retryMutation = useMutation({
     mutationFn: (message: AgentMessage) =>
       retryAgentMessage({
         messageId: message.id,
-        operationKey: createAgentMessageOperationKey("message-retry"),
+        operationKey: stableOperationKey("retry", {
+          messageId: message.id,
+          recipientAgentId: recipientId || null
+        }),
         recipientAgentId: recipientId || undefined
       }),
     onSuccess: async (result) => {
+      operationAttemptsRef.current.delete("retry");
       await refresh();
-      navigate(`/messages/${encodeURIComponent(result.message.id)}`);
+      navigate(`/messages/${encodeURIComponent(result.resultingMessageId)}`);
     }
   });
   const deleteMutation = useMutation({
     mutationFn: (message: AgentMessage) =>
-      deleteAgentMessage(message.id, "Deleted by the owner from Agent Messages."),
+      deleteAgentMessage(
+        message.id,
+        "Deleted by the owner from Agent Messages."
+      ),
     onSuccess: async () => {
       await refresh();
       navigate("/messages");
@@ -539,62 +715,100 @@ function MessageDetail({
 
   if (detail.isLoading) return <LoadingState title="Loading message" />;
   if (detail.isError || !detail.data) {
-    return <ErrorState error={detail.error ?? new Error("Forge could not load this message.")} onRetry={() => void detail.refetch()} />;
+    return (
+      <ErrorState
+        error={detail.error ?? new Error("Forge could not load this message.")}
+        onRetry={() => void detail.refetch()}
+      />
+    );
   }
   const message = detail.data.message;
   return (
     <div className="grid gap-4">
-      <Link className="inline-flex w-fit items-center gap-2 text-sm font-medium text-[var(--primary)]" to="/messages">
+      <Link
+        className="inline-flex w-fit items-center gap-2 text-sm font-medium text-[var(--primary)]"
+        to="/messages"
+      >
         <ArrowLeft className="size-4" /> Back to messages
       </Link>
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-soft)]">To {message.recipient.label}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-soft)]">
+              To {message.recipient.label}
+            </p>
             <h2 className="mt-2 font-display text-2xl text-[var(--ui-ink-strong)]">
               {message.bodyText ? "Agent Message" : "Voice message"}
             </h2>
           </div>
           <MessageStatus status={message.status} />
         </div>
-        {message.bodyText ? <p className="mt-5 whitespace-pre-wrap text-sm leading-7 text-[var(--ui-ink-strong)]">{message.bodyText}</p> : null}
+        {message.bodyText ? (
+          <p className="mt-5 whitespace-pre-wrap text-sm leading-7 text-[var(--ui-ink-strong)]">
+            {message.bodyText}
+          </p>
+        ) : null}
         {message.voiceArtifact ? (
           <div className="mt-5 flex items-start gap-3 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
             <FileAudio className="mt-0.5 size-5 text-[var(--primary)]" />
             <div>
-              <p className="font-medium text-[var(--ui-ink-strong)]">Original voice Artifact preserved</p>
+              <p className="font-medium text-[var(--ui-ink-strong)]">
+                Original voice Artifact preserved
+              </p>
               <p className="mt-1 text-sm text-[var(--ui-ink-medium)]">
-                {formatDuration(message.voiceArtifact.verifiedDurationMs)} · {formatBytes(message.voiceArtifact.byteSize)} · sensitive media
+                {formatDuration(message.voiceArtifact.verifiedDurationMs)} ·{" "}
+                {formatBytes(message.voiceArtifact.byteSize)} · sensitive media
               </p>
               <p className="mt-1 text-xs text-[var(--ui-ink-soft)]">
-                Audio is available only to the currently leased, authorized recipient agent. It is not silently sent for transcription.
+                Audio is available only to the currently leased, authorized
+                recipient agent. It is not silently sent for transcription.
               </p>
             </div>
           </div>
         ) : null}
         {message.progressSummary ? (
           <div className="mt-5 rounded-[var(--radius-control)] bg-[var(--ui-accent-soft)] p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--primary)]">Latest progress</p>
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--ui-ink-strong)]">{message.progressSummary}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--primary)]">
+              Latest progress
+            </p>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--ui-ink-strong)]">
+              {message.progressSummary}
+            </p>
           </div>
         ) : null}
         {message.resultMarkdown ? (
           <div className="mt-5 border-t border-[var(--ui-border-subtle)] pt-5">
-            <p className="font-display text-lg text-[var(--ui-ink-strong)]">Agent result</p>
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-[var(--ui-ink-strong)]">{message.resultMarkdown}</p>
+            <p className="font-display text-lg text-[var(--ui-ink-strong)]">
+              Agent result
+            </p>
+            <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-[var(--ui-ink-strong)]">
+              {message.resultMarkdown}
+            </p>
           </div>
         ) : null}
         {message.transcript ? (
           <details className="mt-5 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] p-3">
-            <summary className="cursor-pointer text-sm font-medium">Transcript and provider disclosure</summary>
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{message.transcript.text}</p>
-            <p className="mt-2 text-xs text-[var(--ui-ink-soft)]">{message.transcript.provider}: {message.transcript.disclosure}</p>
+            <summary className="cursor-pointer text-sm font-medium">
+              Transcript and provider disclosure
+            </summary>
+            <p className="mt-3 whitespace-pre-wrap text-sm leading-6">
+              {message.transcript.text}
+            </p>
+            <p className="mt-2 text-xs text-[var(--ui-ink-soft)]">
+              {message.transcript.provider}: {message.transcript.disclosure}
+            </p>
           </details>
         ) : null}
         {message.failure ? (
-          <div role="alert" className="mt-5 flex gap-3 rounded-[var(--radius-control)] border border-red-200 bg-red-50 p-4 text-red-950">
+          <div
+            role="alert"
+            className="mt-5 flex gap-3 rounded-[var(--radius-control)] border border-red-200 bg-red-50 p-4 text-red-950"
+          >
             <CircleAlert className="mt-0.5 size-5 shrink-0" />
-            <div><p className="font-medium">{message.failure.code}</p><p className="mt-1 text-sm">{message.failure.message}</p></div>
+            <div>
+              <p className="font-medium">{message.failure.code}</p>
+              <p className="mt-1 text-sm">{message.failure.message}</p>
+            </div>
           </div>
         ) : null}
         <div className="mt-5 flex flex-wrap gap-2 text-xs text-[var(--ui-ink-soft)]">
@@ -604,52 +818,143 @@ function MessageDetail({
         </div>
       </Card>
 
+      {detail.data.relatedMessages.length > 1 ? (
+        <Card>
+          <h3 className="font-display text-lg text-[var(--ui-ink-strong)]">
+            Message thread
+          </h3>
+          <p className="mt-1 text-sm leading-6 text-[var(--ui-ink-medium)]">
+            The immutable forwarding and retry chain for this request.
+          </p>
+          <ol className="mt-4 grid gap-2">
+            {detail.data.relatedMessages.map((related) => {
+              const relation = related.forwardedFromMessageId
+                ? "Forwarded"
+                : related.retriedFromMessageId
+                  ? "Retried"
+                  : "Started";
+              return (
+                <li key={related.id}>
+                  <Link
+                    aria-current={
+                      related.id === message.id ? "page" : undefined
+                    }
+                    className={cn(
+                      "interactive-tap flex min-h-11 items-center justify-between gap-3 rounded-[var(--radius-control)] border px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]",
+                      related.id === message.id
+                        ? "border-[var(--primary)] bg-[var(--ui-accent-soft)]"
+                        : "border-[var(--ui-border-subtle)] hover:bg-[var(--ui-surface-hover)]"
+                    )}
+                    to={`/messages/${encodeURIComponent(related.id)}`}
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-[var(--ui-ink-soft)]">
+                        {relation} · {related.sender.label} to{" "}
+                        {related.recipient.label}
+                      </span>
+                      <span className="mt-1 block truncate text-sm font-medium text-[var(--ui-ink-strong)]">
+                        {related.bodyText || "Voice message"}
+                      </span>
+                    </span>
+                    <MessageStatus status={related.status} />
+                  </Link>
+                </li>
+              );
+            })}
+          </ol>
+        </Card>
+      ) : null}
+
       <Card>
-        <h3 className="font-display text-lg text-[var(--ui-ink-strong)]">Delivery controls</h3>
+        <h3 className="font-display text-lg text-[var(--ui-ink-strong)]">
+          Delivery controls
+        </h3>
         <p className="mt-1 text-sm leading-6 text-[var(--ui-ink-medium)]">
-          Reassignment is explicit. If another agent holds a lease, Forge atomically revokes it before changing the recipient.
+          Reassignment is explicit. If another agent holds a lease, Forge
+          atomically revokes it before changing the recipient.
         </p>
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
           <label className="grid min-w-0 flex-1 gap-2 text-sm font-medium">
             Agent
-            <select className="min-h-11 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3" value={recipientId} onChange={(event) => setRecipientId(event.target.value)}>
+            <select
+              className="min-h-11 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3"
+              value={recipientId}
+              onChange={(event) => setRecipientId(event.target.value)}
+            >
               <option value="">Choose an agent</option>
-              {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.label}</option>)}
+              {agents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.label}
+                </option>
+              ))}
             </select>
           </label>
-          <Button variant="secondary" disabled={!recipientId || recipientId === message.recipient.agentId} pending={reassignMutation.isPending} onClick={() => reassignMutation.mutate(message)}>
+          <Button
+            variant="secondary"
+            disabled={!recipientId || recipientId === message.recipient.agentId}
+            pending={reassignMutation.isPending}
+            onClick={() => reassignMutation.mutate(message)}
+          >
             <Forward className="size-4" /> Reassign
           </Button>
           {message.status === "failed" ? (
-            <Button variant="secondary" pending={retryMutation.isPending} onClick={() => retryMutation.mutate(message)}>
+            <Button
+              variant="secondary"
+              pending={retryMutation.isPending}
+              onClick={() => retryMutation.mutate(message)}
+            >
               <RotateCcw className="size-4" /> Retry as new message
             </Button>
           ) : null}
         </div>
         <div className="mt-4 flex flex-wrap gap-2 border-t border-[var(--ui-border-subtle)] pt-4">
           {message.unreadInboxEventSequence ? (
-            <Button variant="secondary" pending={readMutation.isPending} onClick={() => readMutation.mutate(message)}>
+            <Button
+              variant="secondary"
+              pending={readMutation.isPending}
+              onClick={() => readMutation.mutate(message)}
+            >
               <MailCheck className="size-4" /> Mark agent activity read
             </Button>
           ) : null}
-          <Button variant="ghost" pending={deleteMutation.isPending} onClick={() => {
-            if (window.confirm("Delete this message from the active inbox and revoke any lease? Its audit record follows Forge retention policy.")) deleteMutation.mutate(message);
-          }}>
+          <Button
+            variant="ghost"
+            pending={deleteMutation.isPending}
+            onClick={() => {
+              if (
+                window.confirm(
+                  "Delete this message from the active inbox and revoke any lease? Its audit record follows Forge retention policy."
+                )
+              )
+                deleteMutation.mutate(message);
+            }}
+          >
             <Trash2 className="size-4" /> Delete
           </Button>
         </div>
       </Card>
 
       <Card>
-        <h3 className="font-display text-lg text-[var(--ui-ink-strong)]">Audit history</h3>
+        <h3 className="font-display text-lg text-[var(--ui-ink-strong)]">
+          Audit history
+        </h3>
         <ol className="mt-4 grid gap-3">
           {detail.data.events.map((event) => (
-            <li key={event.id} className="flex gap-3 border-l-2 border-[var(--ui-border-subtle)] pl-4">
+            <li
+              key={event.id}
+              className="flex gap-3 border-l-2 border-[var(--ui-border-subtle)] pl-4"
+            >
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium capitalize text-[var(--ui-ink-strong)]">{event.event_kind.replaceAll("_", " ")}</p>
-                <p className="mt-1 text-xs text-[var(--ui-ink-soft)]">{event.actor_label} · {formatDateTime(event.occurred_at)}</p>
+                <p className="text-sm font-medium capitalize text-[var(--ui-ink-strong)]">
+                  {event.event_kind.replaceAll("_", " ")}
+                </p>
+                <p className="mt-1 text-xs text-[var(--ui-ink-soft)]">
+                  {event.actor_label} · {formatDateTime(event.occurred_at)}
+                </p>
               </div>
-              {event.next_status ? <MessageStatus status={event.next_status} /> : null}
+              {event.next_status ? (
+                <MessageStatus status={event.next_status} />
+              ) : null}
             </li>
           ))}
         </ol>
@@ -664,20 +969,44 @@ export function AgentMessagesPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const box = searchParams.get("box") === "inbox" ? "inbox" : "outbox";
+  const requestedStatus = searchParams.get("status");
+  const status =
+    requestedStatus && requestedStatus in STATUS_COPY
+      ? (requestedStatus as AgentMessageStatus)
+      : undefined;
+  const cursor = searchParams.get("cursor") || undefined;
   const autoRecord = searchParams.get("compose") === "voice";
-  const agents = useQuery({ queryKey: [...MESSAGE_QUERY_KEY, "agents"], queryFn: listConnectedMessageAgents });
-  const settings = useQuery({ queryKey: [...MESSAGE_QUERY_KEY, "settings"], queryFn: getAgentMessageSettings });
+  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
+  const agents = useQuery({
+    queryKey: [...MESSAGE_QUERY_KEY, "agents"],
+    queryFn: listConnectedMessageAgents
+  });
+  const settings = useQuery({
+    queryKey: [...MESSAGE_QUERY_KEY, "settings"],
+    queryFn: getAgentMessageSettings
+  });
   const messages = useQuery({
-    queryKey: [...MESSAGE_QUERY_KEY, "list", box],
-    queryFn: () => listAgentMessages({ box, limit: 40 }),
-    refetchInterval: () => (document.visibilityState === "visible" ? 30_000 : false)
+    queryKey: [
+      ...MESSAGE_QUERY_KEY,
+      "list",
+      box,
+      status ?? "all",
+      cursor ?? "first"
+    ],
+    queryFn: () => listAgentMessages({ box, status, cursor, limit: 20 }),
+    placeholderData: (previous) => previous,
+    refetchInterval: () =>
+      document.visibilityState === "visible" ? 30_000 : false
   });
   const defaultMutation = useMutation({
     mutationFn: updateDefaultMessageAgent,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: MESSAGE_QUERY_KEY })
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: MESSAGE_QUERY_KEY })
   });
   const [notificationsStatus, setNotificationsStatus] = useState(
-    typeof Notification === "undefined" ? "unavailable" : Notification.permission
+    typeof Notification === "undefined"
+      ? "unavailable"
+      : Notification.permission
   );
   const lastNotifiedRef = useRef<Set<string>>(new Set());
 
@@ -686,25 +1015,55 @@ export function AgentMessagesPage() {
     for (const message of messages.data?.items ?? []) {
       if (!lastNotifiedRef.current.has(message.id)) {
         lastNotifiedRef.current.add(message.id);
-        new Notification(`Agent update from ${message.recipient.label}`, {
-          body: message.progressSummary || STATUS_COPY[message.status].label,
-          tag: `forge-agent-message-${message.id}`
-        });
+        const notification = agentMessageNotification(
+          message.recipient.label,
+          message.status
+        );
+        new Notification(notification.title, notification.options);
       }
     }
   }, [box, messages.data?.items, notificationsStatus]);
 
-  const invalidate = () => void queryClient.invalidateQueries({ queryKey: MESSAGE_QUERY_KEY });
+  const invalidate = () =>
+    void queryClient.invalidateQueries({ queryKey: MESSAGE_QUERY_KEY });
   const connectedAgents = agents.data?.agents ?? [];
-  const defaultAgentId = settings.data?.defaultAgent?.id ?? connectedAgents[0]?.id ?? "";
+  const defaultAgentId =
+    settings.data?.defaultAgent?.id ?? connectedAgents[0]?.id ?? "";
+  const selectMailbox = (nextBox: "inbox" | "outbox") => {
+    const next = new URLSearchParams(searchParams);
+    next.set("box", nextBox);
+    next.delete("cursor");
+    setCursorHistory([]);
+    setSearchParams(next);
+  };
+  const selectStatus = (nextStatus?: AgentMessageStatus) => {
+    const next = new URLSearchParams(searchParams);
+    if (nextStatus) next.set("status", nextStatus);
+    else next.delete("status");
+    next.delete("cursor");
+    setCursorHistory([]);
+    setSearchParams(next);
+  };
 
   if (agents.isLoading || settings.isLoading || messages.isLoading) {
     return <LoadingState title="Opening Agent Messages" />;
   }
   if (agents.isError || settings.isError || messages.isError) {
-    return <ErrorState error={agents.error ?? settings.error ?? messages.error ?? new Error("Forge could not load the message mailbox.")} onRetry={() => {
-      void agents.refetch(); void settings.refetch(); void messages.refetch();
-    }} />;
+    return (
+      <ErrorState
+        error={
+          agents.error ??
+          settings.error ??
+          messages.error ??
+          new Error("Forge could not load the message mailbox.")
+        }
+        onRetry={() => {
+          void agents.refetch();
+          void settings.refetch();
+          void messages.refetch();
+        }}
+      />
+    );
   }
 
   return (
@@ -715,11 +1074,13 @@ export function AgentMessagesPage() {
         titleText="Agent Messages"
         description="Send text, a first-class voice Artifact, or both. Agents claim work with leases and leave a durable result and audit history."
         actions={
-          <Button onClick={() => {
-            const next = new URLSearchParams(searchParams);
-            next.set("compose", "voice");
-            setSearchParams(next);
-          }}>
+          <Button
+            onClick={() => {
+              const next = new URLSearchParams(searchParams);
+              next.set("compose", "voice");
+              setSearchParams(next);
+            }}
+          >
             <Mic className="size-4" /> Talk to agent
           </Button>
         }
@@ -728,34 +1089,137 @@ export function AgentMessagesPage() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.72fr)]">
         <div className="grid content-start gap-4">
           {messageId ? (
-            <MessageDetail messageId={messageId} agents={connectedAgents} onChanged={invalidate} />
+            <MessageDetail
+              messageId={messageId}
+              agents={connectedAgents}
+              onChanged={invalidate}
+            />
           ) : (
             <>
               <Card className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-wrap gap-2" role="tablist" aria-label="Message boxes">
-                  <Button variant={box === "outbox" ? "primary" : "secondary"} role="tab" aria-selected={box === "outbox"} onClick={() => {
-                    const next = new URLSearchParams(searchParams); next.set("box", "outbox"); setSearchParams(next);
-                  }}>
+                <div
+                  className="flex flex-wrap gap-2"
+                  role="tablist"
+                  aria-label="Message boxes"
+                >
+                  <Button
+                    variant={box === "outbox" ? "primary" : "secondary"}
+                    role="tab"
+                    aria-selected={box === "outbox"}
+                    onClick={() => {
+                      selectMailbox("outbox");
+                    }}
+                  >
                     <Send className="size-4" /> Outbox
                   </Button>
-                  <Button variant={box === "inbox" ? "primary" : "secondary"} role="tab" aria-selected={box === "inbox"} onClick={() => {
-                    const next = new URLSearchParams(searchParams); next.set("box", "inbox"); setSearchParams(next);
-                  }}>
-                    <Inbox className="size-4" /> Inbox {messages.data?.unreadThreadCount ? `(${messages.data.unreadThreadCount})` : ""}
+                  <Button
+                    variant={box === "inbox" ? "primary" : "secondary"}
+                    role="tab"
+                    aria-selected={box === "inbox"}
+                    onClick={() => {
+                      selectMailbox("inbox");
+                    }}
+                  >
+                    <Inbox className="size-4" /> Inbox{" "}
+                    {messages.data?.unreadThreadCount
+                      ? `(${messages.data.unreadThreadCount})`
+                      : ""}
                   </Button>
                 </div>
                 <Button variant="ghost" onClick={() => void messages.refetch()}>
                   <RefreshCw className="size-4" /> Refresh
                 </Button>
               </Card>
-              {messages.data?.items.length ? (
-                <div className="grid gap-3">
-                  {messages.data.items.map((message) => <MessageRow key={message.id} message={message} />)}
+              <Card>
+                <div
+                  className="flex flex-wrap items-center gap-2"
+                  role="group"
+                  aria-label="Filter messages by status"
+                >
+                  <Button
+                    size="sm"
+                    variant={!status ? "primary" : "secondary"}
+                    aria-pressed={!status}
+                    onClick={() => selectStatus()}
+                  >
+                    All statuses
+                  </Button>
+                  {(Object.keys(STATUS_COPY) as AgentMessageStatus[]).map(
+                    (candidate) => (
+                      <Button
+                        key={candidate}
+                        size="sm"
+                        variant={status === candidate ? "primary" : "secondary"}
+                        aria-pressed={status === candidate}
+                        onClick={() => selectStatus(candidate)}
+                      >
+                        {STATUS_COPY[candidate].label}
+                      </Button>
+                    )
+                  )}
                 </div>
+              </Card>
+              {messages.data?.items.length ? (
+                <>
+                  <div className="grid gap-3">
+                    {messages.data.items.map((message) => (
+                      <MessageRow key={message.id} message={message} />
+                    ))}
+                  </div>
+                  <nav
+                    className="flex items-center justify-between gap-3"
+                    aria-label="Agent Messages pages"
+                  >
+                    <Button
+                      variant="secondary"
+                      disabled={cursorHistory.length === 0}
+                      onClick={() => {
+                        const previous = cursorHistory.at(-1) ?? "";
+                        setCursorHistory((history) => history.slice(0, -1));
+                        const next = new URLSearchParams(searchParams);
+                        if (previous) next.set("cursor", previous);
+                        else next.delete("cursor");
+                        setSearchParams(next);
+                      }}
+                    >
+                      Newer messages
+                    </Button>
+                    <span
+                      aria-live="polite"
+                      className="text-sm text-[var(--ui-ink-soft)]"
+                    >
+                      Page {cursorHistory.length + 1}
+                    </span>
+                    <Button
+                      variant="secondary"
+                      disabled={!messages.data.nextCursor}
+                      onClick={() => {
+                        if (!messages.data?.nextCursor) return;
+                        setCursorHistory((history) => [
+                          ...history,
+                          cursor ?? ""
+                        ]);
+                        const next = new URLSearchParams(searchParams);
+                        next.set("cursor", messages.data.nextCursor);
+                        setSearchParams(next);
+                      }}
+                    >
+                      Older messages
+                    </Button>
+                  </nav>
+                </>
               ) : (
                 <EmptyState
-                  title={box === "inbox" ? "No unread agent activity" : "No messages sent yet"}
-                  description={box === "inbox" ? "Progress, acknowledgements, results, failures, and forwards appear here until you mark them read." : "Use Talk to agent to record immediately, or write a message in the composer."}
+                  title={
+                    box === "inbox"
+                      ? "No unread agent activity"
+                      : "No messages sent yet"
+                  }
+                  description={
+                    box === "inbox"
+                      ? "Progress, acknowledgements, results, failures, and forwards appear here until you mark them read."
+                      : "Use Talk to agent to record immediately, or write a message in the composer."
+                  }
                 />
               )}
             </>
@@ -785,24 +1249,52 @@ export function AgentMessagesPage() {
               <select
                 className="min-h-11 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3"
                 value={defaultAgentId}
-                disabled={defaultMutation.isPending || connectedAgents.length === 0}
+                disabled={
+                  defaultMutation.isPending || connectedAgents.length === 0
+                }
                 onChange={(event) => defaultMutation.mutate(event.target.value)}
               >
                 <option value="">No default selected</option>
-                {connectedAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.label}</option>)}
+                {connectedAgents.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.label}
+                  </option>
+                ))}
               </select>
             </label>
             <div className="mt-4 grid gap-2 text-sm leading-6 text-[var(--ui-ink-medium)]">
-              <p className="flex items-start gap-2"><Clock3 className="mt-1 size-4 shrink-0" /> Messages are retained for {settings.data?.retentionDays ?? 365} days unless deleted earlier.</p>
-              <p className="flex items-start gap-2"><WifiOff className="mt-1 size-4 shrink-0" /> The iOS app encrypts queued sends on-device and retries when the system grants foreground or background execution. The browser does not promise durable offline uploads.</p>
-              <p className="flex items-start gap-2"><Bot className="mt-1 size-4 shrink-0" /> Direct Codex audio understanding is runtime-dependent and uses the connected runtime’s normal allowance. Forge does not promise free transcription.</p>
+              <p className="flex items-start gap-2">
+                <Clock3 className="mt-1 size-4 shrink-0" /> Messages are
+                retained for {settings.data?.retentionDays ?? 365} days unless
+                deleted earlier.
+              </p>
+              <p className="flex items-start gap-2">
+                <WifiOff className="mt-1 size-4 shrink-0" /> The iOS app
+                encrypts queued sends on-device and retries when the system
+                grants foreground or background execution. The browser does not
+                promise durable offline uploads.
+              </p>
+              <p className="flex items-start gap-2">
+                <Bot className="mt-1 size-4 shrink-0" /> Direct Codex audio
+                understanding is runtime-dependent and uses the connected
+                runtime’s normal allowance. Forge does not promise free
+                transcription.
+              </p>
             </div>
             {typeof Notification !== "undefined" ? (
-              <Button className="mt-4" variant="secondary" disabled={notificationsStatus === "granted"} onClick={async () => {
-                const permission = await Notification.requestPermission();
-                setNotificationsStatus(permission);
-              }}>
-                <MailCheck className="size-4" /> {notificationsStatus === "granted" ? "Browser notifications enabled" : "Enable browser notifications"}
+              <Button
+                className="mt-4"
+                variant="secondary"
+                disabled={notificationsStatus === "granted"}
+                onClick={async () => {
+                  const permission = await Notification.requestPermission();
+                  setNotificationsStatus(permission);
+                }}
+              >
+                <MailCheck className="size-4" />{" "}
+                {notificationsStatus === "granted"
+                  ? "Browser notifications enabled"
+                  : "Enable browser notifications"}
               </Button>
             ) : null}
           </Card>

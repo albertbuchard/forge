@@ -95,6 +95,13 @@ type ReservationRow = {
 type ReceiptRow = {
   request_fingerprint: string;
   response_json: string;
+  actor_kind: AgentMessageActor["kind"];
+  actor_id: string | null;
+};
+
+type TerminalReceiptRow = ReceiptRow & {
+  agent_id: string;
+  claim_generation: number;
 };
 
 export type AgentMessageActor = {
@@ -130,7 +137,52 @@ function canonicalJson(value: unknown): string {
 }
 
 function fingerprint(value: unknown) {
-  return createHash("sha256").update(canonicalJson(value), "utf8").digest("hex");
+  return createHash("sha256")
+    .update(canonicalJson(value), "utf8")
+    .digest("hex");
+}
+
+type AgentMessageCursor = {
+  version: 1;
+  box: "inbox" | "outbox";
+  status: AgentMessageStatus | null;
+  createdAt: string;
+  id: string;
+};
+
+function encodeAgentMessageCursor(cursor: AgentMessageCursor): string {
+  return Buffer.from(canonicalJson(cursor), "utf8").toString("base64url");
+}
+
+function decodeAgentMessageCursor(input: {
+  cursor?: string;
+  box: "inbox" | "outbox";
+  status?: AgentMessageStatus;
+}): AgentMessageCursor | null {
+  if (!input.cursor) return null;
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(input.cursor, "base64url").toString("utf8")
+    ) as Partial<AgentMessageCursor>;
+    if (
+      parsed.version !== 1 ||
+      parsed.box !== input.box ||
+      parsed.status !== (input.status ?? null) ||
+      typeof parsed.createdAt !== "string" ||
+      !Number.isFinite(Date.parse(parsed.createdAt)) ||
+      typeof parsed.id !== "string" ||
+      parsed.id.length === 0
+    ) {
+      throw new Error("invalid cursor scope");
+    }
+    return parsed as AgentMessageCursor;
+  } catch {
+    throw new HttpError(
+      400,
+      "agent_message_cursor_invalid",
+      "This Agent Messages cursor is invalid for the selected mailbox and filters."
+    );
+  }
 }
 
 function leaseDigest(secret: string, key: Buffer) {
@@ -258,7 +310,11 @@ function requireMessage(messageId: string): MessageRow {
     .prepare("SELECT * FROM agent_messages WHERE id = ?")
     .get(messageId) as MessageRow | undefined;
   if (!row) {
-    throw new HttpError(404, "agent_message_not_found", "Agent Message not found.");
+    throw new HttpError(
+      404,
+      "agent_message_not_found",
+      "Agent Message not found."
+    );
   }
   return row;
 }
@@ -266,7 +322,11 @@ function requireMessage(messageId: string): MessageRow {
 function requireOwnerMessage(messageId: string, ownerUserId: string) {
   const row = requireMessage(messageId);
   if (row.owner_user_id !== ownerUserId || row.deleted_at) {
-    throw new HttpError(404, "agent_message_not_found", "Agent Message not found.");
+    throw new HttpError(
+      404,
+      "agent_message_not_found",
+      "Agent Message not found."
+    );
   }
   return row;
 }
@@ -341,9 +401,7 @@ export function getAgentMessageSettings(ownerUserId: string) {
     | { default_agent_id: string; label: string }
     | undefined;
   return {
-    defaultAgent: row
-      ? { id: row.default_agent_id, label: row.label }
-      : null,
+    defaultAgent: row ? { id: row.default_agent_id, label: row.label } : null,
     retentionDays: AGENT_MESSAGE_DEFAULT_RETENTION_DAYS,
     voice: {
       maximumBytes: AGENT_MESSAGE_MAX_VOICE_BYTES,
@@ -560,7 +618,8 @@ export async function activateVoiceReservation(input: {
       {
         idempotencyKey: `agent-message:${input.ownerUserId}:${input.idempotencyKey}`,
         title: "Agent Message voice note",
-        shortDescription: "Original voice note attached to an asynchronous Agent Message.",
+        shortDescription:
+          "Original voice note attached to an asynchronous Agent Message.",
         description:
           "Sensitive original audio preserved by Forge. Agent access is limited to the addressed message's active claim lease.",
         originalFileName: reservation.original_file_name,
@@ -688,8 +747,6 @@ export function createAgentMessage(input: {
   bodyText: string;
   voiceReservationId?: string;
   retentionDays: number;
-  forwardedFromMessageId?: string;
-  retriedFromMessageId?: string;
   actor: AgentMessageActor;
   now?: Date;
 }) {
@@ -704,9 +761,7 @@ export function createAgentMessage(input: {
     bodyText: input.bodyText,
     voiceArtifactId: reservation?.artifact_id ?? null,
     voiceContentSha256: reservation?.content_sha256 ?? null,
-    retentionDays: input.retentionDays,
-    forwardedFromMessageId: input.forwardedFromMessageId ?? null,
-    retriedFromMessageId: input.retriedFromMessageId ?? null
+    retentionDays: input.retentionDays
   });
   const at = input.now ?? new Date();
   return inImmediateTransaction(() => {
@@ -740,12 +795,11 @@ export function createAgentMessage(input: {
       );
     }
     if (reservation) {
-      const claimed = getDatabase()
-        .prepare(
-          `UPDATE agent_message_voice_reservations
+      const claimed = getDatabase().prepare(
+        `UPDATE agent_message_voice_reservations
            SET status = 'consumed', consumed_message_id = ?, updated_at = ?
            WHERE id = ? AND owner_user_id = ? AND status = 'active'`
-        );
+      );
       const messageId = id("amsg");
       const result = claimed.run(
         messageId,
@@ -760,7 +814,14 @@ export function createAgentMessage(input: {
           "The selected voice reservation was already consumed."
         );
       }
-      return insertNewMessage({ ...input, recipient, reservation, requestFingerprint, messageId, at });
+      return insertNewMessage({
+        ...input,
+        recipient,
+        reservation,
+        requestFingerprint,
+        messageId,
+        at
+      });
     }
     return insertNewMessage({
       ...input,
@@ -785,8 +846,6 @@ function insertNewMessage(input: {
   reservation?: ReservationRow;
   requestFingerprint: string;
   messageId: string;
-  forwardedFromMessageId?: string;
-  retriedFromMessageId?: string;
   at: Date;
 }) {
   const timestamp = input.at.toISOString();
@@ -798,11 +857,11 @@ function insertNewMessage(input: {
       `INSERT INTO agent_messages (
         id, owner_user_id, sender_kind, sender_user_id, sender_agent_id, sender_label,
         initial_recipient_agent_id, initial_recipient_label, recipient_agent_id, recipient_label,
-        forwarded_from_message_id, retried_from_message_id, body_text, voice_artifact_id,
+        body_text, voice_artifact_id,
         voice_mime_type, voice_byte_size, voice_declared_duration_ms,
         voice_verified_duration_ms, status, client_idempotency_key, request_fingerprint,
         retention_until, delivered_at, created_at, updated_at
-      ) VALUES (?, ?, 'human_user', ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      ) VALUES (?, ?, 'human_user', ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 'delivered', ?, ?, ?, ?, ?, ?)`
     )
     .run(
@@ -814,8 +873,6 @@ function insertNewMessage(input: {
       input.recipient.label,
       input.recipient.id,
       input.recipient.label,
-      input.forwardedFromMessageId ?? null,
-      input.retriedFromMessageId ?? null,
       input.bodyText.trim(),
       input.reservation?.artifact_id ?? null,
       input.reservation?.verified_mime_type ?? "",
@@ -837,7 +894,7 @@ function insertNewMessage(input: {
   });
   appendEvent({
     messageId: input.messageId,
-    kind: input.retriedFromMessageId ? "retried" : "created",
+    kind: "created",
     actor: input.actor,
     priorStatus: null,
     nextStatus: "delivered",
@@ -845,9 +902,7 @@ function insertNewMessage(input: {
       recipientAgentId: input.recipient.id,
       hasText: input.bodyText.trim().length > 0,
       hasVoice: Boolean(input.reservation?.artifact_id),
-      voiceContentSha256: input.reservation?.content_sha256 ?? null,
-      forwardedFromMessageId: input.forwardedFromMessageId ?? null,
-      retriedFromMessageId: input.retriedFromMessageId ?? null
+      voiceContentSha256: input.reservation?.content_sha256 ?? null
     },
     at: timestamp
   });
@@ -860,18 +915,32 @@ export function listAgentMessages(input: {
   box: "inbox" | "outbox";
   status?: AgentMessageStatus;
   limit: number;
-  offset: number;
+  cursor?: string;
 }) {
-  const whereParameters: Array<string | number> = [input.ownerUserId];
-  const where = ["messages.owner_user_id = ?", "messages.deleted_at IS NULL"];
-  if (input.status) {
-    where.push("messages.status = ?");
-    whereParameters.push(input.status);
-  }
-  const eligiblePlaceholders = INBOX_ACTIVITY_EVENT_KINDS.map(() => "?").join(", ");
+  const eligiblePlaceholders = INBOX_ACTIVITY_EVENT_KINDS.map(() => "?").join(
+    ", "
+  );
   const eligible = [...INBOX_ACTIVITY_EVENT_KINDS];
+  const cursor = decodeAgentMessageCursor(input);
+  const pageLimit = input.limit + 1;
+  const commonWhere = ["messages.deleted_at IS NULL"];
+  const commonParameters: Array<string | number> = [];
+  if (input.status) {
+    commonWhere.push("messages.status = ?");
+    commonParameters.push(input.status);
+  }
+  if (cursor) {
+    commonWhere.push(
+      "(messages.created_at < ? OR (messages.created_at = ? AND messages.id < ?))"
+    );
+    commonParameters.push(cursor.createdAt, cursor.createdAt, cursor.id);
+  }
+  let sql: string;
+  let parameters: Array<string | number>;
   if (input.box === "inbox") {
-    where.push(
+    const where = [
+      "messages.owner_user_id = ?",
+      ...commonWhere,
       `COALESCE((
          SELECT MAX(events.sequence)
          FROM agent_message_events events
@@ -879,20 +948,8 @@ export function listAgentMessages(input: {
            AND events.actor_kind = 'agent'
            AND events.event_kind IN (${eligiblePlaceholders})
        ), 0) > COALESCE(reads.last_read_event_sequence, 0)`
-    );
-    whereParameters.push(...eligible);
-  } else {
-    where.push("messages.sender_kind = 'human_user'");
-  }
-  const parameters = [
-    ...eligible,
-    ...whereParameters,
-    input.limit,
-    input.offset
-  ];
-  const rows = getDatabase()
-    .prepare(
-      `SELECT messages.*,
+    ];
+    sql = `SELECT messages.*,
               (SELECT MAX(events.sequence)
                FROM agent_message_events events
                WHERE events.message_id = messages.id
@@ -902,10 +959,56 @@ export function listAgentMessages(input: {
        LEFT JOIN agent_message_reads reads
          ON reads.owner_user_id = messages.owner_user_id AND reads.message_id = messages.id
        WHERE ${where.join(" AND ")}
-       ORDER BY COALESCE(unread_sequence, 0) DESC, messages.updated_at DESC, messages.id DESC
-       LIMIT ? OFFSET ?`
-    )
-    .all(...parameters) as Array<MessageRow & { unread_sequence: number | null }>;
+       ORDER BY messages.created_at DESC, messages.id DESC
+       LIMIT ?`;
+    parameters = [
+      ...eligible,
+      input.ownerUserId,
+      ...commonParameters,
+      ...eligible,
+      pageLimit
+    ];
+  } else {
+    sql = `WITH RECURSIVE owner_threads(id) AS (
+         SELECT id FROM agent_messages
+         WHERE owner_user_id = ? AND sender_kind = 'human_user'
+         UNION
+         SELECT child.id
+         FROM agent_messages child
+         JOIN owner_threads parent
+           ON child.forwarded_from_message_id = parent.id
+           OR child.retried_from_message_id = parent.id
+         WHERE child.owner_user_id = ?
+       )
+       SELECT messages.*,
+              (SELECT MAX(events.sequence)
+               FROM agent_message_events events
+               WHERE events.message_id = messages.id
+                 AND events.actor_kind = 'agent'
+                 AND events.event_kind IN (${eligiblePlaceholders})) AS unread_sequence
+       FROM agent_messages messages
+       JOIN owner_threads ON owner_threads.id = messages.id
+       LEFT JOIN agent_message_reads reads
+         ON reads.owner_user_id = messages.owner_user_id AND reads.message_id = messages.id
+       WHERE ${commonWhere.join(" AND ")}
+       ORDER BY messages.created_at DESC, messages.id DESC
+       LIMIT ?`;
+    parameters = [
+      input.ownerUserId,
+      input.ownerUserId,
+      ...eligible,
+      ...commonParameters,
+      pageLimit
+    ];
+  }
+  const rows = getDatabase()
+    .prepare(sql)
+    .all(...parameters) as Array<
+    MessageRow & { unread_sequence: number | null }
+  >;
+  const hasMore = rows.length > input.limit;
+  const visibleRows = hasMore ? rows.slice(0, input.limit) : rows;
+  const last = visibleRows.at(-1);
   const unreadCount = getDatabase()
     .prepare(
       `SELECT COUNT(*) AS count
@@ -924,11 +1027,21 @@ export function listAgentMessages(input: {
     .get(input.ownerUserId, ...eligible) as { count: number };
   return {
     box: input.box,
-    items: rows.map((row) => messagePublic(row, row.unread_sequence)),
+    items: visibleRows.map((row) => messagePublic(row, row.unread_sequence)),
     unreadThreadCount: unreadCount.count,
     limit: input.limit,
-    offset: input.offset,
-    hasMore: rows.length === input.limit
+    cursor: input.cursor ?? null,
+    nextCursor:
+      hasMore && last
+        ? encodeAgentMessageCursor({
+            version: 1,
+            box: input.box,
+            status: input.status ?? null,
+            createdAt: last.created_at,
+            id: last.id
+          })
+        : null,
+    hasMore
   };
 }
 
@@ -940,23 +1053,31 @@ export function getAgentMessageDetail(ownerUserId: string, messageId: string) {
               prior_status, next_status, metadata_json, occurred_at
        FROM agent_message_events WHERE message_id = ? ORDER BY sequence`
     )
-    .all(messageId) as Array<Record<string, unknown> & { metadata_json: string }>;
+    .all(messageId) as Array<
+    Record<string, unknown> & { metadata_json: string }
+  >;
   const related = getDatabase()
     .prepare(
-      `SELECT * FROM agent_messages
-       WHERE owner_user_id = ?
-         AND (id = ? OR forwarded_from_message_id = ? OR retried_from_message_id = ?
-              OR id = ? OR id = ?)
-       ORDER BY created_at, id`
+      `WITH RECURSIVE related_ids(id) AS (
+         SELECT ?
+         UNION
+         SELECT candidate.id
+         FROM related_ids
+         JOIN agent_messages current ON current.id = related_ids.id
+         JOIN agent_messages candidate ON (
+           candidate.forwarded_from_message_id = current.id
+           OR candidate.retried_from_message_id = current.id
+           OR current.forwarded_from_message_id = candidate.id
+           OR current.retried_from_message_id = candidate.id
+         )
+         WHERE candidate.owner_user_id = ?
+       )
+       SELECT messages.* FROM agent_messages messages
+       JOIN related_ids ON related_ids.id = messages.id
+       WHERE messages.owner_user_id = ? AND messages.deleted_at IS NULL
+       ORDER BY messages.created_at, messages.id`
     )
-    .all(
-      ownerUserId,
-      messageId,
-      messageId,
-      messageId,
-      message.forwarded_from_message_id,
-      message.retried_from_message_id
-    ) as MessageRow[];
+    .all(messageId, ownerUserId, ownerUserId) as MessageRow[];
   return {
     message: messagePublic(message),
     events: events.map((event) => ({
@@ -980,7 +1101,11 @@ export function getAgentMessageDetailForAgent(input: {
     message.recipient_agent_id !== input.agentId ||
     !input.ownerUserIds.includes(message.owner_user_id)
   ) {
-    throw new HttpError(404, "agent_message_not_found", "Agent Message not found.");
+    throw new HttpError(
+      404,
+      "agent_message_not_found",
+      "Agent Message not found."
+    );
   }
   return getAgentMessageDetail(message.owner_user_id, message.id);
 }
@@ -990,10 +1115,11 @@ function existingOperationReceipt(input: {
   operationKind: string;
   operationKey: string;
   requestFingerprint: string;
+  actor: AgentMessageActor;
 }) {
   const row = getDatabase()
     .prepare(
-      `SELECT request_fingerprint, response_json
+      `SELECT request_fingerprint, response_json, actor_kind, actor_id
        FROM agent_message_operation_receipts
        WHERE message_id = ? AND operation_kind = ? AND operation_key = ?`
     )
@@ -1001,7 +1127,11 @@ function existingOperationReceipt(input: {
     | ReceiptRow
     | undefined;
   if (!row) return null;
-  if (row.request_fingerprint !== input.requestFingerprint) {
+  if (
+    row.request_fingerprint !== input.requestFingerprint ||
+    row.actor_kind !== input.actor.kind ||
+    row.actor_id !== input.actor.id
+  ) {
     throw new HttpError(
       409,
       "agent_message_idempotency_conflict",
@@ -1059,14 +1189,15 @@ export function markAgentMessageRead(input: {
     expectedInboxEventSequence: input.expectedInboxEventSequence
   });
   return inImmediateTransaction(() => {
+    const message = requireOwnerMessage(input.messageId, input.ownerUserId);
     const replay = existingOperationReceipt({
       messageId: input.messageId,
       operationKind: "mark_read",
       operationKey: input.operationKey,
-      requestFingerprint
+      requestFingerprint,
+      actor: input.actor
     });
     if (replay) return { ...replay, replayed: true };
-    const message = requireOwnerMessage(input.messageId, input.ownerUserId);
     const placeholders = INBOX_ACTIVITY_EVENT_KINDS.map(() => "?").join(", ");
     const observed = getDatabase()
       .prepare(
@@ -1105,7 +1236,8 @@ export function markAgentMessageRead(input: {
       messageId: message.id,
       readThroughEventSequence: input.expectedInboxEventSequence,
       latestInboxEventSequence: observed.sequence,
-      hasUnreadNewerActivity: observed.sequence > input.expectedInboxEventSequence
+      hasUnreadNewerActivity:
+        observed.sequence > input.expectedInboxEventSequence
     };
     insertOperationReceipt({
       messageId: message.id,
@@ -1129,7 +1261,8 @@ export function pollAgentMessages(input: {
   limit: number;
   now?: Date;
 }) {
-  if (input.ownerUserIds.length === 0) return { items: [], polledAt: nowIso(input.now) };
+  if (input.ownerUserIds.length === 0)
+    return { items: [], polledAt: nowIso(input.now) };
   const owners = input.ownerUserIds.map(() => "?").join(", ");
   const at = nowIso(input.now);
   const rows = getDatabase()
@@ -1156,16 +1289,30 @@ export function pollAgentMessages(input: {
   };
 }
 
-function requireAgentMessage(messageId: string, agentId: string, now = new Date()) {
-  const row = requireMessage(messageId);
+function requireAgentMessageAccess(input: {
+  messageId: string;
+  agentId: string;
+  ownerUserIds: string[];
+  now?: Date;
+  allowTerminal?: boolean;
+}) {
+  const row = requireMessage(input.messageId);
   if (
-    row.recipient_agent_id !== agentId ||
+    row.recipient_agent_id !== input.agentId ||
+    !input.ownerUserIds.includes(row.owner_user_id) ||
     row.deleted_at ||
-    Date.parse(row.retention_until) <= now.getTime()
+    Date.parse(row.retention_until) <= (input.now ?? new Date()).getTime()
   ) {
-    throw new HttpError(404, "agent_message_not_found", "Agent Message not found.");
+    throw new HttpError(
+      404,
+      "agent_message_not_found",
+      "Agent Message not found."
+    );
   }
-  if (["handled", "failed", "forwarded"].includes(row.status)) {
+  if (
+    !input.allowTerminal &&
+    ["handled", "failed", "forwarded"].includes(row.status)
+  ) {
     throw new HttpError(
       409,
       "agent_message_terminal",
@@ -1178,6 +1325,7 @@ function requireAgentMessage(messageId: string, agentId: string, now = new Date(
 export function claimAgentMessage(input: {
   messageId: string;
   agentId: string;
+  ownerUserIds: string[];
   operationKey: string;
   leaseSecret: string;
   leaseSeconds: number;
@@ -1192,15 +1340,27 @@ export function claimAgentMessage(input: {
     secretDigest
   });
   return inImmediateTransaction(() => {
+    const now = input.now ?? new Date();
+    const message = requireAgentMessageAccess({
+      ...input,
+      now,
+      allowTerminal: true
+    });
     const replay = existingOperationReceipt({
       messageId: input.messageId,
       operationKind: "claim",
       operationKey: input.operationKey,
-      requestFingerprint
+      requestFingerprint,
+      actor: input.actor
     });
     if (replay) return { ...replay, replayed: true };
-    const now = input.now ?? new Date();
-    const message = requireAgentMessage(input.messageId, input.agentId, now);
+    if (["handled", "failed", "forwarded"].includes(message.status)) {
+      throw new HttpError(
+        409,
+        "agent_message_terminal",
+        "This Agent Message already has a terminal outcome."
+      );
+    }
     const hasLiveLease =
       message.claim_secret_digest !== null &&
       message.claim_expires_at !== null &&
@@ -1304,6 +1464,7 @@ function verifyLiveLease(input: {
 function nonterminalAgentOperation(input: {
   messageId: string;
   agentId: string;
+  ownerUserIds: string[];
   operationKind: "renew" | "progress" | "acknowledge";
   operationKey: string;
   leaseSecret: string;
@@ -1315,22 +1476,30 @@ function nonterminalAgentOperation(input: {
 }) {
   const requestFingerprint = fingerprint({
     ...input.payload,
+    agentId: input.agentId,
     claimGeneration: input.claimGeneration,
     leaseDigest: leaseDigest(input.leaseSecret, input.leaseDigestKey)
   });
   return inImmediateTransaction(() => {
+    const message = requireAgentMessageAccess({
+      ...input,
+      allowTerminal: true
+    });
     const replay = existingOperationReceipt({
       messageId: input.messageId,
       operationKind: input.operationKind,
       operationKey: input.operationKey,
-      requestFingerprint
+      requestFingerprint,
+      actor: input.actor
     });
     if (replay) return { ...replay, replayed: true };
-    const message = requireAgentMessage(
-      input.messageId,
-      input.agentId,
-      input.now ?? new Date()
-    );
+    if (["handled", "failed", "forwarded"].includes(message.status)) {
+      throw new HttpError(
+        409,
+        "agent_message_terminal",
+        "This Agent Message already has a terminal outcome."
+      );
+    }
     verifyLiveLease({ ...input, message });
     const now = input.now ?? new Date();
     const at = now.toISOString();
@@ -1409,7 +1578,10 @@ function nonterminalAgentOperation(input: {
 }
 
 export function renewAgentMessageLease(
-  input: Omit<Parameters<typeof nonterminalAgentOperation>[0], "operationKind" | "payload"> & {
+  input: Omit<
+    Parameters<typeof nonterminalAgentOperation>[0],
+    "operationKind" | "payload"
+  > & {
     leaseSeconds: number;
   }
 ) {
@@ -1421,7 +1593,10 @@ export function renewAgentMessageLease(
 }
 
 export function progressAgentMessage(
-  input: Omit<Parameters<typeof nonterminalAgentOperation>[0], "operationKind" | "payload"> & {
+  input: Omit<
+    Parameters<typeof nonterminalAgentOperation>[0],
+    "operationKind" | "payload"
+  > & {
     progressSummary: string;
   }
 ) {
@@ -1433,7 +1608,10 @@ export function progressAgentMessage(
 }
 
 export function acknowledgeAgentMessage(
-  input: Omit<Parameters<typeof nonterminalAgentOperation>[0], "operationKind" | "payload">
+  input: Omit<
+    Parameters<typeof nonterminalAgentOperation>[0],
+    "operationKind" | "payload"
+  >
 ) {
   return nonterminalAgentOperation({
     ...input,
@@ -1446,16 +1624,23 @@ function existingTerminalReceipt(input: {
   messageId: string;
   receiptKey: string;
   requestFingerprint: string;
+  agentId: string;
+  claimGeneration: number;
 }) {
   const row = getDatabase()
     .prepare(
-      `SELECT request_fingerprint, response_json
+      `SELECT request_fingerprint, response_json, agent_id, claim_generation,
+              'agent' AS actor_kind, agent_id AS actor_id
        FROM agent_message_terminal_receipts
        WHERE message_id = ? AND receipt_key = ?`
     )
-    .get(input.messageId, input.receiptKey) as ReceiptRow | undefined;
+    .get(input.messageId, input.receiptKey) as TerminalReceiptRow | undefined;
   if (!row) return null;
-  if (row.request_fingerprint !== input.requestFingerprint) {
+  if (
+    row.request_fingerprint !== input.requestFingerprint ||
+    row.agent_id !== input.agentId ||
+    row.claim_generation !== input.claimGeneration
+  ) {
     throw new HttpError(
       409,
       "agent_message_idempotency_conflict",
@@ -1468,6 +1653,7 @@ function existingTerminalReceipt(input: {
 export function handleAgentMessage(input: {
   messageId: string;
   agentId: string;
+  ownerUserIds: string[];
   receiptKey: string;
   leaseSecret: string;
   claimGeneration: number;
@@ -1485,14 +1671,21 @@ export function handleAgentMessage(input: {
     transcriptText: input.transcriptText,
     transcriptProvider: input.transcriptProvider,
     transcriptDisclosure: input.transcriptDisclosure,
-    claimGeneration: input.claimGeneration
+    agentId: input.agentId,
+    claimGeneration: input.claimGeneration,
+    leaseDigest: leaseDigest(input.leaseSecret, input.leaseDigestKey)
   });
-  return terminalAgentOperation({ ...input, requestFingerprint, outcome: "handled" });
+  return terminalAgentOperation({
+    ...input,
+    requestFingerprint,
+    outcome: "handled"
+  });
 }
 
 export function failAgentMessage(input: {
   messageId: string;
   agentId: string;
+  ownerUserIds: string[];
   receiptKey: string;
   leaseSecret: string;
   claimGeneration: number;
@@ -1506,14 +1699,21 @@ export function failAgentMessage(input: {
     outcome: "failed",
     failureCode: input.failureCode,
     failureMessage: input.failureMessage,
-    claimGeneration: input.claimGeneration
+    agentId: input.agentId,
+    claimGeneration: input.claimGeneration,
+    leaseDigest: leaseDigest(input.leaseSecret, input.leaseDigestKey)
   });
-  return terminalAgentOperation({ ...input, requestFingerprint, outcome: "failed" });
+  return terminalAgentOperation({
+    ...input,
+    requestFingerprint,
+    outcome: "failed"
+  });
 }
 
 function terminalAgentOperation(input: {
   messageId: string;
   agentId: string;
+  ownerUserIds: string[];
   receiptKey: string;
   leaseSecret: string;
   claimGeneration: number;
@@ -1530,13 +1730,19 @@ function terminalAgentOperation(input: {
   failureMessage?: string;
 }) {
   return inImmediateTransaction(() => {
+    const message = requireAgentMessageAccess({
+      ...input,
+      allowTerminal: true
+    });
     const replay = existingTerminalReceipt(input);
     if (replay) return { ...replay, replayed: true };
-    const message = requireAgentMessage(
-      input.messageId,
-      input.agentId,
-      input.now ?? new Date()
-    );
+    if (["handled", "failed", "forwarded"].includes(message.status)) {
+      throw new HttpError(
+        409,
+        "agent_message_terminal",
+        "This Agent Message already has a terminal outcome."
+      );
+    }
     verifyLiveLease({ ...input, message });
     const at = nowIso(input.now);
     const revision = message.revision + 1;
@@ -1615,6 +1821,7 @@ function terminalAgentOperation(input: {
 export function forwardAgentMessage(input: {
   messageId: string;
   agentId: string;
+  ownerUserIds: string[];
   receiptKey: string;
   leaseSecret: string;
   claimGeneration: number;
@@ -1628,18 +1835,29 @@ export function forwardAgentMessage(input: {
     outcome: "forwarded",
     recipientAgentId: input.recipientAgentId,
     progressSummary: input.progressSummary,
-    claimGeneration: input.claimGeneration
+    agentId: input.agentId,
+    claimGeneration: input.claimGeneration,
+    leaseDigest: leaseDigest(input.leaseSecret, input.leaseDigestKey)
   });
   return inImmediateTransaction(() => {
+    const message = requireAgentMessageAccess({
+      ...input,
+      allowTerminal: true
+    });
     const replay = existingTerminalReceipt({ ...input, requestFingerprint });
     if (replay) return { ...replay, replayed: true };
-    const message = requireAgentMessage(
-      input.messageId,
-      input.agentId,
-      input.now ?? new Date()
-    );
+    if (["handled", "failed", "forwarded"].includes(message.status)) {
+      throw new HttpError(
+        409,
+        "agent_message_terminal",
+        "This Agent Message already has a terminal outcome."
+      );
+    }
     verifyLiveLease({ ...input, message });
-    const recipient = agentForOwner(input.recipientAgentId, message.owner_user_id);
+    const recipient = agentForOwner(
+      input.recipientAgentId,
+      message.owner_user_id
+    );
     if (recipient.id === input.agentId) {
       throw new HttpError(
         400,
@@ -1705,7 +1923,10 @@ export function forwardAgentMessage(input: {
       actor: input.actor,
       priorStatus: null,
       nextStatus: "delivered",
-      metadata: { forwardedFromMessageId: message.id, recipientAgentId: recipient.id },
+      metadata: {
+        forwardedFromMessageId: message.id,
+        recipientAgentId: recipient.id
+      },
       at: timestamp
     });
     const revision = message.revision + 1;
@@ -1773,14 +1994,15 @@ export function reassignAgentMessage(input: {
     reason: input.reason
   });
   return inImmediateTransaction(() => {
+    const message = requireOwnerMessage(input.messageId, input.ownerUserId);
     const replay = existingOperationReceipt({
       messageId: input.messageId,
       operationKind: "reassign",
       operationKey: input.operationKey,
-      requestFingerprint
+      requestFingerprint,
+      actor: input.actor
     });
     if (replay) return { ...replay, replayed: true };
-    const message = requireOwnerMessage(input.messageId, input.ownerUserId);
     if (message.revision !== input.expectedRevision) {
       throw new HttpError(
         409,
@@ -1887,14 +2109,15 @@ export function retryAgentMessage(input: {
     recipientAgentId: input.recipientAgentId ?? null
   });
   return inImmediateTransaction(() => {
+    const source = requireOwnerMessage(input.messageId, input.ownerUserId);
     const replay = existingOperationReceipt({
       messageId: input.messageId,
       operationKind: "retry",
       operationKey: input.operationKey,
-      requestFingerprint
+      requestFingerprint,
+      actor: input.actor
     });
     if (replay) return { ...replay, replayed: true };
-    const source = requireOwnerMessage(input.messageId, input.ownerUserId);
     if (source.status !== "failed") {
       throw new HttpError(
         409,
@@ -1962,7 +2185,10 @@ export function retryAgentMessage(input: {
       actor: input.actor,
       priorStatus: null,
       nextStatus: "delivered",
-      metadata: { retriedFromMessageId: source.id, recipientAgentId: recipient.id },
+      metadata: {
+        retriedFromMessageId: source.id,
+        recipientAgentId: recipient.id
+      },
       at: timestamp
     });
     const response = {
@@ -1999,9 +2225,14 @@ export function deleteAgentMessage(input: {
   return inImmediateTransaction(() => {
     const message = requireMessage(input.messageId);
     if (message.owner_user_id !== input.ownerUserId) {
-      throw new HttpError(404, "agent_message_not_found", "Agent Message not found.");
+      throw new HttpError(
+        404,
+        "agent_message_not_found",
+        "Agent Message not found."
+      );
     }
-    if (message.deleted_at) return { messageId: message.id, deletedAt: message.deleted_at };
+    if (message.deleted_at)
+      return { messageId: message.id, deletedAt: message.deleted_at };
     const at = nowIso(input.now);
     getDatabase()
       .prepare(
@@ -2010,14 +2241,7 @@ export function deleteAgentMessage(input: {
           claim_secret_digest = NULL, claimed_by_agent_id = NULL,
           claim_expires_at = NULL, updated_at = ? WHERE id = ?`
       )
-      .run(
-        at,
-        input.actor.kind,
-        input.actor.id,
-        input.reason,
-        at,
-        message.id
-      );
+      .run(at, input.actor.kind, input.actor.id, input.reason, at, message.id);
     appendEvent({
       messageId: message.id,
       kind: "deleted",
@@ -2035,7 +2259,9 @@ export async function purgeExpiredAgentMessages(
   input: {
     now?: Date;
     limit?: number;
-    artifactServices?: Parameters<typeof reconcileAgentMessageVoicePurgeJobs>[0];
+    artifactServices?: Parameters<
+      typeof reconcileAgentMessageVoicePurgeJobs
+    >[0];
   } = {}
 ) {
   const now = input.now ?? new Date();
@@ -2052,7 +2278,9 @@ export async function purgeExpiredAgentMessages(
          ORDER BY messages.retention_until, messages.id
          LIMIT ?`
       )
-      .all(at, limit) as Array<MessageRow & { voice_content_sha256: string | null }>;
+      .all(at, limit) as Array<
+      MessageRow & { voice_content_sha256: string | null }
+    >;
     const systemActor: AgentMessageActor = {
       kind: "system",
       id: null,
@@ -2117,17 +2345,20 @@ export async function purgeExpiredAgentMessages(
           at,
           message.id
         );
-      recordEventLog({
-        eventKind: "agent_message.retention_purged",
-        entityType: "agent_message",
-        entityId: message.id,
-        actor: systemActor.label,
-        source: "system",
-        metadata: {
-          purgeReceiptSha256,
-          originalVoicePreservedUntil: message.retention_until
-        }
-      }, now);
+      recordEventLog(
+        {
+          eventKind: "agent_message.retention_purged",
+          entityType: "agent_message",
+          entityId: message.id,
+          actor: systemActor.label,
+          source: "system",
+          metadata: {
+            purgeReceiptSha256,
+            originalVoicePreservedUntil: message.retention_until
+          }
+        },
+        now
+      );
     }
 
     const expiredReservations = getDatabase()
@@ -2221,14 +2452,7 @@ export async function readAgentMessageVoice(input: {
   ownerUserIds: string[];
   now?: Date;
 }) {
-  const message = requireAgentMessage(
-    input.messageId,
-    input.agentId,
-    input.now ?? new Date()
-  );
-  if (!input.ownerUserIds.includes(message.owner_user_id)) {
-    throw new HttpError(404, "agent_message_not_found", "Agent Message not found.");
-  }
+  const message = requireAgentMessageAccess(input);
   verifyLiveLease({ ...input, message });
   if (!message.voice_artifact_id) {
     throw new HttpError(

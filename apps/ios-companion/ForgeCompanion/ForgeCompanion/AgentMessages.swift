@@ -180,6 +180,30 @@ struct AgentMessageMailboxSettings: Codable {
 struct AgentMessageListEnvelope: Decodable {
     let items: [AgentMessageRecord]
     let unreadThreadCount: Int
+    let nextCursor: String?
+    let hasMore: Bool
+}
+
+func agentMessageListEndpoint(
+    box: String,
+    status: String?,
+    cursor: String?,
+    limit: Int = 50
+) -> String {
+    var components = URLComponents()
+    components.path = "/mobile/agent-messages"
+    var query = [
+        URLQueryItem(name: "box", value: box),
+        URLQueryItem(name: "limit", value: String(limit))
+    ]
+    if let status, status.isEmpty == false {
+        query.append(URLQueryItem(name: "status", value: status))
+    }
+    if let cursor, cursor.isEmpty == false {
+        query.append(URLQueryItem(name: "cursor", value: cursor))
+    }
+    components.queryItems = query
+    return components.string ?? "/mobile/agent-messages?box=\(box)&limit=\(limit)"
 }
 
 private struct AgentMessageAgentsEnvelope: Decodable {
@@ -227,6 +251,8 @@ protocol AgentMessageClientProviding: AnyObject {
     ) async throws -> AgentMessageMailboxSettings
     func list(
         box: String,
+        status: String?,
+        cursor: String?,
         pairing: PairingPayload
     ) async throws -> AgentMessageListEnvelope
     func detail(
@@ -279,7 +305,7 @@ final class AgentMessageClient: AgentMessageClientProviding {
     }
 
     func settings(pairing: PairingPayload) async throws -> AgentMessageMailboxSettings {
-        try await request(
+        return try await request(
             pairing: pairing,
             method: "GET",
             endpoint: "/mobile/agent-messages/settings"
@@ -300,12 +326,18 @@ final class AgentMessageClient: AgentMessageClientProviding {
 
     func list(
         box: String,
+        status: String?,
+        cursor: String?,
         pairing: PairingPayload
     ) async throws -> AgentMessageListEnvelope {
-        try await request(
+        return try await request(
             pairing: pairing,
             method: "GET",
-            endpoint: "/mobile/agent-messages?box=\(box)&limit=50&offset=0"
+            endpoint: agentMessageListEndpoint(
+                box: box,
+                status: status,
+                cursor: cursor
+            )
         )
     }
 
@@ -719,6 +751,8 @@ final class AgentMessageStore: ObservableObject {
     @Published private(set) var agents: [AgentMessageAgent] = []
     @Published private(set) var outbox: [AgentMessageRecord] = []
     @Published private(set) var inbox: [AgentMessageRecord] = []
+    @Published private(set) var outboxHasMore = false
+    @Published private(set) var inboxHasMore = false
     @Published private(set) var settings: AgentMessageMailboxSettings?
     @Published private(set) var isRefreshing = false
     @Published private(set) var isSending = false
@@ -733,6 +767,11 @@ final class AgentMessageStore: ObservableObject {
     private let monitorQueue = DispatchQueue(label: "forge.agent-messages.network")
     private var pairing: PairingPayload?
     private var sendingTask: Task<Bool, Never>?
+    private var outboxNextCursor: String?
+    private var inboxNextCursor: String?
+    private var outboxStatus: String?
+    private var inboxStatus: String?
+    private var markReadOperationKeys: [String: String] = [:]
     var requestBackgroundDelivery: (() -> Void)?
 
     init(
@@ -770,6 +809,10 @@ final class AgentMessageStore: ObservableObject {
             agents = []
             outbox = []
             inbox = []
+            outboxNextCursor = nil
+            inboxNextCursor = nil
+            outboxHasMore = false
+            inboxHasMore = false
             settings = nil
             return
         }
@@ -880,19 +923,87 @@ final class AgentMessageStore: ObservableObject {
         do {
             async let fetchedAgents = client.agents(pairing: pairing)
             async let fetchedSettings = client.settings(pairing: pairing)
-            async let fetchedOutbox = client.list(box: "outbox", pairing: pairing)
-            async let fetchedInbox = client.list(box: "inbox", pairing: pairing)
+            async let fetchedOutbox = client.list(
+                box: "outbox", status: nil, cursor: nil, pairing: pairing
+            )
+            async let fetchedInbox = client.list(
+                box: "inbox", status: nil, cursor: nil, pairing: pairing
+            )
             let values = try await (fetchedAgents, fetchedSettings, fetchedOutbox, fetchedInbox)
             agents = values.0
             settings = values.1
             outbox = values.2.items
+            outboxNextCursor = values.2.nextCursor
+            outboxHasMore = values.2.hasMore
+            outboxStatus = nil
             let previousUnread = Set(inbox.map(\.id))
             inbox = values.3.items
+            inboxNextCursor = values.3.nextCursor
+            inboxHasMore = values.3.hasMore
+            inboxStatus = nil
             latestError = nil
             await notifyForNewInboxActivity(excluding: previousUnread)
         } catch {
             latestError = userMessage(error)
         }
+    }
+
+    func refreshMailbox(box: String, status: String?) async {
+        guard let pairing else { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        do {
+            let page = try await client.list(
+                box: box,
+                status: status,
+                cursor: nil,
+                pairing: pairing
+            )
+            if box == "inbox" {
+                inbox = page.items
+                inboxNextCursor = page.nextCursor
+                inboxHasMore = page.hasMore
+                inboxStatus = status
+            } else {
+                outbox = page.items
+                outboxNextCursor = page.nextCursor
+                outboxHasMore = page.hasMore
+                outboxStatus = status
+            }
+            latestError = nil
+        } catch { latestError = userMessage(error) }
+    }
+
+    func loadMore(box: String, status: String?) async {
+        guard let pairing else { return }
+        let cursor = box == "inbox" ? inboxNextCursor : outboxNextCursor
+        let currentStatus = box == "inbox" ? inboxStatus : outboxStatus
+        guard cursor != nil, currentStatus == status else {
+            await refreshMailbox(box: box, status: status)
+            return
+        }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        do {
+            let page = try await client.list(
+                box: box,
+                status: status,
+                cursor: cursor,
+                pairing: pairing
+            )
+            if box == "inbox" {
+                let known = Set(inbox.map(\.id))
+                inbox.append(contentsOf: page.items.filter { known.contains($0.id) == false })
+                inboxNextCursor = page.nextCursor
+                inboxHasMore = page.hasMore
+            } else {
+                let known = Set(outbox.map(\.id))
+                outbox.append(contentsOf: page.items.filter { known.contains($0.id) == false })
+                outboxNextCursor = page.nextCursor
+                outboxHasMore = page.hasMore
+            }
+            latestError = nil
+        } catch { latestError = userMessage(error) }
     }
 
     func detail(_ messageId: String) async throws -> AgentMessageDetail {
@@ -902,12 +1013,18 @@ final class AgentMessageStore: ObservableObject {
 
     func markRead(_ message: AgentMessageRecord) async {
         guard let pairing else { return }
+        guard let sequence = message.unreadInboxEventSequence else { return }
+        let attempt = "\(message.id):\(sequence)"
+        let operationKey = markReadOperationKeys[attempt]
+            ?? "ios-read-\(UUID().uuidString.lowercased())"
+        markReadOperationKeys[attempt] = operationKey
         do {
             try await client.markRead(
                 message: message,
-                operationKey: "ios-read-\(UUID().uuidString.lowercased())",
+                operationKey: operationKey,
                 pairing: pairing
             )
+            markReadOperationKeys.removeValue(forKey: attempt)
             await refresh()
         } catch { latestError = userMessage(error) }
     }
@@ -1440,6 +1557,7 @@ struct AgentMessagesMailboxView: View {
     @EnvironmentObject private var store: AgentMessageStore
     @Environment(\.dismiss) private var dismiss
     @State private var box = "outbox"
+    @State private var status = ""
     @State private var composerVisible = false
     @State private var selectedMessage: AgentMessageRecord?
 
@@ -1461,6 +1579,18 @@ struct AgentMessagesMailboxView: View {
                     }
                     .pickerStyle(.segmented)
                     .listRowBackground(Color.clear)
+                    Picker("Status", selection: $status) {
+                        Text("All statuses").tag("")
+                        Text("Delivered").tag("delivered")
+                        Text("Claimed").tag("claimed")
+                        Text("In progress").tag("in_progress")
+                        Text("Acknowledged").tag("acknowledged")
+                        Text("Handled").tag("handled")
+                        Text("Failed").tag("failed")
+                        Text("Forwarded").tag("forwarded")
+                    }
+                    .pickerStyle(.menu)
+                    .accessibilityLabel("Filter Agent Messages by status")
                 }
 
                 Section(box == "inbox" ? "Unread agent activity" : "Sent messages") {
@@ -1480,6 +1610,27 @@ struct AgentMessagesMailboxView: View {
                                 messageRow(message)
                             }
                             .buttonStyle(.plain)
+                        }
+                        let hasMore = box == "inbox"
+                            ? store.inboxHasMore
+                            : store.outboxHasMore
+                        if hasMore {
+                            Button {
+                                Task {
+                                    await store.loadMore(
+                                        box: box,
+                                        status: status.isEmpty ? nil : status
+                                    )
+                                }
+                            } label: {
+                                if store.isRefreshing {
+                                    ProgressView().frame(maxWidth: .infinity)
+                                } else {
+                                    Text("Load older messages").frame(maxWidth: .infinity)
+                                }
+                            }
+                            .disabled(store.isRefreshing)
+                            .accessibilityHint("Loads the next cursor page without duplicating messages")
                         }
                     }
                 }
@@ -1521,6 +1672,22 @@ struct AgentMessagesMailboxView: View {
             }
             .refreshable { await store.refresh() }
             .task { await store.refresh() }
+            .onChange(of: box) { _, nextBox in
+                Task {
+                    await store.refreshMailbox(
+                        box: nextBox,
+                        status: status.isEmpty ? nil : status
+                    )
+                }
+            }
+            .onChange(of: status) { _, nextStatus in
+                Task {
+                    await store.refreshMailbox(
+                        box: box,
+                        status: nextStatus.isEmpty ? nil : nextStatus
+                    )
+                }
+            }
             .safeAreaInset(edge: .bottom) {
                 if let error = store.latestError {
                     Text(error)
@@ -1621,6 +1788,25 @@ private struct AgentMessageNativeDetailView: View {
                 Section("Failure") {
                     Text(failure.code).font(.headline)
                     Text(failure.message)
+                }
+            }
+            if let detail, detail.relatedMessages.count > 1 {
+                Section("Message thread") {
+                    ForEach(detail.relatedMessages) { related in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(
+                                related.forwardedFromMessageId != nil
+                                    ? "Forwarded to \(related.recipient.label)"
+                                    : related.retriedFromMessageId != nil
+                                        ? "Retried to \(related.recipient.label)"
+                                        : "Started with \(related.recipient.label)"
+                            )
+                            .font(.subheadline.weight(.semibold))
+                            Text(related.status.replacingOccurrences(of: "_", with: " ").capitalized)
+                                .font(.caption)
+                                .foregroundStyle(CompanionStyle.textMuted)
+                        }
+                    }
                 }
             }
             Section("Immutable audit history") {

@@ -97,8 +97,20 @@ export type AgentMessageList = {
   items: AgentMessage[];
   unreadThreadCount: number;
   limit: number;
-  offset: number;
+  cursor: string | null;
+  nextCursor: string | null;
   hasMore: boolean;
+};
+
+export type AgentMessageOperationReceipt = {
+  messageId?: string;
+  sourceMessageId?: string;
+  resultingMessageId?: string;
+  status?: AgentMessageStatus;
+  revision?: number;
+  claimGeneration?: number;
+  eventSequence?: number;
+  replayed: boolean;
 };
 
 export type AgentMessageDetail = {
@@ -130,14 +142,14 @@ export function listAgentMessages(input: {
   box: "inbox" | "outbox";
   status?: AgentMessageStatus;
   limit?: number;
-  offset?: number;
+  cursor?: string;
 }) {
   const query = new URLSearchParams({
     box: input.box,
-    limit: String(input.limit ?? 40),
-    offset: String(input.offset ?? 0)
+    limit: String(input.limit ?? 40)
   });
   if (input.status) query.set("status", input.status);
+  if (input.cursor) query.set("cursor", input.cursor);
   return json<AgentMessageList>(`/api/v1/agent-messages?${query.toString()}`);
 }
 
@@ -168,10 +180,13 @@ export function activateVoiceReservation(
     declaredDurationMs: number;
   }
 ) {
-  return json<{ reservation: { id: string; status: "active" }; replayed: boolean }>(
-    `/api/v1/agent-messages/voice-reservations/${encodeURIComponent(id)}`,
-    { method: "PUT", body: JSON.stringify(input) }
-  );
+  return json<{
+    reservation: { id: string; status: "active" };
+    replayed: boolean;
+  }>(`/api/v1/agent-messages/voice-reservations/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(input)
+  });
 }
 
 export function createAgentMessage(input: {
@@ -212,7 +227,7 @@ export function reassignAgentMessage(input: {
   revokeActiveLease: boolean;
   reason: string;
 }) {
-  return json<{ message: AgentMessage }>(
+  return json<AgentMessageOperationReceipt>(
     `/api/v1/agent-messages/${encodeURIComponent(input.messageId)}/reassign`,
     { method: "POST", body: JSON.stringify(input) }
   );
@@ -223,7 +238,7 @@ export function retryAgentMessage(input: {
   operationKey: string;
   recipientAgentId?: string;
 }) {
-  return json<{ message: AgentMessage; replayed: boolean }>(
+  return json<AgentMessageOperationReceipt & { resultingMessageId: string }>(
     `/api/v1/agent-messages/${encodeURIComponent(input.messageId)}/retry`,
     {
       method: "POST",

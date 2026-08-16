@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS agent_messages (
     OR voice_artifact_id IS NOT NULL
     OR retention_purged_at IS NOT NULL
   ),
+  CHECK (forwarded_from_message_id IS NULL OR retried_from_message_id IS NULL),
   CHECK (
     (sender_kind = 'human_user' AND sender_user_id IS NOT NULL AND sender_agent_id IS NULL)
     OR (sender_kind = 'agent' AND sender_agent_id IS NOT NULL AND sender_user_id IS NULL)
@@ -184,7 +185,7 @@ CREATE TABLE IF NOT EXISTS agent_message_voice_purge_jobs (
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_agent_messages_owner_outbox
-  ON agent_messages(owner_user_id, deleted_at, updated_at DESC, id DESC);
+  ON agent_messages(owner_user_id, deleted_at, created_at DESC, id DESC);
 
 CREATE INDEX IF NOT EXISTS idx_agent_messages_agent_poll
   ON agent_messages(recipient_agent_id, status, claim_expires_at, created_at, id)

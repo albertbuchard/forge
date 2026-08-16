@@ -54,14 +54,21 @@ export const operationKeySchema = z
 
 export const leaseSecretSchema = z
   .string()
-  .regex(/^[A-Za-z0-9_-]{43,128}$/u, "Use a base64url-encoded random lease secret.");
+  .regex(
+    /^[A-Za-z0-9_-]{43,128}$/u,
+    "Use a base64url-encoded random lease secret."
+  );
 
 export const createVoiceReservationSchema = z
   .object({
     idempotencyKey: operationKeySchema,
     originalFileName: z.string().trim().min(1).max(180),
     declaredMimeType: z.string().trim().min(1).max(200),
-    declaredDurationMs: z.number().int().min(0).max(AGENT_MESSAGE_MAX_VOICE_DURATION_MS)
+    declaredDurationMs: z
+      .number()
+      .int()
+      .min(0)
+      .max(AGENT_MESSAGE_MAX_VOICE_DURATION_MS)
   })
   .strict();
 
@@ -70,7 +77,11 @@ export const activateVoiceReservationSchema = z
     idempotencyKey: operationKeySchema,
     contentBase64: z.string().min(1),
     declaredMimeType: z.string().trim().min(1).max(200),
-    declaredDurationMs: z.number().int().min(0).max(AGENT_MESSAGE_MAX_VOICE_DURATION_MS)
+    declaredDurationMs: z
+      .number()
+      .int()
+      .min(0)
+      .max(AGENT_MESSAGE_MAX_VOICE_DURATION_MS)
   })
   .strict();
 
@@ -80,11 +91,13 @@ export const createAgentMessageSchema = z
     recipientAgentId: z.string().trim().min(1).max(200).optional(),
     bodyText: z.string().max(50_000).optional().default(""),
     voiceReservationId: z.string().trim().min(1).max(200).optional(),
-    retentionDays: z.number().int().min(1).max(3650).optional().default(
-      AGENT_MESSAGE_DEFAULT_RETENTION_DAYS
-    ),
-    forwardedFromMessageId: z.string().trim().min(1).max(200).optional(),
-    retriedFromMessageId: z.string().trim().min(1).max(200).optional()
+    retentionDays: z
+      .number()
+      .int()
+      .min(1)
+      .max(3650)
+      .optional()
+      .default(AGENT_MESSAGE_DEFAULT_RETENTION_DAYS)
   })
   .strict()
   .superRefine((value, context) => {
@@ -94,10 +107,13 @@ export const createAgentMessageSchema = z
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "A message requires text, an active voice reservation, or both."
+        message:
+          "A message requires text, an active voice reservation, or both."
       });
     }
-    if (Buffer.byteLength(value.bodyText, "utf8") > AGENT_MESSAGE_MAX_TEXT_BYTES) {
+    if (
+      Buffer.byteLength(value.bodyText, "utf8") > AGENT_MESSAGE_MAX_TEXT_BYTES
+    ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["bodyText"],
@@ -111,7 +127,7 @@ export const listAgentMessagesQuerySchema = z
     box: z.enum(["inbox", "outbox"]).default("outbox"),
     status: agentMessageStatusSchema.optional(),
     limit: z.coerce.number().int().min(1).max(100).default(30),
-    offset: z.coerce.number().int().min(0).default(0)
+    cursor: z.string().trim().min(1).max(500).optional()
   })
   .strict();
 
