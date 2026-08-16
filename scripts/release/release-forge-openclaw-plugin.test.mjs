@@ -10,6 +10,25 @@ const releaseWorkflowUrl = new URL(
   "../../.github/workflows/release-openclaw-plugin.yml",
   import.meta.url
 );
+const forgePackageUrl = new URL("../../package.json", import.meta.url);
+const openclawPackageUrl = new URL(
+  "../../plugins/openclaw/package.json",
+  import.meta.url
+);
+
+test("publishes the pinned Agent Messages media parser with the runtime", async () => {
+  const [forgePackage, openclawPackage] = await Promise.all(
+    [forgePackageUrl, openclawPackageUrl].map(async (url) =>
+      JSON.parse(await readFile(url, "utf8"))
+    )
+  );
+
+  assert.equal(forgePackage.dependencies["music-metadata"], "11.14.0");
+  assert.equal(
+    openclawPackage.dependencies["music-metadata"],
+    forgePackage.dependencies["music-metadata"]
+  );
+});
 
 test("builds the plugin runtime before Forge Memory exercises it", async () => {
   const source = await readFile(releaseScriptUrl, "utf8");
