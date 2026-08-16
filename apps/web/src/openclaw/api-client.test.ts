@@ -1,4 +1,5 @@
 import type { IncomingMessage } from "node:http";
+import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ensureForgeRuntimeReady } from "./local-runtime";
@@ -20,6 +21,7 @@ import {
   buildForgeWebAppUrl,
   canBootstrapOperatorSession,
   callConfiguredForgeApi,
+  callConfiguredForgeAgentMessageAudio,
   callForgeApi,
   expectForgeSuccess,
   readJsonRequestBody,
@@ -372,5 +374,160 @@ describe("openclaw api client", () => {
     ).toThrow(
       /forge_get_agent_onboarding[\s\S]*forge_update_entities[\s\S]*patch\.checkIn/i
     );
+  });
+
+  it("downloads only the scoped Agent Message voice route and verifies its identity", async () => {
+    const bytes = new TextEncoder().encode("RIFF scoped agent voice");
+    const contentSha256 = createHash("sha256").update(bytes).digest("hex");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            app: "forge",
+            backend: "forge-node-runtime",
+            runtime: { storageRoot: "/tmp/forge-agent-audio-valid" }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(bytes, {
+          status: 200,
+          headers: {
+            "content-type": "audio/wav",
+            "content-length": String(bytes.byteLength),
+            "x-forge-content-sha256": contentSha256,
+            "x-forge-artifact-id": "artifact_voice_1"
+          }
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const config = {
+      origin: "http://127.0.0.1",
+      port: 46317,
+      baseUrl: "http://127.0.0.1:46317",
+      webAppUrl: "http://127.0.0.1:46317/forge/",
+      portSource: "configured",
+      dataRoot: "/tmp/forge-agent-audio-valid",
+      apiToken: "fg_agent_messages_token",
+      actorLabel: "Mailbox agent",
+      injectBootstrapContext: true,
+      timeoutMs: 4_000
+    } as const;
+
+    const result = await callConfiguredForgeAgentMessageAudio(config, {
+      path: "/api/v1/agent-messages/message_1/voice",
+      body: { leaseSecret: "a".repeat(43), claimGeneration: 2 }
+    });
+
+    expect(result.artifactId).toBe("artifact_voice_1");
+    expect(result.contentSha256).toBe(contentSha256);
+    expect(result.mimeType).toBe("audio/wav");
+    expect(Array.from(result.bytes)).toEqual(Array.from(bytes));
+    const [audioUrl, audioInit] = fetchMock.mock.calls[1] as [URL, RequestInit];
+    expect(audioUrl.pathname).toBe("/api/v1/agent-messages/message_1/voice");
+    expect(audioInit.headers).toMatchObject({
+      authorization: "Bearer fg_agent_messages_token",
+      accept: expect.stringContaining("audio/wav")
+    });
+    expect(JSON.parse(String(audioInit.body))).toEqual({
+      leaseSecret: "a".repeat(43),
+      claimGeneration: 2
+    });
+  });
+
+  it("rejects generic paths and over-limit or hash-mismatched Agent Message audio", async () => {
+    const baseConfig = {
+      origin: "http://127.0.0.1",
+      port: 47317,
+      baseUrl: "http://127.0.0.1:47317",
+      webAppUrl: "http://127.0.0.1:47317/forge/",
+      portSource: "configured",
+      dataRoot: "/tmp/forge-agent-audio-invalid",
+      apiToken: "fg_agent_messages_token",
+      actorLabel: "Mailbox agent",
+      injectBootstrapContext: true,
+      timeoutMs: 4_000
+    } as const;
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      callConfiguredForgeAgentMessageAudio(baseConfig, {
+        path: "/api/v1/artifacts/artifact_1/download",
+        body: { leaseSecret: "a".repeat(43), claimGeneration: 1 }
+      })
+    ).rejects.toMatchObject({ code: "forge_agent_message_audio_path_rejected" });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            app: "forge",
+            backend: "forge-node-runtime",
+            runtime: { storageRoot: baseConfig.dataRoot }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([1]), {
+          status: 200,
+          headers: {
+            "content-type": "audio/wav",
+            "content-length": String(25 * 1024 * 1024 + 1),
+            "x-forge-content-sha256": "a".repeat(64),
+            "x-forge-artifact-id": "artifact_voice_over_limit"
+          }
+        })
+      );
+    await expect(
+      callConfiguredForgeAgentMessageAudio(baseConfig, {
+        path: "/api/v1/agent-messages/message_2/voice",
+        body: { leaseSecret: "b".repeat(43), claimGeneration: 1 }
+      })
+    ).rejects.toMatchObject({
+      code: "forge_agent_message_audio_length_invalid"
+    });
+
+    const hashConfig = {
+      ...baseConfig,
+      port: 48317,
+      baseUrl: "http://127.0.0.1:48317",
+      webAppUrl: "http://127.0.0.1:48317/forge/",
+      dataRoot: "/tmp/forge-agent-audio-hash"
+    } as const;
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            app: "forge",
+            backend: "forge-node-runtime",
+            runtime: { storageRoot: hashConfig.dataRoot }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: {
+            "content-type": "audio/wav",
+            "content-length": "3",
+            "x-forge-content-sha256": "c".repeat(64),
+            "x-forge-artifact-id": "artifact_voice_hash"
+          }
+        })
+      );
+    await expect(
+      callConfiguredForgeAgentMessageAudio(hashConfig, {
+        path: "/api/v1/agent-messages/message_3/voice",
+        body: { leaseSecret: "c".repeat(43), claimGeneration: 1 }
+      })
+    ).rejects.toMatchObject({ code: "forge_agent_message_audio_hash_mismatch" });
   });
 });

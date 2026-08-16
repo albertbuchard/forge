@@ -56,6 +56,20 @@ private final class PeerMemorySecretStore: PeerSecretStoring {
     }
 }
 
+private final class AgentMessageMemoryKeyStore: AgentMessageQueueKeyStoring {
+    private(set) var values: [String: Data] = [:]
+
+    @discardableResult
+    func save(_ data: Data, forKey key: String) -> Bool {
+        values[key] = data
+        return true
+    }
+
+    func load(forKey key: String) -> Data? {
+        values[key]
+    }
+}
+
 private final class PeerTestDeviceKeyOperations: PeerDeviceKeyOperating {
     private let privateKey: P256.Signing.PrivateKey
     var identityAvailable: Bool
@@ -12886,6 +12900,188 @@ final class ForgeCompanionTests: XCTestCase {
             transportMode: "iroh",
             transport: nil
         )
+    }
+
+    func testAgentMessageQueueEncryptsVoiceAndPreservesRetryIdentityAcrossReload() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ForgeAgentMessageTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fileURL = root.appendingPathComponent("outbox.aesgcm")
+        let keys = AgentMessageMemoryKeyStore()
+        let item = QueuedAgentMessage(
+            id: UUID(),
+            messageIdempotencyKey: "ios-message-stable-identity",
+            reservationIdempotencyKey: "ios-reserve-stable-identity",
+            recipientAgentId: "agent_primary",
+            bodyText: "Sensitive queued instructions",
+            voiceData: Data("sensitive-original-voice".utf8),
+            voiceMimeType: "audio/mp4",
+            voiceDurationMilliseconds: 1_250,
+            originalFileName: "agent-message-test.m4a",
+            allowCellular: false,
+            createdAt: Date(timeIntervalSince1970: 1_776_000_000),
+            voiceReservationId: nil,
+            state: .waitingForConnectivity,
+            attemptCount: 0,
+            lastError: nil
+        )
+        let queue = AgentMessageEncryptedQueue(fileURL: fileURL, keychain: keys)
+
+        let firstSnapshot = try await queue.enqueue(item)
+        XCTAssertEqual(firstSnapshot.count, 1)
+        XCTAssertEqual(keys.values.values.first?.count, 32)
+        let encrypted = try Data(contentsOf: fileURL)
+        XCTAssertNil(encrypted.range(of: Data(item.bodyText.utf8)))
+        XCTAssertNil(encrypted.range(of: try XCTUnwrap(item.voiceData)))
+
+        let reloadedQueue = AgentMessageEncryptedQueue(fileURL: fileURL, keychain: keys)
+        let reloaded = try await reloadedQueue.snapshot()
+        let persisted = try XCTUnwrap(reloaded.first)
+        XCTAssertEqual(persisted.id, item.id)
+        XCTAssertEqual(persisted.messageIdempotencyKey, item.messageIdempotencyKey)
+        XCTAssertEqual(
+            persisted.reservationIdempotencyKey,
+            item.reservationIdempotencyKey
+        )
+        XCTAssertEqual(persisted.voiceData, item.voiceData)
+        XCTAssertEqual(persisted.state, .waitingForConnectivity)
+
+        let emptied = try await reloadedQueue.remove(id: item.id)
+        XCTAssertTrue(emptied.isEmpty)
+        let finalQueue = AgentMessageEncryptedQueue(fileURL: fileURL, keychain: keys)
+        let finalSnapshot = try await finalQueue.snapshot()
+        XCTAssertTrue(finalSnapshot.isEmpty)
+    }
+
+    func testAgentMessageNetworkPolicyAndBackgroundLabelsAreTruthful() throws {
+        let largeVoice = Data(
+            repeating: 0x41,
+            count: agentMessageCellularConfirmationBytes + 1
+        )
+        let base = QueuedAgentMessage(
+            id: UUID(),
+            messageIdempotencyKey: "ios-message-network-policy",
+            reservationIdempotencyKey: "ios-reserve-network-policy",
+            recipientAgentId: "agent_primary",
+            bodyText: "",
+            voiceData: largeVoice,
+            voiceMimeType: "audio/mp4",
+            voiceDurationMilliseconds: 60_000,
+            originalFileName: "network-policy.m4a",
+            allowCellular: false,
+            createdAt: Date(),
+            voiceReservationId: nil,
+            state: .queued,
+            attemptCount: 0,
+            lastError: nil
+        )
+
+        XCTAssertEqual(
+            agentMessageNetworkWaitingState(
+                for: base,
+                pathSatisfied: false,
+                pathExpensive: false
+            ),
+            .waitingForConnectivity
+        )
+        XCTAssertEqual(
+            agentMessageNetworkWaitingState(
+                for: base,
+                pathSatisfied: true,
+                pathExpensive: true
+            ),
+            .waitingForWiFi
+        )
+        let allowed = QueuedAgentMessage(
+            id: base.id,
+            messageIdempotencyKey: base.messageIdempotencyKey,
+            reservationIdempotencyKey: base.reservationIdempotencyKey,
+            recipientAgentId: base.recipientAgentId,
+            bodyText: base.bodyText,
+            voiceData: base.voiceData,
+            voiceMimeType: base.voiceMimeType,
+            voiceDurationMilliseconds: base.voiceDurationMilliseconds,
+            originalFileName: base.originalFileName,
+            allowCellular: true,
+            createdAt: base.createdAt,
+            voiceReservationId: nil,
+            state: .queued,
+            attemptCount: 0,
+            lastError: nil
+        )
+        XCTAssertNil(
+            agentMessageNetworkWaitingState(
+                for: allowed,
+                pathSatisfied: true,
+                pathExpensive: true
+            )
+        )
+        XCTAssertEqual(
+            AgentMessageDeliveryState.waitingForBackgroundTime.label,
+            "Waiting for iOS background time"
+        )
+        XCTAssertFalse(
+            AgentMessageDeliveryState.waitingForBackgroundTime.label
+                .localizedCaseInsensitiveContains("immediate")
+        )
+    }
+
+    func testAgentMessageNotificationDoesNotExposeContentOrTranscript() {
+        let message = AgentMessageRecord(
+            id: "message_sensitive",
+            sender: AgentMessageParty(
+                kind: "human_user",
+                userId: "user_operator",
+                agentId: nil,
+                label: "Albert"
+            ),
+            initialRecipient: AgentMessageRecipient(
+                agentId: "agent_primary",
+                label: "Primary agent"
+            ),
+            recipient: AgentMessageRecipient(
+                agentId: "agent_primary",
+                label: "Primary agent"
+            ),
+            forwardedFromMessageId: nil,
+            retriedFromMessageId: nil,
+            bodyText: "Sensitive message text",
+            voiceArtifact: AgentMessageVoiceArtifact(
+                id: "artifact_sensitive",
+                mimeType: "audio/mp4",
+                byteSize: 42,
+                declaredDurationMs: 1_000,
+                verifiedDurationMs: 1_000,
+                sensitivity: "sensitive_media"
+            ),
+            status: "in_progress",
+            revision: 3,
+            progressSummary: "Sensitive progress details",
+            resultMarkdown: "Sensitive result",
+            transcript: AgentMessageTranscript(
+                text: "Sensitive transcript",
+                provider: "configured provider",
+                disclosure: "Explicit disclosure"
+            ),
+            failure: nil,
+            unreadInboxEventSequence: 3,
+            retentionUntil: "2027-08-16T12:00:00.000Z",
+            deliveredAt: "2026-08-16T12:00:00.000Z",
+            acknowledgedAt: nil,
+            handledAt: nil,
+            failedAt: nil,
+            forwardedAt: nil,
+            createdAt: "2026-08-16T12:00:00.000Z",
+            updatedAt: "2026-08-16T12:01:00.000Z"
+        )
+
+        let body = agentMessageNotificationBody(for: message)
+        XCTAssertEqual(body, "Agent Message status: In Progress")
+        XCTAssertFalse(body.contains(message.bodyText))
+        XCTAssertFalse(body.contains(message.progressSummary))
+        XCTAssertFalse(body.contains(message.resultMarkdown))
+        XCTAssertFalse(body.contains(message.transcript?.text ?? ""))
+        XCTAssertFalse(body.contains(message.voiceArtifact?.id ?? ""))
     }
 
     func testCompanionForgeTargetURLResolverKeepsPinnedPathsInsideForge() throws {

@@ -8,6 +8,8 @@ import pytest
 
 from forge_hermes import tools
 from forge_hermes.catalog import (
+    AGENT_MESSAGE_ROUTE_EXAMPLES,
+    AGENT_MESSAGE_ROUTE_SPECS,
     ARTIFACT_ROUTE_EXAMPLES,
     ARTIFACT_ROUTE_SPECS,
     ATTENTION_ROUTE_SPECS,
@@ -59,6 +61,39 @@ def test_start_task_run_body_normalizes_unlimited_mode():
         "timerMode": "unlimited",
         "plannedDurationSeconds": None,
         "note": "Focus block",
+    }
+
+
+def test_agent_messages_catalog_is_claim_capable_but_truthfully_text_only():
+    tool = next(
+        item for item in TOOL_CATALOG
+        if item["name"] == "forge_call_agent_messages_route"
+    )
+    route_keys = set(AGENT_MESSAGE_ROUTE_SPECS)
+
+    assert route_keys == {
+        "poll",
+        "detail",
+        "claim",
+        "renewClaim",
+        "addProgress",
+        "acknowledge",
+        "handle",
+        "fail",
+        "forward",
+    }
+    assert "downloadVoice" not in route_keys
+    assert tool["requires_agent_token"] is True
+    assert "text-only" in tool["description"]
+    assert "does not return sensitive voice bytes" in tool["description"]
+    assert "never promise free transcription" in tool["description"]
+    assert tool["method_builder"]({"routeKey": "poll"}) == "GET"
+    assert tool["path_builder"]({"routeKey": "claim", "pathParams": {
+        "id": "amsg_example"
+    }}) == "/api/v1/agent-messages/amsg_example/claim"
+    assert AGENT_MESSAGE_ROUTE_EXAMPLES[0] == {
+        "routeKey": "poll",
+        "query": {"limit": 20},
     }
 
 

@@ -74,3 +74,49 @@ test("response limits can be configured with environment variables", () => {
     }
   );
 });
+
+test("Agent Message audio remains one native MCP audio block without JSON duplication", () => {
+  const audio = Buffer.from("RIFF forge voice fixture", "utf8").toString("base64");
+  const result = {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({
+          artifactId: "artifact_voice_1",
+          runtimeAudioUnderstanding: "runtime-dependent"
+        })
+      },
+      { type: "audio", data: audio, mimeType: "audio/wav" }
+    ],
+    details: {
+      artifactId: "artifact_voice_1",
+      runtimeAudioUnderstanding: "runtime-dependent"
+    }
+  };
+
+  const content = toMcpContent(result, {
+    textContentLimitBytes: 10_000,
+    structuredContentLimitBytes: 10_000
+  });
+
+  assert.deepEqual(content[1], {
+    type: "audio",
+    data: audio,
+    mimeType: "audio/wav"
+  });
+  assert.equal(content.filter((item) => item.type === "audio").length, 1);
+  assert.equal(content[0].text.includes(audio), false);
+  assert.equal(JSON.stringify(maybeStructuredContent(result.details)).includes(audio), false);
+});
+
+test("invalid audio-shaped content is serialized as text instead of crossing the binary boundary", () => {
+  const content = toMcpContent(
+    {
+      content: [{ type: "audio", data: "not-audio", mimeType: "text/plain" }]
+    },
+    { textContentLimitBytes: 10_000, structuredContentLimitBytes: 10_000 }
+  );
+
+  assert.equal(content[0].type, "text");
+  assert.match(content[0].text, /text\/plain/);
+});
