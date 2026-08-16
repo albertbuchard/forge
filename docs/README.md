@@ -54,6 +54,8 @@ Forge keeps that hierarchy connected to:
 - calendar events, Life Events, work blocks, and task timeboxes
 - sleep nights, workouts, movement history, training load, and nutrition context
 - human and bot users with explicit ownership, assignment, and agent-session history
+- asynchronous Agent Messages with text, first-class voice Artifacts, atomic
+  agent claim leases, encrypted iPhone offline queueing, and durable results
 
 Forge is built as a modern local-first stack: React 19, TypeScript 5.x, Vite 6,
 Tailwind CSS 4, Fastify 5, SQLite, generated OpenAPI, Tauri 2, OpenClaw, Hermes,
@@ -126,6 +128,7 @@ manual adapter setup, data-location guidance, screenshots, and contributor check
 
 ## Current References
 
+- [Agent Messages](./reference/agent-messages.md): asynchronous mailbox semantics, agent leases, original voice Artifacts, iPhone data protection, retention, and troubleshooting.
 - [Companion Iroh transport](./reference/companion-iroh.md): iOS pairing, Iroh, manual HTTP, and phone-safe URLs.
 - [Operator settings and recovery](./reference/operator-settings-and-recovery.md): data-root safety, identities, model health, pairing recovery, and preserve-data install contracts.
 - [OpenClaw plugin](./reference/openclaw-plugin.md): advanced OpenClaw adapter setup and runtime behavior.

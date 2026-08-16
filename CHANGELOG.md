@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.61
+
+- Added Agent Messages, a responsive asynchronous inbox/outbox for text, an
+  original voice Artifact, or both, with default or selected connected-agent
+  routing and complete detail history.
+- Added atomic claim leases, generation fencing, exact idempotency receipts,
+  progress, acknowledgement, reassignment with lease revocation, forwarding,
+  handling, failure, retry children, unread cursors, and restart-safe retention
+  cleanup.
+- Added strict 25 MiB/600-second voice verification and a lease-bound sensitive
+  media route without weakening Forge's human-only generic Artifact downloads.
+- Added scoped OpenClaw and Codex Agent Messages tools, native MCP audio-block
+  preservation for supported Codex runtimes, and a truthful text-only Hermes
+  capability surface.
+- Added the native SwiftUI Agent Messages mailbox and composer with immediate
+  recording, AES-GCM encrypted offline queueing, stable retry identities,
+  cellular policy, generic notification content, and truthful iOS background-
+  processing states.
+
 ## Since 0.2.34
 
 This changelog covers the Forge OpenClaw, Hermes, and Codex agent surfaces from

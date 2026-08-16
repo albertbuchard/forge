@@ -106,6 +106,7 @@ Forge project management is explicit and repeated:
 This plugin gives OpenClaw the tools it needs to work with that system. It can read current state, search records, create and update records, control live work sessions, post insights, and hand the user off to the Forge UI when the visual workflow is easier.
 It can also grant an explicit audited XP bonus or penalty through the dedicated reward-bonus route when the normal automatic task or habit reward flows are not the right fit.
 It can also add or remove tracked minutes on existing tasks or projects through a dedicated signed work-adjustment route without pretending that a live task run happened.
+It also exposes `forge_call_agent_messages_route` for asynchronous Agent Messages. An addressed agent can poll, atomically claim with a lease, renew, add progress, acknowledge, read only the original voice Artifact authorized by that live message lease, forward, handle, or fail. Poll results never contain audio bytes, and the voice operation cannot be used as a generic Artifact download.
 It also understands Forge `note` records, which are Markdown-based, searchable, and linkable across one or many entities.
 It also exposes Forge's SQLite-backed wiki memory surface plus the first-class sleep and sports read models, so an agent can review recent nights, inspect workout context, update reflective metadata on health sessions, and work with wiki pages without touching raw storage.
 The curated plugin route surface now includes the dedicated wiki, Life Events, and health APIs directly, including wiki settings, page reads and writes, search, health, sync, reindex, background ingest, Life Events timeline/calendar/ticket/status actions, sleep review, sports review, and reflective updates on individual sleep or workout sessions.
@@ -126,6 +127,15 @@ Examples:
 - “Start a real work session on this task.”
 - “Map this as a behavior pattern.”
 - “Open the Forge UI.”
+- “Poll my Agent Messages, claim the next one, and report progress.”
+
+Agent Messages uses stable operation keys and client-generated lease secrets so
+an exact retry after response loss does not execute work twice. OpenClaw should
+retain a claimed message's operation key, lease secret, and claim generation
+until it reaches a terminal receipt. Voice is passed to the host only through
+the bounded route-specific audio response. Forge never silently sends it to a
+transcription provider; if the host cannot consume audio, leave the message
+pending or forward it to a capable connected agent.
 
 ## Multi-user And Multi-agent Setup
 

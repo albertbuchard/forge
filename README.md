@@ -84,6 +84,9 @@ In Forge, you can:
   audit events, links, and human downloads
 - coordinate human users, bot users, agent runtime sessions, owners, assignees,
   approvals, and audited agent actions
+- send asynchronous Agent Messages as text, one original voice Artifact, or both,
+  then follow atomic claim, progress, acknowledgement, forwarding, result, or
+  failure history from web or the encrypted iPhone outbox
 - pin important Forge records and resume true recently viewed records from the Action
   Bar, iPhone companion, watch Inbox, and trusted agent read paths
 
@@ -353,6 +356,7 @@ has opened.
 - calendar and time: native events, Life Events, mirrored calendars, provider connections, work block templates, and task timeboxes
 - planning and execution: goals, strategies, projects, issues, tasks, subtasks, task runs, habits, work adjustments, and git-linked completion reports
 - agents and collaboration: OpenClaw, Hermes, Codex, Claude Code, explicit human and bot users, owner/assignee filters, runtime sessions, approvals, and audited actions
+- asynchronous agent mail: text and first-class voice Artifacts, default or selected routing, encrypted iPhone offline delivery, atomic claim leases, progress, forwarding, results, and immutable history through [Agent Messages](./docs/reference/agent-messages.md)
 - progress: XP, levels, streaks, trophies, optional downloadable art packs, and local reward history
 
 ## Screenshots

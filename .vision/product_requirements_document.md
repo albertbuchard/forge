@@ -24,6 +24,7 @@ Forge is built as a production-grade monorepo application with:
 - a Node 24 Forge Connectivity Service that stores bounded end-to-end ciphertext for peers that do not overlap online
 - OpenClaw, Hermes, Codex, and Claude Code adapter layers
 - Swift iPhone companion
+- AES-GCM encrypted native Agent Messages outbox drained during foreground or iOS-granted `BackgroundTasks` execution windows
 - Swift 5 / SwiftUI watchOS companion command surface
 - provider-neutral health adapters spanning Swift ingestion, Fastify normalization, and React read models
 - transport-explicit mobile pairing: a secure HTTPS/Tailscale URL is preferred when the phone is connected through Tailscale; Iroh is used only for pairings whose active API/UI URLs are `forge-iroh://` logical endpoints; manual HTTP/LAN routing remains an explicit advanced option and must not silently downgrade a physical device to insecure non-loopback HTTP
@@ -462,3 +463,72 @@ The current 144-item gamification catalog has these regression budgets in the so
 - Desktop and mobile screenshots confirm that the Forge Smith and real trophy art are visible in the first Overview viewport, correctly framed, and do not create horizontal overflow.
 - Continuous down/up phone scroll sampling confirms monotonic shell height and progress, a fully closed state, a fully reopened state at the top, and no blank or background-flash frame.
 - Every registered shell route resolves to a lazy-module prefetch target, and production TS/TSX contains no fixed Tailwind palette classes for normal interface surfaces.
+
+### 17. Agent Messages Contract
+
+Agent Messages is Forge's asynchronous owner-to-agent mailbox, not a real-time
+chat surface. An owner can send text, one original voice recording, or both to
+the configured default agent or another active agent linked to that owner.
+Outbox contains every visible owner-authored thread. Inbox contains threads with
+unread agent-authored `progress`, `acknowledgement`, `handled`, `failed`, or
+`forwarded` events; claim and lease events remain in history without creating
+unread mail.
+
+The production architecture is React 19 and TypeScript for responsive web,
+Fastify 5 and strict SQLite migration `136` for the server state machine,
+generated OpenAPI for contracts, shared OpenClaw/Codex runtime tools with a
+Hermes text-only capability surface, and native SwiftUI with CryptoKit,
+Keychain, `Network`, `AVAudioRecorder`, `BackgroundTasks`, and
+`UserNotifications` on iPhone.
+
+Every message preserves owner, sender, initial recipient, current recipient,
+timestamps, immutable parent provenance, revisions, and ordered events. Status
+is one of `delivered`, `claimed`, `in_progress`, `acknowledged`, `handled`,
+`failed`, or `forwarded`. Forward and retry produce child messages rather than
+rewriting their source. Owner reassignment requires an expected revision and,
+when work is claimed, explicit atomic lease revocation with a recorded reason.
+
+Agent polling is scoped to the token's stable agent identity and linked owner.
+Claim uses a client-generated 256-bit secret, a keyed digest at rest, an atomic
+SQLite transaction, generation fencing, and durable exact-replay receipts.
+Progress, acknowledgement, lease renewal, reassignment, forwarding, handling,
+and failure also use stable operation keys and canonical request fingerprints.
+Exactly repeated requests return the earlier safe result; changed reuse is a
+conflict. Terminal receipt keys prevent a retried worker from applying the same
+terminal side effect twice.
+
+Each original voice is a first-class sensitive Artifact with immutable hash,
+verified media metadata, and a normal entity link to its message. Accepted
+formats are M4A/AAC, MP3, WAV, WebM/Opus, and OGG/Opus, with a 25 MiB decoded
+limit and a verified 600,000 millisecond duration limit. The Agent Messages
+voice route is the only agent byte exception: owner, recipient, scope, live
+lease secret, generation, nonterminal state, retention, media, size, and hash
+must all match. Generic agent Artifact download stays forbidden.
+
+Codex may receive an authorized voice as one MCP audio block when its installed
+runtime accepts native audio. This uses the configured Codex allowance and is
+not a promise of free transcription. Forge never silently calls an OpenAI API
+key or third-party transcription provider. Any separately configured provider
+must disclose its identity and privacy/cost posture; otherwise the original
+voice and message remain pending and actionable.
+
+Browser and iPhone creation use an idempotent 24-hour voice reservation,
+verified activation with the same reservation key, and atomic message creation
+with a separate stable key. The iPhone writes the complete unsent item to an
+AES-GCM queue whose 256-bit key is protected by
+`AfterFirstUnlockThisDeviceOnly`; the queue file uses complete-until-first-
+authentication Data Protection. It does not create a second persistent
+plaintext staging file. Delivery is attempted when the app is active,
+connectivity returns, protected data is available, or iOS grants the existing
+background processing task time. iOS schedules those windows opportunistically,
+so Forge never promises an immediate background transfer or deadline. Voice
+over 5 MiB waits for Wi-Fi unless the user explicitly permits cellular use.
+
+Authorized notifications carry only the agent label and generic state. Default
+retention is 365 days. Deletion immediately hides a message and revokes a live
+lease but does not falsely claim physical erasure. At retention expiry Forge
+scrubs sensitive message fields, preserves a minimal integrity tombstone, and
+removes a shared voice Artifact only after every retained message, reservation,
+version, entity link, and policy reference is gone. A durable cleanup job plus
+the content-addressed Artifact blob lock makes interrupted physical removal
+recoverable at startup.

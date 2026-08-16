@@ -43,11 +43,11 @@
         </section>
 
         <section class="story-metrics" aria-label="Story totals">
-          <a class="story-metric metric-all" href="./user-stories.html" data-metric-scope="all"><strong>204</strong><span>All stories</span></a>
-          <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>204</strong><span>Current product</span></a>
+          <a class="story-metric metric-all" href="./user-stories.html" data-metric-scope="all"><strong>206</strong><span>All stories</span></a>
+          <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>206</strong><span>Current product</span></a>
           <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>0</strong><span>Planned</span></a>
           <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>24</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>164</strong><span>In review</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>166</strong><span>In review</span></a>
           <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>13</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>23</strong><span>Story families</span></a>
         </section>
@@ -115,7 +115,7 @@
           </div>
 
           <div class="result-bar">
-            <p data-result-count aria-live="polite">Showing all 204 stories.</p>
+            <p data-result-count aria-live="polite">Showing all 206 stories.</p>
             <button type="button" class="reset-button" data-reset-filters hidden>Clear filters</button>
           </div>
           <noscript><p class="noscript-note">Filtering needs JavaScript. The complete story contract remains available below; open any family to read its stories.</p></noscript>
@@ -2560,7 +2560,7 @@
             <details class="story-family" data-family-group="AGENT">
               <summary>
                 <span class="family-title"><span class="family-code">AGENT</span>Agents, MCPs, and plugins</span>
-                <span class="family-counts"><span data-family-visible>8</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 8 current</span></span>
+                <span class="family-counts"><span data-family-visible>9</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 9 current</span></span>
               </summary>
               <div class="story-list">
 
@@ -2680,6 +2680,21 @@
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>User/agent settings, audit trail, auth headers.</dd></div>
                       <div><dt>Current evidence and next check</dt><dd>the operator directory now distinguishes humans, linked and unlinked bots, active and inactive lifecycle states, configured identities, fresh verified runtime sessions, actor labels, providers, and session counts. Deactivation disconnects approved primary-agent sessions, revokes their tokens, and blocks registration, heartbeat, event append, or reconnect until deliberate reactivation. Complete the remaining artifact, Psyche, and movement authorization matrix plus live runtime verification.</dd></div>
+                    </dl>
+                  </div>
+                </details>
+
+                <details class="story-card" id="story-agent-09" data-story-id="AGENT-09" data-lifecycle="current" data-readiness="In review" data-family="AGENT">
+                  <summary class="story-summary">
+                    <span class="story-id">AGENT-09</span>
+                    <span class="story-summary-outcome">As a user, I can send slow asynchronous text, voice, or combined work to a default or selected connected agent and receive durable progress, acknowledgement, result, failure, or forwarding history without double execution.</span>
+                    <span class="story-state state-in-review">In review</span>
+                  </summary>
+                  <div class="story-expanded">
+                    <p class="story-expanded-outcome">As a user, I can send slow asynchronous text, voice, or combined work to a default or selected connected agent and receive durable progress, acknowledgement, result, failure, or forwarding history without double execution.</p>
+                    <dl class="story-details">
+                      <div><dt>Where it lives</dt><dd><code>messages-index</code>, Agent Messages API/OpenAPI, OpenClaw/Codex/Hermes tools, sensitive voice Artifacts.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>owner-scoped inbox/outbox/detail and default routing, strict media activation, first-class original voice Artifacts, atomic lease claims, generation fencing, exact replay receipts, reassignment with lease revocation, forwarding/retry children, unread cursors, reference-aware retention, and scoped agent tools are implemented. Focused race, retention, web, MCP, and Hermes checks pass locally; complete the bounded isolated runtime, published-package, and responsive assistive-technology release evidence.</dd></div>
                     </dl>
                   </div>
                 </details>
@@ -2872,7 +2887,7 @@
             <details class="story-family" data-family-group="IOS">
               <summary>
                 <span class="family-title"><span class="family-code">IOS</span>iPhone companion</span>
-                <span class="family-counts"><span data-family-visible>12</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 12 current</span></span>
+                <span class="family-counts"><span data-family-visible>13</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 13 current</span></span>
               </summary>
               <div class="story-list">
 
@@ -3037,6 +3052,21 @@
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Native settings/diagnostics and web mobile settings.</dd></div>
                       <div><dt>Current evidence and next check</dt><dd>support diagnostics now redact current and legacy credential formats; complete each failure, recovery, and export scenario.</dd></div>
+                    </dl>
+                  </div>
+                </details>
+
+                <details class="story-card" id="story-ios-13" data-story-id="IOS-13" data-lifecycle="current" data-readiness="In review" data-family="IOS">
+                  <summary class="story-summary">
+                    <span class="story-id">IOS-13</span>
+                    <span class="story-summary-outcome">As an iPhone user, I can record and securely queue an Agent Message while offline, then let Forge retry it when connectivity and iOS execution time return without exposing notification content or promising an Apple background deadline.</span>
+                    <span class="story-state state-in-review">In review</span>
+                  </summary>
+                  <div class="story-expanded">
+                    <p class="story-expanded-outcome">As an iPhone user, I can record and securely queue an Agent Message while offline, then let Forge retry it when connectivity and iOS execution time return without exposing notification content or promising an Apple background deadline.</p>
+                    <dl class="story-details">
+                      <div><dt>Where it lives</dt><dd>Native Agent Messages inbox/outbox/detail/composer, CryptoKit queue, BackgroundTasks, Network, notifications.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the AES-GCM queue, device-only Keychain key, stable retry identities, text fallback, immediate recording, cellular policy, foreground/connectivity/background-task drain, generic notifications, and truthful waiting states are implemented. Focused queue reload, encryption, network-policy, notification-redaction, and simulator build checks pass; complete physical-device suspension, termination, protected-data, and long-transfer evidence.</dd></div>
                     </dl>
                   </div>
                 </details>

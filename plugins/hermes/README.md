@@ -10,6 +10,13 @@ This plugin follows the Hermes plugin guide directly:
 - bundled Forge runtime assets so Hermes can start Forge safely without repo-only runtime imports
 
 It exposes the same curated Forge contract as the OpenClaw adapter, but through Hermes' Python plugin system.
+Agent Messages is the deliberate exception to byte-level parity: Hermes exposes
+poll, detail, claim, renew, progress, acknowledgement, handle, fail, and forward
+for the asynchronous mailbox, but the current Hermes bridge does not advertise
+voice download because it has no native audio-content transport. A voice-bearing
+message remains pending or can be forwarded to a capable connected agent. The
+plugin never claims free transcription and never silently uploads the recording
+to another provider.
 It also bundles a Psyche interview playbook pack so Hermes can explore values,
 patterns, behaviors, beliefs, modes, and trigger reports with active listening before
 persisting them.

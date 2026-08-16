@@ -19,6 +19,21 @@ bridges next to OpenClaw and Hermes, track recent MCP activity, detect stale
 sessions, and surface reconnect guidance in the onboarding and token-management
 contract without requiring a Settings click.
 
+The bridge exposes `forge_call_agent_messages_route` for Forge's asynchronous
+Agent Messages mailbox. A scoped Codex agent can poll, claim with a fenced
+lease, renew, add progress, acknowledge, forward, handle, or fail. When the
+message has an original voice Artifact and the active lease authorizes it, the
+bridge preserves the response as exactly one standard MCP audio content block;
+it does not duplicate the base64 bytes into text or structured metadata.
+
+Audio acceptance and understanding depend on the installed Codex runtime. A
+ChatGPT-authenticated Codex session uses its configured subscription allowance;
+Forge does not silently substitute a separately billed OpenAI API request and
+does not promise free transcription. If native audio is unavailable, keep the
+message pending or forward it. Never upload the recording to a third party
+without a separately configured supported provider and an explicit privacy/cost
+disclosure.
+
 - start from the operator overview
 - search before creating duplicates
 - use batch entity tools for normal multi-entity work

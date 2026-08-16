@@ -17,6 +17,8 @@ The current shipped surfaces focus on:
 - Sleep import
 - Workout and recovery import
 - Manual sync + background refresh hooks
+- Native Agent Messages inbox, outbox, detail, default-agent selection, and immediate voice/text composer
+- AES-GCM encrypted offline Agent Messages queue with stable retry identities, Wi-Fi/cellular policy, and truthful iOS-scheduled delivery states
 - Full-screen embedded Forge web app after pairing
 - Floating native control center for sync, HealthKit, and companion settings
 - WatchConnectivity bootstrap + direct-first watch action delivery with paired-iPhone backup
@@ -36,21 +38,20 @@ The architecture still leaves room for richer Apple Watch biometrics and passive
 context surfaces, but each mutation must continue to receive a Forge backend receipt
 before the watch treats it as complete.
 
-## Project generation
+## Xcode project maintenance
 
-This folder keeps `project.yml` as the diffable XcodeGen definition for the Apple
-targets. The canonical Xcode project is the generated root project at
-`apps/ios-companion/ForgeCompanion.xcodeproj`.
+The canonical Xcode project is the root project at
+`apps/ios-companion/ForgeCompanion.xcodeproj`. Maintain its file references and
+build phases manually. `project.yml` is historical reference only; XcodeGen must
+not regenerate or overwrite the canonical project.
 
 Do not open a nested `ForgeCompanion/ForgeCompanion.xcodeproj` path if one appears in
 old local state or backups. That stale project drifted from the generated source of
 truth and can compile the wrong target graph.
 
-If you want to regenerate later:
-
-1. Install [XcodeGen](https://github.com/yonaskolb/XcodeGen)
-2. Run `xcodegen generate` from `apps/ios-companion/`
-3. Open `ForgeCompanion.xcodeproj`
+When adding a Swift source file, add the file reference and target build-phase
+entry to the canonical project and run the repository's Xcode reference check
+before building.
 
 ## Key frameworks
 
@@ -58,6 +59,9 @@ If you want to regenerate later:
 - HealthKit
 - BackgroundTasks
 - AVFoundation
+- CryptoKit
+- Network
+- UserNotifications
 - CoreLocation
 - WatchConnectivity
 - WidgetKit
@@ -110,6 +114,30 @@ payload, and `forge-companion/1` ALPN. The app must keep those strategies separa
 Tailscale pairings use Tailscale; Iroh pairings use Iroh.
 
 The deeper transport reference lives in `docs/reference/companion-iroh.md`.
+
+## Agent Messages delivery and privacy
+
+Agent Messages is asynchronous mail, not real-time chat. The native composer can
+send text, one original M4A voice note, or both to the default or a selected
+connected agent. Microphone denial leaves text available.
+
+Before any network attempt, the app gives the message stable reservation and
+message idempotency keys and writes the complete item to an AES-GCM encrypted
+queue. The random 256-bit queue key uses Keychain
+`AfterFirstUnlockThisDeviceOnly`; the queue uses complete-until-first-
+authentication Data Protection. The current implementation does not persist a
+second plaintext upload-staging file. It decrypts voice into memory only while
+the app is active or iOS grants background-processing time.
+
+Delivery is retried when connectivity returns, the app becomes active, or iOS
+grants another existing background task window. iOS controls that scheduling,
+so the UI says `Waiting for iOS background time` instead of promising immediate
+or deadline-bound delivery. Voice notes over 5 MiB wait for Wi-Fi unless the
+user explicitly permits cellular use. Authorized local notifications contain
+only the agent label and generic state, never content or transcript text.
+
+The complete server, retention, voice-Artifact, agent-lease, and troubleshooting
+contract is documented in [`docs/reference/agent-messages.md`](../../docs/reference/agent-messages.md).
 
 ## App Store release automation
 
