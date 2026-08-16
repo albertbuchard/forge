@@ -711,7 +711,8 @@ export function AgentMessagesPage() {
     <div className="grid gap-5 pb-24 lg:pb-8">
       <PageHero
         eyebrow="Asynchronous agent mail"
-        title="Agent Messages"
+        title={<h1>Agent Messages</h1>}
+        titleText="Agent Messages"
         description="Send text, a first-class voice Artifact, or both. Agents claim work with leases and leave a durable result and audit history."
         actions={
           <Button onClick={() => {

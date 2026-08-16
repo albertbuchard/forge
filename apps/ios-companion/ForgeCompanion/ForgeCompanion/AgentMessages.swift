@@ -6,9 +6,9 @@ import Network
 import SwiftUI
 import UserNotifications
 
-private let agentMessageVoiceMaximumBytes = 25 * 1024 * 1024
-private let agentMessageVoiceMaximumDuration: TimeInterval = 10 * 60
-private let agentMessageCellularConfirmationBytes = 5 * 1024 * 1024
+let agentMessageVoiceMaximumBytes = 25 * 1024 * 1024
+let agentMessageVoiceMaximumDuration: TimeInterval = 10 * 60
+let agentMessageCellularConfirmationBytes = 5 * 1024 * 1024
 
 enum AgentMessageDeliveryState: String, Codable {
     case queued
@@ -48,6 +48,22 @@ struct QueuedAgentMessage: Codable, Identifiable {
     var lastError: String?
 
     var containsVoice: Bool { voiceData?.isEmpty == false }
+}
+
+func agentMessageNetworkWaitingState(
+    for item: QueuedAgentMessage,
+    pathSatisfied: Bool,
+    pathExpensive: Bool
+) -> AgentMessageDeliveryState? {
+    guard pathSatisfied else { return .waitingForConnectivity }
+    if item.containsVoice,
+       item.voiceData?.count ?? 0 > agentMessageCellularConfirmationBytes,
+       pathExpensive,
+       item.allowCellular == false
+    {
+        return .waitingForWiFi
+    }
+    return nil
 }
 
 struct AgentMessageAgent: Codable, Identifiable, Hashable {
@@ -508,26 +524,44 @@ private final class AgentMessageClient {
     }
 }
 
-private actor AgentMessageEncryptedQueue {
+protocol AgentMessageQueueKeyStoring: AnyObject {
+    @discardableResult
+    func save(_ data: Data, forKey key: String) -> Bool
+    func load(forKey key: String) -> Data?
+}
+
+extension KeychainStore: AgentMessageQueueKeyStoring {}
+
+actor AgentMessageEncryptedQueue {
     private struct Envelope: Codable {
         let version: Int
         var items: [QueuedAgentMessage]
     }
 
-    private let keychain = KeychainStore(service: "com.albertbuchard.ForgeCompanion.agent-messages")
+    private let keychain: AgentMessageQueueKeyStoring
     private let keyName = "queue-aes-gcm-v1"
     private let fileURL: URL
     private var loaded = false
     private var items: [QueuedAgentMessage] = []
 
-    init() {
-        let support = FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first!
-        fileURL = support
-            .appendingPathComponent("ForgeAgentMessages", isDirectory: true)
-            .appendingPathComponent("outbox-v1.aesgcm", isDirectory: false)
+    init(
+        fileURL: URL? = nil,
+        keychain: AgentMessageQueueKeyStoring = KeychainStore(
+            service: "com.albertbuchard.ForgeCompanion.agent-messages"
+        )
+    ) {
+        self.keychain = keychain
+        if let fileURL {
+            self.fileURL = fileURL
+        } else {
+            let support = FileManager.default.urls(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask
+            ).first!
+            self.fileURL = support
+                .appendingPathComponent("ForgeAgentMessages", isDirectory: true)
+                .appendingPathComponent("outbox-v1.aesgcm", isDirectory: false)
+        }
     }
 
     func snapshot() throws -> [QueuedAgentMessage] {
@@ -824,12 +858,12 @@ final class AgentMessageStore: ObservableObject {
         }
         for original in snapshot {
             var item = original
-            if item.containsVoice,
-               item.voiceData?.count ?? 0 > agentMessageCellularConfirmationBytes,
-               pathExpensive,
-               item.allowCellular == false
-            {
-                item.state = .waitingForWiFi
+            if let waitingState = agentMessageNetworkWaitingState(
+                for: item,
+                pathSatisfied: pathSatisfied,
+                pathExpensive: pathExpensive
+            ) {
+                item.state = waitingState
                 do { queued = try await vault.update(item) } catch { latestError = error.localizedDescription }
                 allSucceeded = false
                 continue
@@ -898,7 +932,7 @@ final class AgentMessageStore: ObservableObject {
         for message in inbox where previous.contains(message.id) == false {
             let content = UNMutableNotificationContent()
             content.title = "Agent update from \(message.recipient.label)"
-            content.body = message.progressSummary.isEmpty ? message.status.replacingOccurrences(of: "_", with: " ").capitalized : message.progressSummary
+            content.body = agentMessageNotificationBody(for: message)
             content.sound = .default
             try? await UNUserNotificationCenter.current().add(
                 UNNotificationRequest(
@@ -909,6 +943,11 @@ final class AgentMessageStore: ObservableObject {
             )
         }
     }
+}
+
+func agentMessageNotificationBody(for message: AgentMessageRecord) -> String {
+    "Agent Message status: "
+        + message.status.replacingOccurrences(of: "_", with: " ").capitalized
 }
 
 private final class AgentVoiceRecorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
