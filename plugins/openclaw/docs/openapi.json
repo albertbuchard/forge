@@ -32100,7 +32100,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Primary Calendar projection identifier when that Calendar event is live and inside the caller's scope; otherwise null without exposing the unavailable identifier."
           },
           "calendarSyncState": {
             "type": "string",
@@ -50532,6 +50533,2693 @@
         "operationId": "postauth_device_requests_requestId_deny"
       }
     },
+    "/api/v1/agent-messages/agents": {
+      "get": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "List agents available for Agent Messages routing",
+        "description": "Requires the authenticated Forge owner. Connected is a fresh runtime observation, not a guarantee of immediate handling.",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner-linked agents",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getagent_messages_agents"
+      }
+    },
+    "/api/v1/agent-messages/settings": {
+      "get": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Read the default Agent Messages recipient and media policy",
+        "description": "Requires the authenticated Forge owner. ",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent Messages settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getagent_messages_settings"
+      },
+      "patch": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Select the default agent for future messages",
+        "description": "Requires the authenticated Forge owner. This never reroutes existing mail and writes the general audit log.",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "defaultAgentId"
+                ],
+                "properties": {
+                  "defaultAgentId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchagent_messages_settings"
+      }
+    },
+    "/api/v1/agent-messages": {
+      "get": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "List the Agent Messages inbox or outbox",
+        "description": "Requires the authenticated Forge owner. Outbox contains owner-authored threads. Inbox contains distinct threads whose latest agent-authored progress, acknowledgement, handled, failed, or forwarded event is newer than the owner read cursor. Claim and lease events never create unread state.",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "box",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "inbox",
+                "outbox"
+              ],
+              "default": "outbox"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "delivered",
+                "claimed",
+                "in_progress",
+                "acknowledged",
+                "handled",
+                "failed",
+                "forwarded"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 30
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded inbox or outbox page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getagent_messages"
+      },
+      "post": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Send text, verified reserved voice, or both to an agent",
+        "description": "Requires the authenticated Forge owner. Creation atomically consumes an active owner-scoped voice reservation. Exact idempotency replay returns the original message; changed reuse is 409.",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotencyKey"
+                ],
+                "properties": {
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "recipientAgentId": {
+                    "type": "string"
+                  },
+                  "bodyText": {
+                    "type": "string",
+                    "maxLength": 50000
+                  },
+                  "voiceReservationId": {
+                    "type": "string"
+                  },
+                  "retentionDays": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3650,
+                    "default": 365
+                  }
+                },
+                "anyOf": [
+                  {
+                    "required": [
+                      "bodyText"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "voiceReservationId"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Exact replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "required": [
+                        "id",
+                        "ownerUserId",
+                        "sender",
+                        "initialRecipient",
+                        "recipient",
+                        "bodyText",
+                        "voiceArtifact",
+                        "status",
+                        "revision",
+                        "retentionUntil",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "ownerUserId": {
+                          "type": "string"
+                        },
+                        "sender": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "initialRecipient": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "recipient": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "bodyText": {
+                          "type": "string",
+                          "maxLength": 50000
+                        },
+                        "voiceArtifact": {
+                          "anyOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "mimeType",
+                                "byteSize",
+                                "verifiedDurationMs",
+                                "sensitivity"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "mimeType": {
+                                  "type": "string"
+                                },
+                                "byteSize": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 26214400
+                                },
+                                "declaredDurationMs": {
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ],
+                                  "minimum": 0
+                                },
+                                "verifiedDurationMs": {
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ],
+                                  "minimum": 1,
+                                  "maximum": 600000
+                                },
+                                "sensitivity": {
+                                  "type": "string",
+                                  "const": "sensitive_media"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "delivered",
+                            "claimed",
+                            "in_progress",
+                            "acknowledged",
+                            "handled",
+                            "failed",
+                            "forwarded"
+                          ]
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "unreadInboxEventSequence": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1
+                        },
+                        "retentionUntil": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "required": [
+                        "id",
+                        "ownerUserId",
+                        "sender",
+                        "initialRecipient",
+                        "recipient",
+                        "bodyText",
+                        "voiceArtifact",
+                        "status",
+                        "revision",
+                        "retentionUntil",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "ownerUserId": {
+                          "type": "string"
+                        },
+                        "sender": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "initialRecipient": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "recipient": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "bodyText": {
+                          "type": "string",
+                          "maxLength": 50000
+                        },
+                        "voiceArtifact": {
+                          "anyOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "mimeType",
+                                "byteSize",
+                                "verifiedDurationMs",
+                                "sensitivity"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "mimeType": {
+                                  "type": "string"
+                                },
+                                "byteSize": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 26214400
+                                },
+                                "declaredDurationMs": {
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ],
+                                  "minimum": 0
+                                },
+                                "verifiedDurationMs": {
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ],
+                                  "minimum": 1,
+                                  "maximum": 600000
+                                },
+                                "sensitivity": {
+                                  "type": "string",
+                                  "const": "sensitive_media"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "delivered",
+                            "claimed",
+                            "in_progress",
+                            "acknowledged",
+                            "handled",
+                            "failed",
+                            "forwarded"
+                          ]
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "unreadInboxEventSequence": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1
+                        },
+                        "retentionUntil": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Changed idempotency key or unavailable reservation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postagent_messages"
+      }
+    },
+    "/api/v1/agent-messages/{id}": {
+      "get": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Read one message, immutable events, and forward/retry provenance",
+        "description": "Requires the authenticated Forge owner. ",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Message detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getagent_messages_id"
+      },
+      "delete": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Soft-delete a message and revoke its live lease",
+        "description": "Requires the authenticated Forge owner. The original voice remains subject to reference-aware retention and crash-recoverable blob cleanup.",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Soft deletion receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "deleteagent_messages_id"
+      }
+    },
+    "/api/v1/agent-messages/{id}/read": {
+      "post": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Advance the owner read cursor to an observed inbox-eligible event",
+        "description": "Requires the authenticated Forge owner. A concurrent newer eligible event remains unread. Lease events are excluded.",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "operationKey",
+                  "expectedInboxEventSequence"
+                ],
+                "properties": {
+                  "operationKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "expectedInboxEventSequence": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotent read-cursor receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postagent_messages_id_read"
+      }
+    },
+    "/api/v1/agent-messages/voice-reservations": {
+      "post": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Reserve an idempotent sensitive voice upload",
+        "description": "Requires the authenticated Forge owner. An unconsumed reservation expires after 24 hours and is cleaned only after reference checks.",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotencyKey",
+                  "originalFileName",
+                  "declaredMimeType",
+                  "declaredDurationMs"
+                ],
+                "properties": {
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "originalFileName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 180
+                  },
+                  "declaredMimeType": {
+                    "type": "string"
+                  },
+                  "declaredDurationMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 600000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Pending voice reservation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postagent_messages_voice_reservations"
+      }
+    },
+    "/api/v1/agent-messages/voice-reservations/{id}": {
+      "put": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Upload and verify the original audio for a reservation",
+        "description": "Requires the authenticated Forge owner. The JSON body is bounded at 35 MiB; decoded media is bounded at 25 MiB and must pass signature, MIME/extension, container/codec, and verified duration at or below 600 seconds.",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotencyKey",
+                  "contentBase64",
+                  "declaredMimeType",
+                  "declaredDurationMs"
+                ],
+                "properties": {
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "contentBase64": {
+                    "type": "string",
+                    "contentEncoding": "base64"
+                  },
+                  "declaredMimeType": {
+                    "type": "string"
+                  },
+                  "declaredDurationMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 600000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Active verified reservation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "putagent_messages_voice_reservations_id"
+      }
+    },
+    "/api/v1/agent-messages/{id}/reassign": {
+      "post": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Reassign a nonterminal message, explicitly revoking a live lease when confirmed",
+        "description": "Requires the authenticated Forge owner. Requires expected revision, reason, and stable operation key. The old lease secret fails immediately.",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "operationKey",
+                  "expectedRevision",
+                  "recipientAgentId",
+                  "reason"
+                ],
+                "properties": {
+                  "operationKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "expectedRevision": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "recipientAgentId": {
+                    "type": "string"
+                  },
+                  "revokeActiveLease": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotent reassignment receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postagent_messages_id_reassign"
+      }
+    },
+    "/api/v1/agent-messages/{id}/retry": {
+      "post": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Create an immutable delivered child from a failed message",
+        "description": "Requires the authenticated Forge owner. ",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "operationKey"
+                ],
+                "properties": {
+                  "operationKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "recipientAgentId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Retry child receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postagent_messages_id_retry"
+      }
+    },
+    "/api/v1/mobile/agent-messages/agents": {
+      "get": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "List agents available for Agent Messages routing",
+        "description": "Requires a signed, replay-protected verified Forge companion request. The owner is derived from the pairing and cannot be supplied by the phone. Connected is a fresh runtime observation, not a guarantee of immediate handling.",
+        "responses": {
+          "200": {
+            "description": "Owner-linked agents",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getmobile_agent_messages_agents"
+      }
+    },
+    "/api/v1/mobile/agent-messages/settings": {
+      "get": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Read the default Agent Messages recipient and media policy",
+        "description": "Requires a signed, replay-protected verified Forge companion request. The owner is derived from the pairing and cannot be supplied by the phone. ",
+        "responses": {
+          "200": {
+            "description": "Agent Messages settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getmobile_agent_messages_settings"
+      },
+      "patch": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Select the default agent for future messages",
+        "description": "Requires a signed, replay-protected verified Forge companion request. The owner is derived from the pairing and cannot be supplied by the phone. This never reroutes existing mail and writes the general audit log.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "defaultAgentId"
+                ],
+                "properties": {
+                  "defaultAgentId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchmobile_agent_messages_settings"
+      }
+    },
+    "/api/v1/mobile/agent-messages": {
+      "get": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "List the Agent Messages inbox or outbox",
+        "description": "Requires a signed, replay-protected verified Forge companion request. The owner is derived from the pairing and cannot be supplied by the phone. Outbox contains owner-authored threads. Inbox contains distinct threads whose latest agent-authored progress, acknowledgement, handled, failed, or forwarded event is newer than the owner read cursor. Claim and lease events never create unread state.",
+        "parameters": [
+          {
+            "name": "box",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "inbox",
+                "outbox"
+              ],
+              "default": "outbox"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "delivered",
+                "claimed",
+                "in_progress",
+                "acknowledged",
+                "handled",
+                "failed",
+                "forwarded"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 30
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded inbox or outbox page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getmobile_agent_messages"
+      },
+      "post": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Send text, verified reserved voice, or both to an agent",
+        "description": "Requires a signed, replay-protected verified Forge companion request. The owner is derived from the pairing and cannot be supplied by the phone. Creation atomically consumes an active owner-scoped voice reservation. Exact idempotency replay returns the original message; changed reuse is 409.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotencyKey"
+                ],
+                "properties": {
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "recipientAgentId": {
+                    "type": "string"
+                  },
+                  "bodyText": {
+                    "type": "string",
+                    "maxLength": 50000
+                  },
+                  "voiceReservationId": {
+                    "type": "string"
+                  },
+                  "retentionDays": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3650,
+                    "default": 365
+                  }
+                },
+                "anyOf": [
+                  {
+                    "required": [
+                      "bodyText"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "voiceReservationId"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Exact replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "required": [
+                        "id",
+                        "ownerUserId",
+                        "sender",
+                        "initialRecipient",
+                        "recipient",
+                        "bodyText",
+                        "voiceArtifact",
+                        "status",
+                        "revision",
+                        "retentionUntil",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "ownerUserId": {
+                          "type": "string"
+                        },
+                        "sender": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "initialRecipient": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "recipient": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "bodyText": {
+                          "type": "string",
+                          "maxLength": 50000
+                        },
+                        "voiceArtifact": {
+                          "anyOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "mimeType",
+                                "byteSize",
+                                "verifiedDurationMs",
+                                "sensitivity"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "mimeType": {
+                                  "type": "string"
+                                },
+                                "byteSize": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 26214400
+                                },
+                                "declaredDurationMs": {
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ],
+                                  "minimum": 0
+                                },
+                                "verifiedDurationMs": {
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ],
+                                  "minimum": 1,
+                                  "maximum": 600000
+                                },
+                                "sensitivity": {
+                                  "type": "string",
+                                  "const": "sensitive_media"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "delivered",
+                            "claimed",
+                            "in_progress",
+                            "acknowledged",
+                            "handled",
+                            "failed",
+                            "forwarded"
+                          ]
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "unreadInboxEventSequence": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1
+                        },
+                        "retentionUntil": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "required": [
+                        "id",
+                        "ownerUserId",
+                        "sender",
+                        "initialRecipient",
+                        "recipient",
+                        "bodyText",
+                        "voiceArtifact",
+                        "status",
+                        "revision",
+                        "retentionUntil",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "ownerUserId": {
+                          "type": "string"
+                        },
+                        "sender": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "initialRecipient": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "recipient": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "bodyText": {
+                          "type": "string",
+                          "maxLength": 50000
+                        },
+                        "voiceArtifact": {
+                          "anyOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "mimeType",
+                                "byteSize",
+                                "verifiedDurationMs",
+                                "sensitivity"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "mimeType": {
+                                  "type": "string"
+                                },
+                                "byteSize": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 26214400
+                                },
+                                "declaredDurationMs": {
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ],
+                                  "minimum": 0
+                                },
+                                "verifiedDurationMs": {
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ],
+                                  "minimum": 1,
+                                  "maximum": 600000
+                                },
+                                "sensitivity": {
+                                  "type": "string",
+                                  "const": "sensitive_media"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "delivered",
+                            "claimed",
+                            "in_progress",
+                            "acknowledged",
+                            "handled",
+                            "failed",
+                            "forwarded"
+                          ]
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "unreadInboxEventSequence": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1
+                        },
+                        "retentionUntil": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Changed idempotency key or unavailable reservation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postmobile_agent_messages"
+      }
+    },
+    "/api/v1/mobile/agent-messages/{id}": {
+      "get": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Read one message, immutable events, and forward/retry provenance",
+        "description": "Requires a signed, replay-protected verified Forge companion request. The owner is derived from the pairing and cannot be supplied by the phone. ",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Message detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getmobile_agent_messages_id"
+      },
+      "delete": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Soft-delete a message and revoke its live lease",
+        "description": "Requires a signed, replay-protected verified Forge companion request. The owner is derived from the pairing and cannot be supplied by the phone. The original voice remains subject to reference-aware retention and crash-recoverable blob cleanup.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Soft deletion receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "deletemobile_agent_messages_id"
+      }
+    },
+    "/api/v1/mobile/agent-messages/{id}/read": {
+      "post": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Advance the owner read cursor to an observed inbox-eligible event",
+        "description": "Requires a signed, replay-protected verified Forge companion request. The owner is derived from the pairing and cannot be supplied by the phone. A concurrent newer eligible event remains unread. Lease events are excluded.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "operationKey",
+                  "expectedInboxEventSequence"
+                ],
+                "properties": {
+                  "operationKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "expectedInboxEventSequence": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotent read-cursor receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postmobile_agent_messages_id_read"
+      }
+    },
+    "/api/v1/mobile/agent-messages/voice-reservations": {
+      "post": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Reserve an idempotent sensitive voice upload",
+        "description": "Requires a signed, replay-protected verified Forge companion request. The owner is derived from the pairing and cannot be supplied by the phone. An unconsumed reservation expires after 24 hours and is cleaned only after reference checks.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotencyKey",
+                  "originalFileName",
+                  "declaredMimeType",
+                  "declaredDurationMs"
+                ],
+                "properties": {
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "originalFileName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 180
+                  },
+                  "declaredMimeType": {
+                    "type": "string"
+                  },
+                  "declaredDurationMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 600000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Pending voice reservation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postmobile_agent_messages_voice_reservations"
+      }
+    },
+    "/api/v1/mobile/agent-messages/voice-reservations/{id}": {
+      "put": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Upload and verify the original audio for a reservation",
+        "description": "Requires a signed, replay-protected verified Forge companion request. The owner is derived from the pairing and cannot be supplied by the phone. The JSON body is bounded at 35 MiB; decoded media is bounded at 25 MiB and must pass signature, MIME/extension, container/codec, and verified duration at or below 600 seconds.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotencyKey",
+                  "contentBase64",
+                  "declaredMimeType",
+                  "declaredDurationMs"
+                ],
+                "properties": {
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "contentBase64": {
+                    "type": "string",
+                    "contentEncoding": "base64"
+                  },
+                  "declaredMimeType": {
+                    "type": "string"
+                  },
+                  "declaredDurationMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 600000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Active verified reservation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "putmobile_agent_messages_voice_reservations_id"
+      }
+    },
+    "/api/v1/mobile/agent-messages/{id}/reassign": {
+      "post": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Reassign a nonterminal message, explicitly revoking a live lease when confirmed",
+        "description": "Requires a signed, replay-protected verified Forge companion request. The owner is derived from the pairing and cannot be supplied by the phone. Requires expected revision, reason, and stable operation key. The old lease secret fails immediately.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "operationKey",
+                  "expectedRevision",
+                  "recipientAgentId",
+                  "reason"
+                ],
+                "properties": {
+                  "operationKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "expectedRevision": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "recipientAgentId": {
+                    "type": "string"
+                  },
+                  "revokeActiveLease": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotent reassignment receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postmobile_agent_messages_id_reassign"
+      }
+    },
+    "/api/v1/mobile/agent-messages/{id}/retry": {
+      "post": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Create an immutable delivered child from a failed message",
+        "description": "Requires a signed, replay-protected verified Forge companion request. The owner is derived from the pairing and cannot be supplied by the phone. ",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "operationKey"
+                ],
+                "properties": {
+                  "operationKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "recipientAgentId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Retry child receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postmobile_agent_messages_id_retry"
+      }
+    },
+    "/api/v1/agent-messages/poll": {
+      "get": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Poll claim-eligible messages addressed to the authenticated agent",
+        "description": "Requires agentMessages.poll. Polling never claims and omits audio bytes.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compact claim-eligible messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getagent_messages_poll"
+      }
+    },
+    "/api/v1/agent-messages/{id}/detail": {
+      "get": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Read the addressed message and its immutable audit history",
+        "description": "Requires agentMessages.poll and exact recipient plus owner scope.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Message detail and ordered audit events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getagent_messages_id_detail"
+      }
+    },
+    "/api/v1/agent-messages/{id}/claim": {
+      "post": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Atomically claim a message with a retry-safe lease",
+        "description": "Requires agentMessages.claim. The caller supplies a random secret; Forge stores only its keyed digest and a durable exact-replay receipt.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "operationKey",
+                  "leaseSecret"
+                ],
+                "properties": {
+                  "operationKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "leaseSecret": {
+                    "type": "string",
+                    "minLength": 43,
+                    "maxLength": 128,
+                    "description": "Caller-generated base64url cryptographically random lease secret."
+                  },
+                  "leaseSeconds": {
+                    "type": "integer",
+                    "minimum": 60,
+                    "maximum": 900,
+                    "default": 300
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Claim lease or exact replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Live competing claim or changed replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postagent_messages_id_claim"
+      }
+    },
+    "/api/v1/agent-messages/{id}/lease": {
+      "post": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Renew the authenticated claim lease",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "operationKey",
+                  "leaseSecret",
+                  "claimGeneration"
+                ],
+                "properties": {
+                  "operationKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "leaseSecret": {
+                    "type": "string",
+                    "minLength": 43,
+                    "maxLength": 128,
+                    "description": "Caller-generated base64url cryptographically random lease secret."
+                  },
+                  "claimGeneration": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "leaseSeconds": {
+                    "type": "integer",
+                    "minimum": 60,
+                    "maximum": 900,
+                    "default": 300
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Renewal receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postagent_messages_id_lease"
+      }
+    },
+    "/api/v1/agent-messages/{id}/progress": {
+      "post": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Append user-visible agent progress",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "operationKey",
+                  "leaseSecret",
+                  "claimGeneration"
+                ],
+                "properties": {
+                  "operationKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "leaseSecret": {
+                    "type": "string",
+                    "minLength": 43,
+                    "maxLength": 128,
+                    "description": "Caller-generated base64url cryptographically random lease secret."
+                  },
+                  "claimGeneration": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "progressSummary": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 10000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Progress receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postagent_messages_id_progress"
+      }
+    },
+    "/api/v1/agent-messages/{id}/acknowledge": {
+      "post": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Acknowledge the message under its live lease",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "operationKey",
+                  "leaseSecret",
+                  "claimGeneration"
+                ],
+                "properties": {
+                  "operationKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "leaseSecret": {
+                    "type": "string",
+                    "minLength": 43,
+                    "maxLength": 128,
+                    "description": "Caller-generated base64url cryptographically random lease secret."
+                  },
+                  "claimGeneration": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Acknowledgement receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postagent_messages_id_acknowledge"
+      }
+    },
+    "/api/v1/agent-messages/{id}/handle": {
+      "post": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Handle the message with an idempotent terminal receipt",
+        "description": "Requires agentMessages.complete. Transcript fields require explicit provider/cost/privacy disclosure and never replace the original Artifact.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "operationKey",
+                  "leaseSecret",
+                  "claimGeneration"
+                ],
+                "properties": {
+                  "operationKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "leaseSecret": {
+                    "type": "string",
+                    "minLength": 43,
+                    "maxLength": 128,
+                    "description": "Caller-generated base64url cryptographically random lease secret."
+                  },
+                  "claimGeneration": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "receiptKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "resultMarkdown": {
+                    "type": "string",
+                    "maxLength": 100000
+                  },
+                  "transcriptText": {
+                    "type": "string",
+                    "maxLength": 100000
+                  },
+                  "transcriptProvider": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "transcriptDisclosure": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Handled terminal receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postagent_messages_id_handle"
+      }
+    },
+    "/api/v1/agent-messages/{id}/fail": {
+      "post": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Fail the message with an idempotent terminal receipt",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "operationKey",
+                  "leaseSecret",
+                  "claimGeneration"
+                ],
+                "properties": {
+                  "operationKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "leaseSecret": {
+                    "type": "string",
+                    "minLength": 43,
+                    "maxLength": 128,
+                    "description": "Caller-generated base64url cryptographically random lease secret."
+                  },
+                  "claimGeneration": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "receiptKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "failureCode": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "failureMessage": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Failed terminal receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postagent_messages_id_fail"
+      }
+    },
+    "/api/v1/agent-messages/{id}/forward": {
+      "post": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Forward to another owner-linked agent as an immutable child",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "operationKey",
+                  "leaseSecret",
+                  "claimGeneration"
+                ],
+                "properties": {
+                  "operationKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "leaseSecret": {
+                    "type": "string",
+                    "minLength": 43,
+                    "maxLength": 128,
+                    "description": "Caller-generated base64url cryptographically random lease secret."
+                  },
+                  "claimGeneration": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "receiptKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:-]+$"
+                  },
+                  "recipientAgentId": {
+                    "type": "string"
+                  },
+                  "progressSummary": {
+                    "type": "string",
+                    "maxLength": 10000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Forward terminal and child receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postagent_messages_id_forward"
+      }
+    },
+    "/api/v1/agent-messages/{id}/voice": {
+      "post": {
+        "tags": [
+          "Agent Messages"
+        ],
+        "summary": "Read only this leased message's verified original voice Artifact",
+        "description": "Requires agentMessages.voice.read and exact recipient, claimant, owner scope, secret, generation, nonterminal state, retention, sensitivity, and Artifact integrity. This is not generic Artifact download.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "leaseSecret",
+                  "claimGeneration"
+                ],
+                "properties": {
+                  "leaseSecret": {
+                    "type": "string",
+                    "minLength": 43,
+                    "maxLength": 128,
+                    "description": "Caller-generated base64url cryptographically random lease secret."
+                  },
+                  "claimGeneration": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Exact original voice bytes. Hash and Artifact id are returned in response headers.",
+            "headers": {
+              "X-Forge-Artifact-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Forge-Content-Sha256": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              }
+            },
+            "content": {
+              "audio/mp4": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "audio/aac": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "audio/mpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "audio/wav": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "audio/webm": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "audio/ogg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postagent_messages_id_voice"
+      }
+    },
     "/api/v1/launchpad/packages": {
       "get": {
         "tags": [
@@ -53720,7 +56408,7 @@
       ],
       "post": {
         "summary": "Link or project a Life Event into the calendar",
-        "description": "Requires the source Life Event to be inside the caller's user, project, and tag scope before any calendar search or mutation. If a match is found, Forge links through entity_links and calendar event links. If no match is found and projection is link_or_create, Forge creates a native calendar_event.",
+        "description": "Requires the source Life Event to be inside the caller's user, project, and tag scope before any calendar search or mutation. Matching considers only live Calendar events inside that same scope. A created projection inherits the scoped Life Event owner and visible context links; inaccessible source links are never copied. If no authorized match is found and projection is link_or_create, Forge creates a native calendar_event.",
         "requestBody": {
           "required": false,
           "content": {
