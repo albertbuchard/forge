@@ -7026,6 +7026,25 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       '{"routeKey":"replaceGenericLinks","pathParams":{"id":"artifact_123"},"body":{"links":[{"entityType":"wiki_page","entityId":"note_budget_model","relationship":"embedded_reference","anchorKey":"budget-workbook"}]}}'
   },
   {
+    toolName: "forge_call_agent_messages_route",
+    summary:
+      "Poll, inspect, claim, renew, progress, acknowledge, complete, fail, forward, or retrieve the specifically authorized original voice Artifact for slow asynchronous Agent Messages.",
+    whenToUse:
+      "Use for the Agent Messages worker lifecycle after Forge has routed a message to this connected agent. Poll before claiming, perform work only under the current atomic lease, and reuse stable operation keys only for exact transport retries.",
+    inputShape:
+      '{ routeKey: "poll"|"detail"|"claim"|"renewClaim"|"addProgress"|"acknowledge"|"downloadVoice"|"handle"|"fail"|"forward", pathParams?: { id?: string }, query?: object, body?: object }',
+    requiredFields: ["routeKey"],
+    notes: [
+      "Every route requires a configured Forge agent token with the exact published Agent Messages scopes. Use pathParams.id for every message-specific route; poll alone has no message id.",
+      "Claim with a fresh 256-bit random leaseSecret and a stable operationKey. Protected updates and downloadVoice require the current leaseSecret and claimGeneration; terminal operation keys are idempotent only for the exact same payload.",
+      "downloadVoice returns only the lease-authorized first-class original voice Artifact. OpenClaw and Codex may pass that audio to a connected runtime only when the runtime accepts audio; this does not promise transcription or a separate no-charge capability.",
+      "Hermes is text-only and does not expose downloadVoice. Forge never silently uploads voice to a transcription provider; if no explicitly configured supported path exists, keep the message pending or forward it without discarding the original.",
+      "Forwarding creates a new linked child with immutable provenance. Acknowledge, handle, fail, and forward must preserve the current claim fencing and stable exact-retry receipt semantics."
+    ],
+    example:
+      '{"routeKey":"poll","query":{"limit":20}}'
+  },
+  {
     toolName: "forge_call_life_event_route",
     summary:
       "Call one allowed Life Events route for timeline reads, one-event reads, calendar sync, calendar-to-Life-Event marking, trusted ticket-artifact import, or travel-status reads.",

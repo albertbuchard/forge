@@ -455,6 +455,7 @@ describe("forge openclaw plugin", () => {
     expect(toolNames).toEqual([
       "forge_adjust_work_minutes",
       "forge_apply_doctor_fix",
+      "forge_call_agent_messages_route",
       "forge_call_artifact_route",
       "forge_call_attention_route",
       "forge_call_calendar_connection_route",

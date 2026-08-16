@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-08-16T16:46:39.000Z",
+  "generatedAt": "2026-08-16T17:20:56.000Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
     "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG",
-    "catalogEntryCount": 87,
-    "documentedToolCount": 87,
-    "catalogSha256": "9811040408bc128ed85316fd9edd9190f541557f70d25c81477c1a31b56630c5"
+    "catalogEntryCount": 88,
+    "documentedToolCount": 88,
+    "catalogSha256": "2970f227b7d8e646d3e5de4148463b18836774032ee7766c233bc8b3c4afdf59"
   },
   "groups": [
     {
@@ -83,6 +83,27 @@
       "notes": [],
       "example": "{}",
       "catalogDocumented": false
+    },
+    {
+      "name": "forge_call_agent_messages_route",
+      "groupId": "other",
+      "groupTitle": "Other Forge Tools",
+      "label": "Forge Agent Messages Route",
+      "summary": "Poll, inspect, claim, renew, progress, acknowledge, complete, fail, forward, or retrieve the specifically authorized original voice Artifact for slow asynchronous Agent Messages.",
+      "whenToUse": "Use for the Agent Messages worker lifecycle after Forge has routed a message to this connected agent. Poll before claiming, perform work only under the current atomic lease, and reuse stable operation keys only for exact transport retries.",
+      "inputShape": "{ routeKey: \"poll\"|\"detail\"|\"claim\"|\"renewClaim\"|\"addProgress\"|\"acknowledge\"|\"downloadVoice\"|\"handle\"|\"fail\"|\"forward\", pathParams?: { id?: string }, query?: object, body?: object }",
+      "requiredFields": [
+        "routeKey"
+      ],
+      "notes": [
+        "Every route requires a configured Forge agent token with the exact published Agent Messages scopes. Use pathParams.id for every message-specific route; poll alone has no message id.",
+        "Claim with a fresh 256-bit random leaseSecret and a stable operationKey. Protected updates and downloadVoice require the current leaseSecret and claimGeneration; terminal operation keys are idempotent only for the exact same payload.",
+        "downloadVoice returns only the lease-authorized first-class original voice Artifact. OpenClaw and Codex may pass that audio to a connected runtime only when the runtime accepts audio; this does not promise transcription or a separate no-charge capability.",
+        "Hermes is text-only and does not expose downloadVoice. Forge never silently uploads voice to a transcription provider; if no explicitly configured supported path exists, keep the message pending or forward it without discarding the original.",
+        "Forwarding creates a new linked child with immutable provenance. Acknowledge, handle, fail, and forward must preserve the current claim fencing and stable exact-retry receipt semantics."
+      ],
+      "example": "{\"routeKey\":\"poll\",\"query\":{\"limit\":20}}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_call_artifact_route",
