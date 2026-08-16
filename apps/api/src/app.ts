@@ -883,6 +883,7 @@ import { registerPeopleRoutes } from "./routes/people.js";
 import { registerCourseRoutes } from "./routes/courses.js";
 import { ensureBuiltInCourses } from "./repositories/courses.js";
 import { registerPeerSharingRoutes } from "./routes/peer-sharing.js";
+import { registerAgentMessageRoutes } from "./agent-messages/routes.js";
 import { PEER_ROUTE_CONTRACTS } from "./peer-route-contract.js";
 import { persistPeerPairingConfirmation } from "./repositories/peer-pairing.js";
 import { authenticatePeerCompanionRequest } from "./services/peer-companion-auth.js";
@@ -14644,6 +14645,13 @@ export async function buildServer(
     peerCore,
     devWebOrigin: process.env.FORGE_DEV_WEB_ORIGIN?.trim() || null,
     persistPairingConfirmation: persistPeerPairingConfirmation
+  });
+  await registerAgentMessageRoutes(app, {
+    authenticate: authenticateRequest,
+    authorization: managers.authorization,
+    leaseDigestKey: Buffer.from(
+      managers.secrets.deriveKey("agent-message-lease-digests/v1")
+    )
   });
 
   app.get("/api/v1/artifacts", async (request) => {

@@ -4,6 +4,7 @@ import {
 } from "./peer-openapi.js";
 import { buildCourseOpenApiPaths } from "./course-openapi.js";
 import { buildSecurityPairingOpenApiPaths } from "./security-pairing-openapi.js";
+import { buildAgentMessageOpenApiPaths } from "./agent-message-openapi.js";
 import {
   TASK_CLOSEOUT_LIMITS,
   crudEntityTypeSchema,
@@ -14170,6 +14171,7 @@ export function buildOpenApiDocument() {
       ...buildPeerOpenApiPaths(),
       ...buildCourseOpenApiPaths(),
       ...buildSecurityPairingOpenApiPaths(),
+      ...buildAgentMessageOpenApiPaths(),
       ...buildLaunchpadOpenApiPaths(),
       "/api/v1/comparisons/catalog": {
         get: {

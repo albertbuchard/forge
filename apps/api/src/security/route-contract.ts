@@ -68,7 +68,19 @@ const VERIFIED_COMPANION_PROTOCOL_ROUTES = new Set([
   "POST /api/v1/mobile/healthkit/sync-sessions/:id/chunks",
   "POST /api/v1/mobile/healthkit/sync-sessions/:id/complete",
   "DELETE /api/v1/mobile/healthkit/sync-sessions/:id",
-  "POST /api/v1/mobile/healthkit/sync"
+  "POST /api/v1/mobile/healthkit/sync",
+  "GET /api/v1/mobile/agent-messages/agents",
+  "GET /api/v1/mobile/agent-messages/settings",
+  "PATCH /api/v1/mobile/agent-messages/settings",
+  "GET /api/v1/mobile/agent-messages",
+  "GET /api/v1/mobile/agent-messages/:id",
+  "POST /api/v1/mobile/agent-messages/:id/read",
+  "POST /api/v1/mobile/agent-messages/voice-reservations",
+  "PUT /api/v1/mobile/agent-messages/voice-reservations/:id",
+  "POST /api/v1/mobile/agent-messages",
+  "POST /api/v1/mobile/agent-messages/:id/reassign",
+  "POST /api/v1/mobile/agent-messages/:id/retry",
+  "DELETE /api/v1/mobile/agent-messages/:id"
 ]);
 
 const VERIFIED_PEER_PROTOCOL_ROUTES = new Set(
@@ -89,6 +101,15 @@ const MIXED_PEER_PROTOCOL_ROUTES = new Set(
 );
 
 const LEGACY_SCOPE_COMPATIBILITY = new Map<string, readonly string[]>([
+  ["GET /api/v1/agent-messages/poll", ["agentMessages.poll"]],
+  ["POST /api/v1/agent-messages/:id/claim", ["agentMessages.claim"]],
+  ["POST /api/v1/agent-messages/:id/lease", ["agentMessages.claim"]],
+  ["POST /api/v1/agent-messages/:id/progress", ["agentMessages.progress"]],
+  ["POST /api/v1/agent-messages/:id/acknowledge", ["agentMessages.progress"]],
+  ["POST /api/v1/agent-messages/:id/handle", ["agentMessages.complete"]],
+  ["POST /api/v1/agent-messages/:id/fail", ["agentMessages.complete"]],
+  ["POST /api/v1/agent-messages/:id/forward", ["agentMessages.forward"]],
+  ["POST /api/v1/agent-messages/:id/voice", ["agentMessages.voice.read"]],
   ["POST /api/v1/entities/create", ["write"]],
   ["GET /api/v1/artifacts", ["artifact.readMetadata"]],
   ["POST /api/v1/artifacts", ["artifact.create", "artifact.uploadBytes"]],

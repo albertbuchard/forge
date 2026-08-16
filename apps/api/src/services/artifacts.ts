@@ -115,7 +115,13 @@ const ALLOWED_EXTENSIONS = [
   "png",
   "jpg",
   "jpeg",
-  "webp"
+  "webp",
+  "m4a",
+  "aac",
+  "mp3",
+  "wav",
+  "webm",
+  "ogg"
 ] as const;
 
 const extensionToFormatFamily: Record<string, ArtifactFormatFamily> = {
@@ -134,7 +140,13 @@ const extensionToFormatFamily: Record<string, ArtifactFormatFamily> = {
   png: "image",
   jpg: "image",
   jpeg: "image",
-  webp: "image"
+  webp: "image",
+  m4a: "audio",
+  aac: "audio",
+  mp3: "audio",
+  wav: "audio",
+  webm: "audio",
+  ogg: "audio"
 };
 
 const imageMimeTypeByExtension = {
@@ -142,6 +154,15 @@ const imageMimeTypeByExtension = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
   webp: "image/webp"
+} as const;
+
+const audioMimeTypesByExtension = {
+  m4a: ["audio/mp4"],
+  aac: ["audio/aac"],
+  mp3: ["audio/mpeg"],
+  wav: ["audio/wav"],
+  webm: ["audio/webm"],
+  ogg: ["audio/ogg"]
 } as const;
 
 export const artifactStateSchema = z.enum([
@@ -165,11 +186,13 @@ export const artifactFormatFamilySchema = z.enum([
   "pdf",
   "text",
   "structured_text",
-  "image"
+  "image",
+  "audio"
 ]);
 export const artifactSourceKindSchema = z.enum([
   "upload",
   "agent_upload",
+  "agent_message_voice",
   "wiki_ingest",
   "external_reference",
   "manual"
@@ -851,6 +874,32 @@ function detectMimeType(buffer: Buffer, extension: string) {
     buffer.subarray(8, 12).toString("ascii") === "WEBP"
   ) {
     return "image/webp";
+  }
+  if (
+    buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+    buffer.subarray(8, 12).toString("ascii") === "WAVE"
+  ) {
+    return "audio/wav";
+  }
+  if (buffer.subarray(0, 4).toString("ascii") === "OggS") {
+    return "audio/ogg";
+  }
+  if (
+    buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))
+  ) {
+    return "audio/webm";
+  }
+  if (
+    buffer.subarray(0, 3).toString("ascii") === "ID3" ||
+    (buffer[0] === 0xff && (buffer[1] ?? 0) >= 0xe0)
+  ) {
+    return extension === "aac" ? "audio/aac" : "audio/mpeg";
+  }
+  if (
+    buffer.subarray(4, 8).toString("ascii") === "ftyp" &&
+    (extension === "m4a" || extension === "aac")
+  ) {
+    return extension === "aac" ? "audio/aac" : "audio/mp4";
   }
   if (buffer.subarray(0, 2).toString("ascii") === "PK") {
     if (extension === "docx") {
@@ -1916,6 +1965,21 @@ export function scanArtifactBytes(input: {
       "high",
       "image_header_invalid",
       `The file has a .${detectedExtension} extension but does not begin with the expected ${expectedImageMimeType} signature.`
+    );
+  }
+  const expectedAudioMimeTypes =
+    audioMimeTypesByExtension[
+      detectedExtension as keyof typeof audioMimeTypesByExtension
+    ];
+  if (
+    expectedAudioMimeTypes &&
+    !(expectedAudioMimeTypes as readonly string[]).includes(detectedMimeType)
+  ) {
+    addFinding(
+      findings,
+      "high",
+      "audio_header_invalid",
+      `The file has a .${detectedExtension} extension but does not begin with a supported audio-container signature.`
     );
   }
 
