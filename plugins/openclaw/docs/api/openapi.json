@@ -27,6 +27,12 @@
         "in": "cookie",
         "name": "forge_operator_session",
         "description": "Trusted local operator session cookie."
+      },
+      "browserSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "forge_session",
+        "description": "Forge browser session. Individual routes still enforce whether the principal must be the local owner or may be a paired browser."
       }
     },
     "schemas": {
@@ -49826,6 +49832,802 @@
           }
         },
         "operationId": "getconcepts_conceptId"
+      }
+    },
+    "/api/v1/auth/trusted-browser/authentication/options": {
+      "post": {
+        "summary": "Begin trusted-device browser restoration",
+        "description": "Public, origin-bound WebAuthn start operation. It returns discoverable-credential options without credential identifiers, client identifiers, profile names, or scopes. Challenges are hashed, bounded, expire after two minutes, and can be consumed once.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Non-enumerating trusted-device challenge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "challengeId",
+                    "options"
+                  ],
+                  "properties": {
+                    "challengeId": {
+                      "type": "string",
+                      "pattern": "^tbc_[A-Za-z0-9]{16,160}$"
+                    },
+                    "options": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "WebAuthn PublicKeyCredential options. Authentication uses discoverable credentials and therefore returns an empty allowCredentials array."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Forge pairing error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forge pairing error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "postauth_trusted_browser_authentication_options"
+      }
+    },
+    "/api/v1/auth/trusted-browser/authentication/verify": {
+      "post": {
+        "summary": "Restore an exact paired-browser grant with WebAuthn",
+        "description": "Verifies user presence and user verification, the exact origin and relying party, the credential counter, installation and data-root identity, owner and client epochs, client key, profile, scopes, and active pairing lifecycle. Success creates the ordinary paired-client browser session and refresh family; it can never create an operator session.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "challengeId",
+                  "response"
+                ],
+                "properties": {
+                  "challengeId": {
+                    "type": "string",
+                    "pattern": "^tbc_[A-Za-z0-9]{16,160}$"
+                  },
+                  "response": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Paired-browser session restored"
+          },
+          "400": {
+            "description": "Forge pairing error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Forge pairing error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forge pairing error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "postauth_trusted_browser_authentication_verify"
+      }
+    },
+    "/api/v1/auth/trusted-browser/registration/options": {
+      "post": {
+        "summary": "Begin explicit trusted-device registration",
+        "description": "Requires a current paired-browser session, or a direct-loopback operator session selecting an active browser client. A paired browser may register only its own exact authority. Registration requires a discoverable credential and user verification.",
+        "security": [
+          {
+            "browserSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "clientId": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Trusted-device registration challenge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "challengeId",
+                    "options"
+                  ],
+                  "properties": {
+                    "challengeId": {
+                      "type": "string",
+                      "pattern": "^tbc_[A-Za-z0-9]{16,160}$"
+                    },
+                    "options": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "WebAuthn PublicKeyCredential options. Authentication uses discoverable credentials and therefore returns an empty allowCredentials array."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Forge pairing error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forge pairing error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "postauth_trusted_browser_registration_options"
+      }
+    },
+    "/api/v1/auth/trusted-browser/registration/verify": {
+      "post": {
+        "summary": "Bind a verified passkey to one paired-browser authority",
+        "security": [
+          {
+            "browserSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "challengeId",
+                  "response"
+                ],
+                "properties": {
+                  "clientId": {
+                    "type": "string"
+                  },
+                  "challengeId": {
+                    "type": "string"
+                  },
+                  "response": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Trusted-device credential bound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "credential"
+                  ],
+                  "properties": {
+                    "credential": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "label",
+                        "clientId",
+                        "clientName",
+                        "profile",
+                        "scopes",
+                        "selectedUserIds",
+                        "origin",
+                        "relyingPartyId",
+                        "deviceType",
+                        "backedUp",
+                        "createdAt",
+                        "lastUsedAt",
+                        "revokedAt",
+                        "revocationReason"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^tbr_[A-Za-z0-9]{16,160}$"
+                        },
+                        "label": {
+                          "type": "string",
+                          "maxLength": 120
+                        },
+                        "clientId": {
+                          "type": "string"
+                        },
+                        "clientName": {
+                          "type": "string"
+                        },
+                        "profile": {
+                          "type": "string",
+                          "enum": [
+                            "viewer",
+                            "trusted_personal_assistant",
+                            "executor",
+                            "custom"
+                          ]
+                        },
+                        "scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 32
+                        },
+                        "selectedUserIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 64
+                        },
+                        "origin": {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        "relyingPartyId": {
+                          "type": "string"
+                        },
+                        "deviceType": {
+                          "type": "string",
+                          "enum": [
+                            "singleDevice",
+                            "multiDevice"
+                          ]
+                        },
+                        "backedUp": {
+                          "type": "boolean"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "lastUsedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "revokedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "revocationReason": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Forge pairing error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forge pairing error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "postauth_trusted_browser_registration_verify"
+      }
+    },
+    "/api/v1/auth/trusted-browser/status": {
+      "post": {
+        "summary": "Read trusted-device status for the current browser session",
+        "description": "Returns only active trusted-device credentials bound to the current paired-browser client and relying party. It does not expose credentials belonging to another client and does not grant or restore authority.",
+        "security": [
+          {
+            "browserSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current paired-browser trusted-device status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "available",
+                    "credentials"
+                  ],
+                  "properties": {
+                    "available": {
+                      "type": "boolean"
+                    },
+                    "credentials": {
+                      "type": "array",
+                      "maxItems": 16,
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "label",
+                          "clientId",
+                          "clientName",
+                          "profile",
+                          "scopes",
+                          "selectedUserIds",
+                          "origin",
+                          "relyingPartyId",
+                          "deviceType",
+                          "backedUp",
+                          "createdAt",
+                          "lastUsedAt",
+                          "revokedAt",
+                          "revocationReason"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^tbr_[A-Za-z0-9]{16,160}$"
+                          },
+                          "label": {
+                            "type": "string",
+                            "maxLength": 120
+                          },
+                          "clientId": {
+                            "type": "string"
+                          },
+                          "clientName": {
+                            "type": "string"
+                          },
+                          "profile": {
+                            "type": "string",
+                            "enum": [
+                              "viewer",
+                              "trusted_personal_assistant",
+                              "executor",
+                              "custom"
+                            ]
+                          },
+                          "scopes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 32
+                          },
+                          "selectedUserIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 64
+                          },
+                          "origin": {
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "relyingPartyId": {
+                            "type": "string"
+                          },
+                          "deviceType": {
+                            "type": "string",
+                            "enum": [
+                              "singleDevice",
+                              "multiDevice"
+                            ]
+                          },
+                          "backedUp": {
+                            "type": "boolean"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "lastUsedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          },
+                          "revokedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          },
+                          "revocationReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Forge pairing error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forge pairing error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "postauth_trusted_browser_status"
+      }
+    },
+    "/api/v1/auth/trusted-browser/credentials": {
+      "get": {
+        "summary": "List current and revoked trusted-device credentials",
+        "description": "Owner-only bounded management projection. It never returns credential public keys, counters, raw challenges, challenge hashes, or cookie material.",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trusted-device credential summaries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "credentials"
+                  ],
+                  "properties": {
+                    "credentials": {
+                      "type": "array",
+                      "maxItems": 64,
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "label",
+                          "clientId",
+                          "clientName",
+                          "profile",
+                          "scopes",
+                          "selectedUserIds",
+                          "origin",
+                          "relyingPartyId",
+                          "deviceType",
+                          "backedUp",
+                          "createdAt",
+                          "lastUsedAt",
+                          "revokedAt",
+                          "revocationReason"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^tbr_[A-Za-z0-9]{16,160}$"
+                          },
+                          "label": {
+                            "type": "string",
+                            "maxLength": 120
+                          },
+                          "clientId": {
+                            "type": "string"
+                          },
+                          "clientName": {
+                            "type": "string"
+                          },
+                          "profile": {
+                            "type": "string",
+                            "enum": [
+                              "viewer",
+                              "trusted_personal_assistant",
+                              "executor",
+                              "custom"
+                            ]
+                          },
+                          "scopes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 32
+                          },
+                          "selectedUserIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 64
+                          },
+                          "origin": {
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "relyingPartyId": {
+                            "type": "string"
+                          },
+                          "deviceType": {
+                            "type": "string",
+                            "enum": [
+                              "singleDevice",
+                              "multiDevice"
+                            ]
+                          },
+                          "backedUp": {
+                            "type": "boolean"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "lastUsedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          },
+                          "revokedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          },
+                          "revocationReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Forge pairing error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forge pairing error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "getauth_trusted_browser_credentials"
+      }
+    },
+    "/api/v1/auth/trusted-browser/credentials/{id}/revoke": {
+      "post": {
+        "summary": "Revoke one trusted-device credential",
+        "security": [
+          {
+            "operatorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^tbr_[A-Za-z0-9]{16,160}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trusted-device credential revoked"
+          },
+          "401": {
+            "description": "Forge pairing error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forge pairing error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Forge pairing error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "postauth_trusted_browser_credentials_id_revoke"
       }
     },
     "/api/v1/auth/master-password": {

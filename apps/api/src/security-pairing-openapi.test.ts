@@ -47,3 +47,54 @@ test("exact owner pairing routes publish a secret-free OpenAPI contract", () => 
   assert.doesNotMatch(denyContract, /userCode/);
   assert.match(denyContract, /cannot create authority/);
 });
+
+test("trusted-device OpenAPI is non-enumerating and never promises operator restoration", () => {
+  const document = buildOpenApiDocument() as {
+    paths: Record<string, Record<string, Record<string, unknown>>>;
+    components: { securitySchemes: Record<string, unknown> };
+  };
+  const options =
+    document.paths["/api/v1/auth/trusted-browser/authentication/options"]?.post;
+  const verify =
+    document.paths["/api/v1/auth/trusted-browser/authentication/verify"]?.post;
+  const registration =
+    document.paths["/api/v1/auth/trusted-browser/registration/options"]?.post;
+  const registrationVerify =
+    document.paths["/api/v1/auth/trusted-browser/registration/verify"]?.post;
+  const status =
+    document.paths["/api/v1/auth/trusted-browser/status"]?.post;
+  const credentials =
+    document.paths["/api/v1/auth/trusted-browser/credentials"]?.get;
+  const revoke =
+    document.paths[
+      "/api/v1/auth/trusted-browser/credentials/{id}/revoke"
+    ]?.post;
+
+  assert.ok(options);
+  assert.ok(verify);
+  assert.ok(registration);
+  assert.ok(registrationVerify);
+  assert.ok(status);
+  assert.ok(credentials);
+  assert.ok(revoke);
+  assert.deepEqual(options.security, []);
+  assert.deepEqual(verify.security, []);
+  assert.deepEqual(registration.security, [{ browserSession: [] }]);
+  assert.deepEqual(registrationVerify.security, [{ browserSession: [] }]);
+  assert.deepEqual(status.security, [{ browserSession: [] }]);
+  assert.deepEqual(credentials.security, [{ operatorSession: [] }]);
+  assert.deepEqual(revoke.security, [{ operatorSession: [] }]);
+  assert.ok(document.components.securitySchemes.browserSession);
+
+  const publicContract = JSON.stringify({ options, verify });
+  assert.match(publicContract, /discoverable/);
+  assert.match(publicContract, /can never create an operator session/);
+  assert.doesNotMatch(
+    JSON.stringify(options),
+    /credentialId|clientName|selectedUserIds/
+  );
+  assert.doesNotMatch(
+    JSON.stringify(credentials),
+    /"(?:publicKeyBase64|counter|challengeKeyedHash|refreshToken)"\s*:/
+  );
+});

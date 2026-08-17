@@ -12263,6 +12263,7 @@ export async function buildServer(
     platformOwnerKeyPath: options.platformOwnerKeyPath,
     platformOwnerKeySha256: options.platformOwnerKeySha256,
     canonicalExternalOrigin: options.canonicalExternalOrigin,
+    devWebOrigin: process.env.FORGE_DEV_WEB_ORIGIN?.trim() || null,
     authorizeLegacyToken: (token, transport) => {
       const persisted = getAgentTokenById(token.id);
       return Boolean(

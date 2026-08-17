@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  startAuthentication,
+  startRegistration
+} from "@simplewebauthn/browser";
 import { KeyRound, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -6,8 +10,12 @@ import { Card } from "@/components/ui/card";
 import {
   approveRemoteBrowserPairingWithMasterPassword,
   beginRemoteBrowserPairing,
+  beginTrustedBrowserAuthentication,
+  beginTrustedBrowserRegistration,
   cancelRemoteBrowserPairing,
   cancelRemoteBrowserPairingOnPageExit,
+  completeTrustedBrowserAuthentication,
+  completeTrustedBrowserRegistration,
   pollRemoteBrowserPairing,
   refreshRemoteBrowserPairingCancelProof
 } from "@/lib/api";
@@ -26,6 +34,8 @@ export function RemoteBrowserPairing({
     | "starting"
     | "pending"
     | "paired"
+    | "restoring"
+    | "trusting"
     | "denied"
     | "expired"
     | "limited"
@@ -35,6 +45,7 @@ export function RemoteBrowserPairing({
   const [retrySeconds, setRetrySeconds] = useState(0);
   const [masterPassword, setMasterPassword] = useState("");
   const [masterPasswordPending, setMasterPasswordPending] = useState(false);
+  const [pairedClientId, setPairedClientId] = useState<string | null>(null);
   const timer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -46,8 +57,10 @@ export function RemoteBrowserPairing({
         if (stopped) return;
         if (result.status === "approved") {
           setStatus("paired");
-          setMessage("This browser is paired. Opening Forge…");
-          await onPaired();
+          setPairedClientId(result.clientId);
+          setMessage(
+            "This browser is paired. You can trust it for future user-verified sign-in, or continue without trusting it."
+          );
           return;
         }
         if (result.status === "access_denied") {
@@ -195,6 +208,63 @@ export function RemoteBrowserPairing({
     }
   };
 
+  const restoreTrustedBrowser = async () => {
+    setStatus("restoring");
+    setMessage(null);
+    try {
+      const ceremony = await beginTrustedBrowserAuthentication();
+      const response = await startAuthentication({
+        optionsJSON: ceremony.options as unknown as Parameters<
+          typeof startAuthentication
+        >[0]["optionsJSON"]
+      });
+      await completeTrustedBrowserAuthentication({
+        challengeId: ceremony.challengeId,
+        response
+      });
+      setMessage("Trusted-device verification succeeded. Opening Forge…");
+      await onPaired();
+    } catch (error) {
+      setStatus("idle");
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Forge could not restore this trusted browser. You can still pair it normally."
+      );
+    }
+  };
+
+  const trustPairedBrowser = async () => {
+    if (!pairedClientId) return;
+    setStatus("trusting");
+    setMessage(null);
+    try {
+      const ceremony = await beginTrustedBrowserRegistration({
+        clientId: pairedClientId,
+        label: `Forge trusted browser on ${navigator.platform || "this device"}`
+      });
+      const response = await startRegistration({
+        optionsJSON: ceremony.options as unknown as Parameters<
+          typeof startRegistration
+        >[0]["optionsJSON"]
+      });
+      await completeTrustedBrowserRegistration({
+        clientId: pairedClientId,
+        challengeId: ceremony.challengeId,
+        response
+      });
+      setMessage("This device is trusted. Opening Forge…");
+      await onPaired();
+    } catch (error) {
+      setStatus("paired");
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Forge could not trust this device. The current paired session remains usable."
+      );
+    }
+  };
+
   return (
     <Card
       role="region"
@@ -220,7 +290,34 @@ export function RemoteBrowserPairing({
         </div>
       </div>
 
-      {pairing && status === "pending" ? (
+      {status === "paired" || status === "trusting" ? (
+        <div className="grid gap-3 rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+          <p className="text-sm leading-6 text-[var(--ui-ink-medium)]">
+            Trusting this device stores a passkey that restores only this exact
+            paired browser profile and scopes. Forge will require Face ID, Touch
+            ID, or the device passcode each time it restores access.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <Button
+              type="button"
+              pending={status === "trusting"}
+              pendingLabel="Verifying this device"
+              onClick={() => void trustPairedBrowser()}
+            >
+              <ShieldCheck className="mr-2 size-4" />
+              Trust this device
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={status === "trusting"}
+              onClick={() => void onPaired()}
+            >
+              Continue without trusting
+            </Button>
+          </div>
+        </div>
+      ) : pairing && status === "pending" ? (
         <div className="grid gap-4 rounded-[18px] bg-[var(--ui-surface-2)] p-4">
           <div>
             <div className="type-label text-[var(--ui-ink-faint)]">
@@ -291,10 +388,23 @@ export function RemoteBrowserPairing({
         <div className="flex flex-wrap gap-3">
           <Button
             type="button"
+            variant="secondary"
+            onClick={() => void restoreTrustedBrowser()}
+            pending={status === "restoring"}
+            pendingLabel="Checking this device"
+          >
+            <ShieldCheck className="mr-2 size-4" />
+            Use a trusted device
+          </Button>
+          <Button
+            type="button"
             onClick={() => void start()}
             pending={status === "starting"}
             pendingLabel="Creating secure request"
-            disabled={status === "limited" && retrySeconds > 0}
+            disabled={
+              status === "restoring" ||
+              (status === "limited" && retrySeconds > 0)
+            }
           >
             <KeyRound className="mr-2 size-4" />
             {status === "limited" && retrySeconds > 0

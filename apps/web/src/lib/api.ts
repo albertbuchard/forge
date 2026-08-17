@@ -360,6 +360,14 @@ const REMOTE_DEVICE_CANCEL_PATH = "/api/v1/auth/device/cancel";
 const REMOTE_MASTER_PASSWORD_APPROVE_PATH =
   "/api/v1/auth/device/master-password/approve";
 const REMOTE_BROWSER_REFRESH_PATH = "/api/v1/auth/browser/refresh";
+const TRUSTED_BROWSER_AUTHENTICATION_OPTIONS_PATH =
+  "/api/v1/auth/trusted-browser/authentication/options";
+const TRUSTED_BROWSER_AUTHENTICATION_VERIFY_PATH =
+  "/api/v1/auth/trusted-browser/authentication/verify";
+const TRUSTED_BROWSER_REGISTRATION_OPTIONS_PATH =
+  "/api/v1/auth/trusted-browser/registration/options";
+const TRUSTED_BROWSER_REGISTRATION_VERIFY_PATH =
+  "/api/v1/auth/trusted-browser/registration/verify";
 const REMOTE_BROWSER_RENEWED_AT_KEY = "forge.browser.renewed-at";
 const REMOTE_BROWSER_RENEWAL_INTERVAL_MS = 12 * 60 * 60 * 1_000;
 
@@ -1198,7 +1206,20 @@ export async function approveRemoteBrowserPairingWithMasterPassword(
   }
 }
 
-export async function pollRemoteBrowserPairing(pairing: RemoteBrowserPairing) {
+type RemoteBrowserPairingPollResult =
+  | { status: "approved"; clientId: string }
+  | {
+      status:
+        | "authorization_pending"
+        | "slow_down"
+        | "access_denied"
+        | "expired_token";
+      intervalSeconds?: number;
+    };
+
+export async function pollRemoteBrowserPairing(
+  pairing: RemoteBrowserPairing
+): Promise<RemoteBrowserPairingPollResult> {
   if (Date.now() >= pairing.expiresAt) {
     return { status: "expired_token" as const };
   }
@@ -1212,7 +1233,10 @@ export async function pollRemoteBrowserPairing(pairing: RemoteBrowserPairing) {
   });
   const body = readResponseObject(polled.body);
   if (polled.response.ok) {
-    if (typeof body?.csrfToken !== "string") {
+    if (
+      typeof body?.csrfToken !== "string" ||
+      typeof body.clientId !== "string"
+    ) {
       throw new ForgeApiError({
         status: 502,
         code: "remote_pairing_exchange_invalid",
@@ -1223,7 +1247,7 @@ export async function pollRemoteBrowserPairing(pairing: RemoteBrowserPairing) {
     }
     rememberBrowserCsrfToken(body.csrfToken);
     rememberRemoteBrowserRenewal();
-    return { status: "approved" as const };
+    return { status: "approved" as const, clientId: body.clientId as string };
   }
   if (
     body?.status === "authorization_pending" ||
@@ -1238,6 +1262,125 @@ export async function pollRemoteBrowserPairing(pairing: RemoteBrowserPairing) {
     return { status: body.status, intervalSeconds };
   }
   throw createApiError(REMOTE_DEVICE_TOKEN_PATH, polled.response, polled.body);
+}
+
+export type TrustedBrowserCredentialSummary = {
+  id: string;
+  label: string;
+  clientId: string;
+  clientName: string;
+  profile: Exclude<RemotePairingReview["requestedProfile"], "operator">;
+  scopes: string[];
+  selectedUserIds: string[];
+  origin: string;
+  relyingPartyId: string;
+  deviceType: "singleDevice" | "multiDevice";
+  backedUp: boolean;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  revocationReason: string | null;
+};
+
+type TrustedBrowserCeremony = {
+  challengeId: string;
+  options: Record<string, unknown>;
+};
+
+export async function beginTrustedBrowserAuthentication() {
+  const started = await sendApiRequest(
+    TRUSTED_BROWSER_AUTHENTICATION_OPTIONS_PATH,
+    { method: "POST", body: JSON.stringify({}) }
+  );
+  if (!started.response.ok) {
+    throw createApiError(
+      TRUSTED_BROWSER_AUTHENTICATION_OPTIONS_PATH,
+      started.response,
+      started.body
+    );
+  }
+  const body = readResponseObject(started.body);
+  if (
+    typeof body?.challengeId !== "string" ||
+    !readResponseObject(body.options)
+  ) {
+    throw new ForgeApiError({
+      status: 502,
+      code: "trusted_browser_options_invalid",
+      message: "Forge returned invalid trusted-device authentication options.",
+      requestPath: TRUSTED_BROWSER_AUTHENTICATION_OPTIONS_PATH,
+      details: []
+    });
+  }
+  return body as TrustedBrowserCeremony;
+}
+
+export async function completeTrustedBrowserAuthentication(input: {
+  challengeId: string;
+  response: unknown;
+}) {
+  const verified = await sendApiRequest(
+    TRUSTED_BROWSER_AUTHENTICATION_VERIFY_PATH,
+    { method: "POST", body: JSON.stringify(input) }
+  );
+  if (!verified.response.ok) {
+    throw createApiError(
+      TRUSTED_BROWSER_AUTHENTICATION_VERIFY_PATH,
+      verified.response,
+      verified.body
+    );
+  }
+  const body = readResponseObject(verified.body);
+  if (
+    typeof body?.csrfToken !== "string" ||
+    typeof body.clientId !== "string"
+  ) {
+    throw new ForgeApiError({
+      status: 502,
+      code: "trusted_browser_exchange_invalid",
+      message: "Forge returned an invalid trusted-device session exchange.",
+      requestPath: TRUSTED_BROWSER_AUTHENTICATION_VERIFY_PATH,
+      details: []
+    });
+  }
+  rememberBrowserCsrfToken(body.csrfToken);
+  rememberRemoteBrowserRenewal();
+  browserSessionBootstrapBlocked = false;
+  return body;
+}
+
+export function beginTrustedBrowserRegistration(input?: {
+  clientId?: string;
+  label?: string;
+}) {
+  return request<TrustedBrowserCeremony>(
+    TRUSTED_BROWSER_REGISTRATION_OPTIONS_PATH,
+    { method: "POST", body: JSON.stringify(input ?? {}) }
+  );
+}
+
+export function completeTrustedBrowserRegistration(input: {
+  clientId?: string;
+  challengeId: string;
+  response: unknown;
+}) {
+  return request<{ credential: TrustedBrowserCredentialSummary }>(
+    TRUSTED_BROWSER_REGISTRATION_VERIFY_PATH,
+    { method: "POST", body: JSON.stringify(input) }
+  );
+}
+
+export function listTrustedBrowserCredentials() {
+  return request<{ credentials: TrustedBrowserCredentialSummary[] }>(
+    "/api/v1/auth/trusted-browser/credentials"
+  );
+}
+
+export function revokeTrustedBrowserCredential(credentialId: string) {
+  return request<{ revoked: boolean }>(
+    `/api/v1/auth/trusted-browser/credentials/${encodeURIComponent(credentialId)}/revoke`,
+    { method: "POST" }
+  );
 }
 
 export async function cancelRemoteBrowserPairing(

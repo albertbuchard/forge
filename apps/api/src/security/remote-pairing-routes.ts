@@ -58,13 +58,13 @@ function cookieValue(request: FastifyRequest, name: string) {
 function secureCookie(
   name: string,
   value: string,
-  options: { maxAgeSeconds: number; path?: string }
+  options: { maxAgeSeconds: number; path?: string; secure?: boolean }
 ) {
   return [
     `${name}=${encodeURIComponent(value)}`,
     `Path=${options.path ?? "/"}`,
     "HttpOnly",
-    "Secure",
+    ...(options.secure === false ? [] : ["Secure"]),
     "SameSite=Strict",
     `Max-Age=${Math.max(1, Math.floor(options.maxAgeSeconds))}`,
     "Priority=High"
@@ -76,6 +76,7 @@ function pairedBrowserCookies(input: {
   sessionAbsoluteExpiresAt: string;
   refreshToken: string;
   clientId: string;
+  secure?: boolean;
 }) {
   const sessionMaximumAgeSeconds = Math.max(
     1,
@@ -85,15 +86,18 @@ function pairedBrowserCookies(input: {
   );
   return [
     secureCookie(BROWSER_SESSION_COOKIE, input.sessionToken, {
-      maxAgeSeconds: sessionMaximumAgeSeconds
+      maxAgeSeconds: sessionMaximumAgeSeconds,
+      secure: input.secure
     }),
     secureCookie(BROWSER_REFRESH_COOKIE, input.refreshToken, {
       maxAgeSeconds: BROWSER_REFRESH_COOKIE_LIFETIME_SECONDS,
-      path: "/api/v1/auth/browser/refresh"
+      path: "/api/v1/auth/browser/refresh",
+      secure: input.secure
     }),
     secureCookie(BROWSER_CLIENT_COOKIE, input.clientId, {
       maxAgeSeconds: BROWSER_REFRESH_COOKIE_LIFETIME_SECONDS,
-      path: "/api/v1/auth/browser/refresh"
+      path: "/api/v1/auth/browser/refresh",
+      secure: input.secure
     })
   ];
 }
@@ -104,7 +108,7 @@ function requireSameTargetBrowserOrigin(
 ) {
   const origin = exactBrowserOrigin(request);
   const expectedOrigin = new URL(runtime.exactTargetUri(request)).origin;
-  if (origin !== expectedOrigin) {
+  if (origin !== expectedOrigin && origin !== runtime.devWebOrigin) {
     throw new HttpError(
       403,
       "browser_refresh_origin_invalid",
@@ -147,6 +151,24 @@ function ownerBrowserSession(request: FastifyRequest) {
       401,
       "pairing_owner_session_required",
       "Forge pairing approval requires an authenticated owner browser session."
+    );
+  }
+  return authentication.browserSession.verified;
+}
+
+function currentBrowserSession(request: FastifyRequest) {
+  const authentication = request.forgeSecurity?.authentication;
+  if (
+    authentication?.mode !== "browser_session" ||
+    !authentication.browserSession ||
+    !["operator_session", "paired_client"].includes(
+      authentication.principal.kind
+    )
+  ) {
+    throw new HttpError(
+      401,
+      "trusted_browser_session_required",
+      "Trusted-device registration requires a current owner or paired-browser session."
     );
   }
   return authentication.browserSession.verified;
@@ -268,6 +290,211 @@ export function registerRemotePairingRoutes(
   }
 ) {
   const { runtime } = input;
+  const trustedBrowserChallengeIdSchema = z
+    .string()
+    .regex(/^tbc_[A-Za-z0-9]{16,160}$/);
+  const trustedBrowserCredentialIdSchema = z
+    .string()
+    .regex(/^tbr_[A-Za-z0-9]{16,160}$/);
+
+  app.post(
+    "/api/v1/auth/trusted-browser/authentication/options",
+    async (request, reply) => {
+      z.object({})
+        .strict()
+        .parse(request.body ?? {});
+      try {
+        const result = await runtime.trustedBrowsers.beginAuthentication({
+          origin: requireSameTargetBrowserOrigin(request, runtime),
+          networkPartition: runtime.pairingNetworkPartitions.consume(
+            runtime.pairingNetworkPartitions.observe(request)
+          )
+        });
+        reply.header("cache-control", "no-store");
+        return result;
+      } catch {
+        throw new HttpError(
+          403,
+          "trusted_browser_authentication_rejected",
+          "Forge could not start trusted-device authentication on this origin."
+        );
+      }
+    }
+  );
+
+  app.post(
+    "/api/v1/auth/trusted-browser/authentication/verify",
+    async (request, reply) => {
+      const body = z
+        .object({
+          challengeId: trustedBrowserChallengeIdSchema,
+          response: z.unknown()
+        })
+        .strict()
+        .parse(request.body ?? {});
+      try {
+        const origin = new URL(
+          requireSameTargetBrowserOrigin(request, runtime)
+        );
+        const secure = origin.protocol === "https:";
+        if (!secure && !isDirectLocalTransport(request)) {
+          throw new Error("Loopback restoration requires direct transport.");
+        }
+        const restored = await runtime.trustedBrowsers.finishAuthentication({
+          origin: origin.origin,
+          challengeId: body.challengeId,
+          response: body.response
+        });
+        const principal = pairedPrincipal(restored.client);
+        const session = runtime.browserSessions.create(principal);
+        const refresh = runtime.refreshFamilies.issue({
+          clientId: restored.client.id,
+          ownerId: principal.ownerId,
+          installationId: runtime.installationId,
+          audience: runtime.audience,
+          profile: principal.profile,
+          keyThumbprint: restored.client.keyThumbprint,
+          scopes: principal.scopes,
+          ownerSecurityEpoch: principal.ownerSecurityEpoch,
+          clientSecurityEpoch: principal.clientSecurityEpoch!
+        });
+        reply.header(
+          "set-cookie",
+          pairedBrowserCookies({
+            sessionToken: session.sessionToken,
+            sessionAbsoluteExpiresAt: session.absoluteExpiresAt,
+            refreshToken: refresh.refreshToken,
+            clientId: restored.client.id,
+            secure
+          })
+        );
+        reply.header("cache-control", "no-store");
+        reply.header("pragma", "no-cache");
+        return {
+          session: {
+            id: session.sessionId,
+            absoluteExpiresAt: session.absoluteExpiresAt
+          },
+          csrfToken: session.csrfToken,
+          clientId: restored.client.id,
+          profile: restored.client.profile,
+          scopes: restored.client.scopes,
+          credential: restored.credential
+        };
+      } catch {
+        throw new HttpError(
+          401,
+          "trusted_browser_authentication_rejected",
+          "Forge could not restore a trusted browser. Re-pair this browser if its authority changed or the credential is unavailable."
+        );
+      }
+    }
+  );
+
+  app.post(
+    "/api/v1/auth/trusted-browser/registration/options",
+    async (request, reply) => {
+      const body = z
+        .object({
+          clientId: browserClientIdSchema.optional(),
+          label: z.string().trim().min(1).max(120).optional()
+        })
+        .strict()
+        .parse(request.body ?? {});
+      try {
+        const result = await runtime.trustedBrowsers.beginRegistration({
+          session: currentBrowserSession(request),
+          origin: requireSameTargetBrowserOrigin(request, runtime),
+          directLocalTransport: isDirectLocalTransport(request),
+          clientId: body.clientId,
+          label: body.label
+        });
+        reply.header("cache-control", "no-store");
+        return result;
+      } catch (error) {
+        throw new HttpError(
+          403,
+          "trusted_browser_registration_rejected",
+          error instanceof Error
+            ? error.message
+            : "Forge could not start trusted-device registration."
+        );
+      }
+    }
+  );
+
+  app.post(
+    "/api/v1/auth/trusted-browser/registration/verify",
+    async (request, reply) => {
+      const body = z
+        .object({
+          clientId: browserClientIdSchema.optional(),
+          challengeId: trustedBrowserChallengeIdSchema,
+          response: z.unknown()
+        })
+        .strict()
+        .parse(request.body ?? {});
+      try {
+        const credential = await runtime.trustedBrowsers.finishRegistration({
+          session: currentBrowserSession(request),
+          origin: requireSameTargetBrowserOrigin(request, runtime),
+          directLocalTransport: isDirectLocalTransport(request),
+          clientId: body.clientId,
+          challengeId: body.challengeId,
+          response: body.response
+        });
+        reply.header("cache-control", "no-store");
+        return { credential };
+      } catch (error) {
+        throw new HttpError(
+          403,
+          "trusted_browser_registration_rejected",
+          error instanceof Error
+            ? error.message
+            : "Forge rejected trusted-device registration."
+        );
+      }
+    }
+  );
+
+  app.post("/api/v1/auth/trusted-browser/status", async (request, reply) => {
+    z.object({})
+      .strict()
+      .parse(request.body ?? {});
+    const result = runtime.trustedBrowsers.status({
+      session: currentBrowserSession(request),
+      origin: requireSameTargetBrowserOrigin(request, runtime)
+    });
+    reply.header("cache-control", "no-store");
+    return result;
+  });
+
+  app.get(
+    "/api/v1/auth/trusted-browser/credentials",
+    async (request, reply) => {
+      ownerBrowserSession(request);
+      reply.header("cache-control", "no-store");
+      return { credentials: runtime.trustedBrowsers.list(input.ownerId) };
+    }
+  );
+
+  app.post(
+    "/api/v1/auth/trusted-browser/credentials/:id/revoke",
+    async (request) => {
+      ownerBrowserSession(request);
+      const { id } = z
+        .object({ id: trustedBrowserCredentialIdSchema })
+        .parse(request.params);
+      if (!runtime.trustedBrowsers.revoke(input.ownerId, id)) {
+        throw new HttpError(
+          404,
+          "trusted_browser_credential_not_found",
+          "Forge found no active trusted-device credential with that identifier."
+        );
+      }
+      return { revoked: true };
+    }
+  );
   const remoteMachineScopesAvailable =
     input.remoteMachineScopesAvailable === true;
 
@@ -318,7 +545,17 @@ export function registerRemotePairingRoutes(
   });
 
   app.post("/api/v1/auth/browser/refresh", async (request, reply) => {
-    requireSameTargetBrowserOrigin(request, runtime);
+    const browserOrigin = new URL(
+      requireSameTargetBrowserOrigin(request, runtime)
+    );
+    const secure = browserOrigin.protocol === "https:";
+    if (!secure && !isDirectLocalTransport(request)) {
+      throw new HttpError(
+        403,
+        "browser_refresh_transport_invalid",
+        "Loopback browser renewal requires a direct local connection."
+      );
+    }
     const refreshToken = cookieValue(request, BROWSER_REFRESH_COOKIE);
     const clientIdValue = cookieValue(request, BROWSER_CLIENT_COOKIE);
     const parsedClientId = browserClientIdSchema.safeParse(clientIdValue);
@@ -386,7 +623,8 @@ export function registerRemotePairingRoutes(
         sessionToken: session.sessionToken,
         sessionAbsoluteExpiresAt: session.absoluteExpiresAt,
         refreshToken: rotated.refreshToken,
-        clientId: client.id
+        clientId: client.id,
+        secure
       })
     );
     reply.header("cache-control", "no-store");

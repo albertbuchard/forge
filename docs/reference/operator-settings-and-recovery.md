@@ -22,7 +22,7 @@ section is loading or when that section has a retryable error.
 | Models    | `/settings/models`   | Model providers, credentials, defaults, and health checks.                 |
 | Agents    | `/settings/agents`   | Agent identities, sessions, scopes, tokens, and approvals.                 |
 | Rewards   | `/settings/rewards`  | Progression rules, assets, and reward controls.                            |
-| KarpaWiki | `/settings/wiki`     | Wiki spaces, index health, ingest behavior, and reindexing.                 |
+| KarpaWiki | `/settings/wiki`     | Wiki spaces, index health, ingest behavior, and reindexing.                |
 | Logs      | `/settings/logs`     | Bounded runtime diagnostics and recovery evidence.                         |
 | Bin       | `/settings/bin`      | Soft-deleted records available for deliberate recovery.                    |
 
@@ -108,6 +108,31 @@ Argon2id using 19 MiB of memory, two operations, and parallelism one after an
 installation-keyed secret digest. The database stores only the salt and
 verifier. Remote attempts are limited to five per owner and network partition
 in five minutes. The remote page does not save the submitted password.
+
+### Trusted-Device Browser Restoration
+
+After a remote browser finishes ordinary pairing, Forge offers two explicit
+choices: **Trust this device** or **Continue without trusting**. Trust is never
+created by network reachability, pairing approval alone, or a background
+prompt. The browser creates a discoverable WebAuthn credential only after the
+user chooses the trust action and completes Face ID, Touch ID, Windows Hello,
+or the device passcode.
+
+On a later visit, choose **Use a trusted device** before starting another
+pairing request. Successful user verification restores the same paired-browser
+client, profile, and scopes through the normal browser-session and refresh
+mechanisms. It cannot restore a local-owner or operator session, widen scopes,
+or create a new client grant. If WebAuthn is unavailable, declined, expired, or
+revoked, start ordinary browser pairing instead.
+
+**Settings → Agents** lists active and revoked trusted-device credentials with
+their paired client, profile, scopes, creation time, last verification time,
+and whether the authenticator reports a synced passkey. Revoking trust removes
+only that restoration credential. Revoking or changing the paired client,
+recovering the owner, or replacing the Forge installation also invalidates its
+trust automatically. A synced passkey can be available on more than one device,
+so the label describes the credential rather than proving one physical device
+identity.
 
 ## Model Health
 

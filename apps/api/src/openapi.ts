@@ -13821,6 +13821,13 @@ export function buildOpenApiDocument() {
           in: "cookie",
           name: "forge_operator_session",
           description: "Trusted local operator session cookie."
+        },
+        browserSession: {
+          type: "apiKey",
+          in: "cookie",
+          name: "forge_session",
+          description:
+            "Forge browser session. Individual routes still enforce whether the principal must be the local owner or may be a paired browser."
         }
       },
       schemas: {

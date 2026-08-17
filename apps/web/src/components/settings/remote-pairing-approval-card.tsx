@@ -4,7 +4,7 @@ import {
   startRegistration
 } from "@simplewebauthn/browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clock3, ShieldCheck, ShieldX } from "lucide-react";
+import { Clock3, KeyRound, ShieldCheck, ShieldX } from "lucide-react";
 
 import {
   REMOTE_PAIRING_REQUESTS_QUERY_KEY,
@@ -19,11 +19,16 @@ import {
   completePrivilegedPairingStepUp,
   denyRemotePairingRequest,
   listRemoteClients,
+  listTrustedBrowserCredentials,
   revokeRemoteClient,
+  revokeTrustedBrowserCredential,
   type RemotePairingRequest
 } from "@/lib/api";
 
 const REMOTE_CLIENTS_QUERY_KEY = ["forge-security-clients"] as const;
+const TRUSTED_BROWSER_CREDENTIALS_QUERY_KEY = [
+  "forge-trusted-browser-credentials"
+] as const;
 
 function requiresOwnerStepUp(review: RemotePairingRequest) {
   return (
@@ -124,6 +129,10 @@ export function RemotePairingApprovalCard() {
         : false,
     refetchIntervalInBackground: false
   });
+  const trustedCredentialsQuery = useQuery({
+    queryKey: TRUSTED_BROWSER_CREDENTIALS_QUERY_KEY,
+    queryFn: listTrustedBrowserCredentials
+  });
   const revokeMutation = useMutation({
     mutationFn: revokeRemoteClient,
     onSuccess: async () => {
@@ -133,6 +142,14 @@ export function RemotePairingApprovalCard() {
         }),
         queryClient.invalidateQueries({ queryKey: REMOTE_CLIENTS_QUERY_KEY })
       ]);
+    }
+  });
+  const revokeTrustedCredentialMutation = useMutation({
+    mutationFn: revokeTrustedBrowserCredential,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: TRUSTED_BROWSER_CREDENTIALS_QUERY_KEY
+      });
     }
   });
 
@@ -349,6 +366,103 @@ export function RemotePairingApprovalCard() {
           {message}
         </p>
       ) : null}
+
+      <div className="mt-6 border-t border-[var(--ui-border-subtle)] pt-4">
+        <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+          Trusted devices
+        </div>
+        <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-muted)]">
+          A trusted device can restore only the exact paired-browser profile and
+          scopes recorded when it was trusted. Restoration still requires Face
+          ID, Touch ID, or the device passcode. Revoking a paired client also
+          revokes every trusted-device credential attached to it.
+        </p>
+        <div className="mt-3 grid gap-3">
+          {trustedCredentialsQuery.isLoading ? (
+            <p className="text-sm text-[var(--ui-ink-muted)]">
+              Loading trusted devices…
+            </p>
+          ) : trustedCredentialsQuery.isError ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-sm text-[var(--danger)]">
+                Trusted devices could not be loaded.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => void trustedCredentialsQuery.refetch()}
+              >
+                Retry
+              </Button>
+            </div>
+          ) : trustedCredentialsQuery.data?.credentials.length ? (
+            trustedCredentialsQuery.data.credentials.map((credential) => (
+              <div
+                key={credential.id}
+                className="flex flex-col gap-3 rounded-[18px] bg-[var(--ui-surface-2)] p-4 sm:flex-row sm:items-start sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <KeyRound className="size-4" aria-hidden="true" />
+                    <strong className="text-[var(--ui-ink-strong)]">
+                      {credential.label}
+                    </strong>
+                    <Badge>{credential.profile.replaceAll("_", " ")}</Badge>
+                    <Badge>
+                      {credential.deviceType === "multiDevice"
+                        ? credential.backedUp
+                          ? "synced passkey"
+                          : "multi-device passkey"
+                        : "this authenticator"}
+                    </Badge>
+                    {credential.revokedAt ? <Badge>revoked</Badge> : null}
+                  </div>
+                  <p className="mt-2 text-sm text-[var(--ui-ink-medium)]">
+                    {credential.clientName}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {credential.scopes.map((scope) => (
+                      <Badge key={scope}>{scope}</Badge>
+                    ))}
+                  </div>
+                  <p className="mt-2 break-all text-xs leading-5 text-[var(--ui-ink-muted)]">
+                    Trusted {new Date(credential.createdAt).toLocaleString()}
+                    {credential.lastUsedAt
+                      ? ` · last verified ${new Date(credential.lastUsedAt).toLocaleString()}`
+                      : " · not yet used to restore access"}
+                    {credential.revocationReason
+                      ? ` · ${credential.revocationReason.replaceAll("_", " ")}`
+                      : ""}
+                  </p>
+                </div>
+                {!credential.revokedAt ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    pending={
+                      revokeTrustedCredentialMutation.isPending &&
+                      revokeTrustedCredentialMutation.variables ===
+                        credential.id
+                    }
+                    pendingLabel="Revoking"
+                    onClick={() =>
+                      revokeTrustedCredentialMutation.mutate(credential.id)
+                    }
+                  >
+                    Revoke trust
+                  </Button>
+                ) : null}
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-[var(--ui-ink-muted)]">
+              No browser has been trusted for user-verified restoration.
+            </p>
+          )}
+        </div>
+      </div>
 
       <div className="mt-6 border-t border-[var(--ui-border-subtle)] pt-4">
         <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">

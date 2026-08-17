@@ -2,9 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   authorizePreparedLocalBrowser,
   beginRemoteBrowserPairing,
+  beginTrustedBrowserAuthentication,
   cancelRemoteBrowserPairing,
   cancelRemoteBrowserPairingOnPageExit,
   claimTaskRun,
+  completeTrustedBrowserAuthentication,
   createCalendarConnection,
   createGoal,
   createProject,
@@ -207,7 +209,8 @@ describe("remote browser pairing client", () => {
           userCode: "BCDF-GHJK",
           verificationUri: "/forge/pair",
           expiresIn: 600,
-          interval: 5
+          interval: 5,
+          masterPasswordAvailable: false
         })
       )
       .mockResolvedValueOnce(
@@ -241,7 +244,10 @@ describe("remote browser pairing client", () => {
     expect(localStorage.length).toBe(0);
 
     const approved = await pollRemoteBrowserPairing(pairing);
-    expect(approved).toEqual({ status: "approved" });
+    expect(approved).toEqual({
+      status: "approved",
+      clientId: "client_remote_browser"
+    });
     expect(localStorage.getItem("forge.browser.csrf")).toBe(
       `fg_csrf_${"B".repeat(43)}`
     );
@@ -269,6 +275,59 @@ describe("remote browser pairing client", () => {
     expect(protectedHeader.jwk).not.toHaveProperty("d");
 
     await cancelRemoteBrowserPairing(pairing);
+  });
+
+  it("restores a trusted browser without invoking local-owner bootstrap", async () => {
+    vi.stubGlobal("window", {
+      location: {
+        origin: "https://forge.example.test",
+        protocol: "https:",
+        hostname: "forge.example.test"
+      }
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          challengeId: "tbc_1234567890123456",
+          options: {
+            challenge: "challenge",
+            rpId: "forge.example.test",
+            allowCredentials: [],
+            userVerification: "required"
+          }
+        })
+      )
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          csrfToken: `fg_csrf_${"T".repeat(43)}`,
+          clientId: "client_trusted_browser",
+          profile: "trusted_personal_assistant",
+          scopes: ["read", "write"]
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const ceremony = await beginTrustedBrowserAuthentication();
+    expect(ceremony.options.allowCredentials).toEqual([]);
+    await completeTrustedBrowserAuthentication({
+      challengeId: ceremony.challengeId,
+      response: { id: "discoverable-credential" }
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]![0]).toContain(
+      "/api/v1/auth/trusted-browser/authentication/options"
+    );
+    expect(fetchMock.mock.calls[1]![0]).toContain(
+      "/api/v1/auth/trusted-browser/authentication/verify"
+    );
+    expect(localStorage.getItem("forge.browser.csrf")).toBe(
+      `fg_csrf_${"T".repeat(43)}`
+    );
+    expect(
+      Number(localStorage.getItem("forge.browser.renewed-at"))
+    ).toBeGreaterThan(0);
   });
 
   it("turns the operator-session 401 into the secure remote pairing journey", async () => {
@@ -416,7 +475,8 @@ describe("remote browser pairing client", () => {
           userCode: "JKLM-NPQR",
           verificationUri: "/forge/pair",
           expiresIn: 180,
-          interval: 5
+          interval: 5,
+          masterPasswordAvailable: false
         })
       )
       .mockResolvedValueOnce(mockJsonResponse({ cancelled: true }));

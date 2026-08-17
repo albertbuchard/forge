@@ -56,6 +56,7 @@ import {
 } from "./security-runtime.js";
 import { FileSigningKeyProvider } from "./signing-key-provider.js";
 import { SqliteSecurityStore } from "./sqlite-security-store.js";
+import { TrustedBrowserService } from "./trusted-browser-service.js";
 
 const BROWSER_SESSION_COOKIE = "forge_session";
 const BROWSER_CSRF_HEADER = "x-forge-csrf";
@@ -88,6 +89,7 @@ export type ApplicationSecurityRuntime = {
   issuer: string;
   audience: string;
   canonicalExternalOrigin: string | null;
+  devWebOrigin: string | null;
   store: SqliteSecurityStore;
   signingKeys: FileSigningKeyProvider;
   accessCredentials: AccessCredentialService;
@@ -97,6 +99,7 @@ export type ApplicationSecurityRuntime = {
   pairingNetworkPartitions: PairingNetworkPartitionAuthority<FastifyRequest>;
   masterPasswords: MasterPasswordService<FastifyRequest>;
   privilegedPairingStepUp: PrivilegedPairingStepUp;
+  trustedBrowsers: TrustedBrowserService;
   refreshFamilies: RefreshFamilyService;
   localOwnerSessions: LocalOwnerSessionCoordinator | null;
   ownerBrokerBinaryPath: string | null;
@@ -328,6 +331,30 @@ export function resolveCanonicalExternalOrigin(
   }
 }
 
+export function resolveApplicationDevWebOrigin(
+  value: string | null | undefined
+) {
+  const candidate = value?.trim();
+  if (!candidate) return null;
+  try {
+    const parsed = new URL(candidate);
+    if (
+      !["http:", "https:"].includes(parsed.protocol) ||
+      parsed.username ||
+      parsed.password ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      throw new Error("invalid development web origin");
+    }
+    return parsed.origin;
+  } catch {
+    throw new Error(
+      "FORGE_DEV_WEB_ORIGIN must be an HTTP or HTTPS URL without credentials, query, or fragment."
+    );
+  }
+}
+
 export function exactApplicationSecurityTargetUri(
   request: FastifyRequest,
   canonicalExternalOrigin: string | null = null
@@ -444,6 +471,7 @@ export async function initializeApplicationSecurityRuntime(input: {
   platformOwnerKeyPath?: string | null;
   platformOwnerKeySha256?: string | null;
   canonicalExternalOrigin?: string | null;
+  devWebOrigin?: string | null;
   protocolVerifiers?: ApplicationProtocolVerifiers;
   authorizeLegacyToken?: (
     token: NonNullable<AuthContext["token"]>,
@@ -468,6 +496,9 @@ export async function initializeApplicationSecurityRuntime(input: {
   const audience = `${issuer}:api`;
   const canonicalExternalOrigin = resolveCanonicalExternalOrigin(
     input.canonicalExternalOrigin ?? process.env.FORGE_CANONICAL_EXTERNAL_ORIGIN
+  );
+  const devWebOrigin = resolveApplicationDevWebOrigin(
+    input.devWebOrigin ?? process.env.FORGE_DEV_WEB_ORIGIN
   );
   const pairingReview = (request: PairingRequest) =>
     createServerPairingReview({
@@ -513,6 +544,14 @@ export async function initializeApplicationSecurityRuntime(input: {
     store,
     browserSessions
   });
+  const trustedBrowsers = new TrustedBrowserService(
+    input.database,
+    systemSecurityClock,
+    input.secrets,
+    store,
+    installationId,
+    input.dataDirectory
+  );
   const pairingOwnerAuthorizations = new PairingOwnerAuthorizationService(
     systemSecurityClock,
     digester,
@@ -802,6 +841,7 @@ export async function initializeApplicationSecurityRuntime(input: {
     issuer,
     audience,
     canonicalExternalOrigin,
+    devWebOrigin,
     store,
     signingKeys,
     accessCredentials,
@@ -811,6 +851,7 @@ export async function initializeApplicationSecurityRuntime(input: {
     pairingNetworkPartitions,
     masterPasswords,
     privilegedPairingStepUp,
+    trustedBrowsers,
     refreshFamilies,
     localOwnerSessions,
     ownerBrokerBinaryPath,

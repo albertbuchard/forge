@@ -38,6 +38,7 @@ import {
   type OpaqueSecretSource,
   type SecurityClock
 } from "./security-runtime.js";
+import { SECURITY_TRUSTED_BROWSER_SCHEMA_SQL } from "./trusted-browser-schema.js";
 
 export const SECURITY_CREDENTIAL_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS security_owners (
@@ -457,6 +458,7 @@ export class SqliteSecurityStore
     this.database.exec("PRAGMA busy_timeout = 5000;");
     this.database.exec(SECURITY_CREDENTIAL_SCHEMA_SQL);
     this.database.exec(SECURITY_PAIRING_CLIENT_METADATA_SCHEMA_SQL);
+    this.database.exec(SECURITY_TRUSTED_BROWSER_SCHEMA_SQL);
   }
 
   ensureOwner(ownerId: string) {

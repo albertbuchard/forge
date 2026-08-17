@@ -37,6 +37,8 @@ const BOUNDED_AUTH_PROTOCOL_ROUTES = new Set([
   "POST /api/v1/auth/device/master-password/approve",
   "POST /api/v1/auth/token",
   "POST /api/v1/auth/browser/refresh",
+  "POST /api/v1/auth/trusted-browser/authentication/options",
+  "POST /api/v1/auth/trusted-browser/authentication/verify",
   "POST /api/v1/auth/local/begin",
   "POST /api/v1/auth/local/exchange",
   "POST /api/v1/auth/local/browser/begin",

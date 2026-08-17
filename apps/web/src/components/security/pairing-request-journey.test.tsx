@@ -21,7 +21,9 @@ import {
   completePrivilegedPairingStepUp,
   denyRemotePairingRequest,
   listRemoteClients,
-  listRemotePairingRequests
+  listTrustedBrowserCredentials,
+  listRemotePairingRequests,
+  revokeTrustedBrowserCredential
 } from "@/lib/api";
 
 vi.mock("@simplewebauthn/browser", () => ({
@@ -36,7 +38,9 @@ vi.mock("@/lib/api", () => ({
   denyRemotePairingRequest: vi.fn(),
   listRemoteClients: vi.fn(),
   listRemotePairingRequests: vi.fn(),
-  revokeRemoteClient: vi.fn()
+  listTrustedBrowserCredentials: vi.fn(),
+  revokeRemoteClient: vi.fn(),
+  revokeTrustedBrowserCredential: vi.fn()
 }));
 
 const request = {
@@ -120,6 +124,9 @@ describe("secure pairing request journey", () => {
             ]
     }));
     vi.mocked(listRemoteClients).mockImplementation(async () => ({ clients }));
+    vi.mocked(listTrustedBrowserCredentials).mockResolvedValue({
+      credentials: []
+    });
     vi.mocked(approveRemotePairingRequest).mockImplementation(
       async (requestId) => {
         requestStatus = "approved";
@@ -221,6 +228,67 @@ describe("secure pairing request journey", () => {
     expect(await screen.findByText(/no device is waiting/i)).toBeVisible();
   });
 
+  it("lists synced passkeys and revokes the exact trusted credential", async () => {
+    vi.mocked(listTrustedBrowserCredentials).mockResolvedValue({
+      credentials: [
+        {
+          id: "tbr_1234567890123456",
+          label: "Example iPhone",
+          clientId: "client_12345678-1234-1234-1234-123456789012",
+          clientName: "Safari on iPhone",
+          profile: "trusted_personal_assistant",
+          scopes: ["read", "write"],
+          selectedUserIds: [],
+          origin: "https://forge.example.test",
+          relyingPartyId: "forge.example.test",
+          deviceType: "multiDevice",
+          backedUp: true,
+          createdAt: "2026-08-18T08:00:00.000Z",
+          lastUsedAt: null,
+          revokedAt: null,
+          revocationReason: null
+        }
+      ]
+    });
+    vi.mocked(revokeTrustedBrowserCredential).mockResolvedValue({
+      revoked: true
+    });
+
+    renderWithProviders(<RemotePairingApprovalCard />);
+
+    expect(await screen.findByText("Example iPhone")).toBeVisible();
+    expect(screen.getByText("synced passkey")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Revoke trust" }));
+    await waitFor(() => {
+      expect(revokeTrustedBrowserCredential).toHaveBeenCalledWith(
+        "tbr_1234567890123456",
+        expect.anything()
+      );
+    });
+  });
+
+  it("keeps Settings usable and offers Retry when trusted-device inventory fails", async () => {
+    vi.mocked(listTrustedBrowserCredentials).mockRejectedValueOnce(
+      new Error("inventory unavailable")
+    );
+
+    renderWithProviders(<RemotePairingApprovalCard />);
+
+    expect(
+      await screen.findByText("Trusted devices could not be loaded.")
+    ).toBeVisible();
+    expect(screen.getByText("Forge Companion on iPhone")).toBeVisible();
+    vi.mocked(listTrustedBrowserCredentials).mockResolvedValueOnce({
+      credentials: []
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(
+      await screen.findByText(
+        "No browser has been trusted for user-verified restoration."
+      )
+    ).toBeVisible();
+  });
+
   it("uses one passkey step-up to approve the exact elevated request", async () => {
     const elevatedRequest = {
       ...request,
@@ -251,9 +319,7 @@ describe("secure pairing request journey", () => {
       screen.getByLabelText(/short code shown on Forge Companion on iPhone/i),
       { target: { value: "BCDF-GHJK" } }
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Verify and approve" })
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Verify and approve" }));
 
     await waitFor(() => {
       expect(beginPrivilegedPairingStepUp).toHaveBeenCalledWith("BCDF-GHJK");

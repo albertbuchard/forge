@@ -273,6 +273,214 @@ test("remote API client pairs once, renews with DPoP, and is denied after revoca
   }
 });
 
+test("trusted-browser start is non-enumerating, origin-bound, and cannot bypass owner management auth", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "forge-trusted-browser-"));
+  const app = await buildServer({
+    dataRoot: root,
+    seedDemoData: false,
+    taskRunWatchdog: false,
+    devrageMetricSync: false,
+    peerRuntime: false
+  });
+  try {
+    const started = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/trusted-browser/authentication/options",
+      headers: { host: "127.0.0.1", origin: "http://127.0.0.1" },
+      payload: {}
+    });
+    assert.equal(started.statusCode, 200, started.body);
+    const challenge = started.json<{
+      challengeId: string;
+      options: { allowCredentials: unknown[]; userVerification: string };
+    }>();
+    assert.match(challenge.challengeId, /^tbc_[A-Za-z0-9]{16,160}$/);
+    assert.deepEqual(challenge.options.allowCredentials, []);
+    assert.equal(challenge.options.userVerification, "required");
+    assert.doesNotMatch(
+      started.body,
+      /client_[A-Za-z0-9-]{16,180}|credentialId|clientName|scopes/
+    );
+
+    const rejected = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/trusted-browser/authentication/verify",
+      headers: { host: "127.0.0.1", origin: "http://127.0.0.1" },
+      payload: {
+        challengeId: challenge.challengeId,
+        response: {
+          id: "not-a-real-credential",
+          rawId: "not-a-real-credential",
+          type: "public-key",
+          response: {},
+          clientExtensionResults: {}
+        }
+      }
+    });
+    assert.equal(rejected.statusCode, 401, rejected.body);
+    assert.equal(
+      rejected.json<{ code: string }>().code,
+      "trusted_browser_authentication_rejected"
+    );
+    assert.doesNotMatch(
+      rejected.body,
+      /client_|authority_digest|credential_id/
+    );
+
+    const wrongOrigin = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/trusted-browser/authentication/options",
+      headers: { host: "127.0.0.1", origin: "http://localhost" },
+      payload: {}
+    });
+    assert.equal(wrongOrigin.statusCode, 403, wrongOrigin.body);
+    assert.equal(
+      wrongOrigin.json<{ code: string }>().code,
+      "trusted_browser_authentication_rejected"
+    );
+
+    const managementDenied = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/trusted-browser/credentials",
+      headers: { host: "127.0.0.1" }
+    });
+    assert.equal(managementDenied.statusCode, 401, managementDenied.body);
+  } finally {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("successful trusted restoration issues a non-operator browser session and refresh family", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "forge-trusted-route-"));
+  let runtime!: ApplicationSecurityRuntime;
+  const app = await buildServer({
+    dataRoot: root,
+    seedDemoData: false,
+    taskRunWatchdog: false,
+    devrageMetricSync: false,
+    peerRuntime: false,
+    onSecurityRuntimeReady(value) {
+      runtime = value;
+    }
+  });
+  try {
+    const key = await clientKey();
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/device",
+      headers: { host: "127.0.0.1" },
+      payload: {
+        clientName: "Trusted route browser",
+        clientType: "browser",
+        clientKeyThumbprint: key.thumbprint,
+        requestedScopes: ["read"],
+        requestedProfile: "viewer"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 200, pairingResponse.body);
+    const pairing = runtime.store.readPairingRequest(
+      pairingResponse.json<{ requestId: string }>().requestId
+    );
+    assert.ok(pairing);
+    const clientId = "client_trusted-route-000001";
+    runtime.store.registerClient({
+      id: clientId,
+      ownerId: pairing.ownerId,
+      subjectId: pairing.id,
+      installationId: runtime.installationId,
+      keyThumbprint: key.thumbprint,
+      audience: runtime.audience,
+      profile: "viewer",
+      scopes: ["profile:viewer", "read"]
+    });
+    const client = runtime.store.readClient(clientId);
+    assert.ok(client);
+    runtime.trustedBrowsers.finishAuthentication = async () => ({
+      client,
+      credential: {
+        id: "tbr_1234567890123456",
+        label: "Trusted route browser",
+        clientId,
+        clientName: "Trusted route browser",
+        profile: "viewer" as const,
+        scopes: ["profile:viewer", "read"],
+        selectedUserIds: [],
+        origin: "http://127.0.0.1",
+        relyingPartyId: "127.0.0.1",
+        deviceType: "singleDevice" as const,
+        backedUp: false,
+        createdAt: "2026-08-18T08:00:00.000Z",
+        lastUsedAt: "2026-08-18T08:01:00.000Z",
+        revokedAt: null,
+        revocationReason: null
+      }
+    });
+
+    const restored = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/trusted-browser/authentication/verify",
+      headers: { host: "127.0.0.1", origin: "http://127.0.0.1" },
+      payload: {
+        challengeId: "tbc_1234567890123456",
+        response: { id: "route-verified-by-service" }
+      }
+    });
+    assert.equal(restored.statusCode, 200, restored.body);
+    assert.equal(
+      restored.json<{ profile: string; clientId: string }>().profile,
+      "viewer"
+    );
+    assert.equal(
+      restored.json<{ profile: string; clientId: string }>().clientId,
+      clientId
+    );
+    assert.doesNotMatch(restored.body, /operator/);
+    const cookies = String(restored.headers["set-cookie"]);
+    assert.match(cookies, /forge_session=/);
+    assert.match(cookies, /forge_browser_refresh=/);
+    assert.match(cookies, /forge_browser_client=/);
+    assert.doesNotMatch(cookies, /; Secure/);
+  } finally {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("trusted-browser WebAuthn accepts the validated source-backed Vite origin", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "forge-trusted-vite-"));
+  const previousDevWebOrigin = process.env.FORGE_DEV_WEB_ORIGIN;
+  process.env.FORGE_DEV_WEB_ORIGIN = "http://127.0.0.1:3027/forge/";
+  const app = await buildServer({
+    dataRoot: root,
+    seedDemoData: false,
+    taskRunWatchdog: false,
+    devrageMetricSync: false,
+    peerRuntime: false
+  });
+  try {
+    const started = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/trusted-browser/authentication/options",
+      headers: { host: "127.0.0.1:4317", origin: "http://127.0.0.1:3027" },
+      payload: {}
+    });
+    assert.equal(started.statusCode, 200, started.body);
+    assert.equal(
+      started.json<{ options: { rpId: string } }>().options.rpId,
+      "127.0.0.1"
+    );
+  } finally {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+    if (previousDevWebOrigin === undefined) {
+      delete process.env.FORGE_DEV_WEB_ORIGIN;
+    } else {
+      process.env.FORGE_DEV_WEB_ORIGIN = previousDevWebOrigin;
+    }
+  }
+});
+
 test("local owner lists exact requests, approves one real client, and can clear an abandoned request", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "forge-exact-pairing-"));
   let runtime!: ApplicationSecurityRuntime;
@@ -592,21 +800,14 @@ test("local owner lists exact requests, approves one real client, and can clear 
       headers: ownerHeaders,
       payload: { userCode: boundary.userCode }
     });
-    assert.equal(
-      boundaryApproved.statusCode,
-      200,
-      boundaryApproved.body
-    );
+    assert.equal(boundaryApproved.statusCode, 200, boundaryApproved.body);
     const boundaryApprovalBody = boundaryApproved.json<{
       scopes: string[];
     }>();
     assert.equal(boundaryApprovalBody.scopes.length, 33);
     assert.equal(
-      (
-        approveSchema.properties?.scopes as
-          | { maxItems?: number }
-          | undefined
-      )?.maxItems,
+      (approveSchema.properties?.scopes as { maxItems?: number } | undefined)
+        ?.maxItems,
       33
     );
   } finally {
