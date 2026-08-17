@@ -109,4 +109,20 @@ test("verified principals preserve selected-user authority with legacy empty-own
   const legacy = manager.authenticate(legacyHeaders);
   assert.deepEqual(legacy.token?.scopePolicy.userIds, [principal.ownerId]);
   assert.deepEqual(legacy.scope.userIds, [principal.ownerId]);
+
+  for (const malformed of [
+    ["   "],
+    ["x".repeat(129)],
+    ["user_selected", "   "]
+  ]) {
+    const malformedHeaders = {};
+    manager.bindVerifiedPrincipal(malformedHeaders, {
+      ...principal,
+      selectedUserIds: malformed
+    });
+    assert.throws(
+      () => manager.authenticate(malformedHeaders),
+      /rejected malformed selected-user authority/
+    );
+  }
 });

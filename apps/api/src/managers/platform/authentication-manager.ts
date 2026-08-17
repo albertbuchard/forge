@@ -17,9 +17,13 @@ function resolveVerifiedUserScope(principal: ForgePrincipal) {
   if (!selected || selected.length === 0) {
     return [principal.ownerId];
   }
-  return [...new Set(selected.map((value) => value.trim()))]
-    .filter((value) => value.length > 0 && value.length <= 128)
-    .sort();
+  const normalized = selected.map((value) => value.trim());
+  if (normalized.some((value) => value.length === 0 || value.length > 128)) {
+    throw new Error(
+      "Forge rejected malformed selected-user authority before application authentication."
+    );
+  }
+  return [...new Set(normalized)].sort();
 }
 
 export class AuthenticationManager extends AbstractManager {
