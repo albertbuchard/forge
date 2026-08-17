@@ -826,7 +826,13 @@ export function registerRemotePairingRoutes(
         .object({ requestId: pairingRequestIdSchema })
         .parse(request.params);
       const body = z
-        .object({ userCode: z.string().trim().min(8).max(64) })
+        .object({
+          userCode: z.string().trim().min(8).max(64),
+          selectedUserIds: z
+            .array(z.string().trim().min(1).max(128))
+            .max(64)
+            .default([])
+        })
         .strict()
         .parse(request.body ?? {});
       const session = ownerPairingSession(request);
@@ -850,6 +856,7 @@ export function registerRemotePairingRoutes(
             requestId,
             networkPartition: runtime.pairingNetworkPartitions.observe(request),
             scopes: pending.requestedScopes,
+            selectedUserIds: body.selectedUserIds,
             profile: pending.requestedProfile
           }),
           registerClient: true
@@ -896,6 +903,10 @@ export function registerRemotePairingRoutes(
       .object({
         userCode: z.string().trim().min(8).max(64),
         scopes: z.array(scopeSchema).min(1).max(32),
+        selectedUserIds: z
+          .array(z.string().trim().min(1).max(128))
+          .max(64)
+          .default([]),
         profile: profileSchema
       })
       .strict()
@@ -911,6 +922,7 @@ export function registerRemotePairingRoutes(
           userCode: body.userCode,
           networkPartition: runtime.pairingNetworkPartitions.observe(request),
           scopes: body.scopes,
+          selectedUserIds: body.selectedUserIds,
           profile: body.profile
         })
       });
@@ -1000,6 +1012,10 @@ export function registerRemotePairingRoutes(
         userCode: z.string().trim().min(8).max(64),
         requestId: z.string().regex(/^pair_[A-Za-z0-9-]{16,160}$/),
         scopes: z.array(scopeSchema).min(1).max(32),
+        selectedUserIds: z
+          .array(z.string().trim().min(1).max(128))
+          .max(64)
+          .default([]),
         profile: profileSchema,
         challengeId: z.string().regex(/^pwc_[A-Za-z0-9]{16,160}$/),
         response: z.unknown(),
@@ -1044,6 +1060,7 @@ export function registerRemotePairingRoutes(
           requestId: body.requestId,
           networkPartition: runtime.pairingNetworkPartitions.observe(request),
           scopes: body.scopes,
+          selectedUserIds: body.selectedUserIds,
           profile: body.profile,
           privilegedAuthorization
         }),
@@ -1212,6 +1229,7 @@ export function registerRemotePairingRoutes(
         audience: runtime.audience,
         profile: polled.grant.profile as ForgePrincipal["profile"],
         scopes: polled.grant.scopes,
+        selectedUserIds: polled.grant.selectedUserIds,
         clientSecurityEpoch: 1
       });
     }
@@ -1228,6 +1246,11 @@ export function registerRemotePairingRoutes(
       client.scopes.length !== polled.grant.scopes.length ||
       client.scopes.some(
         (scope, index) => scope !== [...polled.grant.scopes].sort()[index]
+      ) ||
+      client.selectedUserIds.length !== polled.grant.selectedUserIds.length ||
+      client.selectedUserIds.some(
+        (userId, index) =>
+          userId !== [...polled.grant.selectedUserIds].sort()[index]
       )
     ) {
       throw new HttpError(

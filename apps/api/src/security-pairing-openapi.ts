@@ -509,6 +509,14 @@ export function buildSecurityPairingOpenApiPaths(): Record<string, unknown> {
                 minLength: 8,
                 maxLength: 64,
                 writeOnly: true
+              },
+              selectedUserIds: {
+                type: "array",
+                items: { type: "string", minLength: 1, maxLength: 128 },
+                maxItems: 64,
+                default: [],
+                description:
+                  "Exact canonical user identifiers whose data this client may access. An empty array preserves the unrestricted owner grant."
               }
             }
           })
@@ -526,6 +534,7 @@ export function buildSecurityPairingOpenApiPaths(): Record<string, unknown> {
                 "clientName",
                 "audience",
                 "scopes",
+                "selectedUserIds",
                 "profile"
               ],
               properties: {
@@ -537,6 +546,11 @@ export function buildSecurityPairingOpenApiPaths(): Record<string, unknown> {
                   type: "array",
                   items: { type: "string" },
                   maxItems: 33
+                },
+                selectedUserIds: {
+                  type: "array",
+                  items: { type: "string" },
+                  maxItems: 64
                 },
                 profile: {
                   type: "string",

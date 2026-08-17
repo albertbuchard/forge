@@ -27,6 +27,7 @@ export type PairingOwnerAuthorization = {
   readonly ownerId: string;
   readonly ownerSecurityEpoch: number;
   readonly scopes: readonly string[];
+  readonly selectedUserIds: readonly string[];
   readonly profile: string;
   readonly authorizedBySessionId: string;
   readonly authorizedAt: string;
@@ -54,6 +55,21 @@ function requiresPrivilegedStepUp(
         scope.startsWith("admin.")
     )
   );
+}
+
+function normalizeSelectedUserIds(values: readonly string[]) {
+  const normalized = [...new Set(values.map((value) => value.trim()))]
+    .filter(Boolean)
+    .sort();
+  if (
+    normalized.length > 64 ||
+    normalized.some((value) => value.length > 128)
+  ) {
+    throw new Error(
+      "Forge pairing selected-user authority exceeds its bounded identifier policy."
+    );
+  }
+  return normalized;
 }
 
 export class PairingOwnerAuthorizationService<ServerContext = unknown> {
@@ -105,6 +121,7 @@ export class PairingOwnerAuthorizationService<ServerContext = unknown> {
     networkPartition: VerifiedNetworkPartition;
     requestId?: string;
     scopes: readonly string[];
+    selectedUserIds: readonly string[];
     profile: string;
     privilegedAuthorization?: PrivilegedPairingAuthorization;
   }) {
@@ -159,6 +176,7 @@ export class PairingOwnerAuthorizationService<ServerContext = unknown> {
       decision: "approve",
       request,
       scopes: [...new Set(input.scopes)].sort(),
+      selectedUserIds: normalizeSelectedUserIds(input.selectedUserIds),
       profile: input.profile,
       sessionId: input.session.sessionId
     });
@@ -210,6 +228,7 @@ export class PairingOwnerAuthorizationService<ServerContext = unknown> {
       decision: "approve",
       request,
       scopes: request.requestedScopes,
+      selectedUserIds: [],
       profile: request.requestedProfile,
       sessionId: `master-password:${request.id}`
     });
@@ -279,6 +298,7 @@ export class PairingOwnerAuthorizationService<ServerContext = unknown> {
       decision: "deny",
       request,
       scopes: [],
+      selectedUserIds: [],
       profile: request.requestedProfile,
       sessionId: input.session.sessionId
     });
@@ -305,6 +325,7 @@ export class PairingOwnerAuthorizationService<ServerContext = unknown> {
       decision: "deny",
       request,
       scopes: [],
+      selectedUserIds: [],
       profile: request.requestedProfile,
       sessionId: input.session.sessionId
     });
@@ -374,6 +395,7 @@ export class PairingOwnerAuthorizationService<ServerContext = unknown> {
     decision: "approve" | "deny";
     request: PairingRequest;
     scopes: readonly string[];
+    selectedUserIds: readonly string[];
     profile: string;
     sessionId: string;
   }) {
@@ -383,6 +405,7 @@ export class PairingOwnerAuthorizationService<ServerContext = unknown> {
       ownerId: input.request.ownerId,
       ownerSecurityEpoch: input.request.ownerSecurityEpoch,
       scopes: input.scopes,
+      selectedUserIds: input.selectedUserIds,
       profile: input.profile,
       authorizedBySessionId: input.sessionId,
       authorizedAt: this.clock.now().toISOString()

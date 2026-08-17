@@ -149,6 +149,7 @@ describe("secure pairing request journey", () => {
           clientName: request.clientName,
           audience: request.audience,
           scopes: clients[0]!.scopes,
+          selectedUserIds: [],
           profile: "trusted_personal_assistant" as const
         };
       }
@@ -206,7 +207,8 @@ describe("secure pairing request journey", () => {
     await waitFor(() => {
       expect(approveRemotePairingRequest).toHaveBeenCalledWith(
         request.requestId,
-        "BCDF-GHJK"
+        "BCDF-GHJK",
+        []
       );
     });
     expect(

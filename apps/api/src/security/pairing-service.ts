@@ -49,6 +49,7 @@ export type PairingRequest = {
     ownerId: string;
     ownerSecurityEpoch: number;
     scopes: readonly string[];
+    selectedUserIds: readonly string[];
     profile: string;
     approvedAt: string;
   } | null;
@@ -149,6 +150,7 @@ export type PairingPollResult =
         clientKeyThumbprint: string;
         audience: string;
         scopes: readonly string[];
+        selectedUserIds: readonly string[];
         profile: string;
       };
     };
@@ -394,6 +396,7 @@ export class PairingService<ServerContext = unknown> {
           `profile:${authorization.profile}`
         ])
       ].sort(),
+      selectedUserIds: authorization.selectedUserIds,
       profile: authorization.profile,
       approvedAt: now
     };
@@ -419,6 +422,7 @@ export class PairingService<ServerContext = unknown> {
       clientName: request.clientName,
       audience: request.audience,
       scopes: approval.scopes,
+      selectedUserIds: approval.selectedUserIds,
       profile: approval.profile
     };
   }
@@ -619,6 +623,7 @@ export class PairingService<ServerContext = unknown> {
         clientKeyThumbprint: request.clientKeyThumbprint,
         audience: request.audience,
         scopes: request.approval.scopes,
+        selectedUserIds: request.approval.selectedUserIds ?? [],
         profile: request.approval.profile
       }
     };

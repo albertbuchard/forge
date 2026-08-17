@@ -765,6 +765,13 @@ test("the 64-credential boundary remains usable, manageable, and race-safe", asy
     const allActive = context.service.list(context.ownerId);
     assert.equal(allActive.length, 64);
     assert.equal(allActive.every((credential) => !credential.revokedAt), true);
+    context.database
+      .prepare(
+        `INSERT INTO security_owners (
+           owner_id, security_epoch, created_at, recovered_at
+         ) VALUES (?, 1, ?, NULL)`
+      )
+      .run("owner_capacity_boundary", context.clock.now().toISOString());
     assert.throws(
       () =>
         context.database
@@ -778,7 +785,7 @@ test("the 64-credential boundary remains usable, manageable, and race-safe", asy
                transports_json, label, device_type, backed_up, aaguid,
                created_at, last_used_at, revoked_at, revocation_reason
              )
-             SELECT ?, ?, owner_id, installation_id, data_root_binding,
+             SELECT ?, ?, ?, installation_id, data_root_binding,
                     client_id, client_subject_id, client_key_thumbprint,
                     client_type, audience, profile, scopes_json,
                     selected_user_ids_json, owner_epoch, client_epoch,
@@ -790,6 +797,7 @@ test("the 64-credential boundary remains usable, manageable, and race-safe", asy
           .run(
             "tbr_capacity_overflow_65",
             "capacity_overflow_65",
+            "owner_capacity_boundary",
             allActive[0]!.id
           ),
       /active credential limit reached/
@@ -806,6 +814,17 @@ test("the 64-credential boundary remains usable, manageable, and race-safe", asy
     assert.equal(
       context.service.revoke(context.ownerId, allActive[0]!.id),
       true
+    );
+    assert.throws(
+      () =>
+        context.database
+          .prepare(
+            `UPDATE security_trusted_browser_credentials
+             SET revoked_at = NULL, revocation_reason = NULL
+             WHERE id = ?`
+          )
+          .run(allActive[0]!.id),
+      /revocation is terminal/
     );
     const manageable = context.service.list(context.ownerId);
     assert.equal(manageable.length, 64);

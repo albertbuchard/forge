@@ -1265,11 +1265,11 @@ export class SqliteSecurityStore
         .prepare(
           `INSERT INTO security_clients (
              id, owner_id, subject_id, installation_id, key_thumbprint,
-             audience, profile, scopes_json, client_epoch, created_at,
-             revoked_at, revocation_reason
+             audience, profile, scopes_json, selected_user_ids_json,
+             client_epoch, created_at, revoked_at, revocation_reason
            )
            SELECT ?, owner_id, id, installation_id, client_key_thumbprint,
-                  audience, ?, ?, 1, ?, NULL, NULL
+                  audience, ?, ?, ?, 1, ?, NULL, NULL
            FROM security_pairing_requests
            WHERE id = ? AND owner_id = ? AND owner_epoch = ?
              AND status = 'approved'`
@@ -1278,6 +1278,7 @@ export class SqliteSecurityStore
           input.clientId,
           input.approval.profile,
           JSON.stringify([...new Set(input.approval.scopes)].sort()),
+          JSON.stringify([...new Set(input.approval.selectedUserIds)].sort()),
           input.now,
           input.id,
           input.approval.ownerId,

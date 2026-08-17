@@ -49,10 +49,17 @@ BEFORE INSERT ON security_trusted_browser_credentials
 WHEN NEW.revoked_at IS NULL AND (
   SELECT COUNT(*)
   FROM security_trusted_browser_credentials
-  WHERE owner_id = NEW.owner_id AND revoked_at IS NULL
+  WHERE revoked_at IS NULL
 ) >= 64
 BEGIN
   SELECT RAISE(ABORT, 'trusted browser active credential limit reached');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_security_trusted_browser_terminal_revocation
+BEFORE UPDATE OF revoked_at ON security_trusted_browser_credentials
+WHEN OLD.revoked_at IS NOT NULL AND NEW.revoked_at IS NULL
+BEGIN
+  SELECT RAISE(ABORT, 'trusted browser revocation is terminal');
 END;
 
 CREATE TABLE IF NOT EXISTS security_trusted_browser_challenges (

@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
+import { selectSelectedUserIds } from "@/features/shell/selectors";
 import { MetricTile } from "@/components/ui/metric-tile";
 import { ErrorState } from "@/components/ui/page-state";
 import {
@@ -46,6 +47,7 @@ import {
   revokeAgentToken,
   rotateAgentToken
 } from "@/lib/api";
+import { useAppSelector } from "@/store/typed-hooks";
 import type {
   AgentAction,
   AgentRuntimeSession,
@@ -183,6 +185,7 @@ function formatScopeSummary(token: AgentTokenSummary) {
 }
 
 export function SettingsAgentsPage() {
+  const selectedUserIds = useAppSelector(selectSelectedUserIds);
   const queryClient = useQueryClient();
 
   // ── Dialog state ──────────────────────────────────────────────────────────
@@ -589,7 +592,7 @@ export function SettingsAgentsPage() {
         {operatorSessionQuery.data?.session.profile === "operator" ? (
           <>
             <MasterPasswordSettingsCard />
-            <RemotePairingApprovalCard />
+            <RemotePairingApprovalCard selectedUserIds={selectedUserIds} />
           </>
         ) : null}
         {onboardingQuery.isError ? (

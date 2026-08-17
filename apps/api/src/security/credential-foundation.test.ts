@@ -1440,6 +1440,7 @@ test("pairing is persistent, client-key proven, rate-isolated, cancellable, race
             userCode: "BBBB-BBBB",
             networkPartition: services.networkPartitions.observe("network-a"),
             scopes: ["read"],
+            selectedUserIds: [],
             profile: "trusted_personal_assistant"
           }),
         /invalid/
@@ -1452,6 +1453,7 @@ test("pairing is persistent, client-key proven, rate-isolated, cancellable, race
           userCode: started.userCode,
           networkPartition: services.networkPartitions.observe("network-a"),
           scopes: ["read"],
+          selectedUserIds: [],
           profile: "trusted_personal_assistant"
         }),
       /rate limited/
@@ -1463,6 +1465,7 @@ test("pairing is persistent, client-key proven, rate-isolated, cancellable, race
           userCode: started.userCode,
           networkPartition: services.networkPartitions.observe("network-b"),
           scopes: ["read", "write", "operator"],
+          selectedUserIds: [],
           profile: "trusted_personal_assistant"
         }),
       /cannot expand/
@@ -1473,6 +1476,7 @@ test("pairing is persistent, client-key proven, rate-isolated, cancellable, race
         userCode: started.userCode,
         networkPartition: services.networkPartitions.observe("network-b"),
         scopes: ["read"],
+        selectedUserIds: [],
         profile: "trusted_personal_assistant"
       })
     });
@@ -2324,6 +2328,7 @@ test("browser, passkey summary, pairing, local exchange, refresh, client, and ac
             "owner-elevated-missing-step-up"
           ),
           scopes: ["read", "machine.exec"],
+          selectedUserIds: [],
           profile: "executor"
         }),
       /requires current owner step-up/
@@ -2343,6 +2348,7 @@ test("browser, passkey summary, pairing, local exchange, refresh, client, and ac
             "owner-elevated-wrong-step-up"
           ),
           scopes: ["read", "machine.exec"],
+          selectedUserIds: [],
           profile: "executor",
           privilegedAuthorization: preliminaryPairingAuthorization
         }),
@@ -2362,6 +2368,7 @@ test("browser, passkey summary, pairing, local exchange, refresh, client, and ac
           "owner-elevated-step-up"
         ),
         scopes: ["read", "machine.exec"],
+        selectedUserIds: [],
         profile: "executor",
         privilegedAuthorization: privilegedPairingAuthorization
       })
@@ -2390,6 +2397,7 @@ test("browser, passkey summary, pairing, local exchange, refresh, client, and ac
         userCode: pendingPairing.userCode,
         networkPartition: recoveryNetworkPartitions.observe("owner-recovery"),
         scopes: ["read"],
+        selectedUserIds: [],
         profile: "viewer"
       })
     });

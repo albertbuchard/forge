@@ -298,7 +298,7 @@ export class TrustedBrowserService {
       ...input,
       origin: relyingParty.origin
     });
-    this.requireCredentialCapacity(authority.ownerId);
+    this.requireCredentialCapacity();
     const credentials = this.listActiveCredentialsForRp(relyingParty.rpId);
     const challenge = randomBytes(32);
     const options = await generateRegistrationOptions({
@@ -928,17 +928,17 @@ export class TrustedBrowserService {
     return this.readCredentialById(input.id);
   }
 
-  private requireCredentialCapacity(ownerId: string) {
+  private requireCredentialCapacity() {
     const row = this.database
       .prepare(
-        `SELECT COUNT(*) AS count
+         `SELECT COUNT(*) AS count
          FROM security_trusted_browser_credentials
-         WHERE owner_id = ? AND revoked_at IS NULL`
+         WHERE revoked_at IS NULL`
       )
-      .get(ownerId) as { count: number };
+      .get() as { count: number };
     if (row.count >= MAXIMUM_ACTIVE_TRUSTED_BROWSER_CREDENTIALS) {
       throw new Error(
-        "This Forge owner already has the maximum number of active trusted-device credentials. Revoke one before adding another."
+        "This Forge installation already has the maximum number of active trusted-device credentials. Revoke one before adding another."
       );
     }
   }

@@ -634,7 +634,10 @@ test("local owner lists exact requests, approves one real client, and can clear 
       method: "POST",
       url: `/api/v1/auth/device/requests/${first.requestId}/approve`,
       headers: ownerHeaders,
-      payload: { userCode: first.userCode }
+      payload: {
+        userCode: first.userCode,
+        selectedUserIds: ["user_primary"]
+      }
     });
     assert.equal(approved.statusCode, 200, approved.body);
     const approvedBody = approved.json<{
@@ -643,6 +646,7 @@ test("local owner lists exact requests, approves one real client, and can clear 
       clientName: string;
       audience: string;
       scopes: string[];
+      selectedUserIds: string[];
       profile: string;
     }>();
     assert.equal(approvedBody.requestId, first.requestId);
@@ -683,6 +687,11 @@ test("local owner lists exact requests, approves one real client, and can clear 
     assert.equal(
       runtime.store.readClientBySubjectId(first.requestId)?.id,
       approvedBody.clientId
+    );
+    assert.deepEqual(approvedBody.selectedUserIds, ["user_primary"]);
+    assert.deepEqual(
+      runtime.store.readClientBySubjectId(first.requestId)?.selectedUserIds,
+      ["user_primary"]
     );
 
     const awaiting = await app.inject({

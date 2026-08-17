@@ -1500,7 +1500,8 @@ export function listRemotePairingRequests() {
 
 export function approveRemotePairingRequest(
   requestId: string,
-  userCode: string
+  userCode: string,
+  selectedUserIds: string[] = []
 ) {
   return request<{
     requestId: string;
@@ -1508,10 +1509,11 @@ export function approveRemotePairingRequest(
     clientName: string;
     audience: string;
     scopes: string[];
+    selectedUserIds: string[];
     profile: RemotePairingReview["requestedProfile"];
   }>(`/api/v1/auth/device/requests/${encodeURIComponent(requestId)}/approve`, {
     method: "POST",
-    body: JSON.stringify({ userCode })
+    body: JSON.stringify({ userCode, selectedUserIds })
   });
 }
 
@@ -1534,13 +1536,15 @@ export function reviewRemotePairing(userCode: string) {
 
 export function approveRemotePairing(
   userCode: string,
-  review: RemotePairingReview
+  review: RemotePairingReview,
+  selectedUserIds: string[] = []
 ) {
   return request("/api/v1/auth/device/approve", {
     method: "POST",
     body: JSON.stringify({
       userCode,
       scopes: review.requestedScopes,
+      selectedUserIds,
       profile: review.requestedProfile
     })
   });
@@ -1572,6 +1576,7 @@ export function completePrivilegedPairingStepUp(input: {
   challengeId: string;
   response: unknown;
   credentialLabel?: string;
+  selectedUserIds?: string[];
 }) {
   return request("/api/v1/auth/device/step-up/verify", {
     method: "POST",
@@ -1579,6 +1584,7 @@ export function completePrivilegedPairingStepUp(input: {
       userCode: input.userCode,
       requestId: input.review.requestId,
       scopes: input.review.requestedScopes,
+      selectedUserIds: input.selectedUserIds ?? [],
       profile: input.review.requestedProfile,
       challengeId: input.challengeId,
       response: input.response,

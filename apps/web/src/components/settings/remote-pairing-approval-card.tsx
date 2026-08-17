@@ -107,7 +107,11 @@ function PairingReviewDetails({ request }: { request: RemotePairingRequest }) {
   );
 }
 
-export function RemotePairingApprovalCard() {
+export function RemotePairingApprovalCard({
+  selectedUserIds = []
+}: {
+  selectedUserIds?: string[];
+}) {
   const queryClient = useQueryClient();
   const requestsQuery = useRemotePairingRequests(true);
   const [codes, setCodes] = useState<Record<string, string>>({});
@@ -206,10 +210,15 @@ export function RemotePairingApprovalCard() {
           userCode,
           review: request,
           challengeId: ceremony.challengeId,
-          response
+          response,
+          selectedUserIds
         });
       } else {
-        await approveRemotePairingRequest(request.requestId, userCode);
+        await approveRemotePairingRequest(
+          request.requestId,
+          userCode,
+          selectedUserIds
+        );
       }
       setCodes((current) => {
         const next = { ...current };
