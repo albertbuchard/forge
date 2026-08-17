@@ -1474,6 +1474,7 @@ function forgeRuntimeEnvironment(config, peerPreparation) {
     "FORGE_PLATFORM_OWNER_KEY_PATH",
     "FORGE_PLATFORM_OWNER_KEY_SHA256",
     "FORGE_LOCAL_BROWSER_HANDLER_SCHEME",
+    "FORGE_LOCAL_BROWSER_HANDLER_APP_PATH",
     "FORGE_LOCAL_BROWSER_API_ORIGIN",
     "FORGE_CANONICAL_EXTERNAL_ORIGIN",
     "FORGE_PEER_ENABLE_IROH",
@@ -1505,6 +1506,8 @@ function forgeRuntimeEnvironment(config, peerPreparation) {
       peerPreparation.ownerBrokerBinarySha256;
     if (peerPreparation.browserHandler?.handlerScheme === "forge") {
       environment.FORGE_LOCAL_BROWSER_HANDLER_SCHEME = "forge";
+      environment.FORGE_LOCAL_BROWSER_HANDLER_APP_PATH =
+        peerPreparation.browserHandler.appPath;
       environment.FORGE_LOCAL_BROWSER_API_ORIGIN = `http://127.0.0.1:${config.port}`;
     }
   } else {

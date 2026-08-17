@@ -46,6 +46,7 @@ test(
     const previousBrokerSha256 = process.env.FORGE_OWNER_BROKER_SHA256;
     process.env.FORGE_OWNER_BROKER_BIN = ownerBrokerBinary;
     process.env.FORGE_OWNER_BROKER_SHA256 = ownerBrokerSha256!;
+    const launchedBrowserHandlerUrls: string[] = [];
     const app = await buildServer({
       dataRoot,
       seedDemoData: true,
@@ -55,6 +56,9 @@ test(
       ownerBrokerBinaryPath: ownerBrokerBinary,
       ownerBrokerBinarySha256: ownerBrokerSha256,
       localBrowserHandlerScheme: "forge",
+      localBrowserHandlerLauncher: async (handlerUrl) => {
+        launchedBrowserHandlerUrls.push(handlerUrl);
+      },
       localBrowserApiOrigin: "http://127.0.0.1:4317"
     });
     try {
@@ -367,6 +371,12 @@ test(
             "automatic",
             "interactive"
           ]);
+          assert.equal(launchedBrowserHandlerUrls.length, 2);
+          assert.ok(
+            launchedBrowserHandlerUrls.every((value) =>
+              value.startsWith("forge://local-auth?")
+            )
+          );
         } finally {
           mutableCoordinator.begin = originalBegin;
         }

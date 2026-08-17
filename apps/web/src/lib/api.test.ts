@@ -905,7 +905,7 @@ describe("create entity payload normalization", () => {
     );
   });
 
-  it("uses a proof-bound public local-owner transaction and retries protected reads", async () => {
+  it("uses an API-launched proof-bound local-owner transaction and retries protected reads", async () => {
     localStorage.clear();
     window.history.replaceState(null, "", "/");
     const handlerUrls: string[] = [];
@@ -939,7 +939,8 @@ describe("create entity payload normalization", () => {
         return mockJsonResponse({
           transactionId: "local_browser_test_1",
           expiresAt: "2026-05-03T13:37:35.000Z",
-          handlerUrl: handlerUrl.toString()
+          handlerUrl: handlerUrl.toString(),
+          handlerLaunched: true
         });
       }
       if (requestPath.includes("/api/v1/auth/local/browser/exchange")) {
@@ -995,9 +996,7 @@ describe("create entity payload normalization", () => {
       "/api/v1/wiki/pages?kind=wiki&limit=25"
     );
     expect(window.location.hash).toBe("");
-    expect(handlerUrls).toHaveLength(1);
-    expect(handlerUrls[0]).toMatch(/^forge:\/\/local-auth\?/);
-    expect(handlerUrls[0]).not.toContain("fg_browser_");
+    expect(handlerUrls).toHaveLength(0);
     expect(localStorage.getItem("forge.browser.csrf")).toBe(
       "fg_csrf_browser_test"
     );

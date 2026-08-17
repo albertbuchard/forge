@@ -18,6 +18,10 @@ import {
   runInTransaction
 } from "./db.js";
 import { HttpError, isHttpError, type ValidationIssue } from "./errors.js";
+import {
+  createMacosLocalBrowserHandlerLauncher,
+  type LocalBrowserHandlerLauncher
+} from "./security/local-browser-handler-launcher.js";
 import { getRuntimeTimeZone } from "@/lib/date-keys.js";
 import {
   listActivityEvents,
@@ -12210,6 +12214,8 @@ export async function buildServer(
     platformOwnerKeyPath?: string | null;
     platformOwnerKeySha256?: string | null;
     localBrowserHandlerScheme?: string | null;
+    localBrowserHandlerAppPath?: string | null;
+    localBrowserHandlerLauncher?: LocalBrowserHandlerLauncher | null;
     localBrowserApiOrigin?: string | null;
     canonicalExternalOrigin?: string | null;
     onSecurityRuntimeReady?: (runtime: ApplicationSecurityRuntime) => void;
@@ -12315,6 +12321,10 @@ export async function buildServer(
     options.localBrowserApiOrigin?.trim() ||
     process.env.FORGE_LOCAL_BROWSER_API_ORIGIN?.trim() ||
     null;
+  const localBrowserHandlerAppPath =
+    options.localBrowserHandlerAppPath?.trim() ||
+    process.env.FORGE_LOCAL_BROWSER_HANDLER_APP_PATH?.trim() ||
+    null;
   const localBrowserApiOrigin = (() => {
     if (!configuredLocalBrowserApiOrigin) {
       return null;
@@ -12337,6 +12347,12 @@ export async function buildServer(
       return null;
     }
   })();
+  const localBrowserHandlerLauncher =
+    options.localBrowserHandlerLauncher !== undefined
+      ? options.localBrowserHandlerLauncher
+      : createMacosLocalBrowserHandlerLauncher({
+          appPath: localBrowserHandlerAppPath
+        });
   mobilePairingCredentials = new MobilePairingCredentialVault(
     getDatabase(),
     managers.secrets
@@ -15387,10 +15403,21 @@ export async function buildServer(
     handlerUrl.searchParams.set("browserOrigin", browserOrigin);
     handlerUrl.searchParams.set("transactionId", transaction.transactionId);
     handlerUrl.searchParams.set("browserNonce", input.browserNonce);
+    let handlerLaunched = false;
+    if (input.approvalMode === "automatic" && localBrowserHandlerLauncher) {
+      try {
+        await localBrowserHandlerLauncher(handlerUrl.toString());
+        handlerLaunched = true;
+      } catch {
+        // The web client retains its browser launch and explicit user-gesture
+        // fallbacks when macOS cannot open the verified owner app.
+      }
+    }
     return {
       transactionId: transaction.transactionId,
       expiresAt: transaction.expiresAt,
-      handlerUrl: handlerUrl.toString()
+      handlerUrl: handlerUrl.toString(),
+      handlerLaunched
     };
   });
   app.post("/api/v1/auth/local/browser/challenge", async (request) => {

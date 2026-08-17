@@ -727,6 +727,7 @@ type PreparedLocalBrowserAuthorization = {
   handlerUrl: string;
   privateKey: CryptoKey;
   approvalMode: LocalBrowserApprovalMode;
+  handlerLaunched: boolean;
 };
 
 type LocalBrowserApprovalMode = "automatic" | "interactive";
@@ -919,7 +920,8 @@ async function prepareLocalBrowserAuthorizationTransaction(
         browserNonce,
         handlerUrl,
         privateKey: browserKeys.privateKey,
-        approvalMode
+        approvalMode,
+        handlerLaunched: transaction?.handlerLaunched === true
       };
       preparedLocalBrowserAuthorization = prepared;
       return prepared;
@@ -1014,7 +1016,9 @@ export async function authorizePreparedLocalBrowser() {
       details: []
     });
   }
-  invokeLocalBrowserOwnerHandler(prepared.handlerUrl);
+  if (!prepared.handlerLaunched) {
+    invokeLocalBrowserOwnerHandler(prepared.handlerUrl);
+  }
   await exchangePreparedLocalBrowserAuthorization();
 }
 
@@ -1487,7 +1491,9 @@ async function bootstrapBrowserSession() {
     browserSessionBootstrapPromise = (async () => {
       const prepared =
         await prepareLocalBrowserAuthorizationTransaction("automatic");
-      invokeLocalBrowserOwnerHandler(prepared.handlerUrl);
+      if (!prepared.handlerLaunched) {
+        invokeLocalBrowserOwnerHandler(prepared.handlerUrl);
+      }
       try {
         await exchangePreparedLocalBrowserAuthorization();
       } catch (error) {
