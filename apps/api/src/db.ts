@@ -29,6 +29,8 @@ const SECURITY_PAIRING_METADATA_COMPATIBILITY_MIGRATION =
   "120_security_pairing_metadata_compatibility.sql";
 const COURSE_DEFINITION_INTEGRITY_MIGRATION =
   "121_course_definition_integrity.sql";
+const PEER_QUERY_AUDIT_COMPATIBILITY_MIGRATION =
+  "134a_peer_query_audit_compatibility.sql";
 
 const PEOPLE_HARDENING_COLUMNS = [
   {
@@ -147,6 +149,42 @@ export async function repairLegacyPeopleSchema(database: DatabaseSync) {
   }
   database.exec(repairSchema);
   database.exec(PEOPLE_OWNER_PARTITION_INDEXES_SQL);
+}
+
+export function prepareLegacyPeerQueryAuditMigration(database: DatabaseSync) {
+  // Early published revisions of migration 087 created peer_query_audit before
+  // the exact grant-verification evidence columns were added. Migration 104
+  // replayed the final 087 schema with CREATE TABLE IF NOT EXISTS, which could
+  // create the final trigger against that older table without adding its
+  // columns. Drop the potentially invalid trigger before any ALTER TABLE, add
+  // the columns conditionally, and let migration 134a rebuild the table with
+  // the complete foreign-key and CHECK constraint contract.
+  database.exec(
+    "DROP TRIGGER IF EXISTS trg_peer_query_audit_exact_allowed_verification"
+  );
+  const repairs = [
+    {
+      column: "grant_verification_id",
+      definition: "grant_verification_id TEXT"
+    },
+    {
+      column: "verified_grant_hash",
+      definition:
+        "verified_grant_hash TEXT CHECK (verified_grant_hash IS NULL OR length(verified_grant_hash) = 64)"
+    },
+    {
+      column: "authorization_evidence_json",
+      definition:
+        "authorization_evidence_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(authorization_evidence_json) AND json_type(authorization_evidence_json) = 'object' AND length(authorization_evidence_json) <= 262144)"
+    }
+  ] as const;
+  for (const repair of repairs) {
+    if (!hasDatabaseColumn(database, "peer_query_audit", repair.column)) {
+      database.exec(
+        `ALTER TABLE peer_query_audit ADD COLUMN ${repair.definition}`
+      );
+    }
+  }
 }
 
 function backfillLegacyPairingClientMetadata(database: DatabaseSync) {
@@ -758,6 +796,9 @@ export async function initializeDatabase(): Promise<void> {
     try {
       if (file === PEOPLE_LEGACY_SCHEMA_REPAIR_MIGRATION) {
         await repairLegacyPeopleSchema(database);
+      }
+      if (file === PEER_QUERY_AUDIT_COMPATIBILITY_MIGRATION) {
+        prepareLegacyPeerQueryAuditMigration(database);
       }
       database.exec(sql);
       if (file === SECURITY_PAIRING_METADATA_COMPATIBILITY_MIGRATION) {
