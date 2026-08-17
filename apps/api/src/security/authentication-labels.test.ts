@@ -4,6 +4,7 @@ import test from "node:test";
 import { AuthenticationManager } from "../managers/platform/authentication-manager.js";
 import type { SessionManager } from "../managers/platform/session-manager.js";
 import type { TokenManager } from "../managers/platform/token-manager.js";
+import type { ForgePrincipal } from "./contracts.js";
 
 const verifiedToken = {
   id: "token-label-test",
@@ -72,4 +73,40 @@ test("caller actor and source headers cannot replace verified browser identity",
   assert.equal(authenticated.actor, "Verified Owner");
   assert.equal(authenticated.source, "ui");
   assert.equal(authenticated.session?.id, "session-label-test");
+});
+
+test("verified principals preserve selected-user authority with legacy empty-owner semantics", () => {
+  const manager = new AuthenticationManager(
+    { readSessionFromHeaders: () => null } as unknown as SessionManager,
+    { verifyBearerToken: () => null } as unknown as TokenManager
+  );
+  const principal = {
+    kind: "paired_client",
+    subjectId: "pair_selected_user_test",
+    ownerId: "owner_selected_user_test",
+    clientId: "client_selected_user_test",
+    installationId: "installation_selected_user_test",
+    audience: "urn:forge:selected-user-test",
+    scopes: ["read", "write"],
+    selectedUserIds: ["user_selected", "user_selected"],
+    clientType: "browser",
+    profile: "viewer",
+    ownerSecurityEpoch: 1,
+    clientSecurityEpoch: 1,
+    authenticatedAt: "2026-08-18T08:00:00.000Z"
+  } satisfies ForgePrincipal;
+  const selectedHeaders = {};
+  manager.bindVerifiedPrincipal(selectedHeaders, principal);
+  const selected = manager.authenticate(selectedHeaders);
+  assert.deepEqual(selected.token?.scopePolicy.userIds, ["user_selected"]);
+  assert.deepEqual(selected.scope.userIds, ["user_selected"]);
+
+  const legacyHeaders = {};
+  manager.bindVerifiedPrincipal(legacyHeaders, {
+    ...principal,
+    selectedUserIds: []
+  });
+  const legacy = manager.authenticate(legacyHeaders);
+  assert.deepEqual(legacy.token?.scopePolicy.userIds, [principal.ownerId]);
+  assert.deepEqual(legacy.scope.userIds, [principal.ownerId]);
 });

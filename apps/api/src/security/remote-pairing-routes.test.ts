@@ -76,7 +76,7 @@ test("remote API client pairs once, renews with DPoP, and is denied after revoca
   let runtime!: ApplicationSecurityRuntime;
   const app = await buildServer({
     dataRoot: root,
-    seedDemoData: false,
+    seedDemoData: true,
     taskRunWatchdog: false,
     devrageMetricSync: false,
     peerRuntime: false,
@@ -94,8 +94,8 @@ test("remote API client pairs once, renews with DPoP, and is denied after revoca
       payload: {
         clientName: "Codex",
         clientKeyThumbprint: key.thumbprint,
-        requestedScopes: ["read"],
-        requestedProfile: "viewer"
+        requestedScopes: ["read", "write"],
+        requestedProfile: "trusted_personal_assistant"
       }
     });
     assert.equal(begun.statusCode, 200, begun.body);
@@ -123,6 +123,37 @@ test("remote API client pairs once, renews with DPoP, and is denied after revoca
       authenticatedAt: new Date().toISOString()
     };
     const ownerSession = runtime.browserSessions.create(ownerPrincipal);
+    const ownerHeaders = {
+      host: "127.0.0.1",
+      cookie: `forge_session=${encodeURIComponent(ownerSession.sessionToken)}`,
+      "x-forge-csrf": ownerSession.csrfToken
+    };
+    const selectedFixture = await app.inject({
+      method: "POST",
+      url: "/api/v1/notes",
+      headers: ownerHeaders,
+      payload: {
+        title: "Selected API authority fixture",
+        contentMarkdown: "Allowed selected-user fixture.",
+        userId: "user_forge_bot"
+      }
+    });
+    assert.equal(selectedFixture.statusCode, 201, selectedFixture.body);
+    const selectedFixtureId = selectedFixture.json<{ note: { id: string } }>()
+      .note.id;
+    const excludedFixture = await app.inject({
+      method: "POST",
+      url: "/api/v1/notes",
+      headers: ownerHeaders,
+      payload: {
+        title: "Excluded API authority fixture",
+        contentMarkdown: "Unselected-user fixture.",
+        userId: "user_operator"
+      }
+    });
+    assert.equal(excludedFixture.statusCode, 201, excludedFixture.body);
+    const excludedFixtureId = excludedFixture.json<{ note: { id: string } }>()
+      .note.id;
     const approved = await app.inject({
       method: "POST",
       url: "/api/v1/auth/device/approve",
@@ -133,8 +164,9 @@ test("remote API client pairs once, renews with DPoP, and is denied after revoca
       },
       payload: {
         userCode: pairing.userCode,
-        scopes: ["read"],
-        profile: "viewer"
+        scopes: ["read", "write"],
+        selectedUserIds: ["user_forge_bot"],
+        profile: "trusted_personal_assistant"
       }
     });
     assert.equal(approved.statusCode, 200, approved.body);
@@ -192,6 +224,76 @@ test("remote API client pairs once, renews with DPoP, and is denied after revoca
       }
     });
     assert.equal(admitted.statusCode, 200, admitted.body);
+
+    const notesTarget = "http://127.0.0.1/api/v1/notes";
+    const scopedRead = await app.inject({
+      method: "GET",
+      url: "/api/v1/notes",
+      headers: {
+        host: "127.0.0.1",
+        authorization: `DPoP ${issued.accessToken}`,
+        dpop: await dpopProof({
+          privateKey: key.privateKey,
+          publicJwk: key.publicJwk,
+          method: "GET",
+          target: notesTarget,
+          credential: issued.accessToken
+        })
+      }
+    });
+    assert.equal(scopedRead.statusCode, 200, scopedRead.body);
+    const visibleNoteIds = scopedRead
+      .json<{ notes: Array<{ id: string }> }>()
+      .notes.map((note) => note.id);
+    assert.equal(visibleNoteIds.includes(selectedFixtureId), true);
+    assert.equal(visibleNoteIds.includes(excludedFixtureId), false);
+
+    const selectedMutation = await app.inject({
+      method: "POST",
+      url: "/api/v1/notes",
+      headers: {
+        host: "127.0.0.1",
+        authorization: `DPoP ${issued.accessToken}`,
+        dpop: await dpopProof({
+          privateKey: key.privateKey,
+          publicJwk: key.publicJwk,
+          method: "POST",
+          target: notesTarget,
+          credential: issued.accessToken
+        })
+      },
+      payload: {
+        title: "Selected API mutation",
+        contentMarkdown: "Allowed by exact selected-user authority.",
+        userId: "user_forge_bot"
+      }
+    });
+    assert.equal(selectedMutation.statusCode, 201, selectedMutation.body);
+    const excludedMutation = await app.inject({
+      method: "POST",
+      url: "/api/v1/notes",
+      headers: {
+        host: "127.0.0.1",
+        authorization: `DPoP ${issued.accessToken}`,
+        dpop: await dpopProof({
+          privateKey: key.privateKey,
+          publicJwk: key.publicJwk,
+          method: "POST",
+          target: notesTarget,
+          credential: issued.accessToken
+        })
+      },
+      payload: {
+        title: "Excluded API mutation",
+        contentMarkdown: "Must fail closed.",
+        userId: "user_operator"
+      }
+    });
+    assert.equal(excludedMutation.statusCode, 403, excludedMutation.body);
+    assert.equal(
+      excludedMutation.json<{ code: string }>().code,
+      "user_scope_forbidden"
+    );
 
     const tokenTarget = "http://127.0.0.1/api/v1/auth/token";
     const renewed = await app.inject({
@@ -1594,7 +1696,7 @@ test("remote browser pairing returns only an HttpOnly session and revocation clo
   let runtime!: ApplicationSecurityRuntime;
   const app = await buildServer({
     dataRoot: root,
-    seedDemoData: false,
+    seedDemoData: true,
     taskRunWatchdog: false,
     devrageMetricSync: false,
     peerRuntime: false,
@@ -1613,8 +1715,8 @@ test("remote browser pairing returns only an HttpOnly session and revocation clo
         clientName: "Remote browser",
         clientType: "browser",
         clientKeyThumbprint: key.thumbprint,
-        requestedScopes: ["read"],
-        requestedProfile: "viewer"
+        requestedScopes: ["read", "write"],
+        requestedProfile: "trusted_personal_assistant"
       }
     });
     assert.equal(begun.statusCode, 200, begun.body);
@@ -1641,6 +1743,37 @@ test("remote browser pairing returns only an HttpOnly session and revocation clo
       clientSecurityEpoch: null,
       authenticatedAt: new Date().toISOString()
     });
+    const ownerHeaders = {
+      host: "127.0.0.1",
+      cookie: `forge_session=${encodeURIComponent(ownerSession.sessionToken)}`,
+      "x-forge-csrf": ownerSession.csrfToken
+    };
+    const selectedFixture = await app.inject({
+      method: "POST",
+      url: "/api/v1/notes",
+      headers: ownerHeaders,
+      payload: {
+        title: "Selected browser authority fixture",
+        contentMarkdown: "Allowed selected-user fixture.",
+        userId: "user_forge_bot"
+      }
+    });
+    assert.equal(selectedFixture.statusCode, 201, selectedFixture.body);
+    const selectedFixtureId = selectedFixture.json<{ note: { id: string } }>()
+      .note.id;
+    const excludedFixture = await app.inject({
+      method: "POST",
+      url: "/api/v1/notes",
+      headers: ownerHeaders,
+      payload: {
+        title: "Excluded browser authority fixture",
+        contentMarkdown: "Unselected-user fixture.",
+        userId: "user_operator"
+      }
+    });
+    assert.equal(excludedFixture.statusCode, 201, excludedFixture.body);
+    const excludedFixtureId = excludedFixture.json<{ note: { id: string } }>()
+      .note.id;
     const reviewed = await app.inject({
       method: "POST",
       url: "/api/v1/auth/device/review",
@@ -1671,8 +1804,8 @@ test("remote browser pairing returns only an HttpOnly session and revocation clo
     assert.equal(review.clientName, "Remote browser");
     assert.equal(review.clientType, "browser");
     assert.equal(review.audience, runtime.audience);
-    assert.deepEqual(review.requestedScopes, ["read"]);
-    assert.equal(review.requestedProfile, "viewer");
+    assert.deepEqual(review.requestedScopes, ["read", "write"]);
+    assert.equal(review.requestedProfile, "trusted_personal_assistant");
     assert.equal(review.expiresAt, request.expiresAt);
     assert.match(
       review.installationFingerprint,
@@ -1682,7 +1815,7 @@ test("remote browser pairing returns only an HttpOnly session and revocation clo
       review.endpoint.fingerprint,
       /^[A-F0-9]{8}(?:-[A-F0-9]{8}){3}$/
     );
-    assert.deepEqual(review.boundaries.resources.scopes, ["read"]);
+    assert.deepEqual(review.boundaries.resources.scopes, ["read", "write"]);
     assert.deepEqual(review.boundaries.egress.requestedScopes, []);
     const approved = await app.inject({
       method: "POST",
@@ -1694,8 +1827,9 @@ test("remote browser pairing returns only an HttpOnly session and revocation clo
       },
       payload: {
         userCode: pairing.userCode,
-        scopes: ["read"],
-        profile: "viewer"
+        scopes: ["read", "write"],
+        selectedUserIds: ["user_forge_bot"],
+        profile: "trusted_personal_assistant"
       }
     });
     assert.equal(approved.statusCode, 200, approved.body);
@@ -1778,7 +1912,10 @@ test("remote browser pairing returns only an HttpOnly session and revocation clo
     assert.equal(pairedBrowserAuthority.actorLabel, "Paired Browser");
     assert.equal(pairedBrowserAuthority.principalKind, "paired_client");
     assert.equal(pairedBrowserAuthority.localOwner, false);
-    assert.equal(pairedBrowserAuthority.profile, "viewer");
+    assert.equal(
+      pairedBrowserAuthority.profile,
+      "trusted_personal_assistant"
+    );
 
     const admitted = await app.inject({
       method: "GET",
@@ -1786,6 +1923,51 @@ test("remote browser pairing returns only an HttpOnly session and revocation clo
       headers: { host: "127.0.0.1", cookie: browserCookie }
     });
     assert.equal(admitted.statusCode, 200, admitted.body);
+    const scopedRead = await app.inject({
+      method: "GET",
+      url: "/api/v1/notes",
+      headers: { host: "127.0.0.1", cookie: browserCookie }
+    });
+    assert.equal(scopedRead.statusCode, 200, scopedRead.body);
+    const visibleNoteIds = scopedRead
+      .json<{ notes: Array<{ id: string }> }>()
+      .notes.map((note) => note.id);
+    assert.equal(visibleNoteIds.includes(selectedFixtureId), true);
+    assert.equal(visibleNoteIds.includes(excludedFixtureId), false);
+    const selectedMutation = await app.inject({
+      method: "POST",
+      url: "/api/v1/notes",
+      headers: {
+        host: "127.0.0.1",
+        cookie: browserCookie,
+        "x-forge-csrf": body.csrfToken
+      },
+      payload: {
+        title: "Selected browser mutation",
+        contentMarkdown: "Allowed by exact selected-user authority.",
+        userId: "user_forge_bot"
+      }
+    });
+    assert.equal(selectedMutation.statusCode, 201, selectedMutation.body);
+    const excludedMutation = await app.inject({
+      method: "POST",
+      url: "/api/v1/notes",
+      headers: {
+        host: "127.0.0.1",
+        cookie: browserCookie,
+        "x-forge-csrf": body.csrfToken
+      },
+      payload: {
+        title: "Excluded browser mutation",
+        contentMarkdown: "Must fail closed.",
+        userId: "user_operator"
+      }
+    });
+    assert.equal(excludedMutation.statusCode, 403, excludedMutation.body);
+    assert.equal(
+      excludedMutation.json<{ code: string }>().code,
+      "user_scope_forbidden"
+    );
     const redactedSettings = await app.inject({
       method: "GET",
       url: "/api/v1/settings",

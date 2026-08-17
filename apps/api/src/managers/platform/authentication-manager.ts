@@ -12,6 +12,16 @@ function readSingleHeaderValue(value: unknown) {
   return typeof value === "string" ? value : null;
 }
 
+function resolveVerifiedUserScope(principal: ForgePrincipal) {
+  const selected = principal.selectedUserIds;
+  if (!selected || selected.length === 0) {
+    return [principal.ownerId];
+  }
+  return [...new Set(selected.map((value) => value.trim()))]
+    .filter((value) => value.length > 0 && value.length <= 128)
+    .sort();
+}
+
 export class AuthenticationManager extends AbstractManager {
   readonly name = "AuthenticationManager";
   private readonly verifiedPrincipals = new WeakMap<
@@ -78,6 +88,7 @@ export class AuthenticationManager extends AbstractManager {
         verified.profile === "operator" ||
         verified.profile === "trusted_personal_assistant" ||
         verified.profile === "executor";
+      const userIds = resolveVerifiedUserScope(verified);
       return {
         ...requestContext,
         actor: verified.subjectId,
@@ -101,13 +112,13 @@ export class AuthenticationManager extends AbstractManager {
             includePeoplePages: false
           },
           scopePolicy: {
-            userIds: [verified.ownerId],
+            userIds,
             projectIds: [],
             tagIds: []
           }
         },
         scope: {
-          userIds: [verified.ownerId],
+          userIds,
           projectIds: [],
           tagIds: []
         },
