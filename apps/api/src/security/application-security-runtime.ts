@@ -405,6 +405,7 @@ function accessPrincipal(
     installationId: claims.installation_id,
     audience,
     scopes: claims.scopes,
+    selectedUserIds: claims.selected_user_ids,
     clientType: claims.client_type,
     profile: claims.profile,
     ownerSecurityEpoch: claims.owner_epoch,

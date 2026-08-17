@@ -50277,7 +50277,7 @@
                     },
                     "credentials": {
                       "type": "array",
-                      "maxItems": 16,
+                      "maxItems": 64,
                       "items": {
                         "type": "object",
                         "additionalProperties": false,
@@ -50418,7 +50418,7 @@
         "description": "Owner-only bounded management projection. It never returns credential public keys, counters, raw challenges, challenge hashes, or cookie material.",
         "security": [
           {
-            "operatorSession": []
+            "browserSession": []
           }
         ],
         "responses": {
@@ -50573,9 +50573,10 @@
     "/api/v1/auth/trusted-browser/credentials/{id}/revoke": {
       "post": {
         "summary": "Revoke one trusted-device credential",
+        "description": "Owner-only operation authenticated by the current Forge browser session. Paired-browser principals are rejected even though they use the same cookie transport.",
         "security": [
           {
-            "operatorSession": []
+            "browserSession": []
           }
         ],
         "parameters": [

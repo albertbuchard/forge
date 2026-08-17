@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS security_clients (
   audience TEXT NOT NULL,
   profile TEXT NOT NULL,
   scopes_json TEXT NOT NULL,
+  selected_user_ids_json TEXT NOT NULL DEFAULT '[]',
   client_epoch INTEGER NOT NULL DEFAULT 1 CHECK (client_epoch >= 1),
   created_at TEXT NOT NULL,
   revoked_at TEXT,
@@ -247,6 +248,7 @@ type ClientRow = {
   audience: string;
   profile: ForgePrincipal["profile"];
   scopes_json: string;
+  selected_user_ids_json: string;
   client_epoch: number;
   owner_epoch: number;
   created_at: string;
@@ -271,6 +273,7 @@ function mapClient(row: ClientRow) {
     audience: row.audience,
     profile: row.profile,
     scopes: parseStringArray(row.scopes_json),
+    selectedUserIds: parseStringArray(row.selected_user_ids_json),
     ownerSecurityEpoch: row.owner_epoch,
     clientSecurityEpoch: row.client_epoch,
     createdAt: row.created_at,
@@ -566,6 +569,7 @@ export class SqliteSecurityStore
     audience: string;
     profile: ForgePrincipal["profile"];
     scopes: readonly string[];
+    selectedUserIds?: readonly string[];
     clientSecurityEpoch?: number;
   }) {
     this.ensureOwner(input.ownerId);
@@ -574,9 +578,10 @@ export class SqliteSecurityStore
       .prepare(
         `INSERT INTO security_clients (
           id, owner_id, subject_id, installation_id, key_thumbprint, audience,
-          profile, scopes_json, client_epoch, created_at, revoked_at,
+          profile, scopes_json, selected_user_ids_json, client_epoch,
+          created_at, revoked_at,
           revocation_reason
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)`
       )
       .run(
         input.id,
@@ -587,6 +592,7 @@ export class SqliteSecurityStore
         input.audience,
         input.profile,
         JSON.stringify([...new Set(input.scopes)].sort()),
+        JSON.stringify([...new Set(input.selectedUserIds ?? [])].sort()),
         input.clientSecurityEpoch ?? 1,
         now
       );
@@ -598,7 +604,8 @@ export class SqliteSecurityStore
         `SELECT client.id, client.owner_id, client.subject_id,
                 client.installation_id, client.key_thumbprint,
                 client.audience, client.profile,
-                client.scopes_json, client.client_epoch, owner.security_epoch AS owner_epoch,
+                client.scopes_json, client.selected_user_ids_json,
+                client.client_epoch, owner.security_epoch AS owner_epoch,
                 client.created_at, client.revoked_at,
                 metadata.client_type
          FROM security_clients client
@@ -617,7 +624,8 @@ export class SqliteSecurityStore
         `SELECT client.id, client.owner_id, client.subject_id,
                 client.installation_id, client.key_thumbprint,
                 client.audience, client.profile,
-                client.scopes_json, client.client_epoch,
+                client.scopes_json, client.selected_user_ids_json,
+                client.client_epoch,
                 owner.security_epoch AS owner_epoch,
                 client.created_at, client.revoked_at,
                 metadata.client_type
@@ -639,7 +647,8 @@ export class SqliteSecurityStore
         `SELECT client.id, client.owner_id, client.subject_id,
                 client.installation_id, client.key_thumbprint,
                 client.audience, client.profile,
-                client.scopes_json, client.client_epoch,
+                client.scopes_json, client.selected_user_ids_json,
+                client.client_epoch,
                 owner.security_epoch AS owner_epoch,
                 client.created_at, client.revoked_at,
                 request.client_name,
@@ -758,6 +767,7 @@ export class SqliteSecurityStore
     audience: string;
     profile: ForgePrincipal["profile"];
     scopes: readonly string[];
+    selectedUserIds: readonly string[];
     keyThumbprint: string | null;
     compatibilityAuthorizationId: string | null;
     ownerSecurityEpoch: number;
@@ -776,7 +786,9 @@ export class SqliteSecurityStore
       client.revokedAt ||
       (input.keyThumbprint !== null &&
         client.keyThumbprint !== input.keyThumbprint) ||
-      input.scopes.some((scope) => !client.scopes.includes(scope))
+      input.scopes.some((scope) => !client.scopes.includes(scope)) ||
+      JSON.stringify([...input.selectedUserIds].sort()) !==
+        JSON.stringify([...client.selectedUserIds].sort())
     ) {
       return false;
     }

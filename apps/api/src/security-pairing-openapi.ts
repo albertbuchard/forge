@@ -298,7 +298,7 @@ export function buildSecurityPairingOpenApiPaths(): Record<string, unknown> {
                 available: { type: "boolean" },
                 credentials: {
                   type: "array",
-                  maxItems: 16,
+                  maxItems: 64,
                   items: trustedBrowserCredentialSchema
                 }
               }
@@ -314,7 +314,7 @@ export function buildSecurityPairingOpenApiPaths(): Record<string, unknown> {
         summary: "List current and revoked trusted-device credentials",
         description:
           "Owner-only bounded management projection. It never returns credential public keys, counters, raw challenges, challenge hashes, or cookie material.",
-        security: [{ operatorSession: [] }],
+        security: [{ browserSession: [] }],
         responses: {
           "200": {
             description: "Trusted-device credential summaries",
@@ -339,7 +339,9 @@ export function buildSecurityPairingOpenApiPaths(): Record<string, unknown> {
     "/api/v1/auth/trusted-browser/credentials/{id}/revoke": {
       post: {
         summary: "Revoke one trusted-device credential",
-        security: [{ operatorSession: [] }],
+        description:
+          "Owner-only operation authenticated by the current Forge browser session. Paired-browser principals are rejected even though they use the same cookie transport.",
+        security: [{ browserSession: [] }],
         parameters: [
           {
             name: "id",

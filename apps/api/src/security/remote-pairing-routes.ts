@@ -227,6 +227,7 @@ function pairedPrincipal(
     installationId: client.installationId,
     audience: client.audience,
     scopes: client.scopes,
+    selectedUserIds: client.selectedUserIds,
     clientType: client.clientType,
     profile: client.profile,
     ownerSecurityEpoch: client.ownerSecurityEpoch,

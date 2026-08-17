@@ -52,6 +52,7 @@ export type BrowserClientStateReader = {
     audience: string;
     profile: ForgePrincipal["profile"];
     scopes: readonly string[];
+    selectedUserIds: readonly string[];
     ownerSecurityEpoch: number;
     clientSecurityEpoch: number;
     revokedAt: string | null;
@@ -342,7 +343,10 @@ export class BrowserSessionService {
         client.profile === principal.profile &&
         client.ownerSecurityEpoch === principal.ownerSecurityEpoch &&
         client.clientSecurityEpoch === principal.clientSecurityEpoch &&
-        principal.scopes.every((scope) => client.scopes.includes(scope))
+        principal.scopes.length === client.scopes.length &&
+        principal.scopes.every((scope) => client.scopes.includes(scope)) &&
+        JSON.stringify([...(principal.selectedUserIds ?? [])].sort()) ===
+          JSON.stringify([...client.selectedUserIds].sort())
     );
   }
 }

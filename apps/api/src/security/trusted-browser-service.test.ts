@@ -225,7 +225,8 @@ function fixture() {
     keyThumbprint: "k".repeat(43),
     audience: "https://forge.test/api",
     profile: "trusted_personal_assistant",
-    scopes: ["read", "write"]
+    scopes: ["read", "write"],
+    selectedUserIds: ["user_primary"]
   });
   const principal: ForgePrincipal = {
     kind: "paired_client",
@@ -235,6 +236,7 @@ function fixture() {
     installationId,
     audience: "https://forge.test/api",
     scopes: ["read", "write"],
+    selectedUserIds: ["user_primary"],
     clientType: "browser",
     profile: "trusted_personal_assistant",
     ownerSecurityEpoch: 1,
@@ -321,6 +323,7 @@ test("trusted browser restores one exact paired authority and consumes assertion
     assert.equal(credential.clientId, context.clientId);
     assert.equal(credential.profile, "trusted_personal_assistant");
     assert.deepEqual(credential.scopes, ["read", "write"]);
+    assert.deepEqual(credential.selectedUserIds, ["user_primary"]);
 
     const authentication = await context.service.beginAuthentication({
       origin,
@@ -461,6 +464,52 @@ test("client-key mutation advances the epoch and rejects the stale paired sessio
     );
   } finally {
     context.database.close();
+  }
+});
+
+test("selected-user restriction and owner reassignment invalidate exact authority", async () => {
+  for (const scenario of ["selected-user", "owner"] as const) {
+    const context = fixture();
+    try {
+      await registerTrustedBrowser(context);
+      if (scenario === "selected-user") {
+        context.database
+          .prepare(
+            "UPDATE security_clients SET selected_user_ids_json = ? WHERE id = ?"
+          )
+          .run('["user_other"]', context.clientId);
+      } else {
+        context.database
+          .prepare(
+            `INSERT INTO security_owners (
+               owner_id, security_epoch, created_at, recovered_at
+             ) VALUES (?, 1, ?, NULL)`
+          )
+          .run("owner_reassigned", context.clock.now().toISOString());
+        context.database
+          .prepare("UPDATE security_clients SET owner_id = ? WHERE id = ?")
+          .run("owner_reassigned", context.clientId);
+      }
+      assert.equal(
+        context.store.readClient(context.clientId)?.clientSecurityEpoch,
+        2
+      );
+      const [credential] = context.service.list(context.ownerId);
+      assert.ok(credential?.revokedAt);
+      assert.equal(credential?.revocationReason, "client_authority_changed");
+      await assert.rejects(
+        context.service.beginRegistration({
+          session: context.session,
+          origin: "https://forge.test",
+          directLocalTransport: false
+        }),
+        scenario === "owner"
+          ? /selected paired-browser authority is unavailable/
+          : /no longer matches its exact client authority/
+      );
+    } finally {
+      context.database.close();
+    }
   }
 });
 
@@ -660,6 +709,116 @@ test("transport policy permits direct loopback and HTTPS but rejects remote HTTP
         networkPartition: "test:remote-http"
       }),
       /HTTPS/
+    );
+  } finally {
+    context.database.close();
+  }
+});
+
+test("the 64-credential boundary remains usable, manageable, and race-safe", async () => {
+  const context = fixture();
+  try {
+    const origin = "https://forge.test";
+    for (let index = 0; index < 63; index += 1) {
+      await registerTrustedBrowser(context, origin);
+    }
+    const firstRace = await context.service.beginRegistration({
+      session: context.session,
+      origin,
+      directLocalTransport: false,
+      label: "Boundary credential A"
+    });
+    const secondRace = await context.service.beginRegistration({
+      session: context.session,
+      origin,
+      directLocalTransport: false,
+      label: "Boundary credential B"
+    });
+    const firstAuthenticator = registrationResponse({
+      challenge: firstRace.options.challenge,
+      origin,
+      rpId: "forge.test"
+    });
+    const secondAuthenticator = registrationResponse({
+      challenge: secondRace.options.challenge,
+      origin,
+      rpId: "forge.test"
+    });
+    await context.service.finishRegistration({
+      session: context.session,
+      origin,
+      directLocalTransport: false,
+      challengeId: firstRace.challengeId,
+      response: firstAuthenticator.response
+    });
+    await assert.rejects(
+      context.service.finishRegistration({
+        session: context.session,
+        origin,
+        directLocalTransport: false,
+        challengeId: secondRace.challengeId,
+        response: secondAuthenticator.response
+      }),
+      /missing, expired, replayed, or stale/
+    );
+
+    const allActive = context.service.list(context.ownerId);
+    assert.equal(allActive.length, 64);
+    assert.equal(allActive.every((credential) => !credential.revokedAt), true);
+    assert.throws(
+      () =>
+        context.database
+          .prepare(
+            `INSERT INTO security_trusted_browser_credentials (
+               id, credential_id, owner_id, installation_id,
+               data_root_binding, client_id, client_subject_id,
+               client_key_thumbprint, client_type, audience, profile,
+               scopes_json, selected_user_ids_json, owner_epoch, client_epoch,
+               authority_digest, rp_id, origin, public_key_base64, counter,
+               transports_json, label, device_type, backed_up, aaguid,
+               created_at, last_used_at, revoked_at, revocation_reason
+             )
+             SELECT ?, ?, owner_id, installation_id, data_root_binding,
+                    client_id, client_subject_id, client_key_thumbprint,
+                    client_type, audience, profile, scopes_json,
+                    selected_user_ids_json, owner_epoch, client_epoch,
+                    authority_digest, rp_id, origin, public_key_base64,
+                    counter, transports_json, label, device_type, backed_up,
+                    aaguid, created_at, last_used_at, NULL, NULL
+             FROM security_trusted_browser_credentials WHERE id = ?`
+          )
+          .run(
+            "tbr_capacity_overflow_65",
+            "capacity_overflow_65",
+            allActive[0]!.id
+          ),
+      /active credential limit reached/
+    );
+    await assert.rejects(
+      context.service.beginRegistration({
+        session: context.session,
+        origin,
+        directLocalTransport: false
+      }),
+      /maximum number of active trusted-device credentials/
+    );
+
+    assert.equal(
+      context.service.revoke(context.ownerId, allActive[0]!.id),
+      true
+    );
+    const manageable = context.service.list(context.ownerId);
+    assert.equal(manageable.length, 64);
+    assert.equal(
+      manageable.filter((credential) => !credential.revokedAt).length,
+      63
+    );
+    await assert.doesNotReject(
+      context.service.beginRegistration({
+        session: context.session,
+        origin,
+        directLocalTransport: false
+      })
     );
   } finally {
     context.database.close();

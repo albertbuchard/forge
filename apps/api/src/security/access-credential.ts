@@ -11,6 +11,7 @@ type AccessCredentialClaims = JWTPayload & {
   owner_id: string;
   profile: ForgePrincipal["profile"];
   scopes: string[];
+  selected_user_ids: string[];
   owner_epoch: number;
   client_epoch: number;
   principal_kind: ForgePrincipal["kind"];
@@ -46,6 +47,7 @@ export type CredentialStateReader = {
     audience: string;
     profile: ForgePrincipal["profile"];
     scopes: readonly string[];
+    selectedUserIds: readonly string[];
     keyThumbprint: string | null;
     compatibilityAuthorizationId: string | null;
     ownerSecurityEpoch: number;
@@ -149,6 +151,7 @@ export class AccessCredentialService {
       owner_id: principal.ownerId,
       profile: principal.profile,
       scopes: [...principal.scopes],
+      selected_user_ids: [...(principal.selectedUserIds ?? [])].sort(),
       owner_epoch: principal.ownerSecurityEpoch,
       client_epoch: principal.clientSecurityEpoch,
       principal_kind: principal.kind,
@@ -171,6 +174,7 @@ export class AccessCredentialService {
         audience: principal.audience,
         profile: principal.profile,
         scopes: principal.scopes,
+        selectedUserIds: principal.selectedUserIds ?? [],
         keyThumbprint:
           issuance.mode === "sender_constrained"
             ? issuance.confirmationJkt
@@ -227,6 +231,10 @@ export class AccessCredentialService {
       typeof payload.client_epoch !== "number" ||
       !Array.isArray(payload.scopes) ||
       !payload.scopes.every((scope) => typeof scope === "string") ||
+      !Array.isArray(payload.selected_user_ids) ||
+      !payload.selected_user_ids.every(
+        (userId) => typeof userId === "string"
+      ) ||
       !["sender_constrained", "compatibility_bearer"].includes(
         payload.credential_mode
       )
@@ -260,6 +268,7 @@ export class AccessCredentialService {
         audience: input.audience,
         profile: payload.profile,
         scopes: payload.scopes,
+        selectedUserIds: payload.selected_user_ids,
         keyThumbprint: payload.cnf?.jkt ?? null,
         compatibilityAuthorizationId:
           payload.compatibility_authorization_id ?? null,

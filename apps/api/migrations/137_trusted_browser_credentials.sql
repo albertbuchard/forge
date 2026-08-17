@@ -1,6 +1,9 @@
 -- Restore one exact paired-browser grant through a user-verified WebAuthn
 -- credential. Challenges are single-use and store only keyed challenge hashes.
 
+ALTER TABLE security_clients
+  ADD COLUMN selected_user_ids_json TEXT NOT NULL DEFAULT '[]';
+
 CREATE TABLE security_trusted_browser_credentials (
   id TEXT PRIMARY KEY,
   credential_id TEXT NOT NULL UNIQUE,
@@ -46,6 +49,17 @@ CREATE INDEX idx_security_trusted_browser_client
 CREATE INDEX idx_security_trusted_browser_rp
   ON security_trusted_browser_credentials (rp_id, revoked_at, credential_id);
 
+CREATE TRIGGER trg_security_trusted_browser_active_credential_cap
+BEFORE INSERT ON security_trusted_browser_credentials
+WHEN NEW.revoked_at IS NULL AND (
+  SELECT COUNT(*)
+  FROM security_trusted_browser_credentials
+  WHERE owner_id = NEW.owner_id AND revoked_at IS NULL
+) >= 64
+BEGIN
+  SELECT RAISE(ABORT, 'trusted browser active credential limit reached');
+END;
+
 CREATE TABLE security_trusted_browser_challenges (
   id TEXT PRIMARY KEY,
   ceremony TEXT NOT NULL CHECK (ceremony IN ('register', 'authenticate')),
@@ -78,7 +92,7 @@ CREATE INDEX idx_security_trusted_browser_challenge_expiry
 -- already-issued browser/access sessions on the old client epoch.
 CREATE TRIGGER trg_security_trusted_browser_client_epoch_guard
 AFTER UPDATE OF owner_id, subject_id, installation_id, key_thumbprint,
-  audience, profile, scopes_json, revoked_at
+  audience, profile, scopes_json, selected_user_ids_json, revoked_at
 ON security_clients
 WHEN OLD.client_epoch IS NEW.client_epoch
   AND (
@@ -89,6 +103,7 @@ WHEN OLD.client_epoch IS NEW.client_epoch
     OR OLD.audience IS NOT NEW.audience
     OR OLD.profile IS NOT NEW.profile
     OR OLD.scopes_json IS NOT NEW.scopes_json
+    OR OLD.selected_user_ids_json IS NOT NEW.selected_user_ids_json
     OR OLD.revoked_at IS NOT NEW.revoked_at
   )
 BEGIN
@@ -99,7 +114,8 @@ END;
 
 CREATE TRIGGER trg_security_trusted_browser_client_authority_change
 AFTER UPDATE OF owner_id, subject_id, installation_id, key_thumbprint,
-  audience, profile, scopes_json, client_epoch, revoked_at
+  audience, profile, scopes_json, selected_user_ids_json, client_epoch,
+  revoked_at
 ON security_clients
 WHEN OLD.owner_id IS NOT NEW.owner_id
   OR OLD.subject_id IS NOT NEW.subject_id
@@ -108,6 +124,7 @@ WHEN OLD.owner_id IS NOT NEW.owner_id
   OR OLD.audience IS NOT NEW.audience
   OR OLD.profile IS NOT NEW.profile
   OR OLD.scopes_json IS NOT NEW.scopes_json
+  OR OLD.selected_user_ids_json IS NOT NEW.selected_user_ids_json
   OR OLD.client_epoch IS NOT NEW.client_epoch
   OR OLD.revoked_at IS NOT NEW.revoked_at
 BEGIN

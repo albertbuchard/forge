@@ -29,6 +29,7 @@ import type { SecurityClock } from "./security-runtime.js";
 
 export const TRUSTED_BROWSER_CHALLENGE_TTL_SECONDS = 2 * 60;
 const MAXIMUM_PENDING_TRUSTED_BROWSER_CHALLENGES = 64;
+const MAXIMUM_ACTIVE_TRUSTED_BROWSER_CREDENTIALS = 64;
 
 const base64UrlSchema = z.string().regex(/^[A-Za-z0-9_-]+$/);
 const canonicalBase64Schema = z
@@ -297,6 +298,7 @@ export class TrustedBrowserService {
       ...input,
       origin: relyingParty.origin
     });
+    this.requireCredentialCapacity(authority.ownerId);
     const credentials = this.listActiveCredentialsForRp(relyingParty.rpId);
     const challenge = randomBytes(32);
     const options = await generateRegistrationOptions({
@@ -581,16 +583,33 @@ export class TrustedBrowserService {
   }
 
   list(ownerId: string) {
-    const rows = this.database
+    const activeRows = this.database
       .prepare(
         `SELECT credential.*
          FROM security_trusted_browser_credentials credential
-         WHERE credential.owner_id = ?
+         WHERE credential.owner_id = ? AND credential.revoked_at IS NULL
          ORDER BY credential.created_at DESC, credential.id ASC
          LIMIT 64`
       )
       .all(ownerId) as TrustedBrowserCredentialRow[];
-    return rows.map((row) =>
+    const remainingHistory = Math.max(
+      0,
+      MAXIMUM_ACTIVE_TRUSTED_BROWSER_CREDENTIALS - activeRows.length
+    );
+    const revokedRows =
+      remainingHistory === 0
+        ? []
+        : (this.database
+            .prepare(
+              `SELECT credential.*
+               FROM security_trusted_browser_credentials credential
+               WHERE credential.owner_id = ?
+                 AND credential.revoked_at IS NOT NULL
+               ORDER BY credential.created_at DESC, credential.id ASC
+               LIMIT ?`
+            )
+            .all(ownerId, remainingHistory) as TrustedBrowserCredentialRow[]);
+    return [...activeRows, ...revokedRows].map((row) =>
       this.statusForCredential(mapTrustedBrowserCredential(row))
     );
   }
@@ -607,7 +626,7 @@ export class TrustedBrowserService {
          WHERE owner_id = ? AND client_id = ? AND rp_id = ?
            AND revoked_at IS NULL
          ORDER BY created_at DESC, id ASC
-         LIMIT 16`
+         LIMIT 64`
       )
       .all(
         principal.ownerId,
@@ -690,7 +709,7 @@ export class TrustedBrowserService {
           "operator"
         >,
         scopes: principal.scopes,
-        selectedUserIds: [],
+        selectedUserIds: principal.selectedUserIds ?? [],
         clientSecurityEpoch: principal.clientSecurityEpoch!
       });
       if (!safeDigestEqual(exactPrincipalDigest, authority.authorityDigest)) {
@@ -733,7 +752,7 @@ export class TrustedBrowserService {
       audience: client.audience,
       profile: client.profile as Exclude<ForgePrincipal["profile"], "operator">,
       scopes: canonicalStringArray(client.scopes),
-      selectedUserIds: [] as string[],
+      selectedUserIds: canonicalStringArray(client.selectedUserIds),
       clientSecurityEpoch: client.clientSecurityEpoch,
       client
     };
@@ -907,6 +926,21 @@ export class TrustedBrowserService {
       });
     if (Number(inserted.changes) !== 1) return null;
     return this.readCredentialById(input.id);
+  }
+
+  private requireCredentialCapacity(ownerId: string) {
+    const row = this.database
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM security_trusted_browser_credentials
+         WHERE owner_id = ? AND revoked_at IS NULL`
+      )
+      .get(ownerId) as { count: number };
+    if (row.count >= MAXIMUM_ACTIVE_TRUSTED_BROWSER_CREDENTIALS) {
+      throw new Error(
+        "This Forge owner already has the maximum number of active trusted-device credentials. Revoke one before adding another."
+      );
+    }
   }
 
   private listActiveCredentialsForRp(rpId: string) {

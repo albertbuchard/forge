@@ -17,6 +17,8 @@ export type ForgePrincipal = {
   installationId: string | null;
   audience: string;
   scopes: readonly string[];
+  /** Canonical user records this client is restricted to; empty means no user restriction. */
+  selectedUserIds?: readonly string[];
   /**
    * Paired credentials retain the reviewed client class so narrow grants
    * cannot be reinterpreted through a different renewal or session path.

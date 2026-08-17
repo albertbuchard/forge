@@ -51,7 +51,12 @@ test("exact owner pairing routes publish a secret-free OpenAPI contract", () => 
 test("trusted-device OpenAPI is non-enumerating and never promises operator restoration", () => {
   const document = buildOpenApiDocument() as {
     paths: Record<string, Record<string, Record<string, unknown>>>;
-    components: { securitySchemes: Record<string, unknown> };
+    components: {
+      securitySchemes: Record<
+        string,
+        { type?: string; in?: string; name?: string }
+      >;
+    };
   };
   const options =
     document.paths["/api/v1/auth/trusted-browser/authentication/options"]?.post;
@@ -82,9 +87,13 @@ test("trusted-device OpenAPI is non-enumerating and never promises operator rest
   assert.deepEqual(registration.security, [{ browserSession: [] }]);
   assert.deepEqual(registrationVerify.security, [{ browserSession: [] }]);
   assert.deepEqual(status.security, [{ browserSession: [] }]);
-  assert.deepEqual(credentials.security, [{ operatorSession: [] }]);
-  assert.deepEqual(revoke.security, [{ operatorSession: [] }]);
+  assert.deepEqual(credentials.security, [{ browserSession: [] }]);
+  assert.deepEqual(revoke.security, [{ browserSession: [] }]);
   assert.ok(document.components.securitySchemes.browserSession);
+  assert.equal(
+    document.components.securitySchemes.browserSession?.name,
+    "forge_session"
+  );
 
   const publicContract = JSON.stringify({ options, verify });
   assert.match(publicContract, /discoverable/);
