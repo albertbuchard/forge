@@ -237,7 +237,7 @@ import type {
   TriggerReportInput,
   TriggerReportPage
 } from "./psyche-types";
-import type { FlashcardInput } from "./psyche-schemas";
+import { flashcardReadSchema, type FlashcardInput } from "./psyche-schemas";
 import type {
   CreateQuestionnaireInstrumentInput,
   QuestionnaireInstrumentDetail,
@@ -2782,6 +2782,12 @@ function readBatchEntity<T>(result: Record<string, unknown>): T {
   return result.entity as T;
 }
 
+function invalidFlashcardResponse() {
+  return new Error(
+    "Forge returned an invalid flashcard response. Reload Forge and try again."
+  );
+}
+
 export async function listFlashcards(userIds?: string[] | unknown) {
   const response = await searchEntities({
     searches: [
@@ -2792,8 +2798,23 @@ export async function listFlashcards(userIds?: string[] | unknown) {
       }
     ]
   });
-  const matches = (response.results[0]?.matches ?? []) as Flashcard[];
-  return { flashcards: matches };
+  const rawMatches = response.results[0]?.matches;
+  if (rawMatches !== undefined && !Array.isArray(rawMatches)) {
+    throw invalidFlashcardResponse();
+  }
+  const flashcards = (rawMatches ?? []).map((match) => {
+    if (typeof match !== "object" || match === null || !("entity" in match)) {
+      throw invalidFlashcardResponse();
+    }
+    const parsed = flashcardReadSchema.safeParse(
+      (match as { entity?: unknown }).entity
+    );
+    if (!parsed.success) {
+      throw invalidFlashcardResponse();
+    }
+    return parsed.data satisfies Flashcard;
+  });
+  return { flashcards };
 }
 
 export async function createFlashcard(input: FlashcardInput) {

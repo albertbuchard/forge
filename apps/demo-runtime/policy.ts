@@ -1,5 +1,18 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
+export const DEMO_CAPABILITY_HEADER = "x-forge-demo";
+export const DEMO_CAPABILITY_VALUE = "isolated";
+
+export function markDemoProxyResponse(
+  headers: Readonly<Record<string, string | string[] | undefined>>
+) {
+  return {
+    ...headers,
+    "cache-control": "no-store",
+    [DEMO_CAPABILITY_HEADER]: DEMO_CAPABILITY_VALUE
+  };
+}
+
 export function encodeDemoSessionToken(
   secret: string,
   id: string,
@@ -12,7 +25,10 @@ export function encodeDemoSessionToken(
   return `${value}.${signature}`;
 }
 
-export function decodeDemoSessionToken(secret: string, raw: string | undefined) {
+export function decodeDemoSessionToken(
+  secret: string,
+  raw: string | undefined
+) {
   if (!raw) return null;
   const parts = raw.split(".");
   if (parts.length !== 3) return null;
@@ -53,7 +69,9 @@ const BLOCKED_READ_PREFIXES = [
 export function demoRouteAllowed(method: string, url: URL, body: Buffer) {
   if (method === "GET" || method === "HEAD") {
     return (
-      !BLOCKED_READ_PREFIXES.some((prefix) => url.pathname.startsWith(prefix)) &&
+      !BLOCKED_READ_PREFIXES.some((prefix) =>
+        url.pathname.startsWith(prefix)
+      ) &&
       !url.pathname.endsWith("/download") &&
       !url.pathname.endsWith("/raw")
     );

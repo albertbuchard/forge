@@ -27,6 +27,7 @@ import {
   getWeeklyReview,
   listRemotePairingRequests,
   listActivity,
+  listFlashcards,
   listNotes,
   listWikiPages,
   patchTask,
@@ -57,6 +58,143 @@ function mockJsonErrorResponse(
     text: vi.fn().mockResolvedValue(JSON.stringify(body))
   } as unknown as Response;
 }
+
+const legacyFlashcardEntity = {
+  id: "flashcard_legacy",
+  domainId: "domain_psyche",
+  message: "Pause, name what is happening, and choose the next kind action.",
+  userId: "user_owner",
+  user: {
+    id: "user_owner",
+    kind: "human",
+    handle: "owner",
+    displayName: "Owner",
+    description: "",
+    accentColor: "#2563eb",
+    createdAt: "2026-08-01T00:00:00.000Z",
+    updatedAt: "2026-08-01T00:00:00.000Z"
+  },
+  createdAt: "2026-08-18T10:00:00.000Z",
+  updatedAt: "2026-08-18T10:00:00.000Z"
+};
+
+describe("flashcard batch-search contract", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("unwraps a live entity, preserves owner decoration, and defaults legacy presentation fields", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse({
+        results: [
+          {
+            ok: true,
+            matches: [
+              {
+                deleted: false,
+                entityType: "flashcard",
+                id: legacyFlashcardEntity.id,
+                entity: legacyFlashcardEntity
+              }
+            ]
+          }
+        ]
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await listFlashcards(["user_owner"]);
+
+    expect(result.flashcards).toEqual([
+      expect.objectContaining({
+        id: "flashcard_legacy",
+        message: legacyFlashcardEntity.message,
+        title: "",
+        imageUrl: "",
+        imageAlt: "",
+        backgroundColor: "#f8fafc",
+        textColor: "#111827",
+        accentColor: "#6ee7b7",
+        typography: "serif",
+        layout: "centered",
+        visualStyle: "calm",
+        userId: "user_owner",
+        user: legacyFlashcardEntity.user
+      })
+    ]);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1]?.body))).toEqual({
+      searches: [
+        {
+          entityTypes: ["flashcard"],
+          userIds: ["user_owner"],
+          limit: 200
+        }
+      ]
+    });
+  });
+
+  it("rejects a batch wrapper with no entity", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        mockJsonResponse({
+          results: [
+            {
+              ok: true,
+              matches: [
+                {
+                  deleted: false,
+                  entityType: "flashcard",
+                  id: legacyFlashcardEntity.id
+                }
+              ]
+            }
+          ]
+        })
+      )
+    );
+
+    await expect(listFlashcards()).rejects.toThrow(
+      "Forge returned an invalid flashcard response. Reload Forge and try again."
+    );
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["blank", "   "]
+  ])(
+    "rejects a flashcard with a %s required message without echoing it",
+    async (_case, message) => {
+      const entity = { ...legacyFlashcardEntity } as Record<string, unknown>;
+      if (message === undefined) delete entity.message;
+      else entity.message = message;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          mockJsonResponse({
+            results: [
+              {
+                ok: true,
+                matches: [
+                  {
+                    deleted: false,
+                    entityType: "flashcard",
+                    id: legacyFlashcardEntity.id,
+                    entity
+                  }
+                ]
+              }
+            ]
+          })
+        )
+      );
+
+      await expect(listFlashcards()).rejects.toThrow(
+        "Forge returned an invalid flashcard response. Reload Forge and try again."
+      );
+    }
+  );
+});
 
 describe("notes API contract", () => {
   afterEach(() => {
@@ -390,36 +528,31 @@ describe("remote browser pairing client", () => {
     });
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(
-        {
-          ok: true,
-          status: 200,
-          headers: new Headers(),
-          text: vi.fn().mockResolvedValue(
-            JSON.stringify({
-              code: "pairing_owner_session_required",
-              error:
-                "Only the verified local owner can review pairing requests.",
-              statusCode: 403
-            })
-          )
-        } as unknown as Response
-      )
-      .mockResolvedValueOnce(
-        {
-          ok: true,
-          status: 200,
-          headers: new Headers(),
-          text: vi.fn().mockResolvedValue(
-            JSON.stringify({
-              code: "pairing_admission_limited",
-              error:
-                "Forge cannot admit another pairing request in the current bounded window.",
-              statusCode: 429
-            })
-          )
-        } as unknown as Response
-      );
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            code: "pairing_owner_session_required",
+            error: "Only the verified local owner can review pairing requests.",
+            statusCode: 403
+          })
+        )
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            code: "pairing_admission_limited",
+            error:
+              "Forge cannot admit another pairing request in the current bounded window.",
+            statusCode: 429
+          })
+        )
+      } as unknown as Response);
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(listRemotePairingRequests()).rejects.toMatchObject({
@@ -1197,9 +1330,7 @@ describe("create entity payload normalization", () => {
     expect(exchangeCount).toBe(2);
     expect(handlerUrls).toHaveLength(2);
     expect(handlerUrls[1]).toBe(stagedHandlerUrl);
-    expect(
-      [...new URL(handlerUrls[1]!).searchParams.keys()].sort()
-    ).toEqual([
+    expect([...new URL(handlerUrls[1]!).searchParams.keys()].sort()).toEqual([
       "apiOrigin",
       "browserNonce",
       "browserOrigin",

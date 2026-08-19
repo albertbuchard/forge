@@ -6,6 +6,21 @@ const uniqueStrings = z
   .array(nonEmpty)
   .transform((values) => Array.from(new Set(values)));
 const ownedUserId = z.string().trim().min(1).nullable().optional();
+const userSummaryReadSchema = z.object({
+  id: nonEmpty,
+  kind: z.enum(["human", "bot"]),
+  lifecycleStatus: z.enum(["active", "inactive"]).optional(),
+  handle: trimmed,
+  displayName: trimmed,
+  description: trimmed,
+  accentColor: trimmed,
+  deactivatedAt: z.string().trim().nullable().optional(),
+  lifecycleReason: trimmed.optional(),
+  lifecycleActor: z.string().trim().nullable().optional(),
+  lifecycleSource: z.enum(["ui", "agent", "system"]).nullable().optional(),
+  createdAt: nonEmpty,
+  updatedAt: nonEmpty
+});
 
 export const psycheValueSchema = z.object({
   title: nonEmpty,
@@ -211,6 +226,19 @@ export const flashcardSchema = z.object({
   userId: ownedUserId
 });
 
+export const flashcardReadSchema = flashcardSchema.extend({
+  id: nonEmpty,
+  domainId: nonEmpty,
+  message: nonEmpty,
+  createdAt: nonEmpty,
+  updatedAt: nonEmpty,
+  user: userSummaryReadSchema.nullable().optional(),
+  ownerUserId: ownedUserId,
+  ownerUser: userSummaryReadSchema.nullable().optional(),
+  assigneeUserIds: z.array(nonEmpty).optional(),
+  assignees: z.array(userSummaryReadSchema).optional()
+});
+
 export const eventTypeSchema = z.object({
   label: nonEmpty,
   description: trimmed,
@@ -304,6 +332,7 @@ export type BeliefEntryInput = z.infer<typeof beliefEntrySchema>;
 export type ModeProfileInput = z.infer<typeof modeProfileSchema>;
 export type ModeGuideSessionInput = z.infer<typeof modeGuideSessionSchema>;
 export type FlashcardInput = z.infer<typeof flashcardSchema>;
+export type FlashcardRead = z.infer<typeof flashcardReadSchema>;
 export type EventTypeInput = z.infer<typeof eventTypeSchema>;
 export type EmotionDefinitionInput = z.infer<typeof emotionDefinitionSchema>;
 export type TriggerReportInput = z.infer<typeof triggerReportSchema>;

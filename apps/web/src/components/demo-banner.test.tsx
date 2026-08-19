@@ -17,6 +17,12 @@ describe("public demo banner", () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock
       .mockResolvedValueOnce(
+        new Response(null, {
+          status: 200,
+          headers: { "x-forge-demo": "isolated" }
+        })
+      )
+      .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
             demo: {
@@ -34,15 +40,35 @@ describe("public demo banner", () => {
     await screen.findByRole("complementary", {
       name: "Public demonstration notice"
     });
-    expect(screen.getByText("Public demonstration · sample data only")).toBeTruthy();
-    expect(screen.getByText(/cannot reach personal Forge data or external services/u)).toBeTruthy();
+    expect(
+      screen.getByText("Public demonstration · sample data only")
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/cannot reach personal Forge data or external services/u)
+    ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Reset sample" })).toBeTruthy();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/health",
+      expect.objectContaining({ credentials: "same-origin" })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/demo/status",
+      expect.objectContaining({ credentials: "same-origin" })
+    );
   });
 
   it("renders nothing outside the isolated demo gateway", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 404 }));
+    const fetchMock = vi
+      .mocked(fetch)
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
     const { container } = render(<DemoBanner />);
-    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/health",
+      expect.objectContaining({ credentials: "same-origin" })
+    );
     expect(container).toBeEmptyDOMElement();
   });
 });

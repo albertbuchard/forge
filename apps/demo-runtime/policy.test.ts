@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DEMO_CAPABILITY_HEADER,
+  DEMO_CAPABILITY_VALUE,
   decodeDemoSessionToken,
   demoRouteAllowed,
-  encodeDemoSessionToken
+  encodeDemoSessionToken,
+  markDemoProxyResponse
 } from "./policy.js";
 
 const secret = "a-demo-secret-that-is-at-least-thirty-two-bytes";
@@ -15,10 +18,7 @@ test("demo session tokens are opaque, integrity protected, and reject tampering"
     id: "session-1",
     createdAt: 1_786_510_800_000
   });
-  assert.equal(
-    decodeDemoSessionToken(secret, `${token.slice(0, -1)}x`),
-    null
-  );
+  assert.equal(decodeDemoSessionToken(secret, `${token.slice(0, -1)}x`), null);
   assert.equal(decodeDemoSessionToken(`${secret}-other`, token), null);
   assert.equal(decodeDemoSessionToken(secret, "bad.token"), null);
 });
@@ -36,7 +36,11 @@ test("demo policy permits sample reads and task-state changes while denying priv
     "/api/v1/notes/note-1/raw"
   ]) {
     assert.equal(
-      demoRouteAllowed("GET", new URL(path, "https://demo.example"), Buffer.alloc(0)),
+      demoRouteAllowed(
+        "GET",
+        new URL(path, "https://demo.example"),
+        Buffer.alloc(0)
+      ),
       false,
       path
     );
@@ -68,4 +72,16 @@ test("demo policy permits sample reads and task-state changes while denying priv
     ),
     false
   );
+});
+
+test("demo proxy responses carry the isolated capability marker without dropping upstream headers", () => {
+  const headers = markDemoProxyResponse({
+    "content-type": "application/json",
+    "set-cookie": ["forge_session=opaque"]
+  });
+
+  assert.equal(headers[DEMO_CAPABILITY_HEADER], DEMO_CAPABILITY_VALUE);
+  assert.equal(headers["cache-control"], "no-store");
+  assert.equal(headers["content-type"], "application/json");
+  assert.deepEqual(headers["set-cookie"], ["forge_session=opaque"]);
 });
