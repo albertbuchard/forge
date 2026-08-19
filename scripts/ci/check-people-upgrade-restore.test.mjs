@@ -359,6 +359,11 @@ test(
       scenario.restoredUpgrade.repeatable.migrationTimestampsCompared,
       false
     );
+    assert.deepEqual(
+      scenario.preservationContract.volatileColumnsByTable
+        .user_ownership_defaults,
+      ["created_at", "updated_at"]
+    );
     assert.ok(scenario.sourceUpgrade.preservation.checkedTableCount > 20);
     assert.ok(scenario.sourceUpgrade.preservation.checkedRowCount > 0);
     assert.equal(scenario.sourceUpgrade.preservation.additiveRowCount, 14);

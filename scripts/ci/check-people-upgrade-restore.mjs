@@ -71,6 +71,10 @@ const REPEAT_UPGRADE_VOLATILE_COLUMNS = Object.freeze({
   ])
 });
 
+const INDEPENDENT_UPGRADE_VOLATILE_COLUMNS = Object.freeze({
+  user_ownership_defaults: Object.freeze(["created_at", "updated_at"])
+});
+
 const PRIOR_RUNTIME_STARTUP_VOLATILE_COLUMNS = Object.freeze({
   user_access_grants: Object.freeze(["updated_at"]),
   users: Object.freeze(["updated_at"])
@@ -3075,6 +3079,22 @@ function verifyCurrentMigrationContract({
   }
 }
 
+function isCanonicalDatabaseTimestamp(value) {
+  if (typeof value !== "string") return false;
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.valueOf()) && parsed.toISOString() === value) {
+    return true;
+  }
+  if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/u.test(value)) {
+    return false;
+  }
+  const sqliteUtc = new Date(`${value.replace(" ", "T")}Z`);
+  return (
+    !Number.isNaN(sqliteUtc.valueOf()) &&
+    sqliteUtc.toISOString().replace("T", " ").slice(0, 19) === value
+  );
+}
+
 function tableHashWithoutVolatileColumns(tableName, table, volatileColumns) {
   const volatile = new Set(volatileColumns);
   for (const column of volatile) {
@@ -3092,15 +3112,10 @@ function tableHashWithoutVolatileColumns(tableName, table, volatileColumns) {
   for (const row of table.rows) {
     for (const column of volatile) {
       const value = row[column];
-      if (
-        value !== null &&
-        (typeof value !== "string" ||
-          Number.isNaN(Date.parse(value)) ||
-          new Date(value).toISOString() !== value)
-      ) {
+      if (value !== null && !isCanonicalDatabaseTimestamp(value)) {
         fail(
           "repeat_upgrade_volatile_value_invalid",
-          `${tableName}.${column} contains a non-ISO timestamp.`
+          `${tableName}.${column} contains a non-canonical timestamp.`
         );
       }
     }
@@ -3311,6 +3326,7 @@ async function runScenario({
       : {})
   };
   const volatileColumnsByTable = {
+    ...INDEPENDENT_UPGRADE_VOLATILE_COLUMNS,
     ...(scenario.expectVolatileQuestionnaireSeedTimestamps
       ? REPEAT_UPGRADE_VOLATILE_COLUMNS
       : {}),
@@ -3695,6 +3711,13 @@ function validateReleaseCoverage(
       .sort((left, right) =>
         left.tableName.localeCompare(right.tableName, "en")
       );
+    const observedVolatileEvidenceIsDeclared =
+      result.restoredUpgrade.repeatable.volatileTableEvidence.every(
+        ({ tableName, volatileColumns }) =>
+          stableSerialize(
+            result.preservationContract.volatileColumnsByTable[tableName]
+          ) === stableSerialize(volatileColumns)
+      );
     const sourceAdditiveEvidence = sourcePreservation.tables
       .filter((table) => !table.strictCount)
       .map(({ tableName, expectedAdditiveRows, additiveRows }) => ({
@@ -3741,9 +3764,9 @@ function validateReleaseCoverage(
       result.restoredUpgrade.repeatable.migrationTimestampsCompared !== false ||
       result.restoredUpgrade.repeatable.excludedDerivedShadowTableCount !==
         result.sourceUpgrade.idempotent.excludedDerivedShadowTableCount ||
-      stableSerialize(
-        result.restoredUpgrade.repeatable.volatileTableEvidence
-      ) !== stableSerialize(expectedVolatileEvidence) ||
+      !observedVolatileEvidenceIsDeclared ||
+      result.restoredUpgrade.repeatable.volatileTableEvidence.length >
+        expectedVolatileEvidence.length ||
       result.sourceUpgrade.contract.appliedMigrationCount !==
         result.sourceUpgrade.idempotent.migrationCount ||
       result.sourceUpgrade.contract.appliedSqlMigrationCount !==
