@@ -3079,7 +3079,7 @@ function verifyCurrentMigrationContract({
   }
 }
 
-function isCanonicalDatabaseTimestamp(value) {
+export function isCanonicalDatabaseTimestamp(value) {
   if (typeof value !== "string") return false;
   const parsed = new Date(value);
   if (!Number.isNaN(parsed.valueOf()) && parsed.toISOString() === value) {
@@ -3123,7 +3123,7 @@ function tableHashWithoutVolatileColumns(tableName, table, volatileColumns) {
   return sha256(stableSerialize({ tableName, columns, rows }));
 }
 
-function verifySnapshotsEquivalent(
+export function verifySnapshotsEquivalent(
   left,
   right,
   {
@@ -3209,6 +3209,24 @@ function verifySnapshotsEquivalent(
       )
     )
   };
+}
+
+export function observedVolatileEvidenceIsDeclaredSubset(
+  observedEvidence,
+  declaredColumnsByTable
+) {
+  const seenTables = new Set();
+  for (const { tableName, volatileColumns } of observedEvidence) {
+    if (
+      seenTables.has(tableName) ||
+      stableSerialize(declaredColumnsByTable[tableName]) !==
+        stableSerialize(volatileColumns)
+    ) {
+      return false;
+    }
+    seenTables.add(tableName);
+  }
+  return seenTables.size <= Object.keys(declaredColumnsByTable).length;
 }
 
 function exerciseAdversarialBackups({
@@ -3712,11 +3730,9 @@ function validateReleaseCoverage(
         left.tableName.localeCompare(right.tableName, "en")
       );
     const observedVolatileEvidenceIsDeclared =
-      result.restoredUpgrade.repeatable.volatileTableEvidence.every(
-        ({ tableName, volatileColumns }) =>
-          stableSerialize(
-            result.preservationContract.volatileColumnsByTable[tableName]
-          ) === stableSerialize(volatileColumns)
+      observedVolatileEvidenceIsDeclaredSubset(
+        result.restoredUpgrade.repeatable.volatileTableEvidence,
+        result.preservationContract.volatileColumnsByTable
       );
     const sourceAdditiveEvidence = sourcePreservation.tables
       .filter((table) => !table.strictCount)

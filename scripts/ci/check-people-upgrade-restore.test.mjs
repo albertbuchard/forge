@@ -15,12 +15,19 @@ import {
   assertOutputPathAllowed,
   createHarnessEvidenceRoot,
   defaultRepoRoot,
+  isCanonicalDatabaseTimestamp,
+  observedVolatileEvidenceIsDeclaredSubset,
   runPeopleUpgradeRestoreHarness,
   serializeReportForStdout,
   verifyBackupManifest,
   verifyPriorReleaseArtifactBytes,
-  verifyPriorReleaseRegistryMetadata
+  verifyPriorReleaseRegistryMetadata,
+  verifySnapshotsEquivalent
 } from "./check-people-upgrade-restore.mjs";
+
+const VOLATILE_OWNERSHIP_COLUMNS = Object.freeze({
+  user_ownership_defaults: ["created_at", "updated_at"]
+});
 
 function digest(bytes, algorithm, encoding) {
   return createHash(algorithm).update(bytes).digest(encoding);
@@ -37,6 +44,200 @@ function parseCliFailure(stderr, expectedCode) {
   }
   return null;
 }
+
+function makeRepeatUpgradeSnapshot({
+  tableName = "user_ownership_defaults",
+  ownerUserId = "user_owner",
+  createdAt = "2026-08-19 23:26:08",
+  updatedAt = "2026-08-19 23:26:08",
+  rowCount = 1
+} = {}) {
+  const row = {
+    subject_user_id: "user_subject",
+    owner_user_id: ownerUserId,
+    updated_by_actor: null,
+    created_at: createdAt,
+    updated_at: updatedAt
+  };
+  return {
+    excludedDerivedShadowTables: [],
+    tables: {
+      [tableName]: {
+        rowCount,
+        logicalSha256: digest(JSON.stringify(row), "sha256", "hex"),
+        columns: Object.keys(row),
+        rows: [row]
+      }
+    },
+    migrations: []
+  };
+}
+
+test("canonical database timestamps accept only exact UTC representations", () => {
+  assert.equal(isCanonicalDatabaseTimestamp("2026-08-19T23:26:08.000Z"), true);
+  assert.equal(isCanonicalDatabaseTimestamp("2026-08-19 23:26:08"), true);
+  for (const value of [
+    "2026-08-19T23:26:08+02:00",
+    "2026-02-30 23:26:08",
+    "not-a-timestamp",
+    42,
+    null,
+    {}
+  ]) {
+    assert.equal(isCanonicalDatabaseTimestamp(value), false);
+  }
+});
+
+test("repeat-upgrade comparison permits either declared timestamp to vary or neither", () => {
+  const baseline = makeRepeatUpgradeSnapshot();
+  const variants = [
+    makeRepeatUpgradeSnapshot({ createdAt: "2026-08-19 23:26:09" }),
+    makeRepeatUpgradeSnapshot({ updatedAt: "2026-08-19 23:26:09" }),
+    makeRepeatUpgradeSnapshot({
+      createdAt: "2026-08-19 23:26:09",
+      updatedAt: "2026-08-19 23:26:09"
+    }),
+    makeRepeatUpgradeSnapshot()
+  ];
+  for (const [index, variant] of variants.entries()) {
+    const result = verifySnapshotsEquivalent(baseline, variant, {
+      volatileColumnsByTable: VOLATILE_OWNERSHIP_COLUMNS
+    });
+    assert.deepEqual(
+      result.volatileTableEvidence,
+      index === variants.length - 1
+        ? []
+        : [
+            {
+              tableName: "user_ownership_defaults",
+              volatileColumns: ["created_at", "updated_at"]
+            }
+          ]
+    );
+  }
+});
+
+test("repeat-upgrade comparison rejects malformed declared timestamps", () => {
+  const baseline = makeRepeatUpgradeSnapshot();
+  for (const createdAt of [
+    "2026-08-19T23:26:08+02:00",
+    "not-a-timestamp",
+    42
+  ]) {
+    assert.throws(
+      () =>
+        verifySnapshotsEquivalent(
+          baseline,
+          makeRepeatUpgradeSnapshot({ createdAt }),
+          { volatileColumnsByTable: VOLATILE_OWNERSHIP_COLUMNS }
+        ),
+      (error) => error.code === "repeat_upgrade_volatile_value_invalid"
+    );
+  }
+});
+
+test("repeat-upgrade comparison rejects structural and nonvolatile differences", () => {
+  const baseline = makeRepeatUpgradeSnapshot();
+  assert.throws(
+    () =>
+      verifySnapshotsEquivalent(
+        baseline,
+        makeRepeatUpgradeSnapshot({ rowCount: 2 }),
+        { volatileColumnsByTable: VOLATILE_OWNERSHIP_COLUMNS }
+      ),
+    (error) => error.code === "repeat_upgrade_hash_mismatch"
+  );
+  assert.throws(
+    () =>
+      verifySnapshotsEquivalent(
+        makeRepeatUpgradeSnapshot({ tableName: "other_defaults" }),
+        makeRepeatUpgradeSnapshot({
+          tableName: "other_defaults",
+          createdAt: "2026-08-19 23:26:09"
+        })
+      ),
+    (error) => error.code === "repeat_upgrade_hash_mismatch"
+  );
+  assert.throws(
+    () =>
+      verifySnapshotsEquivalent(
+        baseline,
+        makeRepeatUpgradeSnapshot({
+          ownerUserId: "user_other_owner",
+          updatedAt: "2026-08-19 23:26:09"
+        }),
+        { volatileColumnsByTable: VOLATILE_OWNERSHIP_COLUMNS }
+      ),
+    (error) => error.code === "repeat_upgrade_hash_mismatch"
+  );
+  assert.throws(
+    () =>
+      verifySnapshotsEquivalent(
+        baseline,
+        makeRepeatUpgradeSnapshot({ tableName: "other_defaults" }),
+        { volatileColumnsByTable: VOLATILE_OWNERSHIP_COLUMNS }
+      ),
+    (error) => error.code === "repeat_upgrade_table_mismatch"
+  );
+});
+
+test("release coverage accepts only declared volatile-table evidence subsets", () => {
+  const declared = {
+    user_ownership_defaults: ["created_at", "updated_at"],
+    people_profile_cache: ["updated_at"]
+  };
+  const ownershipEvidence = {
+    tableName: "user_ownership_defaults",
+    volatileColumns: ["created_at", "updated_at"]
+  };
+  const profileEvidence = {
+    tableName: "people_profile_cache",
+    volatileColumns: ["updated_at"]
+  };
+  assert.equal(observedVolatileEvidenceIsDeclaredSubset([], declared), true);
+  assert.equal(
+    observedVolatileEvidenceIsDeclaredSubset([ownershipEvidence], declared),
+    true
+  );
+  assert.equal(
+    observedVolatileEvidenceIsDeclaredSubset(
+      [ownershipEvidence, profileEvidence],
+      declared
+    ),
+    true
+  );
+  assert.equal(
+    observedVolatileEvidenceIsDeclaredSubset(
+      [
+        {
+          tableName: "undeclared_table",
+          volatileColumns: ["updated_at"]
+        }
+      ],
+      declared
+    ),
+    false
+  );
+  assert.equal(
+    observedVolatileEvidenceIsDeclaredSubset(
+      [
+        {
+          tableName: "user_ownership_defaults",
+          volatileColumns: ["created_at"]
+        }
+      ],
+      declared
+    ),
+    false
+  );
+  assert.equal(
+    observedVolatileEvidenceIsDeclaredSubset(
+      [ownershipEvidence, ownershipEvidence],
+      declared
+    ),
+    false
+  );
+});
 
 test("pinned prior artifact verification rejects missing, wrong, and tampered bytes", () => {
   const bytes = Buffer.from("deterministic-prior-release-fixture", "utf8");
