@@ -3095,9 +3095,8 @@ export function isCanonicalDatabaseTimestamp(value) {
   );
 }
 
-function tableHashWithoutVolatileColumns(tableName, table, volatileColumns) {
-  const volatile = new Set(volatileColumns);
-  for (const column of volatile) {
+function validateVolatileColumns(tableName, table, volatileColumns) {
+  for (const column of volatileColumns) {
     if (!table.columns.includes(column)) {
       fail(
         "repeat_upgrade_volatile_column_missing",
@@ -3105,14 +3104,10 @@ function tableHashWithoutVolatileColumns(tableName, table, volatileColumns) {
       );
     }
   }
-  const columns = table.columns.filter((column) => !volatile.has(column));
-  const rows = table.rows.map((row) =>
-    Object.fromEntries(columns.map((column) => [column, row[column]]))
-  );
   for (const row of table.rows) {
-    for (const column of volatile) {
+    for (const column of volatileColumns) {
       const value = row[column];
-      if (value !== null && !isCanonicalDatabaseTimestamp(value)) {
+      if (!isCanonicalDatabaseTimestamp(value)) {
         fail(
           "repeat_upgrade_volatile_value_invalid",
           `${tableName}.${column} contains a non-canonical timestamp.`
@@ -3120,6 +3115,15 @@ function tableHashWithoutVolatileColumns(tableName, table, volatileColumns) {
       }
     }
   }
+}
+
+function tableHashWithoutVolatileColumns(tableName, table, volatileColumns) {
+  validateVolatileColumns(tableName, table, volatileColumns);
+  const volatile = new Set(volatileColumns);
+  const columns = table.columns.filter((column) => !volatile.has(column));
+  const rows = table.rows.map((row) =>
+    Object.fromEntries(columns.map((column) => [column, row[column]]))
+  );
   return sha256(stableSerialize({ tableName, columns, rows }));
 }
 
@@ -3152,11 +3156,15 @@ export function verifySnapshotsEquivalent(
   for (const tableName of leftTables) {
     const leftTable = left.tables[tableName];
     const rightTable = right.tables[tableName];
+    const volatileColumns = volatileColumnsByTable[tableName] ?? [];
+    if (volatileColumns.length > 0) {
+      validateVolatileColumns(tableName, leftTable, volatileColumns);
+      validateVolatileColumns(tableName, rightTable, volatileColumns);
+    }
     if (
       leftTable.rowCount !== rightTable.rowCount ||
       leftTable.logicalSha256 !== rightTable.logicalSha256
     ) {
-      const volatileColumns = volatileColumnsByTable[tableName] ?? [];
       if (
         leftTable.rowCount !== rightTable.rowCount ||
         volatileColumns.length === 0 ||

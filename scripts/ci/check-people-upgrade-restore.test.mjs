@@ -136,6 +136,31 @@ test("repeat-upgrade comparison rejects malformed declared timestamps", () => {
   }
 });
 
+test("repeat-upgrade comparison validates declared timestamps even when hashes match", () => {
+  const baseline = makeRepeatUpgradeSnapshot();
+  for (const field of ["createdAt", "updatedAt"]) {
+    for (const invalidValue of [null, "not-a-timestamp"]) {
+      const invalidSnapshot = makeRepeatUpgradeSnapshot({
+        [field]: invalidValue
+      });
+      assert.throws(
+        () =>
+          verifySnapshotsEquivalent(baseline, invalidSnapshot, {
+            volatileColumnsByTable: VOLATILE_OWNERSHIP_COLUMNS
+          }),
+        (error) => error.code === "repeat_upgrade_volatile_value_invalid"
+      );
+      assert.throws(
+        () =>
+          verifySnapshotsEquivalent(invalidSnapshot, invalidSnapshot, {
+            volatileColumnsByTable: VOLATILE_OWNERSHIP_COLUMNS
+          }),
+        (error) => error.code === "repeat_upgrade_volatile_value_invalid"
+      );
+    }
+  }
+});
+
 test("repeat-upgrade comparison rejects structural and nonvolatile differences", () => {
   const baseline = makeRepeatUpgradeSnapshot();
   assert.throws(
