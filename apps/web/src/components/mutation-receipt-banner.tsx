@@ -109,7 +109,7 @@ export function MutationReceiptBanner({
           </span>
         </p>
         {errorMessage ? (
-          <p role="alert" className="text-sm text-[var(--ui-danger)]">
+          <p role="alert" className="text-sm text-[var(--danger)]">
             {errorMessage}
           </p>
         ) : null}

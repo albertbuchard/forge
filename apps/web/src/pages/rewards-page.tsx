@@ -60,7 +60,7 @@ function getGamificationFallbackUrl(
 }
 
 export const offlineGamificationImageUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144"><rect width="144" height="144" rx="28" fill="#1d2434"/><circle cx="72" cy="64" r="34" fill="#2b3449" stroke="#c9a45d" stroke-width="4"/><path d="M50 55h44l-6 34H56z" fill="#c9a45d"/><path d="M58 50l14-18 14 18" fill="none" stroke="#f4d89a" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><rect x="48" y="96" width="48" height="8" rx="4" fill="#c9a45d"/></svg>'
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144" style="color-scheme:light dark"><rect width="144" height="144" rx="28" fill="Canvas"/><circle cx="72" cy="64" r="34" fill="ButtonFace" stroke="CanvasText" stroke-width="4"/><path d="M50 55h44l-6 34H56z" fill="Highlight"/><path d="M58 50l14-18 14 18" fill="none" stroke="CanvasText" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><rect x="48" y="96" width="48" height="8" rx="4" fill="Highlight"/></svg>'
 )}`;
 
 export function recoverMissingGamificationImage(

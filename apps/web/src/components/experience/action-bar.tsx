@@ -999,7 +999,7 @@ export function ActionBar({
     entitySearchQuery.isFetching;
 
   const handleSelect = (item: ActionBarItem) => {
-    if (!item.onSelect && !item.href) {
+    if (item.availability === "missing" || (!item.onSelect && !item.href)) {
       return;
     }
     onOpenChange(false);
@@ -1223,7 +1223,7 @@ export function ActionBar({
                 </form>
                 {savedViewError ? (
                   <p
-                    className="mt-2 text-sm text-[var(--ui-danger)]"
+                    className="mt-2 text-sm text-[var(--danger)]"
                     role="alert"
                   >
                     {savedViewError}
@@ -1235,7 +1235,7 @@ export function ActionBar({
                   </p>
                 ) : savedViewsQuery.isError ? (
                   <p
-                    className="mt-3 text-sm text-[var(--ui-danger)]"
+                    className="mt-3 text-sm text-[var(--danger)]"
                     role="alert"
                   >
                     Forge could not load saved views.
@@ -1275,7 +1275,7 @@ export function ActionBar({
                         </button>
                         <button
                           type="button"
-                          className="m-1 inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-danger)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--primary)_45%,transparent)]"
+                          className="m-1 inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--danger)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--primary)_45%,transparent)]"
                           aria-label={`Delete saved view ${savedView.name}`}
                           disabled={deleteSavedViewMutation.isPending}
                           onClick={() =>

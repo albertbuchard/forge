@@ -219,4 +219,16 @@ describe("DailyBriefingPanel", () => {
       })
     ).toBeInTheDocument();
   });
+
+  it("fails safely when a partial runtime response omits the briefing", async () => {
+    getDailyBriefingMock.mockResolvedValue({});
+    renderPanel();
+
+    expect(
+      await screen.findByRole("heading", {
+        name: /Daily briefing is unavailable/i
+      })
+    ).toBeInTheDocument();
+    expect(screen.getByText(/No data was changed/i)).toBeInTheDocument();
+  });
 });

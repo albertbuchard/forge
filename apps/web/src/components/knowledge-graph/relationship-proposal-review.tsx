@@ -217,7 +217,7 @@ export function RelationshipProposalReview({
                 Loading saved suggestions…
               </div>
             ) : query.isError && !data ? (
-              <div className="grid gap-3 rounded-[22px] border border-[var(--ui-danger)]/30 bg-[var(--ui-danger-soft)] p-4" role="alert">
+              <div className="grid gap-3 rounded-[22px] border border-[var(--danger)]/30 bg-[var(--ui-danger-soft)] p-4" role="alert">
                 <p className="text-sm text-[var(--ui-ink-strong)]">{errorMessage(query.error)}</p>
                 <Button type="button" variant="secondary" className="min-h-11 justify-self-start" onClick={() => query.refetch()}>
                   <RefreshCw className="size-4" aria-hidden="true" /> Try again

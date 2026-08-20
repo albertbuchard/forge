@@ -392,6 +392,12 @@ describe("ActionBar", () => {
       screen.getByPlaceholderText(
         "Search anything in Forge or type create habit…"
       ),
+      { key: "ArrowDown" }
+    );
+    fireEvent.keyDown(
+      screen.getByPlaceholderText(
+        "Search anything in Forge or type create habit…"
+      ),
       { key: "Enter" }
     );
     expect(onOpenChange).not.toHaveBeenCalled();

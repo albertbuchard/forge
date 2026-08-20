@@ -136,8 +136,9 @@ function MessageStatus({ status }: { status: AgentMessageStatus }) {
       tone={copy.tone}
       className={cn(
         status === "handled" &&
-          "border-emerald-300 bg-emerald-50 text-emerald-950",
-        status === "failed" && "border-red-300 bg-red-50 text-red-950"
+          "border-[var(--ui-success-border)] bg-[var(--ui-success-soft)] text-[var(--success)]",
+        status === "failed" &&
+          "border-[var(--ui-danger-border)] bg-[var(--ui-danger-soft)] text-[var(--danger)]"
       )}
     >
       {copy.label}
@@ -528,9 +529,9 @@ function AgentMessageComposer({
           {recording ? (
             <span
               role="status"
-              className="inline-flex items-center gap-2 text-sm font-medium text-red-600"
+              className="inline-flex items-center gap-2 text-sm font-medium text-[var(--danger)]"
             >
-              <span className="size-2 animate-pulse rounded-full bg-red-600" />{" "}
+              <span className="size-2 animate-pulse rounded-full bg-[var(--danger)]" />{" "}
               Recording · stops at 10:00
             </span>
           ) : null}
@@ -561,14 +562,14 @@ function AgentMessageComposer({
           </div>
         ) : null}
         {recordingError ? (
-          <p role="alert" className="mt-3 text-sm text-red-700">
+          <p role="alert" className="mt-3 text-sm text-[var(--danger)]">
             {recordingError}
           </p>
         ) : null}
       </div>
 
       {recordedBlob && recordedBlob.size > CELLULAR_CONFIRM_BYTES ? (
-        <label className="mt-4 flex items-start gap-3 rounded-[var(--radius-control)] border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+        <label className="mt-4 flex items-start gap-3 rounded-[var(--radius-control)] border border-[var(--ui-warning-border)] bg-[var(--ui-warning-soft)] p-3 text-sm text-[var(--warning)]">
           <input
             className="mt-1"
             type="checkbox"
@@ -801,7 +802,7 @@ function MessageDetail({
         {message.failure ? (
           <div
             role="alert"
-            className="mt-5 flex gap-3 rounded-[var(--radius-control)] border border-red-200 bg-red-50 p-4 text-red-950"
+            className="mt-5 flex gap-3 rounded-[var(--radius-control)] border border-[var(--ui-danger-border)] bg-[var(--ui-danger-soft)] p-4 text-[var(--danger)]"
           >
             <CircleAlert className="mt-0.5 size-5 shrink-0" />
             <div>

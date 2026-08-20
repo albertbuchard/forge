@@ -461,7 +461,7 @@
 }
 
 .course-lesson-roadmap__questions button:focus-visible {
-  outline: 2px solid var(--ui-focus-ring);
+  outline: 2px solid var(--ui-ring);
   outline-offset: 2px;
 }
 
@@ -785,7 +785,7 @@
 }
 
 .course-inline-checkpoint:focus-visible {
-  outline: 2px solid var(--ui-focus-ring);
+  outline: 2px solid var(--ui-ring);
   outline-offset: 2px;
 }
 
@@ -1833,6 +1833,16 @@ body {
   --ui-success-border: color-mix(
     in srgb,
     var(--success) 34%,
+    var(--ui-border-subtle) 66%
+  );
+  --ui-danger-border: color-mix(
+    in srgb,
+    var(--danger) 34%,
+    var(--ui-border-subtle) 66%
+  );
+  --ui-warning-border: color-mix(
+    in srgb,
+    var(--warning) 34%,
     var(--ui-border-subtle) 66%
   );
   --ui-tertiary-soft: color-mix(in srgb, var(--tertiary) 14%, transparent);

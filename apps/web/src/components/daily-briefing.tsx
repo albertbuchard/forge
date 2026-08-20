@@ -85,7 +85,7 @@ function BriefingSection({
           tone={needsAttention ? "meta" : "signal"}
           className={cn(
             "capitalize",
-            needsAttention && "text-[var(--ui-warning)]"
+            needsAttention && "text-[var(--warning)]"
           )}
         >
           {statusLabel(section.status)}
@@ -247,7 +247,7 @@ export function DailyBriefingPanel({
             </p>
           </div>
         </div>
-      ) : query.isError || !query.data ? (
+      ) : query.isError || !query.data?.briefing ? (
         <div
           className="grid min-h-40 place-items-center text-center"
           role="alert"
@@ -255,7 +255,7 @@ export function DailyBriefingPanel({
           <div className="max-w-xl">
             <AlertTriangle
               aria-hidden="true"
-              className="mx-auto size-5 text-[var(--ui-warning)]"
+              className="mx-auto size-5 text-[var(--warning)]"
             />
             <h2
               id="daily-briefing-title"

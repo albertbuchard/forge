@@ -241,7 +241,7 @@ function AttentionRow({
     <article
       id={`attention-item-${encodeURIComponent(item.id)}`}
       tabIndex={-1}
-      className="grid min-w-0 gap-4 border-b border-[var(--ui-border-subtle)] px-4 py-5 outline-none last:border-b-0 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ui-focus)] sm:grid-cols-[auto_minmax(0,1fr)] sm:px-5"
+      className="grid min-w-0 gap-4 border-b border-[var(--ui-border-subtle)] px-4 py-5 outline-none last:border-b-0 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ui-ring)] sm:grid-cols-[auto_minmax(0,1fr)] sm:px-5"
       data-testid={`attention-item-${item.id}`}
     >
       <div
@@ -772,7 +772,7 @@ export function AttentionInboxPage() {
                 key={receipt.id}
                 id={`attention-resolution-${encodeURIComponent(receipt.attemptId)}`}
                 tabIndex={-1}
-                className="grid min-w-0 gap-2 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ui-focus)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5"
+                className="grid min-w-0 gap-2 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ui-ring)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5"
               >
                 <div className="min-w-0">
                   <div className="font-medium text-[var(--ui-ink-strong)]">

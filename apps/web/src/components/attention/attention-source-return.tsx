@@ -78,7 +78,7 @@ export function AttentionSourceReturn({
       tabIndex={-1}
       data-attention-source={sourceRef}
       className={cn(
-        "mb-4 flex min-w-0 flex-col gap-3 rounded-[var(--radius-control)] border border-[var(--ui-success-border)] bg-[var(--ui-success-soft)] px-4 py-3 text-sm text-[var(--ui-ink-medium)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--ui-focus)] sm:flex-row sm:items-center sm:justify-between",
+        "mb-4 flex min-w-0 flex-col gap-3 rounded-[var(--radius-control)] border border-[var(--ui-success-border)] bg-[var(--ui-success-soft)] px-4 py-3 text-sm text-[var(--ui-ink-medium)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--ui-ring)] sm:flex-row sm:items-center sm:justify-between",
         className
       )}
     >
@@ -95,7 +95,7 @@ export function AttentionSourceReturn({
       </span>
       <Link
         to={returnHref}
-        className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 font-medium text-[var(--ui-ink-strong)] transition hover:bg-[var(--ui-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ui-focus)]"
+        className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 font-medium text-[var(--ui-ink-strong)] transition hover:bg-[var(--ui-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ui-ring)]"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         Return to Attention
