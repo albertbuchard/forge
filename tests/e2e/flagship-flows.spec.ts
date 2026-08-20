@@ -5,37 +5,31 @@ test.beforeEach(async ({ page }, testInfo) => {
   await installE2eStorageGuards(page, testInfo.testId);
 });
 
-test("overview is a clear front door to Forge", async ({ page }) => {
+test("launchpad is a clear first-use front door to Forge", async ({ page }) => {
   await page.goto("");
   await waitForForge(page);
-  await expect(page).toHaveURL(/\/forge\/overview$/);
+  await expect(page).toHaveURL(/\/forge\/launchpad$/);
   const main = page.locator("main");
   await expect(main).toContainText(
-    "See what needs attention, continue current work, or open any part of Forge."
+    "Choose an outcome, inspect every proposed change, import existing work, and keep unresolved decisions in one review queue."
   );
   await expect(
-    main.getByRole("heading", { name: "What matters now" })
+    main.getByRole("heading", {
+      name: "What do you want Forge to help you achieve first?"
+    })
   ).toBeVisible();
   await expect(
-    main.getByRole("heading", { name: "Everything in Forge" })
+    main.getByRole("heading", { name: "Plan a useful week" })
   ).toBeVisible();
   await expect(
-    main.getByRole("button", { name: "Search Forge" })
+    main.getByRole("heading", { name: "Build a daily reflection loop" })
   ).toBeVisible();
-  await expect(main.getByRole("link", { name: "Explore Forge" })).toBeVisible();
-  await expect(main).toContainText("Knowledge and learning");
-  await expect(main).toContainText("People, connections, and system");
-
-  const rewardPreview = page.getByTestId("forge-smith-featured-trophy");
-  await expect(rewardPreview).toBeVisible();
-  await expect(rewardPreview).toHaveAttribute("alt", / trophy$/);
-  await expect
-    .poll(() =>
-      rewardPreview.evaluate(
-        (element) => (element as HTMLImageElement).naturalWidth
-      )
-    )
-    .toBeGreaterThan(0);
+  await expect(
+    main.getByRole("heading", { name: "Start a research project" })
+  ).toBeVisible();
+  await expect(
+    main.getByRole("navigation", { name: "Launchpad sections" })
+  ).toBeVisible();
 });
 
 test("today feels like a directive-driven operating surface", async ({
@@ -141,7 +135,9 @@ test("psyche flagship surfaces render inside the shared shell", async ({
   await expect(
     page.locator('[data-testid="psyche-hub-graph"]:visible').first()
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Reflect" })).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "Reflect", exact: true })
+  ).toHaveCount(1);
   await expect(page.getByTestId("create-floating-trigger")).toBeVisible();
 
   await page.goto("psyche/goal-map");
