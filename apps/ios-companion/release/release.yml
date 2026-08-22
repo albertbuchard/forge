@@ -13,9 +13,10 @@ release:
   default_mode: testflight
   phased_release: false
   automatic_release: true
-  notify_external_testers: false
-  testflight_groups: []
-  skip_testflight_submission: true
+  notify_external_testers: true
+  testflight_groups:
+    - Beta external
+  skip_testflight_submission: false
 
 metadata:
   default_locale: en-US

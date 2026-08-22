@@ -520,11 +520,28 @@ end
 
 def validate_release_inputs!(config:, mode:, require_api_key:)
   validate_release_version_config!(config)
+  validate_testflight_distribution_config!(config) if %w[validate testflight].include?(mode)
   verify_project_bundle_ids!(config)
   verify_protected_app_release_contract!
   metadata_state = validate_metadata!(config: config, mode: mode)
   app_store_connect_api_key_from_env if require_api_key && ENV["FORGE_RELEASE_SKIP_REMOTE_VALIDATION"] != "1"
   metadata_state
+end
+
+def validate_testflight_distribution_config!(config)
+  groups = Array(config.dig(:release, :testflight_groups))
+    .map { |group| group.to_s.strip }
+    .reject(&:empty?)
+
+  UI.user_error!(
+    "TestFlight releases must name at least one tester group in release.testflight_groups"
+  ) if groups.empty?
+  UI.user_error!(
+    "TestFlight releases must set release.skip_testflight_submission to false so the processed build is distributed"
+  ) if config.dig(:release, :skip_testflight_submission) == true
+  UI.user_error!(
+    "TestFlight releases must set release.notify_external_testers to true"
+  ) unless config.dig(:release, :notify_external_testers) == true
 end
 
 def validate_release_version_config!(config)

@@ -340,10 +340,16 @@ Before tagging:
 4. run `npm run release:ios-companion:audit`
 5. commit and push to `main`
 
-For upload/process/changelog-only TestFlight builds, keep
-`release.skip_testflight_submission: true` and `release.testflight_groups: []`.
-That avoids external beta review submission while still uploading the IPA and
-waiting long enough to attach the changelog.
+Every tagged TestFlight release must be delivered to testers, not merely uploaded
+to App Store Connect. Keep `release.skip_testflight_submission: false`, name the
+intended external group in `release.testflight_groups`, and keep
+`release.notify_external_testers: true`. The release audit rejects an empty group,
+a skipped submission, or disabled tester notifications so a successful workflow
+cannot silently leave the new build invisible to external testers.
+
+The current Forge Companion external group is `Beta external`. The internal
+`Beta` group has access to all builds automatically and does not need to be named
+in each release.
 
 Icon rule:
 

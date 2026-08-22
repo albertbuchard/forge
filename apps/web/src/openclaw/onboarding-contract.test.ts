@@ -1854,6 +1854,10 @@ describe("forge onboarding contract", () => {
   it("publishes exact Daily Briefing and Agent Messages contracts", async () => {
     const onboarding = await loadOnboardingPayload();
     const openapi = buildOpenApiDocument();
+    const openApiPaths = openapi.paths as Record<
+      string,
+      { get?: unknown; post?: unknown } | undefined
+    >;
     const toolByName = new Map(
       onboarding.toolInputCatalog.map((tool) => [tool.toolName, tool])
     );
@@ -1873,7 +1877,7 @@ describe("forge onboarding contract", () => {
         requiredFields: ["userId"]
       })
     );
-    expect(openapi.paths?.["/api/v1/daily-briefing"]?.get).toBeTruthy();
+    expect(openApiPaths["/api/v1/daily-briefing"]?.get).toBeTruthy();
 
     const messages =
       onboarding.entityRouteModel.specializedDomainSurfaces.agentMessages;
@@ -1921,9 +1925,9 @@ describe("forge onboarding contract", () => {
     expect(
       toolByName.get("forge_call_agent_messages_route")?.inputShape
     ).toContain('"downloadVoice"');
-    expect(openapi.paths?.["/api/v1/agent-messages/poll"]?.get).toBeTruthy();
+    expect(openApiPaths["/api/v1/agent-messages/poll"]?.get).toBeTruthy();
     expect(
-      openapi.paths?.["/api/v1/agent-messages/{id}/voice"]?.post
+      openApiPaths["/api/v1/agent-messages/{id}/voice"]?.post
     ).toBeTruthy();
   });
 
