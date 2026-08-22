@@ -5,16 +5,10 @@
   "version": "0.3.65",
   "activation": {
     "onStartup": true,
-    "onCapabilities": [
-      "tool"
-    ],
-    "onCommands": [
-      "forge"
-    ]
+    "onCapabilities": ["tool"],
+    "onCommands": ["forge"]
   },
-  "skills": [
-    "./skills"
-  ],
+  "skills": ["./skills"],
   "commandAliases": [
     {
       "name": "forge"
@@ -51,6 +45,7 @@
       "forge_get_agent_onboarding",
       "forge_get_calendar_overview",
       "forge_get_current_work",
+      "forge_get_daily_briefing",
       "forge_get_doctor",
       "forge_get_nutrition_patterns",
       "forge_get_operator_context",

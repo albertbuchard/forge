@@ -1541,6 +1541,7 @@ describe("forge onboarding contract", () => {
     ).toEqual([
       "forge_call_attention_route",
       "forge_call_entity_navigation_route",
+      "forge_call_agent_messages_route",
       "forge_call_people_route",
       "forge_call_peer_route",
       "forge_call_movement_route",
@@ -1555,6 +1556,7 @@ describe("forge onboarding contract", () => {
     expect(onboarding.recommendedPluginTools?.readModels).toEqual(
       expect.arrayContaining([
         "forge_get_today_priority",
+        "forge_get_daily_briefing",
         "forge_get_psyche_overview",
         "forge_get_psyche_schema_catalog"
       ])
@@ -1812,6 +1814,7 @@ describe("forge onboarding contract", () => {
       onboarding.toolInputCatalog.map((tool) => [tool.toolName, tool])
     );
     const surfaceToolPairs = [
+      ["agentMessages", "forge_call_agent_messages_route"],
       ["lifeEvents", "forge_call_life_event_route"],
       ["movement", "forge_call_movement_route"],
       ["lifeForce", "forge_call_life_force_route"],
@@ -1846,6 +1849,82 @@ describe("forge onboarding contract", () => {
         ).toBeTruthy();
       }
     }
+  });
+
+  it("publishes exact Daily Briefing and Agent Messages contracts", async () => {
+    const onboarding = await loadOnboardingPayload();
+    const openapi = buildOpenApiDocument();
+    const toolByName = new Map(
+      onboarding.toolInputCatalog.map((tool) => [tool.toolName, tool])
+    );
+
+    expect(onboarding.entityRouteModel.readModelOnlySurfaces).toEqual(
+      expect.objectContaining({
+        dailyBriefing: "/api/v1/daily-briefing",
+        daily_briefing: "/api/v1/daily-briefing"
+      })
+    );
+    expect(onboarding.verificationPaths.dailyBriefing).toBe(
+      "/api/v1/daily-briefing"
+    );
+    expect(toolByName.get("forge_get_daily_briefing")).toEqual(
+      expect.objectContaining({
+        inputShape: "{ userId: string, timeZone?: string }",
+        requiredFields: ["userId"]
+      })
+    );
+    expect(openapi.paths?.["/api/v1/daily-briefing"]?.get).toBeTruthy();
+
+    const messages =
+      onboarding.entityRouteModel.specializedDomainSurfaces.agentMessages;
+    expect(messages.routeTool).toBe("forge_call_agent_messages_route");
+    expect(messages.routeKeys).toEqual([
+      "poll",
+      "detail",
+      "claim",
+      "renewClaim",
+      "addProgress",
+      "acknowledge",
+      "downloadVoice",
+      "handle",
+      "fail",
+      "forward"
+    ]);
+    expect(messages.methodRoutes).toEqual({
+      poll: "GET /api/v1/agent-messages/poll",
+      detail: "GET /api/v1/agent-messages/:id/detail",
+      claim: "POST /api/v1/agent-messages/:id/claim",
+      renewClaim: "POST /api/v1/agent-messages/:id/lease",
+      addProgress: "POST /api/v1/agent-messages/:id/progress",
+      acknowledge: "POST /api/v1/agent-messages/:id/acknowledge",
+      downloadVoice: "POST /api/v1/agent-messages/:id/voice",
+      handle: "POST /api/v1/agent-messages/:id/handle",
+      fail: "POST /api/v1/agent-messages/:id/fail",
+      forward: "POST /api/v1/agent-messages/:id/forward"
+    });
+    expect(
+      onboarding.entityRouteModel.specializedDomainSurfaces.agent_messages
+    ).toEqual(messages);
+    expect(messages.readRoutes).toEqual({
+      poll: "/api/v1/agent-messages/poll",
+      detail: "/api/v1/agent-messages/:id/detail",
+      downloadVoice: "/api/v1/agent-messages/:id/voice"
+    });
+    expect(messages.notes.join(" ")).toMatch(
+      /Hermes remains text-only[\s\S]*omits that route key/i
+    );
+    expect(toolByName.get("forge_call_agent_messages_route")).toEqual(
+      expect.objectContaining({
+        requiredFields: ["routeKey"]
+      })
+    );
+    expect(
+      toolByName.get("forge_call_agent_messages_route")?.inputShape
+    ).toContain('"downloadVoice"');
+    expect(openapi.paths?.["/api/v1/agent-messages/poll"]?.get).toBeTruthy();
+    expect(
+      openapi.paths?.["/api/v1/agent-messages/{id}/voice"]?.post
+    ).toBeTruthy();
   });
 
   it("publishes PSY-09 owner, idempotency, and scope payload guidance", async () => {

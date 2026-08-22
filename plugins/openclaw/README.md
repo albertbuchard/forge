@@ -104,6 +104,7 @@ Forge project management is explicit and repeated:
 - direct commits to `main` by default
 
 This plugin gives OpenClaw the tools it needs to work with that system. It can read current state, search records, create and update records, control live work sessions, post insights, and hand the user off to the Forge UI when the visual workflow is easier.
+It exposes `forge_get_daily_briefing` for one exact visible owner's evidence-backed day picture across work, schedule, current capacity, and recent activity, including explicit freshness, omission, and conflict states.
 It can also grant an explicit audited XP bonus or penalty through the dedicated reward-bonus route when the normal automatic task or habit reward flows are not the right fit.
 It can also add or remove tracked minutes on existing tasks or projects through a dedicated signed work-adjustment route without pretending that a live task run happened.
 It also exposes `forge_call_agent_messages_route` for asynchronous Agent Messages. An addressed agent can poll, atomically claim with a lease, renew, add progress, acknowledge, read only the original voice Artifact authorized by that live message lease, forward, handle, or fail. Poll results never contain audio bytes, and the voice operation cannot be used as a generic Artifact download.
@@ -124,6 +125,7 @@ Examples:
 - “Open Preferences and let me start the game.”
 - “What does Forge already know about my food preferences?”
 - “Show me my current work in Forge.”
+- “Give me today's Forge briefing for Albert.”
 - “Start a real work session on this task.”
 - “Map this as a behavior pattern.”
 - “Open the Forge UI.”

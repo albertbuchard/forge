@@ -320,6 +320,25 @@ def test_today_priority_tool_uses_bounded_scope_and_timezone_query():
     )
 
 
+def test_daily_briefing_tool_requires_one_exact_owner():
+    spec = next(
+        tool for tool in TOOL_CATALOG if tool["name"] == "forge_get_daily_briefing"
+    )
+
+    assert spec["method"] == "GET"
+    assert spec["parameters"]["required"] == ["userId"]
+    assert "userIds" not in spec["parameters"]["properties"]
+    assert spec["path_builder"](
+        {
+            "userId": "user_operator",
+            "timeZone": "Europe/Zurich",
+        }
+    ) == (
+        "/api/v1/daily-briefing?userId=user_operator"
+        "&timeZone=Europe%2FZurich"
+    )
+
+
 def test_start_task_run_handler_uses_local_owner_client_and_task_run_route(
     monkeypatch: pytest.MonkeyPatch,
 ):

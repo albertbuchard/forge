@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-08-16T17:20:56.000Z",
+  "generatedAt": "2026-08-20T21:03:52.401Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
     "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG",
-    "catalogEntryCount": 88,
-    "documentedToolCount": 88,
-    "catalogSha256": "2970f227b7d8e646d3e5de4148463b18836774032ee7766c233bc8b3c4afdf59"
+    "catalogEntryCount": 89,
+    "documentedToolCount": 89,
+    "catalogSha256": "35f32b5392c373bd75b043f14d276464c358635c35cab91e1d72a56c5f44bdcd"
   },
   "groups": [
     {
@@ -96,6 +96,7 @@
         "routeKey"
       ],
       "notes": [
+        "Resolve routeKey against live onboarding specializedDomainSurfaces.agentMessages.routeKeys and methodRoutes before every call; fill every published placeholder through pathParams and do not guess a nearby Agent Messages path.",
         "Every route requires a configured Forge agent token with the exact published Agent Messages scopes. Use pathParams.id for every message-specific route; poll alone has no message id.",
         "Claim with a fresh 256-bit random leaseSecret and a stable operationKey. Protected updates and downloadVoice require the current leaseSecret and claimGeneration; terminal operation keys are idempotent only for the exact same payload.",
         "downloadVoice returns only the lease-authorized first-class original voice Artifact. OpenClaw and Codex may pass that audio to a connected runtime only when the runtime accepts audio; this does not promise transcription or a separate no-charge capability.",
@@ -646,6 +647,25 @@
         "Read before starting another run when duplicate active work is plausible."
       ],
       "example": "{}",
+      "catalogDocumented": true
+    },
+    {
+      "name": "forge_get_daily_briefing",
+      "groupId": "other",
+      "groupTitle": "Other Forge Tools",
+      "label": "Forge Daily Briefing",
+      "summary": "Read one owner's deterministic, evidence-backed daily briefing.",
+      "whenToUse": "Use when the user wants a concise account of today's work, schedule, current capacity, and recent activity rather than a single next-task decision.",
+      "inputShape": "{ userId: string, timeZone?: string }",
+      "requiredFields": [
+        "userId"
+      ],
+      "notes": [
+        "Select one exact visible owner. The API intentionally requires userId instead of silently combining several people's work into one briefing.",
+        "Each statement carries exact provenance and freshness. Preserve stale, future, partial, conflict, and omission states instead of smoothing them into a confident narrative.",
+        "Use forge_get_today_priority when the user is asking for one next action; use the daily briefing when they want the broader day picture."
+      ],
+      "example": "{\"userId\":\"user_operator\",\"timeZone\":\"Europe/Zurich\"}",
       "catalogDocumented": true
     },
     {

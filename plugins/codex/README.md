@@ -26,6 +26,10 @@ message has an original voice Artifact and the active lease authorizes it, the
 bridge preserves the response as exactly one standard MCP audio content block;
 it does not duplicate the base64 bytes into text or structured metadata.
 
+The shared curated tool catalog also exposes `forge_get_daily_briefing` for one
+exact visible owner's evidence-backed work, schedule, capacity, and recent-activity
+picture. It preserves the route's freshness, omission, partial, and conflict states.
+
 Audio acceptance and understanding depend on the installed Codex runtime. A
 ChatGPT-authenticated Codex session uses its configured subscription allowance;
 Forge does not silently substitute a separately billed OpenAI API request and

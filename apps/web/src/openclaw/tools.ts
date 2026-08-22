@@ -139,6 +139,10 @@ const todayPriorityReadSchema = Type.Object({
     Type.Integer({ minimum: 1, maximum: 100, default: 24 })
   )
 });
+const dailyBriefingReadSchema = Type.Object({
+  userId: Type.String({ minLength: 1, maxLength: 240 }),
+  timeZone: Type.Optional(Type.String({ minLength: 1, maxLength: 100 }))
+});
 type SpecializedRouteSpec = {
   method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   path: string;
@@ -2328,6 +2332,16 @@ export function registerForgePluginTools(
         "timeZone",
         "candidateLimit"
       ])
+  });
+
+  registerReadTool(api, config, {
+    name: "forge_get_daily_briefing",
+    label: "Forge Daily Briefing",
+    description:
+      "Read one exact visible owner's deterministic daily briefing across today's work, schedule, current capacity, and recent activity. Preserve each statement's evidence, freshness, omissions, and conflict state instead of turning partial evidence into confident prose.",
+    parameters: dailyBriefingReadSchema,
+    path: (params) =>
+      withQueryParams("/api/v1/daily-briefing", params, ["userId", "timeZone"])
   });
 
   registerReadTool(api, config, {

@@ -919,7 +919,25 @@ export function importCoursePackage(input: unknown) {
           content_hash = excluded.content_hash,
           definition_json = excluded.definition_json,
           definition_sha256 = excluded.definition_sha256,
-          updated_at = excluded.updated_at`
+          updated_at = excluded.updated_at
+        WHERE courses.slug IS NOT excluded.slug
+           OR courses.version IS NOT excluded.version
+           OR courses.schema_version IS NOT excluded.schema_version
+           OR courses.title IS NOT excluded.title
+           OR courses.subtitle IS NOT excluded.subtitle
+           OR courses.description IS NOT excluded.description
+           OR courses.language IS NOT excluded.language
+           OR courses.authors_json IS NOT excluded.authors_json
+           OR courses.license IS NOT excluded.license
+           OR courses.estimated_weeks IS NOT excluded.estimated_weeks
+           OR courses.minutes_per_week IS NOT excluded.minutes_per_week
+           OR courses.tags_json IS NOT excluded.tags_json
+           OR courses.entry_lesson_id IS NOT excluded.entry_lesson_id
+           OR courses.featured_lesson_id IS NOT excluded.featured_lesson_id
+           OR courses.source_url IS NOT excluded.source_url
+           OR courses.content_hash IS NOT excluded.content_hash
+           OR courses.definition_json IS NOT excluded.definition_json
+           OR courses.definition_sha256 IS NOT excluded.definition_sha256`
       )
       .run(
         coursePackage.course.id,
@@ -995,7 +1013,17 @@ export function importCoursePackage(input: unknown) {
         related_ids_json = excluded.related_ids_json,
         content_hash = excluded.content_hash,
         tags_json = excluded.tags_json,
-        updated_at = excluded.updated_at`
+        updated_at = excluded.updated_at
+      WHERE concepts.slug IS NOT excluded.slug
+         OR concepts.title IS NOT excluded.title
+         OR concepts.summary IS NOT excluded.summary
+         OR concepts.definition_markdown IS NOT excluded.definition_markdown
+         OR concepts.example_markdown IS NOT excluded.example_markdown
+         OR concepts.non_example_markdown IS NOT excluded.non_example_markdown
+         OR concepts.prerequisite_ids_json IS NOT excluded.prerequisite_ids_json
+         OR concepts.related_ids_json IS NOT excluded.related_ids_json
+         OR concepts.content_hash IS NOT excluded.content_hash
+         OR concepts.tags_json IS NOT excluded.tags_json`
     );
     const linkConcept = database.prepare(
       `INSERT INTO course_concepts (

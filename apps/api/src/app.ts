@@ -6528,6 +6528,67 @@ const PEER_AGENT_ONBOARDING_ROUTES = buildPeoplePeerOnboardingRouteMap(
   )
 );
 
+const AGENT_MESSAGE_ONBOARDING_SURFACE = {
+  classification: "specialized_domain_surface",
+  aliases: ["agent_messages", "agent-messages", "Agent Messages"],
+  routeTool: "forge_call_agent_messages_route",
+  summary:
+    "Lease-governed asynchronous work addressed to one connected agent. Poll, inspect, claim, renew, report progress, acknowledge, complete, fail, forward, or retrieve only the original voice Artifact authorized by the current message lease.",
+  routeKeys: [
+    "poll",
+    "detail",
+    "claim",
+    "renewClaim",
+    "addProgress",
+    "acknowledge",
+    "downloadVoice",
+    "handle",
+    "fail",
+    "forward"
+  ],
+  routeSelectionQuestions: [
+    "Is this agent checking for newly addressed work, inspecting one message, taking ownership, updating the sender, finishing, reporting a failure, forwarding, or retrieving its original voice?",
+    "Which exact message from the current bounded poll result is involved, and what does its current status and lease state allow next?",
+    "If work will begin, does this agent have a fresh secret for one atomic claim and enough time to renew before the lease expires?",
+    "If the original voice is necessary, is this connected runtime explicitly able to receive audio, or should the message remain pending or be forwarded without losing the original?",
+    "For a progress or terminal update, what concise evidence should the sender receive, and which stable retry key belongs to this exact unchanged operation?"
+  ],
+  methodRoutes: {
+    poll: "GET /api/v1/agent-messages/poll",
+    detail: "GET /api/v1/agent-messages/:id/detail",
+    claim: "POST /api/v1/agent-messages/:id/claim",
+    renewClaim: "POST /api/v1/agent-messages/:id/lease",
+    addProgress: "POST /api/v1/agent-messages/:id/progress",
+    acknowledge: "POST /api/v1/agent-messages/:id/acknowledge",
+    downloadVoice: "POST /api/v1/agent-messages/:id/voice",
+    handle: "POST /api/v1/agent-messages/:id/handle",
+    fail: "POST /api/v1/agent-messages/:id/fail",
+    forward: "POST /api/v1/agent-messages/:id/forward"
+  },
+  readRoutes: {
+    poll: "/api/v1/agent-messages/poll",
+    detail: "/api/v1/agent-messages/:id/detail",
+    downloadVoice: "/api/v1/agent-messages/:id/voice"
+  },
+  writeRoutes: {
+    claim: "/api/v1/agent-messages/:id/claim",
+    renewClaim: "/api/v1/agent-messages/:id/lease",
+    addProgress: "/api/v1/agent-messages/:id/progress",
+    acknowledge: "/api/v1/agent-messages/:id/acknowledge",
+    handle: "/api/v1/agent-messages/:id/handle",
+    fail: "/api/v1/agent-messages/:id/fail",
+    forward: "/api/v1/agent-messages/:id/forward"
+  },
+  notes: [
+    "Every operation requires a configured agent token with its exact Agent Messages scope. An operator session cannot substitute for that agent identity.",
+    "Poll before claim, read the exact message, claim atomically with a fresh 256-bit secret, and perform work only while that claim generation remains current. Verify mutations by reading the exact message detail returned under the live lease.",
+    "Use pathParams.id for every message-specific operation. Stable operation or receipt keys are for exact transport retries only; a changed payload needs a new key.",
+    "downloadVoice is a read-only POST because the server must verify the current lease secret and claim generation before returning the original Artifact. It is not a generic Artifact download or a transcription promise.",
+    "OpenClaw and Codex expose downloadVoice only when their connected runtime can accept audio. Hermes remains text-only and deliberately omits that route key; it must keep the message pending or forward it when voice is necessary.",
+    "Forwarding creates a linked child message with immutable provenance. Acknowledge, handle, fail, and forward must preserve claim fencing and exact-retry receipt semantics."
+  ]
+} as const;
+
 export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
   {
     toolName: "forge_get_user_directory",
@@ -6597,6 +6658,20 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     ],
     example:
       '{"userIds":["user_operator"],"timeZone":"Europe/Zurich","candidateLimit":24}'
+  },
+  {
+    toolName: "forge_get_daily_briefing",
+    summary: "Read one owner's deterministic, evidence-backed daily briefing.",
+    whenToUse:
+      "Use when the user wants a concise account of today's work, schedule, current capacity, and recent activity rather than a single next-task decision.",
+    inputShape: "{ userId: string, timeZone?: string }",
+    requiredFields: ["userId"],
+    notes: [
+      "Select one exact visible owner. The API intentionally requires userId instead of silently combining several people's work into one briefing.",
+      "Each statement carries exact provenance and freshness. Preserve stale, future, partial, conflict, and omission states instead of smoothing them into a confident narrative.",
+      "Use forge_get_today_priority when the user is asking for one next action; use the daily briefing when they want the broader day picture."
+    ],
+    example: '{"userId":"user_operator","timeZone":"Europe/Zurich"}'
   },
   {
     toolName: "forge_get_psyche_overview",
@@ -7039,14 +7114,14 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       '{ routeKey: "poll"|"detail"|"claim"|"renewClaim"|"addProgress"|"acknowledge"|"downloadVoice"|"handle"|"fail"|"forward", pathParams?: { id?: string }, query?: object, body?: object }',
     requiredFields: ["routeKey"],
     notes: [
+      "Resolve routeKey against live onboarding specializedDomainSurfaces.agentMessages.routeKeys and methodRoutes before every call; fill every published placeholder through pathParams and do not guess a nearby Agent Messages path.",
       "Every route requires a configured Forge agent token with the exact published Agent Messages scopes. Use pathParams.id for every message-specific route; poll alone has no message id.",
       "Claim with a fresh 256-bit random leaseSecret and a stable operationKey. Protected updates and downloadVoice require the current leaseSecret and claimGeneration; terminal operation keys are idempotent only for the exact same payload.",
       "downloadVoice returns only the lease-authorized first-class original voice Artifact. OpenClaw and Codex may pass that audio to a connected runtime only when the runtime accepts audio; this does not promise transcription or a separate no-charge capability.",
       "Hermes is text-only and does not expose downloadVoice. Forge never silently uploads voice to a transcription provider; if no explicitly configured supported path exists, keep the message pending or forward it without discarding the original.",
       "Forwarding creates a new linked child with immutable provenance. Acknowledge, handle, fail, and forward must preserve the current claim fencing and stable exact-retry receipt semantics."
     ],
-    example:
-      '{"routeKey":"poll","query":{"limit":20}}'
+    example: '{"routeKey":"poll","query":{"limit":20}}'
   },
   {
     toolName: "forge_call_life_event_route",
@@ -8741,6 +8816,8 @@ function buildAgentOnboardingPayload(request: {
         }
       },
       specializedDomainSurfaces: {
+        agentMessages: AGENT_MESSAGE_ONBOARDING_SURFACE,
+        agent_messages: AGENT_MESSAGE_ONBOARDING_SURFACE,
         attention: {
           classification: "specialized_domain_surface",
           aliases: ["attention_inbox", "attention-inbox", "Attention"],
@@ -9403,6 +9480,7 @@ function buildAgentOnboardingPayload(request: {
     verificationPaths: {
       context: "/api/v1/context",
       todayPriority: "/api/v1/today/priority",
+      dailyBriefing: "/api/v1/daily-briefing",
       xpMetrics: "/api/v1/metrics/xp",
       weeklyReview: "/api/v1/reviews/weekly",
       sleepOverview: "/api/v1/health/sleep",
@@ -9466,6 +9544,16 @@ function buildAgentOnboardingPayload(request: {
       artifactTrust: "/api/v1/artifacts/:id/trust",
       artifactVersions: "/api/v1/artifacts/:id/versions",
       artifactAudit: "/api/v1/artifacts/:id/audit",
+      agentMessagesPoll: "/api/v1/agent-messages/poll",
+      agentMessageDetail: "/api/v1/agent-messages/:id/detail",
+      agentMessageClaim: "/api/v1/agent-messages/:id/claim",
+      agentMessageLease: "/api/v1/agent-messages/:id/lease",
+      agentMessageProgress: "/api/v1/agent-messages/:id/progress",
+      agentMessageAcknowledge: "/api/v1/agent-messages/:id/acknowledge",
+      agentMessageVoice: "/api/v1/agent-messages/:id/voice",
+      agentMessageHandle: "/api/v1/agent-messages/:id/handle",
+      agentMessageFail: "/api/v1/agent-messages/:id/fail",
+      agentMessageForward: "/api/v1/agent-messages/:id/forward",
       lifeEventsTimeline: "/api/v1/life-events/timeline",
       lifeEventDetail: "/api/v1/life-events/:id",
       lifeEventCalendarSync: "/api/v1/life-events/:id/calendar-sync",
@@ -9510,6 +9598,7 @@ function buildAgentOnboardingPayload(request: {
         "forge_get_operator_context",
         "forge_get_current_work",
         "forge_get_today_priority",
+        "forge_get_daily_briefing",
         "forge_get_psyche_overview",
         "forge_get_psyche_schema_catalog",
         "forge_get_sleep_overview",
@@ -9523,6 +9612,7 @@ function buildAgentOnboardingPayload(request: {
       specializedDomainWorkflow: [
         "forge_call_attention_route",
         "forge_call_entity_navigation_route",
+        "forge_call_agent_messages_route",
         "forge_call_people_route",
         "forge_call_peer_route",
         "forge_call_movement_route",
@@ -9646,11 +9736,11 @@ function buildAgentOnboardingPayload(request: {
       depthCalibrationRule:
         "Before deepening an intake, decide whether this is quick capture, guided formulation, review-first help, or action-first execution. Quick capture means the user already supplied usable wording and wants it saved, remembered, or logged; reflect the working shape once, ask only the one structural, accuracy, or consent detail that changes the write, and do not force full exploration. Guided formulation means the user asks to understand, name, map, decide, or work through unclear or charged material; use active listening, one lane at a time, and Psyche hypotheses when appropriate before saving. Review-first means read the relevant stored entity, overview, or specialized surface before asking write-shaped questions. Action-first means the target task run, work adjustment, preference signal or judgment, questionnaire run, Movement correction, Life Force signal or weekday template, or Workbench run or output is already clear, so act or ask only for the missing target, span, flow, run, node, weekday, correction, or consent. Do not downgrade psychologically meaningful material into quick capture when the user wants exploration, and do not expand a simple storage request into therapy or project planning.",
       operationLaneRule:
-        "Keep the operation lane explicit before asking for lower-level details. Normal stored entities can be added, updated, reviewed or navigated, linked, or placed. Action workflows use verbs such as start, continue, complete, adjust, judge, signal, publish, sync, or observe. Specialized CRUD surfaces use lifecycle verbs such as create, read, update, sync, reconnect, delete, or browse. Read-model surfaces need a practical read question and scope before any write-shaped follow-up. Attention uses list, snooze, dismiss, or restore after a current bounded read; Entity Navigation uses list or touch after an exact view, while pin and unpin stay human-only. Movement, Life Events, Life Force, and Workbench use review, correct, repair, run, inspect, publish, preserve, calendar-sync, ticket-import, or status lanes through their dedicated route keys. Course and Concept use choose, continue, explain, submit, review mastery, import, or export lanes through the dedicated Course family. Psyche entities need a formulation lane before the storage lane when the user wants understanding; direct saves can move to one accuracy or consent question.",
+        "Keep the operation lane explicit before asking for lower-level details. Normal stored entities can be added, updated, reviewed or navigated, linked, or placed. Action workflows use verbs such as start, continue, complete, adjust, judge, signal, publish, sync, or observe. Specialized CRUD surfaces use lifecycle verbs such as create, read, update, sync, reconnect, delete, or browse. Read-model surfaces need a practical read question and scope before any write-shaped follow-up; a Daily Briefing requires one exact visible owner and an optional timezone, while Today Priority answers the narrower next-action question. Attention uses list, snooze, dismiss, or restore after a current bounded read; Entity Navigation uses list or touch after an exact view, while pin and unpin stay human-only. Agent Messages uses poll, inspect, claim, renew, progress, acknowledge, complete, fail, forward, or original-voice retrieval under one current atomic lease. Movement, Life Events, Life Force, and Workbench use review, correct, repair, run, inspect, publish, preserve, calendar-sync, ticket-import, or status lanes through their dedicated route keys. Course and Concept use choose, continue, explain, submit, review mastery, import, or export lanes through the dedicated Course family. Psyche entities need a formulation lane before the storage lane when the user wants understanding; direct saves can move to one accuracy or consent question.",
       psycheExplorationRule:
         "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, wait for the user's answer before offering a fuller formulation, ask permission before moving from charged exploration into naming or challenge when needed, make the next question help the user feel more able to name the experience rather than more examined, do not widen into adjacent entities until the current one has a working sentence the user recognizes, and once the lived experience is coherent stop deepening and help the user name it cleanly. After one concrete example is clear and a hypothesis lands or is corrected, translate it into a saveable record shape such as a belief sentence, functional loop, behavior, mode, trigger report, value, event type, or emotion definition; do not leave the user with interpretation alone, name the primary Forge record it is becoming, and ask one accuracy or consent question instead of reopening broad exploration, then use the shared batch entity routes after the user accepts the wording or explicitly asks to save. When the user is updating a Psyche record because of one fresh episode, anchor in that episode before renaming the durable formulation, begin with the smallest part of the old wording that no longer fits, and do not reopen the full origin story unless the new understanding is truly structural. If the user accepts the wording, move toward the save instead of reopening deeper exploration.",
       progressiveDisclosureRule:
-        "Treat partial answers as progress, not as failed intake. Before asking another question, identify what is already usable: operation, entity or surface, target record or time span, working wording, owner or placement, route lane, and consent. Say the usable part back briefly, then ask only for the first missing detail that changes the action: duplicate disambiguation, hierarchy parent, time window, weekday, flow, run, node, correction, link, or save consent. Use the known-target fast path when the user's wording already names the object and action: for normal entities ask only for parent, owner, or duplicate disambiguation; for task hierarchy ask only for the project, issue, or parent task; for Movement ask only for the missing interval, boundary, saved object, or confirmation; for Life Events ask only for the missing event id, start/end span, place, calendar match, ticket artifact, travel status target, or confirmation; for Life Force ask only for the weekday, profile field, signal intensity, or planning effect; for Workbench ask only for the missing flow, run, node, input, output, or preservation choice. For normal batch entities, do not ask for optional tags, priority, status, dates, color, links, or assignees when the accepted wording and meaningful body are already enough unless that metadata changes accountability, retrieval, or execution. For Movement, Life Events, Life Force, and Workbench, if the user's wording already implies the dedicated lane, skip the broad route-family question and ask only for the target span, place, event, artifact, weekday, profile field, flow, run, node, output, correction, or consent that is still missing. For direct Psyche saves or updates, treat an offered belief sentence, functional loop, part voice, trigger episode, value phrase, event kind, emotion signature, or flashcard message as real data; ask one accuracy or consent question instead of reopening origin, evidence, or repair.",
+        "Treat partial answers as progress, not as failed intake. Before asking another question, identify what is already usable: operation, entity or surface, target record or time span, working wording, owner or placement, route lane, and consent. Say the usable part back briefly, then ask only for the first missing detail that changes the action: duplicate disambiguation, hierarchy parent, time window, weekday, flow, run, node, correction, link, or save consent. Use the known-target fast path when the user's wording already names the object and action: for normal entities ask only for parent, owner, or duplicate disambiguation; for task hierarchy ask only for the project, issue, or parent task; for Daily Briefing ask only which exact visible owner it covers when that is not already clear; for Agent Messages ask only for the current message, lease fact, update evidence, or audio-capable destination that changes the next operation; for Movement ask only for the missing interval, boundary, saved object, or confirmation; for Life Events ask only for the missing event id, start/end span, place, calendar match, ticket artifact, travel status target, or confirmation; for Life Force ask only for the weekday, profile field, signal intensity, or planning effect; for Workbench ask only for the missing flow, run, node, input, output, or preservation choice. For normal batch entities, do not ask for optional tags, priority, status, dates, color, links, or assignees when the accepted wording and meaningful body are already enough unless that metadata changes accountability, retrieval, or execution. For Movement, Life Events, Life Force, and Workbench, if the user's wording already implies the dedicated lane, skip the broad route-family question and ask only for the target span, place, event, artifact, weekday, profile field, flow, run, node, output, correction, or consent that is still missing. For direct Psyche saves or updates, treat an offered belief sentence, functional loop, part voice, trigger episode, value phrase, event kind, emotion signature, or flashcard message as real data; ask one accuracy or consent question instead of reopening origin, evidence, or repair.",
       writeConfirmationRule:
         "After create, update, delete, restore, run, read, or repair actions, confirm the user-facing record, action, and result in the user's language instead of reopening intake. For batch creates and updates, confirm the working title or accepted wording, container, and owner or placement only when those changed retrieval, accountability, or execution; if optional tags, priority, status, color, links, dates, or assignees were left provisional, say that plainly once instead of asking for all of them. For action workflows, confirm the real product action such as task run started or completed, work adjustment applied, preference judgment or signal submitted, questionnaire run updated or completed, calendar connection synced, or self-observation note written. For Psyche saves, confirm the accepted wording and whether it was saved as a first version, update, link, archive, or distinct version; do not reopen origin, evidence, repair, or adjacent entity mapping after the save unless that next object is already visible and materially useful. Ask a follow-up only if it changes the next action: correction, link, schedule, run, publish, enrichment, preservation choice, or UI handoff.",
       specializedSurfaceRule:

@@ -268,6 +268,12 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   `touch` records an exact in-scope entity only after the agent actually viewed it.
   Agents cannot pin or unpin. Those choices remain human-operator-only in the Forge
   Action Bar. The runtime path is `/api/v1/entity-navigation`.
+- Agent Messages is a dedicated lease-governed worker surface under `agentMessages`
+  and `agent_messages`. Use `forge_call_agent_messages_route`: poll and read the exact
+  message before claiming, act only under the current atomic lease, and read detail
+  back after progress or terminal writes. Hermes is text-only and deliberately omits
+  original-voice retrieval; keep the message pending or forward it when voice is
+  necessary instead of inventing a transcript or discarding the original Artifact.
 - Movement, Life Events, Life Force, and Workbench are specialized domain surfaces. Read
   `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and use
   the dedicated route families for timeline/overlay repair, Life Events chronology/calendar/ticket/status, energy templates/signals,
@@ -664,12 +670,12 @@ For wiki-specific recall:
 - Batch CRUD entities: `goal`, `project`, `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`, `work_block_template`, `task_timebox`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `flashcard`, `trigger_report`, `event_type`, `emotion_definition`, `preference_catalog`, `preference_catalog_item`, `preference_context`, `preference_item`, `questionnaire_instrument`, `sleep_session`, and `workout_session`.
 - Specialized CRUD entities: `wiki_page` and `calendar_connection`.
 - Action/workflow entities: `task_run`, `questionnaire_run`, preference game/judgment/signal flows, calendar connection sync/setup, self-observation review, work adjustments, and import/sync jobs.
-- Read-model-only surfaces: Today priority, operator overview/context, calendar overview, Preferences Workspace, sleep overview, sports overview, training load, weight loss, and the self-observation calendar.
+- Read-model-only surfaces: Daily Briefing, Today priority, operator overview/context, calendar overview, Preferences Workspace, sleep overview, sports overview, training load, weight loss, and the self-observation calendar.
 - In `forge_get_agent_onboarding.entityRouteModel.readModelOnlySurfaces`, operator,
   calendar, Preferences, self-observation, sleep, and sports read models are available under
   camelCase names and entity-style aliases where useful, including
-  `todayPriority`, `operatorOverview`, `operatorContext`, `calendarOverview`, `sleepOverview`,
-  `sportsOverview`, `trainingLoad`, `weightLoss`, `preferencesWorkspace`, `today_priority`, `operator_overview`, `operator_context`,
+  `dailyBriefing`, `todayPriority`, `operatorOverview`, `operatorContext`, `calendarOverview`, `sleepOverview`,
+  `sportsOverview`, `trainingLoad`, `weightLoss`, `preferencesWorkspace`, `daily_briefing`, `today_priority`, `operator_overview`, `operator_context`,
   `calendar_overview`, `self_observation`, `sleep_overview`, and
   `sports_overview`, `training_load`, `weight_loss`, and `preferences_workspace`. Treat those as
   read-only overview surfaces, not batch CRUD entities.
@@ -682,6 +688,10 @@ For wiki-specific recall:
   backlog, or blocked task. Its schedule evidence covers task timeboxes; read
   `forge_get_calendar_overview` separately when meetings or other calendar
   events matter.
+- Use `forge_get_daily_briefing` when the user wants the broader day picture across
+  work, schedule, current capacity, and recent activity. Supply one exact visible
+  owner, ask about timezone only when it changes the local day, and preserve every
+  returned omission, conflict, and freshness state.
 - Use `forge_get_preferences_workspace` before explaining an inferred ranking. Ground
   the explanation in judgments, signals, overrides, evidence count, and uncertainty;
   switch to a dedicated Preferences action only after the user chooses a change.

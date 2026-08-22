@@ -2554,6 +2554,44 @@ Preferred opening question:
 
 - "What decision are you trying to make about today's next work?"
 
+## Daily Briefing
+
+Aim: give one visible owner a concise, evidence-backed picture of today's work,
+schedule, current capacity, and recent activity without blending several people's
+days or disguising missing and stale evidence.
+
+Arc:
+
+1. Use the owner already named or clearly established in the conversation. Ask which
+   person only when more than one visible owner could reasonably be intended.
+2. Ask about timezone only when it changes which local day or calendar events belong
+   in the briefing.
+3. Read the briefing, then lead with its concrete headline and the one statement that
+   most changes how the owner should understand the day.
+4. Preserve each section's freshness, conflict, partial, future, empty, or omitted
+   state. Explain the practical evidence gap instead of filling it with inference.
+5. Offer one grounded next action only when the briefing supports it. Switch to Today
+   Priority when the user wants a single ranked work decision rather than the broader
+   day picture.
+
+Route note:
+
+- `daily_briefing` is a read-model-only surface. Use `forge_get_daily_briefing` or
+  `GET /api/v1/daily-briefing` with one exact visible `userId`; never use batch CRUD.
+- The route requires one owner and accepts an optional IANA timezone. Do not combine
+  several owners into a synthetic briefing.
+- Every published statement must retain its exact evidence, observation time, and
+  freshness envelope.
+
+Ready to review when:
+
+- one exact visible owner is known
+- the timezone is known only if local-day interpretation would otherwise be ambiguous
+
+Preferred opening question:
+
+- "Do you want the broader picture of the day, or one decision about what to do next?"
+
 ## Self Observation
 
 Aim: support, directly capture, explore, or review one observed moment without
@@ -3274,6 +3312,52 @@ Preferred opening question:
 
 - "Are you trying to reopen something pinned, something you viewed recently, or the
   record we just looked at?"
+
+## Agent Messages
+
+Aim: handle slow work addressed to one connected agent through a bounded, atomic
+lease, while keeping the sender informed and preserving the original message and
+voice provenance.
+
+Arc:
+
+1. Poll the bounded inbox before assuming that work is available. If a message is
+   already named, read that exact message and its current lease state first.
+2. Reflect the concrete requested outcome and ask one focused question only when the
+   message itself leaves the work materially ambiguous.
+3. Claim atomically with a fresh secret before doing work. Never act on an expired,
+   superseded, terminal, or differently owned claim.
+4. Renew before expiry when the work continues, and send concise progress or
+   acknowledgement evidence when it helps the sender understand what changed.
+5. Before completing, failing, or forwarding, reread the exact message, preserve the
+   current claim generation, and state the factual result or blocker. Read the detail
+   back after the terminal operation to verify the accepted outcome.
+6. Retrieve original voice only when that message's current lease permits it and the
+   connected runtime explicitly accepts audio. A text-only agent must keep the
+   message pending or forward it rather than invent a transcript or discard the voice.
+
+Lane-to-route map:
+
+- Use the dedicated `forge_call_agent_messages_route`; Agent Messages are not stored
+  batch entities.
+- Resolve the exact operation, method, path, and `pathParams.id` from live onboarding
+  before every call. `downloadVoice` is a read-only POST protected by the current
+  lease, not a generic Artifact download or a transcription service.
+- OpenClaw and Codex can expose the original audio block when their runtime supports
+  it. Hermes deliberately omits that operation because its current transport is
+  text-only.
+- Stable operation and receipt keys apply only to an exact unchanged retry.
+  Forwarding creates a linked child message with immutable provenance.
+
+Ready to act when:
+
+- a current bounded poll or exact detail read identifies the message
+- the intended operation is allowed by its current status and lease
+- a mutating operation has the current claim facts and the evidence needed to verify it
+
+Preferred opening question:
+
+- "Are you checking for newly addressed work, or continuing one specific message?"
 
 ## Life Events
 

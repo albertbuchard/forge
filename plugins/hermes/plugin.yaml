@@ -73,6 +73,7 @@ provides_tools:
   - forge_get_weekly_review
   - forge_get_current_work
   - forge_get_today_priority
+  - forge_get_daily_briefing
   - forge_search_entities
   - forge_create_entities
   - forge_update_entities

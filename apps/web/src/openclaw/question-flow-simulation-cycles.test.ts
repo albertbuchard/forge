@@ -287,6 +287,8 @@ describe("question flow simulation cycles", () => {
     "Operator Overview",
     "Operator Context",
     "Today Priority",
+    "Daily Briefing",
+    "Agent Messages",
     "Self Observation",
     "Sleep Session",
     "Workout Session",
@@ -366,6 +368,10 @@ describe("question flow simulation cycles", () => {
       "Inspect current work, risk, and next moves before changing anything.",
     "Today Priority":
       "Decide what useful work to do next without ignoring active work or current capacity.",
+    "Daily Briefing":
+      "Brief me on today's work, schedule, current capacity, and recent activity for my exact owner account.",
+    "Agent Messages":
+      "Poll for work addressed to this agent, inspect one exact message, and claim it only when the current lease permits work.",
     "Self Observation": "Log what I noticed in the moment before I disengaged.",
     "Sleep Session": "Attach reflective context to last night's poor sleep.",
     "Workout Session":
@@ -501,6 +507,24 @@ describe("question flow simulation cycles", () => {
     "Operator Overview": ["review", "navigate", "interpret", "follow-up"],
     "Operator Context": ["review", "navigate", "interpret", "follow-up"],
     "Today Priority": ["decide", "continue", "pause", "review-evidence"],
+    "Daily Briefing": [
+      "read",
+      "interpret",
+      "compare-with-today-priority",
+      "choose-next-action"
+    ],
+    "Agent Messages": [
+      "poll",
+      "detail",
+      "claim",
+      "renew-claim",
+      "progress",
+      "acknowledge",
+      "download-voice",
+      "complete",
+      "fail",
+      "forward"
+    ],
     "Self Observation": ["observe", "review", "link", "route"],
     "Sleep Session": ["add", "update", "review", "enrich", "delete"],
     "Workout Session": ["add", "update", "review", "enrich", "delete"],
@@ -702,6 +726,8 @@ describe("question flow simulation cycles", () => {
     "Operator Overview": "readModel",
     "Operator Context": "readModel",
     "Today Priority": "readModel",
+    "Daily Briefing": "readModel",
+    "Agent Messages": "specializedDomain",
     "Self Observation": "action",
     "Sleep Session": "batch",
     "Workout Session": "batch",
@@ -799,8 +825,8 @@ describe("question flow simulation cycles", () => {
     entity_navigation: "Entity Navigation",
     todayPriority: "Today Priority",
     today_priority: "Today Priority",
-    dailyBriefing: "Today Priority",
-    daily_briefing: "Today Priority",
+    dailyBriefing: "Daily Briefing",
+    daily_briefing: "Daily Briefing",
     operatorOverview: "Operator Overview",
     operator_overview: "Operator Overview",
     operatorContext: "Operator Context",
@@ -878,6 +904,22 @@ describe("question flow simulation cycles", () => {
   ] as const;
 
   const specializedSurfaceRouteScenarios = {
+    "Agent Messages": {
+      poll: "Poll only for work addressed to this connected agent.",
+      detail:
+        "Inspect one exact message before taking ownership or reporting work.",
+      claim: "Claim one pending message atomically with a fresh secret.",
+      renewClaim: "Renew the current claim before its lease expires.",
+      addProgress:
+        "Send concise progress evidence under the current claim generation.",
+      acknowledge:
+        "Acknowledge receipt without claiming that the work is complete.",
+      downloadVoice:
+        "Retrieve only the original authorized voice artifact under the current lease.",
+      handle: "Complete the message with a stable terminal receipt.",
+      fail: "Report a terminal failure with bounded evidence.",
+      forward: "Forward the work with immutable parent-message provenance."
+    },
     Attention: {
       list: "Review the current bounded queue before choosing a next move.",
       snooze: "Defer an eligible item until a specific future time.",
@@ -1285,6 +1327,8 @@ describe("question flow simulation cycles", () => {
     }
 
     const surfaceToScenarioName = {
+      agentMessages: "Agent Messages",
+      agent_messages: "Agent Messages",
       attention: "Attention",
       entityNavigation: "Entity Navigation",
       movement: "Movement",

@@ -293,6 +293,37 @@ test("repairs built-in release identity and content without weakening immutable 
   }
 });
 
+test("does not churn built-in course or concept timestamps when package material is unchanged", async () => {
+  const dataRoot = await mkdtemp(
+    path.join(os.tmpdir(), "forge-course-idempotent-refresh-test-")
+  );
+  configureDatabase({ dataRoot });
+  configureLegacyWikiAutoImport(false);
+  try {
+    await initializeDatabase();
+    ensureSystemUsers();
+    ensureBuiltInCourses();
+    const database = getDatabase();
+    const sentinel = "2000-01-01T00:00:00.000Z";
+    database.prepare("UPDATE courses SET updated_at = ?").run(sentinel);
+    database.prepare("UPDATE concepts SET updated_at = ?").run(sentinel);
+
+    ensureBuiltInCourses();
+
+    const changedCourses = database
+      .prepare("SELECT COUNT(*) AS count FROM courses WHERE updated_at <> ?")
+      .get(sentinel) as { count: number };
+    const changedConcepts = database
+      .prepare("SELECT COUNT(*) AS count FROM concepts WHERE updated_at <> ?")
+      .get(sentinel) as { count: number };
+    assert.equal(changedCourses.count, 0);
+    assert.equal(changedConcepts.count, 0);
+  } finally {
+    closeDatabase();
+    await rm(dataRoot, { recursive: true, force: true });
+  }
+});
+
 test("imports a modular course and carries proof evidence into concept mastery", async () => {
   const dataRoot = await mkdtemp(path.join(os.tmpdir(), "forge-course-test-"));
   configureDatabase({ dataRoot });

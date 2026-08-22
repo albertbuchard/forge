@@ -482,6 +482,7 @@ describe("forge openclaw plugin", () => {
       "forge_get_agent_onboarding",
       "forge_get_calendar_overview",
       "forge_get_current_work",
+      "forge_get_daily_briefing",
       "forge_get_doctor",
       "forge_get_nutrition_patterns",
       "forge_get_operator_context",

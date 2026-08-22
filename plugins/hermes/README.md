@@ -10,6 +10,7 @@ This plugin follows the Hermes plugin guide directly:
 - bundled Forge runtime assets so Hermes can start Forge safely without repo-only runtime imports
 
 It exposes the same curated Forge contract as the OpenClaw adapter, but through Hermes' Python plugin system.
+That includes `forge_get_daily_briefing`, which requires one exact visible owner and returns an evidence-backed day picture without hiding stale, partial, omitted, or conflicting lanes.
 Agent Messages is the deliberate exception to byte-level parity: Hermes exposes
 poll, detail, claim, renew, progress, acknowledgement, handle, fail, and forward
 for the asynchronous mailbox, but the current Hermes bridge does not advertise

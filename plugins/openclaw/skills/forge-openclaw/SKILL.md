@@ -212,6 +212,12 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   Agents cannot pin or unpin. Those choices remain human-operator-only in the Forge
   Action Bar. The runtime path is `/api/v1/entity-navigation`; the OpenClaw mirror is
   `/forge/v1/entity-navigation`.
+- Agent Messages is a dedicated lease-governed worker surface under `agentMessages`
+  and `agent_messages`. Use `forge_call_agent_messages_route`: poll and read the exact
+  message before claiming, act only under the current atomic lease, and read detail
+  back after progress or terminal writes. Original voice is available only through
+  the current message lease and only when the connected runtime accepts audio; never
+  invent a transcript or use that operation as generic Artifact download.
 - Movement, Life Events, Life Force, and Workbench are specialized domain surfaces. Read
   `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and use
   the dedicated route families for timeline/overlay repair, Life Events chronology/calendar/ticket/status, energy templates/signals,
@@ -456,11 +462,11 @@ Health rule:
   accepted changed fields.
   `forge_parse_food_log_with_chatgpt` must use Forge's configured `openai-codex`
   ChatGPT subscription connection, not a metered OpenAI Platform API path.
-- In `forge_get_agent_onboarding.entityRouteModel.readModelOnlySurfaces`, Today priority, operator,
+- In `forge_get_agent_onboarding.entityRouteModel.readModelOnlySurfaces`, Daily Briefing, Today priority, operator,
   calendar, Preferences, self-observation, sleep, sports, training-load, and weight-loss read models are published with
   both camelCase names and entity-style aliases where useful, including
-  `todayPriority`, `operatorOverview`, `operatorContext`, `calendarOverview`, `sleepOverview`,
-  `sportsOverview`, `trainingLoad`, `weightLoss`, `preferencesWorkspace`, `today_priority`, `operator_overview`, `operator_context`,
+  `dailyBriefing`, `todayPriority`, `operatorOverview`, `operatorContext`, `calendarOverview`, `sleepOverview`,
+  `sportsOverview`, `trainingLoad`, `weightLoss`, `preferencesWorkspace`, `daily_briefing`, `today_priority`, `operator_overview`, `operator_context`,
   `calendar_overview`, `self_observation`, `sleep_overview`,
   `sports_overview`, `training_load`, `weight_loss`, and `preferences_workspace`. Treat those as read-only surfaces,
   not batch CRUD entities.
@@ -471,6 +477,10 @@ Health rule:
   explicit stop or continue state instead of selecting the first task in a lane.
   Its schedule evidence covers task timeboxes; read `forge_get_calendar_overview`
   separately when meetings or other calendar events matter.
+- Use `forge_get_daily_briefing` when the user wants the broader day picture across
+  work, schedule, current capacity, and recent activity. Supply one exact visible
+  owner, ask about timezone only when it changes the local day, and preserve every
+  returned omission, conflict, and freshness state.
 - Use `forge_get_preferences_workspace` before explaining an inferred ranking. Ground
   the explanation in judgments, signals, overrides, evidence count, and uncertainty;
   switch to a dedicated Preferences action only after the user chooses a change.
@@ -1240,6 +1250,7 @@ When the user asks which Forge tools are available, list exactly these tools:
 `forge_ingest_wiki_source`
 `forge_get_current_work`
 `forge_get_today_priority`
+`forge_get_daily_briefing`
 `forge_get_sleep_overview`
 `forge_get_sports_overview`
 `forge_get_training_load_overview`

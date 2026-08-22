@@ -2741,6 +2741,30 @@ TOOL_CATALOG: List[ToolSpec] = [
         ),
     },
     {
+        "name": "forge_get_daily_briefing",
+        "description": "Read one exact visible owner's deterministic daily briefing across today's work, schedule, current capacity, and recent activity. Preserve each statement's evidence, freshness, omissions, and conflict state instead of turning partial evidence into confident prose.",
+        "parameters": object_schema(
+            {
+                "userId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240,
+                    "description": "Exact visible Forge owner whose day the briefing should cover.",
+                },
+                "timeZone": optional_string(
+                    "Optional IANA timezone for the owner's local day."
+                ),
+            },
+            required=["userId"],
+        ),
+        "method": "GET",
+        "path_builder": lambda args: with_query(
+            "/api/v1/daily-briefing",
+            args,
+            ["userId", "timeZone"],
+        ),
+    },
+    {
         "name": "forge_search_entities",
         "description": "Search Forge entities before creating or updating to avoid duplicates. Pass searches as an array, even for one search.",
         "parameters": object_schema(
