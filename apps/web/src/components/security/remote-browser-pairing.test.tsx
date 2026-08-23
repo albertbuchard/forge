@@ -5,6 +5,7 @@ import {
   screen,
   waitFor
 } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   startAuthentication,
@@ -55,17 +56,21 @@ afterEach(() => {
 
 describe("RemoteBrowserPairing", () => {
   it("automatically restores a device passkey before normal pairing", async () => {
-    vi.mocked(beginTrustedBrowserAuthentication).mockResolvedValueOnce({
+    vi.mocked(beginTrustedBrowserAuthentication).mockResolvedValue({
       challengeId: "tbc_1234567890123456",
       options: { challenge: "trusted-challenge" }
     });
-    vi.mocked(startAuthentication).mockResolvedValueOnce({
+    vi.mocked(startAuthentication).mockResolvedValue({
       id: "trusted-credential"
     } as Awaited<ReturnType<typeof startAuthentication>>);
-    vi.mocked(completeTrustedBrowserAuthentication).mockResolvedValueOnce({});
+    vi.mocked(completeTrustedBrowserAuthentication).mockResolvedValue({});
     const onPaired = vi.fn();
 
-    render(<RemoteBrowserPairing onPaired={onPaired} />);
+    render(
+      <StrictMode>
+        <RemoteBrowserPairing onPaired={onPaired} />
+      </StrictMode>
+    );
 
     await waitFor(() => {
       expect(startAuthentication).toHaveBeenCalledTimes(1);

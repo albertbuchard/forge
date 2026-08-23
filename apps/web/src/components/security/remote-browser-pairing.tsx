@@ -65,11 +65,13 @@ export function RemoteBrowserPairing({
   const [masterPasswordPending, setMasterPasswordPending] = useState(false);
   const [pairedClientId, setPairedClientId] = useState<string | null>(null);
   const timer = useRef<number | null>(null);
-  const automaticRestoreStarted = useRef(false);
+  const automaticRestoreState = useRef<"idle" | "in-flight" | "finished">(
+    "idle"
+  );
 
   useEffect(() => {
-    if (automaticRestoreStarted.current) return;
-    automaticRestoreStarted.current = true;
+    if (automaticRestoreState.current !== "idle") return;
+    automaticRestoreState.current = "in-flight";
     let stopped = false;
 
     const restore = async () => {
@@ -88,18 +90,26 @@ export function RemoteBrowserPairing({
           response
         });
         if (stopped) return;
+        automaticRestoreState.current = "finished";
         setMessage("This device is verified. Opening Forge…");
         await onPaired();
       } catch {
         if (stopped) return;
         setStatus("idle");
         setMessage(null);
+      } finally {
+        if (!stopped) {
+          automaticRestoreState.current = "finished";
+        }
       }
     };
 
     void restore();
     return () => {
       stopped = true;
+      if (automaticRestoreState.current === "in-flight") {
+        automaticRestoreState.current = "idle";
+      }
     };
   }, [onPaired]);
 
