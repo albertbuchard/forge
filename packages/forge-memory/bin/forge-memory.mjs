@@ -4239,7 +4239,7 @@ function runtimeAdoptionFailure(config, state, healthResult) {
         "The protected Forge runtime uses a different or unverified data folder. Stop it or run npx forge-memory restart before continuing."
     };
   }
-  if (!runtimeStateMatchesPeerConfig(state, config)) {
+  if (ownsHealthyRuntime && !runtimeStateMatchesPeerConfig(state, config)) {
     return {
       ok: false,
       started: false,
@@ -7479,14 +7479,6 @@ async function runUi(parsed) {
       runtime.ok &&
       runtime.state?.localBrowserHandler?.scheme !== "forge"
     ) {
-      if (
-        runtime.state?.adopted === true ||
-        !runtimeStateOwnsHealthProcess(runtime.state, runtime.health)
-      ) {
-        throw new Error(
-          "Forge is healthy but is not owned by Forge Memory, so it was left unchanged. Restart that API process with the Forge local browser-handler environment, then rerun `npx forge-memory ui`."
-        );
-      }
       runtime = await restartRuntime(config, {
         peerPreparation: preparation
       });
@@ -7495,6 +7487,16 @@ async function runUi(parsed) {
       throw new Error(
         runtime.message ??
           "Forge could not start its secured local browser runtime."
+      );
+    }
+    if (
+      preparation?.browserHandler?.handlerScheme === "forge" &&
+      (runtime.state?.localBrowserHandler?.scheme !== "forge" ||
+        runtime.state?.adopted === true ||
+        !runtimeStateOwnsHealthProcess(runtime.state, runtime.health))
+    ) {
+      throw new Error(
+        "Forge could not safely move the healthy runtime under Forge Memory ownership with the verified local browser handler. The existing runtime was left unchanged or restored; inspect `npx forge-memory doctor` before retrying."
       );
     }
   }

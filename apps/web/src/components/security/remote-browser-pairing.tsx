@@ -23,6 +23,23 @@ import { ForgeApiError } from "@/lib/api-error";
 
 type Pairing = Awaited<ReturnType<typeof beginRemoteBrowserPairing>>;
 
+async function registerCurrentDevice(clientId: string) {
+  const ceremony = await beginTrustedBrowserRegistration({
+    clientId,
+    label: `Forge device passkey on ${navigator.platform || "this device"}`
+  });
+  const response = await startRegistration({
+    optionsJSON: ceremony.options as unknown as Parameters<
+      typeof startRegistration
+    >[0]["optionsJSON"]
+  });
+  await completeTrustedBrowserRegistration({
+    clientId,
+    challengeId: ceremony.challengeId,
+    response
+  });
+}
+
 export function RemoteBrowserPairing({
   onPaired
 }: {
@@ -31,6 +48,7 @@ export function RemoteBrowserPairing({
   const [pairing, setPairing] = useState<Pairing | null>(null);
   const [status, setStatus] = useState<
     | "idle"
+    | "checking"
     | "starting"
     | "pending"
     | "paired"
@@ -40,13 +58,50 @@ export function RemoteBrowserPairing({
     | "expired"
     | "limited"
     | "failed"
-  >("idle");
+  >("checking");
   const [message, setMessage] = useState<string | null>(null);
   const [retrySeconds, setRetrySeconds] = useState(0);
   const [masterPassword, setMasterPassword] = useState("");
   const [masterPasswordPending, setMasterPasswordPending] = useState(false);
   const [pairedClientId, setPairedClientId] = useState<string | null>(null);
   const timer = useRef<number | null>(null);
+  const automaticRestoreStarted = useRef(false);
+
+  useEffect(() => {
+    if (automaticRestoreStarted.current) return;
+    automaticRestoreStarted.current = true;
+    let stopped = false;
+
+    const restore = async () => {
+      try {
+        const ceremony = await beginTrustedBrowserAuthentication();
+        if (stopped) return;
+        setStatus("restoring");
+        const response = await startAuthentication({
+          optionsJSON: ceremony.options as unknown as Parameters<
+            typeof startAuthentication
+          >[0]["optionsJSON"]
+        });
+        if (stopped) return;
+        await completeTrustedBrowserAuthentication({
+          challengeId: ceremony.challengeId,
+          response
+        });
+        if (stopped) return;
+        setMessage("This device is verified. Opening Forge…");
+        await onPaired();
+      } catch {
+        if (stopped) return;
+        setStatus("idle");
+        setMessage(null);
+      }
+    };
+
+    void restore();
+    return () => {
+      stopped = true;
+    };
+  }, [onPaired]);
 
   useEffect(() => {
     if (!pairing || status !== "pending") return;
@@ -56,11 +111,25 @@ export function RemoteBrowserPairing({
         const result = await pollRemoteBrowserPairing(pairing);
         if (stopped) return;
         if (result.status === "approved") {
-          setStatus("paired");
           setPairedClientId(result.clientId);
+          setStatus("trusting");
           setMessage(
-            "This browser is paired. You can trust it for future user-verified sign-in, or continue without trusting it."
+            "Pairing is approved. Confirm the device passkey once so Forge can restore access in compatible browsers without another pairing code."
           );
+          try {
+            await registerCurrentDevice(result.clientId);
+            if (stopped) return;
+            setMessage("This device is trusted. Opening Forge…");
+            await onPaired();
+          } catch (error) {
+            if (stopped) return;
+            setStatus("paired");
+            setMessage(
+              error instanceof Error
+                ? error.message
+                : "Forge could not create the device passkey. The paired session remains usable, and you can retry device trust now."
+            );
+          }
           return;
         }
         if (result.status === "access_denied") {
@@ -239,20 +308,7 @@ export function RemoteBrowserPairing({
     setStatus("trusting");
     setMessage(null);
     try {
-      const ceremony = await beginTrustedBrowserRegistration({
-        clientId: pairedClientId,
-        label: `Forge trusted browser on ${navigator.platform || "this device"}`
-      });
-      const response = await startRegistration({
-        optionsJSON: ceremony.options as unknown as Parameters<
-          typeof startRegistration
-        >[0]["optionsJSON"]
-      });
-      await completeTrustedBrowserRegistration({
-        clientId: pairedClientId,
-        challengeId: ceremony.challengeId,
-        response
-      });
+      await registerCurrentDevice(pairedClientId);
       setMessage("This device is trusted. Opening Forge…");
       await onPaired();
     } catch (error) {
@@ -280,12 +336,12 @@ export function RemoteBrowserPairing({
             Secure browser pairing
           </div>
           <h1 className="type-display-section mt-1 text-[var(--ui-ink-strong)]">
-            Authorize this browser once
+            Authorize this device once
           </h1>
           <p className="type-body mt-2 text-[var(--ui-ink-soft)]">
-            Network or Tailscale access alone is not enough. Forge will create a
-            scoped browser session only after the local owner approves this
-            exact request.
+            Forge first checks for your device passkey. After one approved
+            pairing, that passkey can restore the same scoped access in
+            compatible browsers without another pairing code.
           </p>
         </div>
       </div>
@@ -293,9 +349,9 @@ export function RemoteBrowserPairing({
       {status === "paired" || status === "trusting" ? (
         <div className="grid gap-3 rounded-[18px] bg-[var(--ui-surface-2)] p-4">
           <p className="text-sm leading-6 text-[var(--ui-ink-medium)]">
-            Trusting this device stores a passkey that restores only this exact
-            paired browser profile and scopes. Forge will require Face ID, Touch
-            ID, or the device passcode each time it restores access.
+            Device trust stores a passkey that restores only this exact paired
+            profile and scopes. Forge will require Face ID, Touch ID, Windows
+            Hello, or the device passcode when it restores access.
           </p>
           <div className="flex flex-wrap gap-3">
             <Button
@@ -305,7 +361,7 @@ export function RemoteBrowserPairing({
               onClick={() => void trustPairedBrowser()}
             >
               <ShieldCheck className="mr-2 size-4" />
-              Trust this device
+              Finish trusting this device
             </Button>
             <Button
               type="button"
@@ -313,7 +369,7 @@ export function RemoteBrowserPairing({
               disabled={status === "trusting"}
               onClick={() => void onPaired()}
             >
-              Continue without trusting
+              Use this browser session only
             </Button>
           </div>
         </div>
@@ -390,11 +446,11 @@ export function RemoteBrowserPairing({
             type="button"
             variant="secondary"
             onClick={() => void restoreTrustedBrowser()}
-            pending={status === "restoring"}
-            pendingLabel="Checking this device"
+            pending={status === "checking" || status === "restoring"}
+            pendingLabel="Checking device passkey"
           >
             <ShieldCheck className="mr-2 size-4" />
-            Use a trusted device
+            Restore this device
           </Button>
           <Button
             type="button"
@@ -402,6 +458,7 @@ export function RemoteBrowserPairing({
             pending={status === "starting"}
             pendingLabel="Creating secure request"
             disabled={
+              status === "checking" ||
               status === "restoring" ||
               (status === "limited" && retrySeconds > 0)
             }

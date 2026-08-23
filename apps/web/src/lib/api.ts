@@ -781,8 +781,9 @@ async function performRemoteBrowserRenewal() {
 async function renewRemoteBrowserSession(force: boolean) {
   const lastRenewedAt = readRemoteBrowserRenewedAt();
   if (
-    lastRenewedAt === null ||
-    (!force && Date.now() - lastRenewedAt < REMOTE_BROWSER_RENEWAL_INTERVAL_MS)
+    !force &&
+    (lastRenewedAt === null ||
+      Date.now() - lastRenewedAt < REMOTE_BROWSER_RENEWAL_INTERVAL_MS)
   ) {
     return false;
   }
@@ -1680,7 +1681,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (shouldBootstrapAndRetryBrowserSession({ path, init, response, body })) {
     const renewed =
-      remoteRenewalEligible && readRemoteBrowserRenewedAt() !== null
+      remoteRenewalEligible
         ? await renewRemoteBrowserSession(true)
         : false;
     if (!renewed) {
