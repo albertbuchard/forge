@@ -43,6 +43,18 @@ test("builds the plugin runtime before Forge Memory exercises it", async () => {
   assert.equal(source.indexOf(buildCommand, buildPosition + 1), -1);
 });
 
+test("release rollback does not pass the aliased plugin manifest twice to git restore", async () => {
+  const source = await readFile(releaseScriptUrl, "utf8");
+  const cleanupStart = source.indexOf("cleanup_release_workspace() {");
+  const cleanupEnd = source.indexOf("\n}\n\nrollback_release_state()", cleanupStart);
+  const cleanup = source.slice(cleanupStart, cleanupEnd);
+
+  assert.notEqual(cleanupStart, -1);
+  assert.notEqual(cleanupEnd, -1);
+  assert.equal(cleanup.match(/\$\{ROOT_MANIFEST\}/g)?.length, 1);
+  assert.equal(cleanup.includes("${PLUGIN_MANIFEST}"), false);
+});
+
 test("hardens the ephemeral runner home before packed owner authentication", async () => {
   const source = await readFile(releaseWorkflowUrl, "utf8");
   const hardeningStep = "Harden local-owner verification path";

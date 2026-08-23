@@ -1782,12 +1782,14 @@ await withFakeForgeServer(
     const mismatchedStart = await runAsync(["start"]);
     const mismatchedPayload = JSON.parse(mismatchedStart.stdout);
     if (
-      mismatchedPayload.ok ||
-      mismatchedPayload.configurationMismatch !== true ||
-      mismatchedPayload.adopted !== false
+      !mismatchedPayload.ok ||
+      mismatchedPayload.started !== false ||
+      mismatchedPayload.adopted !== true ||
+      mismatchedPayload.state?.adopted !== true ||
+      mismatchedPayload.state?.peer?.enabled !== true
     ) {
       throw new Error(
-        `Expected a healthy runtime with unknown peer settings not to be adopted, got ${mismatchedStart.stdout}`
+        `Expected stale settings on an unowned adopted runtime not to block recovery, got ${mismatchedStart.stdout}`
       );
     }
     writeSmokeConfig({

@@ -99,7 +99,6 @@ cleanup_release_workspace() {
     "${ROOT_MANIFEST}" \
     "${PLUGIN_PACKAGE_JSON}" \
     "${PLUGIN_PACKAGE_LOCK_JSON}" \
-    "${PLUGIN_MANIFEST}" \
     "${CODEX_PLUGIN_MANIFEST}" \
     "${CODEX_RUNTIME_PACKAGE_JSON}" \
     "${HERMES_PLUGIN_MANIFEST}" \
