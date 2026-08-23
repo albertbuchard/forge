@@ -456,6 +456,12 @@ function forgetRemoteBrowserRenewal() {
   }
 }
 
+function canAttemptRemoteBrowserRenewal() {
+  return (
+    typeof window !== "undefined" && window.location.protocol === "https:"
+  );
+}
+
 function encodeBase64Url(value: ArrayBuffer | Uint8Array) {
   const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
   let binary = "";
@@ -1669,6 +1675,7 @@ async function bootstrapBrowserSession() {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const remoteRenewalEligible =
+    canAttemptRemoteBrowserRenewal() &&
     path !== REMOTE_BROWSER_REFRESH_PATH &&
     path !== REMOTE_DEVICE_BEGIN_PATH &&
     path !== REMOTE_DEVICE_TOKEN_PATH &&
