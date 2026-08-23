@@ -487,7 +487,67 @@ describe("remote browser pairing client", () => {
     await expect(ensureOperatorSession()).rejects.toMatchObject({
       code: "browser_pairing_required"
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
+      expect.stringContaining("/api/v1/auth/operator-session"),
+      expect.stringContaining("/api/v1/auth/browser/refresh")
+    ]);
+  });
+
+  it("recovers a paired browser from its secure refresh cookie when disposable local storage was cleared", async () => {
+    vi.stubGlobal("window", {
+      location: {
+        origin: "https://forge.example.test",
+        protocol: "https:",
+        hostname: "forge.example.test"
+      }
+    });
+    expect(localStorage.getItem("forge.browser.renewed-at")).toBeNull();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        mockJsonErrorResponse(401, {
+          code: "operator_browser_session_required",
+          error: "A paired Forge browser session is required."
+        })
+      )
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          session: {
+            id: "ses_recovered_browser",
+            absoluteExpiresAt: "2026-09-01T00:00:00.000Z"
+          },
+          csrfToken: "fg_csrf_recovered"
+        })
+      )
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          session: {
+            id: "ses_recovered_browser",
+            actorLabel: "Paired Browser",
+            principalKind: "paired_client",
+            localOwner: false,
+            profile: "trusted_personal_assistant",
+            expiresAt: "2026-09-01T00:00:00.000Z"
+          }
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const session = await ensureOperatorSession();
+
+    expect(session.session.principalKind).toBe("paired_client");
+    expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
+      expect.stringContaining("/api/v1/auth/operator-session"),
+      expect.stringContaining("/api/v1/auth/browser/refresh"),
+      expect.stringContaining("/api/v1/auth/operator-session")
+    ]);
+    expect(localStorage.getItem("forge.browser.csrf")).toBe(
+      "fg_csrf_recovered"
+    );
+    expect(
+      Number(localStorage.getItem("forge.browser.renewed-at"))
+    ).toBeGreaterThan(0);
   });
 
   it("fails closed when an embedded transport preserves the Forge error envelope but not the HTTP status", async () => {
@@ -632,6 +692,13 @@ describe("remote browser pairing client", () => {
   });
 
   it("silently renews a persisted paired browser before its next API request", async () => {
+    vi.stubGlobal("window", {
+      location: {
+        origin: "https://forge.example.test",
+        protocol: "https:",
+        hostname: "forge.example.test"
+      }
+    });
     localStorage.setItem(
       "forge.browser.renewed-at",
       String(Date.now() - 24 * 60 * 60 * 1_000)

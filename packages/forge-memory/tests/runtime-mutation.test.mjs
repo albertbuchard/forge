@@ -1395,7 +1395,7 @@ test("a cleanup survivor prevents adoption and no ownership is written", async (
   assert.equal(writes, 0);
 });
 
-test("a race winner must pass package and peer adoption gates", async () => {
+test("a race winner must pass package and ownership adoption gates", async () => {
   const candidate = {
     children: [
       { role: "server", pid: 404, identity: "e".repeat(64) }
@@ -1443,7 +1443,7 @@ test("a race winner must pass package and peer adoption gates", async () => {
     }
   );
   assert.equal(unknownPeerSettings.ok, false);
-  assert.equal(unknownPeerSettings.configurationMismatch, true);
+  assert.equal(unknownPeerSettings.runtimeOwnershipUnknown, true);
 
   const unknownOwner = await runtime.finalizeStartedRuntimeAttempt(
     {
@@ -1459,6 +1459,49 @@ test("a race winner must pass package and peer adoption gates", async () => {
   );
   assert.equal(unknownOwner.ok, false);
   assert.equal(unknownOwner.runtimeOwnershipUnknown, true);
+});
+
+test("stale adopted peer metadata does not block safe recovery while managed drift still fails closed", () => {
+  const peerEnabledConfig = {
+    ...config,
+    peerEnabled: true,
+    peerIrohEnabled: true
+  };
+  const staleAdoptedState = {
+    adopted: true,
+    children: [],
+    canonicalExternalOrigin: null,
+    peer: {
+      enabled: false,
+      irohEnabled: false,
+      allowLoopbackDirect: false,
+      directEndpoints: []
+    }
+  };
+  assert.equal(
+    runtime.runtimeAdoptionFailure(
+      peerEnabledConfig,
+      staleAdoptedState,
+      protectedHealth(process.pid)
+    ),
+    null
+  );
+
+  const identity = runtime.captureProcessIdentity(process.pid);
+  assert.ok(identity);
+  const managedMismatch = runtime.runtimeAdoptionFailure(
+    peerEnabledConfig,
+    {
+      ...staleAdoptedState,
+      adopted: false,
+      runtimePackageName: "forge-openclaw-plugin",
+      runtimePackageVersion: packageVersion,
+      children: [{ role: "server", pid: process.pid, identity }]
+    },
+    protectedHealth(process.pid)
+  );
+  assert.equal(managedMismatch.ok, false);
+  assert.equal(managedMismatch.configurationMismatch, true);
 });
 
 test("adoption rejects missing package identity and a mismatched protected storage root", async () => {
