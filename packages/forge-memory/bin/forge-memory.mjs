@@ -1539,18 +1539,30 @@ function hasVerifiedLocalOwnerPreparation(preparation) {
   );
 }
 
-function applyLocalOwnerProcessEnvironment(preparation) {
+function applyLocalOwnerProcessEnvironment(preparation, config) {
   for (const name of [
     "FORGE_OWNER_BROKER_BIN",
     "FORGE_OWNER_BROKER_SHA256",
     "FORGE_PLATFORM_OWNER_KEY_PATH",
-    "FORGE_PLATFORM_OWNER_KEY_SHA256"
+    "FORGE_PLATFORM_OWNER_KEY_SHA256",
+    "FORGE_LOCAL_BROWSER_HANDLER_SCHEME",
+    "FORGE_LOCAL_BROWSER_HANDLER_APP_PATH",
+    "FORGE_LOCAL_BROWSER_API_ORIGIN"
   ]) {
     delete process.env[name];
   }
   if (preparation?.ownerBrokerBinaryPath) {
     process.env.FORGE_OWNER_BROKER_BIN = preparation.ownerBrokerBinaryPath;
     process.env.FORGE_OWNER_BROKER_SHA256 = preparation.ownerBrokerBinarySha256;
+    if (
+      preparation.browserHandler?.handlerScheme === "forge" &&
+      preparation.browserHandler.appPath
+    ) {
+      process.env.FORGE_LOCAL_BROWSER_HANDLER_SCHEME = "forge";
+      process.env.FORGE_LOCAL_BROWSER_HANDLER_APP_PATH =
+        preparation.browserHandler.appPath;
+      process.env.FORGE_LOCAL_BROWSER_API_ORIGIN = `http://127.0.0.1:${config.port || DEFAULT_PORT}`;
+    }
   } else if (preparation?.platformOwnerKeyPath) {
     process.env.FORGE_PLATFORM_OWNER_KEY_PATH =
       preparation.platformOwnerKeyPath;
@@ -1565,7 +1577,10 @@ function captureLocalOwnerProcessEnvironment() {
       "FORGE_OWNER_BROKER_BIN",
       "FORGE_OWNER_BROKER_SHA256",
       "FORGE_PLATFORM_OWNER_KEY_PATH",
-      "FORGE_PLATFORM_OWNER_KEY_SHA256"
+      "FORGE_PLATFORM_OWNER_KEY_SHA256",
+      "FORGE_LOCAL_BROWSER_HANDLER_SCHEME",
+      "FORGE_LOCAL_BROWSER_HANDLER_APP_PATH",
+      "FORGE_LOCAL_BROWSER_API_ORIGIN"
     ].map((name) => [name, process.env[name]])
   );
 }
@@ -3315,12 +3330,53 @@ async function withRuntimeMutationLock(config, operation) {
   }
 }
 
-async function ensureManagedRuntimeForLocalClient(config, peerPreparation) {
-  if (isHealthyForgeRuntime(await health(config, 1_500))) return;
-  const result = await startRuntime(config, { peerPreparation });
+async function ensureManagedRuntimeForLocalClient(
+  config,
+  peerPreparation,
+  dependencies = {}
+) {
+  const healthImplementation = dependencies.healthImplementation ?? health;
+  const authenticatedHealthImplementation =
+    dependencies.authenticatedHealthImplementation ??
+    waitForAuthenticatedRuntimeHealth;
+  const readStateImplementation =
+    dependencies.readStateImplementation ?? readRuntimeState;
+  const restartImplementation =
+    dependencies.restartImplementation ?? restartRuntime;
+  const startImplementation = dependencies.startImplementation ?? startRuntime;
+  const ownsHealthProcessImplementation =
+    dependencies.ownsHealthProcessImplementation ??
+    runtimeStateOwnsHealthProcess;
+  const current = await healthImplementation(config, 1_500);
+  const requiresBrowserHandler =
+    peerPreparation?.browserHandler?.handlerScheme === "forge";
+  if (isHealthyForgeRuntime(current)) {
+    if (!requiresBrowserHandler) return;
+    const state = await readStateImplementation();
+    if (state?.localBrowserHandler?.scheme === "forge") {
+      const protectedCurrent = await authenticatedHealthImplementation(
+        config,
+        peerPreparation
+      );
+      if (ownsHealthProcessImplementation(state, protectedCurrent)) return;
+    }
+  }
+  const result = isHealthyForgeRuntime(current)
+    ? await restartImplementation(config, { peerPreparation })
+    : await startImplementation(config, { peerPreparation });
   if (!result.ok) {
     throw new Error(
       result.message ?? `Forge did not become healthy at ${baseUrl(config)}.`
+    );
+  }
+  if (
+    requiresBrowserHandler &&
+    (result.state?.localBrowserHandler?.scheme !== "forge" ||
+      result.state?.adopted === true ||
+      !ownsHealthProcessImplementation(result.state, result.health))
+  ) {
+    throw new Error(
+      "Forge did not establish a verified managed runtime with its local browser handler."
     );
   }
 }
@@ -4131,7 +4187,7 @@ async function authenticatedRuntimeHealth(config, peerPreparation = null) {
     );
   }
   const previousOwnerEnvironment = captureLocalOwnerProcessEnvironment();
-  if (preparation) applyLocalOwnerProcessEnvironment(preparation);
+  if (preparation) applyLocalOwnerProcessEnvironment(preparation, config);
   try {
     const toolRuntime = await loadForgeToolRuntime(config);
     if (!toolRuntime?.callConfiguredForgeApi) {
@@ -5807,7 +5863,7 @@ async function loadAuthenticatedLocalForgeClient(config, command) {
       ];
       throw error;
     }
-    applyLocalOwnerProcessEnvironment(nativePreparation);
+    applyLocalOwnerProcessEnvironment(nativePreparation, config);
   }
   const toolRuntime = await loadForgeToolRuntime(config);
   if (!toolRuntime?.callConfiguredForgeApi) {
@@ -5979,7 +6035,7 @@ async function createPairing(config, options = {}) {
           "Forge local-owner authentication has no verified owner channel."
         );
       }
-      applyLocalOwnerProcessEnvironment(nativePreparation);
+      applyLocalOwnerProcessEnvironment(nativePreparation, config);
     }
     const toolRuntime = await loadForgeToolRuntime(config);
     if (!toolRuntime?.callConfiguredForgeApi) {
@@ -8010,7 +8066,7 @@ async function runMcp() {
             "Forge local-owner authentication has no verified owner channel."
           );
         }
-        applyLocalOwnerProcessEnvironment(nativePreparation);
+        applyLocalOwnerProcessEnvironment(nativePreparation, config);
       }
       await ensureManagedRuntimeForLocalClient(config, nativePreparation);
     }
@@ -8344,8 +8400,11 @@ function printFatalError(error, { json = false } = {}) {
 export const __forgeMemoryRuntimeMutationTest = Object.freeze({
   acquireOpenClawRuntimeStartupLease,
   acquireRuntimeStartLock,
+  applyLocalOwnerProcessEnvironment,
   applyRuntimeConfigTransaction,
+  captureLocalOwnerProcessEnvironment,
   captureProcessIdentity,
+  ensureManagedRuntimeForLocalClient,
   finalizeStartedRuntimeAttempt,
   inspectOpenClawRuntimeLaunchBoundary,
   openClawRuntimeLogPath,
@@ -8356,6 +8415,7 @@ export const __forgeMemoryRuntimeMutationTest = Object.freeze({
   readVerifiedOpenClawRuntimeRecord,
   replaceOpenClawLeaseOwnerFile,
   recordedProcessIdentityMatches,
+  restoreLocalOwnerProcessEnvironment,
   restartRuntime,
   runtimeAdoptionFailure,
   runtimeStartLockOwnerPath,

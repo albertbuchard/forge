@@ -16,6 +16,10 @@
   API lacks the current local-browser handler. Stale metadata from an adopted
   runtime no longer traps the CLI in a peer-setting mismatch loop, while a
   managed runtime with real configuration drift still fails closed.
+- Made long-running `forge-memory mcp` clients inherit the same verified browser
+  handler boundary. MCP startup now repairs a healthy runtime that cannot serve
+  local browser authorization instead of accepting it and repeatedly returning
+  `503 local_browser_owner_handler_unavailable`.
 
 ## 0.3.64
 

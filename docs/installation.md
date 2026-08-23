@@ -220,6 +220,12 @@ npx forge-memory doctor --repair
 Repair recreates missing Forge-owned runtime folders and may restart an unhealthy managed
 runtime. It does not delete the Forge data folder.
 
+`ui` and a locally configured Forge Memory MCP client also repair a healthy
+source runtime that was started without the verified local-browser handler. The
+repair holds the runtime-manager locks, verifies the responder and canonical
+data root, and fails closed or restores the prior process if ownership cannot be
+proved. It does not require deleting browser state or pairing again.
+
 Useful follow-up commands:
 
 ```bash

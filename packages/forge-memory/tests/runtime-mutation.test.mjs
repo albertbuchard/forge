@@ -37,6 +37,15 @@ const config = {
 const delay = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+const browserHandlerPreparation = {
+  ownerBrokerBinaryPath: "/verified/forge-owner-broker",
+  ownerBrokerBinarySha256: "a".repeat(64),
+  browserHandler: {
+    handlerScheme: "forge",
+    appPath: "/Applications/Forge Browser Handler.app"
+  }
+};
+
 function processExists(pid) {
   try {
     process.kill(pid, 0);
@@ -79,6 +88,139 @@ async function resetRuntimeFiles() {
     force: true
   });
 }
+
+test("local-owner clients preserve the verified browser handler for runtimes they may spawn", () => {
+  const previous = runtime.captureLocalOwnerProcessEnvironment();
+  try {
+    runtime.applyLocalOwnerProcessEnvironment(
+      browserHandlerPreparation,
+      config
+    );
+    assert.equal(
+      process.env.FORGE_OWNER_BROKER_BIN,
+      browserHandlerPreparation.ownerBrokerBinaryPath
+    );
+    assert.equal(
+      process.env.FORGE_OWNER_BROKER_SHA256,
+      browserHandlerPreparation.ownerBrokerBinarySha256
+    );
+    assert.equal(process.env.FORGE_LOCAL_BROWSER_HANDLER_SCHEME, "forge");
+    assert.equal(
+      process.env.FORGE_LOCAL_BROWSER_HANDLER_APP_PATH,
+      browserHandlerPreparation.browserHandler.appPath
+    );
+    assert.equal(
+      process.env.FORGE_LOCAL_BROWSER_API_ORIGIN,
+      `http://127.0.0.1:${config.port}`
+    );
+  } finally {
+    runtime.restoreLocalOwnerProcessEnvironment(previous);
+  }
+});
+
+test("local MCP startup keeps a compatible managed browser runtime unchanged", async () => {
+  const current = { ok: true, forge: true };
+  const protectedCurrent = { ok: true, forge: true, protected: true };
+  const state = {
+    adopted: false,
+    localBrowserHandler: { scheme: "forge" }
+  };
+  let starts = 0;
+  let restarts = 0;
+  let authenticatedReads = 0;
+  await runtime.ensureManagedRuntimeForLocalClient(
+    config,
+    browserHandlerPreparation,
+    {
+      healthImplementation: async () => current,
+      authenticatedHealthImplementation: async () => {
+        authenticatedReads += 1;
+        return protectedCurrent;
+      },
+      readStateImplementation: async () => state,
+      ownsHealthProcessImplementation: (candidate, healthResult) =>
+        candidate === state && healthResult === protectedCurrent,
+      startImplementation: async () => {
+        starts += 1;
+      },
+      restartImplementation: async () => {
+        restarts += 1;
+      }
+    }
+  );
+  assert.equal(authenticatedReads, 1);
+  assert.equal(starts, 0);
+  assert.equal(restarts, 0);
+});
+
+test("local MCP startup repairs a healthy runtime that lacks its browser handler", async () => {
+  const current = { ok: true, forge: true };
+  const repairedState = {
+    adopted: false,
+    localBrowserHandler: { scheme: "forge" }
+  };
+  const repairedHealth = { ok: true, forge: true };
+  let starts = 0;
+  let restarts = 0;
+  let authenticatedReads = 0;
+  await runtime.ensureManagedRuntimeForLocalClient(
+    config,
+    browserHandlerPreparation,
+    {
+      healthImplementation: async () => current,
+      authenticatedHealthImplementation: async () => {
+        authenticatedReads += 1;
+        return { ok: true, forge: true };
+      },
+      readStateImplementation: async () => ({
+        adopted: true,
+        localBrowserHandler: { scheme: null }
+      }),
+      ownsHealthProcessImplementation: (candidate, healthResult) =>
+        candidate === repairedState && healthResult === repairedHealth,
+      startImplementation: async () => {
+        starts += 1;
+      },
+      restartImplementation: async (_config, options) => {
+        restarts += 1;
+        assert.equal(options.peerPreparation, browserHandlerPreparation);
+        return {
+          ok: true,
+          state: repairedState,
+          health: repairedHealth
+        };
+      }
+    }
+  );
+  assert.equal(authenticatedReads, 0);
+  assert.equal(starts, 0);
+  assert.equal(restarts, 1);
+});
+
+test("local MCP startup rejects a replacement without verified browser ownership", async () => {
+  await assert.rejects(
+    runtime.ensureManagedRuntimeForLocalClient(
+      config,
+      browserHandlerPreparation,
+      {
+        healthImplementation: async () => ({ ok: false, forge: false }),
+        startImplementation: async () => ({
+          ok: true,
+          state: {
+            adopted: true,
+            localBrowserHandler: { scheme: null }
+          },
+          health: { ok: true, forge: true }
+        }),
+        restartImplementation: async () => {
+          throw new Error("a stopped runtime must use the start path");
+        },
+        ownsHealthProcessImplementation: () => false
+      }
+    ),
+    /verified managed runtime with its local browser handler/
+  );
+});
 
 function protectedHealth(
   pid,

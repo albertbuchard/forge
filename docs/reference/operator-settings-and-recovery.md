@@ -178,6 +178,13 @@ recover. Revoking a pairing requires the device to pair again.
 Hermes, Codex, and Claude Code adapters at the same configured data root.
 Repeated install and configure runs preserve existing files in that root.
 
+Local `ui` and Forge Memory MCP startup require more than an HTTP health
+response: the running process must also be a verified managed runtime with the
+current local-browser handler. If a source runtime started by an older adapter
+lacks that handler, Forge performs a locked ownership transfer and preserves the
+configured data root. A failed transfer stops without adopting an unknown
+process and restores the verified prior runtime when possible.
+
 `npx forge-memory update` creates a pre-update data archive before changing the
 runtime cache or selected adapters. It stops if the required backup is not
 confirmed or cannot be created. `npx forge-memory uninstall` removes the runtime

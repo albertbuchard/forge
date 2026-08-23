@@ -130,7 +130,11 @@ Codex and Claude Code use `npx forge-memory mcp` after configuration. That MCP e
 the same curated Forge tool registry as the other Forge adapters, including
 the wiki tools (`forge_search_wiki`, `forge_get_wiki_page`, and maintenance
 tools). It also exposes `forge_memory_mcp_diagnostics` so adapter startup issues
-show up as a tool result instead of a closed MCP transport.
+show up as a tool result instead of a closed MCP transport. A local MCP client
+also carries the verified browser-handler configuration into a runtime it may
+start. If it finds a healthy runtime that lacks that handler, it performs the
+same locked, identity-verified repair as `ui` instead of leaving local browsers
+in a repeated `503` authorization loop.
 
 When a remote browser, iPhone, Codex, Hermes, or OpenClaw asks to pair, every unlocked
 local-owner Forge UI shows a notification that opens the complete pending-request
