@@ -4173,10 +4173,18 @@ async function verifyTransferredRuntimeStart(
   };
 }
 
-async function authenticatedRuntimeHealth(config, peerPreparation = null) {
+async function authenticatedRuntimeHealth(
+  config,
+  peerPreparation = null,
+  dependencies = {}
+) {
+  const prepareOwnerImplementation =
+    dependencies.prepareOwnerImplementation ?? ensureForgePeerPrepared;
+  const loadToolRuntimeImplementation =
+    dependencies.loadToolRuntimeImplementation ?? loadForgeToolRuntime;
   let preparation = peerPreparation;
   if (!process.env.FORGE_API_TOKEN?.trim() && !preparation) {
-    preparation = await ensureForgePeerPrepared(config);
+    preparation = await prepareOwnerImplementation(config);
   }
   if (
     !process.env.FORGE_API_TOKEN?.trim() &&
@@ -4189,18 +4197,22 @@ async function authenticatedRuntimeHealth(config, peerPreparation = null) {
   const previousOwnerEnvironment = captureLocalOwnerProcessEnvironment();
   if (preparation) applyLocalOwnerProcessEnvironment(preparation, config);
   try {
-    const toolRuntime = await loadForgeToolRuntime(config);
-    if (!toolRuntime?.callConfiguredForgeApi) {
+    const toolRuntime = await loadToolRuntimeImplementation(config);
+    if (!toolRuntime?.callForgeApi) {
       throw new Error("Forge could not load its authenticated client runtime.");
     }
-    const response = await toolRuntime.callConfiguredForgeApi(
-      toolRuntime.forgeConfig,
-      {
-        method: "GET",
-        path: "/api/v1/health",
-        extraHeaders: { "x-forge-runtime-probe": "1" }
-      }
-    );
+    const response = await toolRuntime.callForgeApi({
+      baseUrl: toolRuntime.forgeConfig.baseUrl,
+      dataRoot: toolRuntime.forgeConfig.dataRoot,
+      apiToken: toolRuntime.forgeConfig.apiToken,
+      remoteCredentialId:
+        toolRuntime.forgeConfig.remoteCredentialId ?? "",
+      actorLabel: toolRuntime.forgeConfig.actorLabel,
+      timeoutMs: toolRuntime.forgeConfig.timeoutMs,
+      method: "GET",
+      path: "/api/v1/health",
+      extraHeaders: { "x-forge-runtime-probe": "1" }
+    });
     if (
       response.status !== 200 ||
       response.body?.app !== "forge" ||
@@ -7837,7 +7849,7 @@ async function loadForgeToolRuntime(config) {
   const [
     { Value },
     { resolveForgePluginConfig },
-    { callConfiguredForgeApi },
+    { callConfiguredForgeApi, callForgeApi },
     { registerForgePluginTools }
   ] = await Promise.all([
     importFile(pluginRequire.resolve("@sinclair/typebox/value")),
@@ -7868,7 +7880,8 @@ async function loadForgeToolRuntime(config) {
     Value,
     tools,
     forgeConfig,
-    callConfiguredForgeApi
+    callConfiguredForgeApi,
+    callForgeApi
   };
 }
 
@@ -8402,6 +8415,7 @@ export const __forgeMemoryRuntimeMutationTest = Object.freeze({
   acquireRuntimeStartLock,
   applyLocalOwnerProcessEnvironment,
   applyRuntimeConfigTransaction,
+  authenticatedRuntimeHealth,
   captureLocalOwnerProcessEnvironment,
   captureProcessIdentity,
   ensureManagedRuntimeForLocalClient,

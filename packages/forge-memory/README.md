@@ -55,7 +55,9 @@ the replacement starts with the current local-browser handler. The transfer veri
 the process, protected health identity, data root, and launch boundary before stopping
 anything; a failed replacement is retried once and then restores the prior OpenClaw
 runtime. Stale settings recorded for an adopted process do not block that safe transfer,
-while Forge Memory still rejects real drift in a runtime it owns.
+while Forge Memory still rejects real drift in a runtime it owns. Protected replacement
+verification uses the already-running API directly and never tries to bootstrap a second
+runtime while the transfer lock is held.
 
 Tailscale reachability is never Forge authorization. Remote browsers and remote API
 clients need a Forge-issued scoped credential even when Tailscale Serve and access

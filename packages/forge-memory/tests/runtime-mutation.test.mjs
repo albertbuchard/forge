@@ -118,6 +118,45 @@ test("local-owner clients preserve the verified browser handler for runtimes the
   }
 });
 
+test("protected runtime verification bypasses runtime bootstrap while holding the startup lease", async () => {
+  const calls = [];
+  const result = await runtime.authenticatedRuntimeHealth(
+    config,
+    browserHandlerPreparation,
+    {
+      loadToolRuntimeImplementation: async () => ({
+        forgeConfig: {
+          baseUrl: `http://127.0.0.1:${config.port}`,
+          dataRoot: config.dataRoot,
+          apiToken: "",
+          remoteCredentialId: "",
+          actorLabel: "runtime-verification-test",
+          timeoutMs: 2_000
+        },
+        callForgeApi: async (input) => {
+          calls.push(input);
+          return {
+            status: 200,
+            body: {
+              app: "forge",
+              backend: "forge-node-runtime",
+              runtime: {
+                pid: process.pid,
+                storageRoot: config.dataRoot
+              }
+            }
+          };
+        }
+      })
+    }
+  );
+  assert.equal(result.ok, true);
+  assert.equal(result.payload.runtime.pid, process.pid);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].path, "/api/v1/health");
+  assert.equal(calls[0].extraHeaders["x-forge-runtime-probe"], "1");
+});
+
 test("local MCP startup keeps a compatible managed browser runtime unchanged", async () => {
   const current = { ok: true, forge: true };
   const protectedCurrent = { ok: true, forge: true, protected: true };

@@ -19,7 +19,9 @@
 - Made long-running `forge-memory mcp` clients inherit the same verified browser
   handler boundary. MCP startup now repairs a healthy runtime that cannot serve
   local browser authorization instead of accepting it and repeatedly returning
-  `503 local_browser_owner_handler_unavailable`.
+  `503 local_browser_owner_handler_unavailable`. Protected handoff verification
+  now calls the authenticated API directly, so it cannot recursively enter the
+  runtime bootstrap while already holding the startup lease.
 
 ## 0.3.64
 
