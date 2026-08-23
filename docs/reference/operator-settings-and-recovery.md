@@ -111,19 +111,31 @@ in five minutes. The remote page does not save the submitted password.
 
 ### Trusted-Device Browser Restoration
 
-After a remote browser finishes ordinary pairing, Forge offers two explicit
-choices: **Trust this device** or **Continue without trusting**. Trust is never
-created by network reachability, pairing approval alone, or a background
-prompt. The browser creates a discoverable WebAuthn credential only after the
-user chooses the trust action and completes Face ID, Touch ID, Windows Hello,
-or the device passcode.
+When an ordinary remote-browser session disappears, Forge first tries the
+HttpOnly refresh cookie. That recovery does not depend on the non-secret
+renewal timestamp in browser storage, so clearing ordinary local storage during
+an app update does not discard a still-valid renewable session.
 
-On a later visit, choose **Use a trusted device** before starting another
-pairing request. Successful user verification restores the same paired-browser
-client, profile, and scopes through the normal browser-session and refresh
-mechanisms. It cannot restore a local-owner or operator session, widen scopes,
-or create a new client grant. If WebAuthn is unavailable, declined, expired, or
-revoked, start ordinary browser pairing instead.
+If renewal is unavailable, Forge automatically asks the device credential
+provider for a discoverable passkey before it creates another pairing request.
+Successful user verification restores the same paired-browser client, profile,
+and scopes through the normal browser-session and refresh mechanisms. It cannot
+restore a local-owner or operator session, widen scopes, or create a new client
+grant.
+
+After the owner approves one ordinary browser pairing, the requesting browser
+immediately asks for Face ID, Touch ID, Windows Hello, or the device passcode to
+create the device passkey. This is the default completion path and does not add
+a second owner approval. The user can decline or use **Use this browser session
+only**; the approved session remains usable, and **Finish trusting this device**
+can retry while that session remains active.
+
+A discoverable passkey can restore access in compatible browsers that use the
+same device credential provider and the exact same Forge HTTPS host. Browser
+cookies and local storage are not shared across browsers; the passkey is the
+device-level recovery mechanism. Each restoration still requires user
+verification. If WebAuthn is unavailable, declined, expired, or revoked,
+ordinary browser pairing remains the fallback.
 
 **Settings → Agents** lists active and revoked trusted-device credentials with
 their paired client, profile, scopes, creation time, last verification time,
@@ -132,7 +144,9 @@ only that restoration credential. Revoking or changing the paired client,
 recovering the owner, or replacing the Forge installation also invalidates its
 trust automatically. A synced passkey can be available on more than one device,
 so the label describes the credential rather than proving one physical device
-identity.
+identity. Updating or reinstalling Forge does not revoke trust by itself when
+the canonical data root, installation identity, paired client authority, exact
+HTTPS relying party, and device passkey are preserved.
 
 ## Model Health
 

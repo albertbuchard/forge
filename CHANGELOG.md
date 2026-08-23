@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.66
+
+- Made remote-browser authorization device-first: Forge now attempts silent
+  renewal from the HttpOnly refresh cookie even when disposable browser storage
+  was cleared, then automatically offers the discoverable device passkey before
+  creating another pairing request.
+- Changed the successful browser-pairing path to request one user-verified
+  device passkey immediately. Compatible browsers using the same credential
+  provider and exact Forge HTTPS relying party can restore the same client,
+  profile, and scopes without another owner pairing approval. Declining or
+  lacking WebAuthn keeps the newly paired browser session usable.
+- Made `npx forge-memory ui` automatically attempt the existing verified,
+  rollback-protected OpenClaw-to-Forge runtime ownership transfer when the live
+  API lacks the current local-browser handler. Stale metadata from an adopted
+  runtime no longer traps the CLI in a peer-setting mismatch loop, while a
+  managed runtime with real configuration drift still fails closed.
+
 ## 0.3.64
 
 - Declared the pinned `music-metadata@11.14.0` parser in the published

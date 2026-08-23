@@ -49,10 +49,26 @@ write without another prompt. If the browser requires a user gesture before open
 local protocol, Forge shows one pre-staged **Authorize this browser** link; this is the
 only extra first-browser step.
 
+If port 4317 is already served by a verified Forge source runtime started through
+OpenClaw, `ui` now attempts the existing protected ownership transfer automatically so
+the replacement starts with the current local-browser handler. The transfer verifies
+the process, protected health identity, data root, and launch boundary before stopping
+anything; a failed replacement is retried once and then restores the prior OpenClaw
+runtime. Stale settings recorded for an adopted process do not block that safe transfer,
+while Forge Memory still rejects real drift in a runtime it owns.
+
 Tailscale reachability is never Forge authorization. Remote browsers and remote API
 clients need a Forge-issued scoped credential even when Tailscale Serve and access
 controls already restrict who can reach the machine. Remote authentication also requires
 HTTPS. Forge does not need Tailscale Funnel.
+
+Remote browser authorization is device-first. Forge tries the secure refresh cookie even
+if disposable browser storage was cleared, then automatically checks for a discoverable
+device passkey before offering another pairing request. After one approved pairing, the
+browser asks for one Face ID, Touch ID, Windows Hello, or device-passcode verification to
+create that passkey. Compatible browsers using the same credential provider and exact
+Forge HTTPS host can then restore the same profile and scopes without another owner
+approval. Declining or lacking passkeys keeps the paired browser session usable.
 
 Development install from a Forge checkout:
 

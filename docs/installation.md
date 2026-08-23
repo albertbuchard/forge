@@ -133,9 +133,14 @@ another device in the same tailnet. Tailscale Funnel is unnecessary.
 Network access is not authorization. After the HTTPS route exists:
 
 1. Open the remote Forge URL ending in `/forge/`.
-2. Select **Pair this browser**.
-3. Keep the short code visible on the requesting browser.
-4. Approve the exact pending request once:
+2. Forge automatically checks the device credential provider for an existing
+   Forge passkey. Complete Face ID, Touch ID, Windows Hello, or the device
+   passcode if one is available. A successful check opens Forge without another
+   pairing code.
+3. If this is the first authorization for the device, select **Pair this
+   browser**.
+4. Keep the short code visible on the requesting browser.
+5. Approve the exact pending request once:
    - click the pairing notification in an already unlocked local-owner Forge window,
      review the request under **Settings → Agents**, enter the short code, and approve;
      or
@@ -147,8 +152,17 @@ Network access is not authorization. After the HTTPS route exists:
 
      Select the request, enter the same code, and approve.
 
-5. Return to the remote browser. Forge creates a scoped renewable session and renews it
-   silently during normal use.
+6. Return to the remote browser. Forge creates a scoped renewable session and
+   immediately asks for one device-passkey verification. Complete that check so
+   compatible browsers using the same credential provider and exact HTTPS host
+   can restore the same profile and scopes without another owner approval. If
+   passkeys are unavailable or declined, the new browser session still works.
+
+Forge silently rotates the renewable session during normal use. If disposable
+browser storage is cleared but the secure refresh cookie survives, Forge now
+tries that cookie directly. Package updates and reinstalls preserve the device
+credential when they preserve the canonical Forge data root and installation
+identity.
 
 Tailscale access controls remain useful as an additional network filter. They never
 replace the Forge credential and pairing checks.

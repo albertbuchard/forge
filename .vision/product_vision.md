@@ -27,6 +27,16 @@ fragile local address handoff: Forge generates a one-time payload with the deskt
 node id, pairing token, optional relay hint, and ALPN `forge-companion/1`; direct HTTP, LAN, or
 Tailscale URLs stay available as deliberate advanced choices.
 
+Remote browser access should feel device-first rather than browser-by-browser. The owner
+approves one scoped pairing once, the requesting device completes one passkey verification,
+and Forge thereafter recovers from the secure refresh cookie or the discoverable device
+passkey before asking for another code. Compatible browsers may reuse that passkey through
+the same device credential provider and exact Forge HTTPS relying party, while every restore
+keeps the original non-operator profile and scopes and still requires Face ID, Touch ID,
+Windows Hello, or the device passcode. Package updates and reinstalls preserve this trust
+when the canonical Forge data and installation identity are preserved; revocation or
+authority drift fails closed.
+
 Forge's progression layer uses that same stack: SQLite reward projections, Fastify API
 read models, React surfaces, Framer Motion celebration effects, source-controlled catalog
 data, small in-repo mascot previews, and optional per-style raster sprite archives hosted
