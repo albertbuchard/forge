@@ -1915,6 +1915,22 @@ function resolveDevServerEntry(repoRoot) {
   );
 }
 
+function resolveDevServerLaunch(repoRoot, { watch = true } = {}) {
+  const tsx = path.join(
+    repoRoot,
+    "node_modules",
+    "tsx",
+    "dist",
+    "cli.mjs"
+  );
+  const serverEntry = resolveDevServerEntry(repoRoot);
+  return {
+    tsx,
+    serverEntry,
+    args: [tsx, ...(watch ? ["watch"] : []), serverEntry]
+  };
+}
+
 function localViteListenerMatchesRepo(port, repoRoot) {
   if (process.platform === "win32" || typeof process.getuid !== "function") {
     return false;
@@ -3813,15 +3829,10 @@ function inspectOpenClawRuntimeLaunchBoundary(config, state) {
       );
     }
     expectedCwd = path.resolve(config.repo);
-    const tsx = path.join(
-      expectedCwd,
-      "node_modules",
-      "tsx",
-      "dist",
-      "cli.mjs"
-    );
-    const sourceEntry = resolveDevServerEntry(expectedCwd);
-    args = [tsx, sourceEntry];
+    const launch = resolveDevServerLaunch(expectedCwd, {
+      watch: /(?:^|\s)watch(?:\s|$)/.test(command)
+    });
+    args = launch.args;
   } else {
     expectedCwd = resolveOpenClawPluginRoot({
       installedOnly: true
@@ -3858,12 +3869,15 @@ function inspectOpenClawRuntimeLaunchBoundary(config, state) {
   if (
     !existingPathsMatch(cwd, expectedCwd) ||
     !command.includes(executable) ||
-    args.some(
-      (argument) =>
-        !path.isAbsolute(argument) ||
-        !fs.existsSync(argument) ||
-        !command.includes(argument)
-    )
+    args
+      .filter((argument) => argument !== "watch")
+      .some(
+        (argument) =>
+          !path.isAbsolute(argument) ||
+          !fs.existsSync(argument) ||
+          !command.includes(argument)
+      ) ||
+    (args.includes("watch") && !/(?:^|\s)watch(?:\s|$)/.test(command))
   ) {
     throw new Error(
       "Forge refused to transfer the OpenClaw runtime because its checkout or entrypoint does not match the configured launch boundary."
@@ -4644,18 +4658,11 @@ async function startRuntime(config, options = {}) {
     if (config.mode === "dev") {
       if (!config.repo)
         throw new Error("Dev mode requires a Forge repo checkout.");
-      const tsx = path.join(
-        config.repo,
-        "node_modules",
-        "tsx",
-        "dist",
-        "cli.mjs"
-      );
-      if (!fs.existsSync(tsx))
+      const launch = resolveDevServerLaunch(config.repo);
+      if (!fs.existsSync(launch.tsx))
         throw new Error(
-          `tsx was not found at ${tsx}. Run npm install in the Forge repo.`
+          `tsx was not found at ${launch.tsx}. Run npm install in the Forge repo.`
         );
-      const serverEntry = resolveDevServerEntry(config.repo);
       const webPortAvailable = await isPortAvailable(config.webPort);
       if (
         !webPortAvailable &&
@@ -4665,7 +4672,7 @@ async function startRuntime(config, options = {}) {
           `Port ${config.webPort} is already in use by a service that is not the Forge Vite dev server.`
         );
       }
-      const server = spawn(process.execPath, [tsx, serverEntry], {
+      const server = spawn(process.execPath, launch.args, {
         cwd: config.repo,
         detached: true,
         stdio: ["ignore", out, out],
@@ -8426,6 +8433,7 @@ export const __forgeMemoryRuntimeMutationTest = Object.freeze({
   openClawRuntimeStartupLockPath,
   openClawRuntimeStatePath,
   reapAbandonedRuntimeStartLock,
+  resolveDevServerLaunch,
   readVerifiedOpenClawRuntimeRecord,
   replaceOpenClawLeaseOwnerFile,
   recordedProcessIdentityMatches,

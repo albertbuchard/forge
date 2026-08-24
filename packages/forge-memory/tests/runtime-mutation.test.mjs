@@ -89,6 +89,39 @@ async function resetRuntimeFiles() {
   });
 }
 
+test("development runtimes watch the Forge API source for changes", async () => {
+  const repoRoot = path.join(tempHome, "watched-forge-repo");
+  const tsx = path.join(
+    repoRoot,
+    "node_modules",
+    "tsx",
+    "dist",
+    "cli.mjs"
+  );
+  const serverEntry = path.join(
+    repoRoot,
+    "apps",
+    "api",
+    "src",
+    "index.ts"
+  );
+  await fsp.mkdir(path.dirname(tsx), { recursive: true });
+  await fsp.mkdir(path.dirname(serverEntry), { recursive: true });
+  await fsp.writeFile(tsx, "export {};\n", "utf8");
+  await fsp.writeFile(serverEntry, "export {};\n", "utf8");
+
+  assert.deepEqual(runtime.resolveDevServerLaunch(repoRoot), {
+    tsx,
+    serverEntry,
+    args: [tsx, "watch", serverEntry]
+  });
+  assert.deepEqual(runtime.resolveDevServerLaunch(repoRoot, { watch: false }), {
+    tsx,
+    serverEntry,
+    args: [tsx, serverEntry]
+  });
+});
+
 test("local-owner clients preserve the verified browser handler for runtimes they may spawn", () => {
   const previous = runtime.captureLocalOwnerProcessEnvironment();
   try {
