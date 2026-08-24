@@ -14,8 +14,11 @@ import {
   type ForgeRuntimeHost
 } from "./lib/app-runtime";
 import { normalizeRouterBasename } from "./lib/runtime-paths";
+import { installVitePreloadRecovery } from "./lib/vite-preload-recovery";
 import { appStore } from "./store/store";
 import "./styles.css";
+
+installVitePreloadRecovery();
 
 type RootErrorBoundaryProps = {
   children: React.ReactNode;
@@ -55,9 +58,10 @@ class RootErrorBoundary extends React.Component<
           </h1>
           <p className="mt-3 text-sm leading-6 text-ink/70">
             The HTML entrypoint loaded, but the React application hit an error
-            before the interface could be displayed. Hard refresh the Tailscale
-            page first; if this remains visible, check the browser console and
-            the local Forge runtime logs.
+            before the interface could be displayed. Forge automatically retries
+            a transient live-module failure once. If this remains visible,
+            select Reload Forge; then check the browser console and local
+            runtime logs only if the retry still fails.
           </p>
           <pre className="mt-4 max-h-44 overflow-auto rounded-2xl border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 text-xs leading-5 text-ink/70">
             {this.state.error.message}

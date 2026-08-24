@@ -33,7 +33,7 @@ function renderCard() {
 }
 
 describe("MasterPasswordSettingsCard", () => {
-  it("offers an unset-by-default strong master password and confirms before saving", async () => {
+  it("enforces only the basic length rule and makes strength guidance non-blocking", async () => {
     vi.mocked(getMasterPasswordStatus).mockResolvedValueOnce({
       configured: false,
       configuredAt: null,
@@ -55,8 +55,11 @@ describe("MasterPasswordSettingsCard", () => {
       screen.getByText(/optional and unset by default/i)
     ).toBeInTheDocument();
     expect(
-      await screen.findByText(/repeated short patterns.*keyboard sequences/i)
+      await screen.findByText(/only strength requirement is at least 15/i)
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/strength estimate.*will not block/i)
+    ).toBeVisible();
     const save = await screen.findByRole("button", {
       name: "Set master password"
     });
@@ -66,19 +69,28 @@ describe("MasterPasswordSettingsCard", () => {
     fireEvent.change(password, { target: { value: "too short" } });
     fireEvent.change(confirmation, { target: { value: "too short" } });
     expect(save).toBeDisabled();
+    expect(screen.getByText("Too short")).toBeVisible();
+    expect(
+      screen.getByRole("progressbar", {
+        name: "Estimated master password strength"
+      })
+    ).toHaveAttribute("aria-valuenow", "21");
 
-    const strong = "Frosted lanterns orbit the quiet lake 2026";
-    fireEvent.change(password, { target: { value: strong } });
-    fireEvent.change(confirmation, { target: { value: `${strong}!` } });
+    const accepted = "aaaaaaaaaaaaaaaa";
+    fireEvent.change(password, { target: { value: accepted } });
+    fireEvent.change(confirmation, { target: { value: `${accepted}!` } });
     expect(screen.getByRole("alert")).toHaveTextContent(/do not match/i);
     expect(save).toBeDisabled();
 
-    fireEvent.change(confirmation, { target: { value: strong } });
+    fireEvent.change(confirmation, { target: { value: accepted } });
+    expect(screen.getByText("Minimum met")).toBeVisible();
+    expect(screen.getByText(/accepted.*not required/i)).toBeVisible();
+    expect(save).toBeEnabled();
     fireEvent.click(save);
     await waitFor(() => {
       expect(vi.mocked(setMasterPassword).mock.calls[0]?.[0]).toEqual({
-        password: strong,
-        confirmation: strong
+        password: accepted,
+        confirmation: accepted
       });
     });
     expect(

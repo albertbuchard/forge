@@ -15,23 +15,9 @@ import type {
 export const MASTER_PASSWORD_MINIMUM_LENGTH = 15;
 export const MASTER_PASSWORD_MAXIMUM_LENGTH = 128;
 export const MASTER_PASSWORD_MAXIMUM_UTF8_BYTES = 1_024;
-export const MASTER_PASSWORD_MINIMUM_DIVERSITY_BITS = 50;
 export const MASTER_PASSWORD_MEMLIMIT = 19 * 1_024 * 1_024;
 export const MASTER_PASSWORD_OPSLIMIT = 2;
 export const MASTER_PASSWORD_PARALLELISM = 1;
-
-const COMMON_MASTER_PASSWORDS = new Set([
-  "123456789012345",
-  "correct horse battery staple",
-  "forge master password",
-  "forge remote access",
-  "letmeinletmeinletmein",
-  "passwordpassword",
-  "password123456789",
-  "qwertyuiopasdfgh",
-  "this is my password",
-  "trustno1trustno1"
-]);
 
 export type MasterPasswordCredential = {
   ownerId: string;
@@ -86,9 +72,7 @@ export class MasterPasswordError extends Error {
       | "master_password_rate_limited"
       | "master_password_too_short"
       | "master_password_too_long"
-      | "master_password_too_large"
-      | "master_password_common"
-      | "master_password_weak",
+      | "master_password_too_large",
     message: string
   ) {
     super(message);
@@ -100,54 +84,7 @@ function normalizePassword(password: string) {
   return password.normalize("NFC");
 }
 
-function passwordFingerprint(password: string) {
-  return password
-    .toLocaleLowerCase("en-US")
-    .replaceAll("0", "o")
-    .replaceAll("1", "i")
-    .replaceAll("3", "e")
-    .replaceAll("4", "a")
-    .replaceAll("5", "s")
-    .replaceAll("7", "t")
-    .replaceAll(/[^a-z0-9]/gu, "");
-}
-
-function compactPassword(password: string) {
-  return password.toLocaleLowerCase("en-US").replaceAll(/[^a-z0-9]/gu, "");
-}
-
-function characterDistributionBits(password: string) {
-  const symbols = [...password];
-  const counts = new Map<string, number>();
-  for (const symbol of symbols) {
-    counts.set(symbol, (counts.get(symbol) ?? 0) + 1);
-  }
-  return (
-    symbols.length *
-    [...counts.values()].reduce((entropy, count) => {
-      const probability = count / symbols.length;
-      return entropy - probability * Math.log2(probability);
-    }, 0)
-  );
-}
-
-function containsObviousSequence(fingerprint: string) {
-  for (const sequence of [
-    "abcdefghijklmnopqrstuvwxyz",
-    "zyxwvutsrqponmlkjihgfedcba",
-    "0123456789",
-    "9876543210",
-    "qwertyuiopasdfghjklzxcvbnm",
-    "mnbvcxzlkjhgfdsaqpoiuytrewq"
-  ]) {
-    for (let index = 0; index <= sequence.length - 6; index += 1) {
-      if (fingerprint.includes(sequence.slice(index, index + 6))) return true;
-    }
-  }
-  return false;
-}
-
-function validateNewPassword(password: string, ownerId: string) {
+function validateNewPassword(password: string) {
   const normalized = normalizePassword(password);
   const length = [...normalized].length;
   if (length < MASTER_PASSWORD_MINIMUM_LENGTH) {
@@ -168,47 +105,6 @@ function validateNewPassword(password: string, ownerId: string) {
     throw new MasterPasswordError(
       "master_password_too_large",
       "The UTF-8 encoded master password is too large."
-    );
-  }
-  const blocklist = new Set(COMMON_MASTER_PASSWORDS);
-  const normalizedLower = normalized.toLocaleLowerCase("en-US");
-  if (blocklist.has(normalizedLower)) {
-    throw new MasterPasswordError(
-      "master_password_common",
-      "Choose a unique passphrase that is not a common password, the product name, or your owner identifier."
-    );
-  }
-  const fingerprint = passwordFingerprint(normalized);
-  const ownerFingerprint = passwordFingerprint(ownerId);
-  const weakFragments = [
-    "password",
-    "letmein",
-    "qwerty",
-    "asdfgh",
-    "abcdef",
-    "i2eas6",
-    "trustnoi",
-    "correcthorsebatterystaple",
-    "forge"
-  ];
-  if (
-    weakFragments.some((fragment) => fingerprint.includes(fragment)) ||
-    (ownerFingerprint.length >= 4 && fingerprint.includes(ownerFingerprint))
-  ) {
-    throw new MasterPasswordError(
-      "master_password_common",
-      "Choose a unique passphrase that is not a common password, an obvious variation, the product name, or your owner identifier."
-    );
-  }
-  if (
-    new Set([...normalizedLower]).size < 6 ||
-    containsObviousSequence(compactPassword(normalized)) ||
-    characterDistributionBits(normalized) <
-      MASTER_PASSWORD_MINIMUM_DIVERSITY_BITS
-  ) {
-    throw new MasterPasswordError(
-      "master_password_weak",
-      "Choose a less predictable passphrase. Avoid repeated characters, short repeated patterns, and obvious alphabet, number, or keyboard sequences."
     );
   }
   return normalized;
@@ -273,7 +169,7 @@ export class MasterPasswordService<
         );
       }
     }
-    const password = validateNewPassword(input.password, input.ownerId);
+    const password = validateNewPassword(input.password);
     const salt = this.secrets.bytes(sodium.crypto_pwhash_SALTBYTES);
     const verifier = await this.deriveVerifier(password, salt);
     const now = this.clock.now().toISOString();

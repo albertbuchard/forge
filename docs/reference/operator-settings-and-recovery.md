@@ -89,10 +89,12 @@ token immediately; revocation is permanent for that credential.
 
 Forge does not create or assign a master password by default. An authenticated
 operator using a browser directly on the Forge host can opt in under
-**Settings → Agents**. Forge requires at least 15 Unicode characters, rejects
-common and Forge-derived values, and recommends a unique long passphrase rather
-than forced symbol rules. Replacing an existing master password requires the
-current one.
+**Settings → Agents**. Forge enforces only a basic password policy: at least 15
+and no more than 128 Unicode characters, with matching confirmation. It does
+not require symbols, uppercase letters, numbers, or a particular character
+mix. The settings card provides a non-blocking strength estimate so the owner
+can make an informed choice without fighting an opaque password checker.
+Replacing an existing master password requires the current one.
 
 The password is not a reusable Forge session or an operator credential. It is
 an alternative way to approve one already-pending remote-browser pairing

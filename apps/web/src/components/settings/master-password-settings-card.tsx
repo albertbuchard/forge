@@ -11,6 +11,72 @@ export const MASTER_PASSWORD_STATUS_QUERY_KEY = [
   "forge-master-password-status"
 ] as const;
 
+type PasswordStrengthGuidance = {
+  label: string;
+  detail: string;
+  percent: number;
+  barClassName: string;
+};
+
+function getPasswordStrengthGuidance(
+  password: string,
+  minimumLength: number
+): PasswordStrengthGuidance | null {
+  const symbols = [...password.normalize("NFC")];
+  const length = symbols.length;
+  if (length === 0) return null;
+  if (length < minimumLength) {
+    const remaining = minimumLength - length;
+    return {
+      label: "Too short",
+      detail: `${remaining} more ${remaining === 1 ? "character" : "characters"} required.`,
+      percent: Math.max(6, Math.round((length / minimumLength) * 35)),
+      barClassName: "bg-[var(--danger)]"
+    };
+  }
+
+  const uniqueSymbols = new Set(symbols).size;
+  const categories = [
+    /\p{Ll}/u,
+    /\p{Lu}/u,
+    /\p{N}/u,
+    /\p{Z}/u,
+    /[^\p{L}\p{N}\p{Z}]/u
+  ].filter((pattern) => pattern.test(password)).length;
+  const varietyBonus = uniqueSymbols >= 10 && categories >= 2 ? 1 : 0;
+  const score =
+    1 +
+    (length >= minimumLength + 5 ? 1 : 0) +
+    (length >= minimumLength + 13 ? 1 : 0) +
+    varietyBonus;
+
+  if (score >= 4) {
+    return {
+      label: "Strong estimate",
+      detail:
+        "Accepted. This estimate is guidance only and never adds another requirement.",
+      percent: 100,
+      barClassName: "bg-[var(--success)]"
+    };
+  }
+  if (score >= 2) {
+    return {
+      label: "Good estimate",
+      detail:
+        "Accepted. This estimate is guidance only and never adds another requirement.",
+      percent: 72,
+      barClassName: "bg-[var(--primary)]"
+    };
+  }
+  return {
+    label: "Minimum met",
+    detail:
+      "Accepted. A longer password is usually stronger, but it is not required.",
+    percent: 45,
+    barClassName: "bg-[var(--warning)]"
+  };
+}
+
 export function MasterPasswordSettingsCard() {
   const queryClient = useQueryClient();
   const statusQuery = useQuery({
@@ -49,6 +115,7 @@ export function MasterPasswordSettingsCard() {
   const configured = status?.configured === true;
   const formVisible = !configured || editing;
   const minimumLength = status?.minimumLength ?? 15;
+  const strengthGuidance = getPasswordStrengthGuidance(password, minimumLength);
   const canSubmit =
     [...password.normalize("NFC")].length >= minimumLength &&
     password.normalize("NFC") === confirmation.normalize("NFC") &&
@@ -133,11 +200,10 @@ export function MasterPasswordSettingsCard() {
           }}
         >
           <p className="text-sm leading-6 text-[var(--ui-ink-muted)]">
-            Use at least {minimumLength} characters. A long, unique passphrase
-            is stronger than forced symbol rules. Common, Forge-derived, and
-            owner-derived passwords are rejected, as are repeated characters,
-            repeated short patterns, and obvious alphabet, number, or keyboard
-            sequences.
+            The only strength requirement is at least {minimumLength}
+            characters. There are no mandatory symbols, uppercase letters,
+            numbers, or character-mix rules. The strength estimate below is
+            advice and will not block an accepted password.
           </p>
           {configured ? (
             <label className="grid gap-1.5 text-sm text-[var(--ui-ink-medium)]">
@@ -166,6 +232,42 @@ export function MasterPasswordSettingsCard() {
               className="min-h-11 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 text-[var(--ui-ink-strong)] outline-none focus:border-[var(--ui-border-strong)]"
             />
           </label>
+          {strengthGuidance ? (
+            <div
+              className="grid gap-1.5"
+              aria-live="polite"
+              data-testid="master-password-strength"
+            >
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="font-medium text-[var(--ui-ink-medium)]">
+                  {strengthGuidance.label}
+                </span>
+                <span className="text-[var(--ui-ink-faint)]">
+                  {Math.min(
+                    [...password.normalize("NFC")].length,
+                    minimumLength
+                  )}
+                  /{minimumLength} minimum
+                </span>
+              </div>
+              <div
+                role="progressbar"
+                aria-label="Estimated master password strength"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={strengthGuidance.percent}
+                className="h-2 overflow-hidden rounded-full bg-[var(--ui-surface-3)]"
+              >
+                <div
+                  className={`h-full rounded-full transition-[width] ${strengthGuidance.barClassName}`}
+                  style={{ width: `${strengthGuidance.percent}%` }}
+                />
+              </div>
+              <p className="text-xs leading-5 text-[var(--ui-ink-muted)]">
+                {strengthGuidance.detail}
+              </p>
+            </div>
+          ) : null}
           <label className="grid gap-1.5 text-sm text-[var(--ui-ink-medium)]">
             Confirm master password
             <input
