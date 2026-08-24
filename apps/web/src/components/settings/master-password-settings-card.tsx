@@ -200,8 +200,8 @@ export function MasterPasswordSettingsCard() {
           }}
         >
           <p className="text-sm leading-6 text-[var(--ui-ink-muted)]">
-            The only strength requirement is at least {minimumLength}
-            characters. There are no mandatory symbols, uppercase letters,
+            The only strength requirement is at least {minimumLength} characters.
+            There are no mandatory symbols, uppercase letters,
             numbers, or character-mix rules. The strength estimate below is
             advice and will not block an accepted password.
           </p>

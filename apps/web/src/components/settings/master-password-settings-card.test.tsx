@@ -55,7 +55,9 @@ describe("MasterPasswordSettingsCard", () => {
       screen.getByText(/optional and unset by default/i)
     ).toBeInTheDocument();
     expect(
-      await screen.findByText(/only strength requirement is at least 15/i)
+      await screen.findByText(
+        /only strength requirement is at least 15 characters\./i
+      )
     ).toBeInTheDocument();
     expect(
       screen.getByText(/strength estimate.*will not block/i)
