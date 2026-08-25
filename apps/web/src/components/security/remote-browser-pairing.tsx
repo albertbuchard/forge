@@ -373,7 +373,7 @@ export function RemoteBrowserPairing({
     }
   };
 
-  const usePairedBrowserSession = async () => {
+  const openPairedBrowserSession = async () => {
     WebAuthnAbortService.cancelCeremony();
     setStatus("paired");
     setMessage("Opening Forge with this paired browser session…");
@@ -425,7 +425,7 @@ export function RemoteBrowserPairing({
             <Button
               type="button"
               variant="secondary"
-              onClick={() => void usePairedBrowserSession()}
+              onClick={() => void openPairedBrowserSession()}
             >
               Use this browser session only
             </Button>
