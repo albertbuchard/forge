@@ -97,6 +97,7 @@ platform :ios do
       build_number: build_number,
       changelog: release_notes_text(config),
       groups: testflight_groups.empty? ? nil : testflight_groups,
+      distribute_external: !testflight_groups.empty?,
       notify_external_testers: config.dig(:release, :notify_external_testers) == true,
       skip_submission: config.dig(:release, :skip_testflight_submission) == true,
       skip_waiting_for_build_processing: config.dig(:release, :skip_waiting_for_build_processing) == true
@@ -362,6 +363,7 @@ def upload_to_testflight_with_reconciliation!(
   build_number:,
   changelog:,
   groups:,
+  distribute_external:,
   notify_external_testers:,
   skip_submission:,
   skip_waiting_for_build_processing:
@@ -371,6 +373,7 @@ def upload_to_testflight_with_reconciliation!(
     ipa: ipa_path,
     changelog: changelog,
     groups: groups,
+    distribute_external: distribute_external,
     notify_external_testers: notify_external_testers,
     skip_submission: skip_submission,
     skip_waiting_for_build_processing: skip_waiting_for_build_processing

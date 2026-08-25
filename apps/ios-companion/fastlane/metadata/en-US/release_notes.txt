@@ -1,7 +1,9 @@
-Forge Companion 1.0.176 adds Forge's permanent Work area and improves remote device pairing, aligned with Forge 0.3.70.
+Forge Companion 1.0.177 adds Forge's permanent Work area and improves remote device pairing, aligned with Forge 0.3.70.
 
 Work brings current jobs, appointments, contracts, freelance work, goals, check-ins, opportunity searches, applications, people, and documents into one connected view. You can track several overlapping roles and several concurrent searches without losing paused or completed history.
 
 Opportunity campaigns keep their own criteria, targets, evaluations, applications, interviews, offers, search runs, and next actions. Agents can retrieve one bounded Work context, preserve source evidence, and prepare an application without claiming it was submitted. External transmission still requires an exact preview, approval, and direct completion evidence.
 
 Remote pairing no longer blocks ordinary pairing while a device passkey check is waiting. Automatic restoration now stops after a bounded wait, while the normal pairing and optional master-password paths remain available.
+
+This build also corrects TestFlight distribution so the configured Beta external group receives the processed build, rather than limiting distribution to internal testers.

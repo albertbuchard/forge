@@ -647,6 +647,14 @@ test("reusable CI has no Apple credentials while iOS publication remains fail-cl
   );
   assert.match(
     fastfile,
+    /lane :testflight_release[\s\S]*?distribute_external: !testflight_groups\.empty\?/
+  );
+  assert.match(
+    fastfile,
+    /upload_to_testflight\([\s\S]*?distribute_external: distribute_external/
+  );
+  assert.match(
+    fastfile,
     /lane :app_store_release[\s\S]*?require_api_key: true/
   );
   assert.match(
