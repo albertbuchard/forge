@@ -31,6 +31,35 @@ const COURSE_DEFINITION_INTEGRITY_MIGRATION =
   "121_course_definition_integrity.sql";
 const PEER_QUERY_AUDIT_COMPATIBILITY_MIGRATION =
   "134a_peer_query_audit_compatibility.sql";
+const WORK_OPPORTUNITY_SCHEMA_COMPATIBILITY_MIGRATION =
+  "139_work_opportunity_schema_compatibility.sql";
+const WORK_OPPORTUNITY_CANONICAL_SCHEMA_MIGRATION =
+  "138_work_and_opportunity_management.sql";
+
+const WORK_OPPORTUNITY_COMPATIBILITY_TABLES = [
+  "opportunity_campaigns",
+  "campaign_opportunity_evaluations",
+  "candidate_positioning_profiles",
+  "candidate_document_sets",
+  "application_response_templates",
+  "job_applications",
+  "job_offers",
+  "job_offer_revisions",
+  "application_transmission_previews"
+] as const;
+
+const WORK_OPPORTUNITY_COMPATIBILITY_INDEXES = [
+  "idx_opportunity_campaigns_owner_status",
+  "idx_campaign_opportunity_evaluations_latest",
+  "idx_job_applications_owner_status",
+  "idx_job_applications_active_duplicate_guard",
+  "idx_application_transmission_previews_application"
+] as const;
+
+const WORK_OPPORTUNITY_COMPATIBILITY_TRIGGERS = [
+  "trg_opportunity_campaign_revision_history",
+  "trg_job_application_revision_history"
+] as const;
 
 const PEOPLE_HARDENING_COLUMNS = [
   {
@@ -185,6 +214,423 @@ export function prepareLegacyPeerQueryAuditMigration(database: DatabaseSync) {
       );
     }
   }
+}
+
+function assertSqlIdentifier(identifier: string): string {
+  if (!/^[a-z_][a-z0-9_]*$/u.test(identifier)) {
+    throw new Error(
+      `Unsafe SQL identifier in compatibility migration: ${identifier}`
+    );
+  }
+  return identifier;
+}
+
+function quoteSqlIdentifier(identifier: string): string {
+  return `"${assertSqlIdentifier(identifier)}"`;
+}
+
+function addColumnIfMissing(
+  database: DatabaseSync,
+  table: string,
+  column: string,
+  definition: string
+) {
+  if (hasDatabaseColumn(database, table, column)) return;
+  database.exec(
+    `ALTER TABLE ${quoteSqlIdentifier(table)} ADD COLUMN ${definition}`
+  );
+}
+
+function extractCanonicalTableStatement(source: string, table: string): string {
+  const marker = `CREATE TABLE ${assertSqlIdentifier(table)} (`;
+  const start = source.indexOf(marker);
+  const terminator = "\n) STRICT;";
+  const end = start < 0 ? -1 : source.indexOf(terminator, start);
+  if (start < 0 || end < 0) {
+    throw new Error(`Canonical Work schema is missing table ${table}.`);
+  }
+  return source.slice(start, end + terminator.length);
+}
+
+function extractCanonicalIndexStatement(source: string, index: string): string {
+  const safeIndex = assertSqlIdentifier(index);
+  const pattern = new RegExp(
+    `CREATE (?:UNIQUE )?INDEX ${safeIndex}\\b[\\s\\S]*?;`,
+    "u"
+  );
+  const statement = source.match(pattern)?.[0];
+  if (!statement) {
+    throw new Error(`Canonical Work schema is missing index ${index}.`);
+  }
+  return statement;
+}
+
+function extractCanonicalTriggerStatement(
+  source: string,
+  trigger: string
+): string {
+  const marker = `CREATE TRIGGER ${assertSqlIdentifier(trigger)}\n`;
+  const start = source.indexOf(marker);
+  const terminator = "\nEND;";
+  const end = start < 0 ? -1 : source.indexOf(terminator, start);
+  if (start < 0 || end < 0) {
+    throw new Error(`Canonical Work schema is missing trigger ${trigger}.`);
+  }
+  return source.slice(start, end + terminator.length);
+}
+
+function rebuildTableFromCanonicalWorkSchema(
+  database: DatabaseSync,
+  canonicalSchema: string,
+  table: string
+) {
+  const safeTable = assertSqlIdentifier(table);
+  const stagingTable = `_forge_139_${safeTable}`;
+  const existingStaging = database
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(stagingTable);
+  if (existingStaging) {
+    throw new Error(
+      `Compatibility migration found unexpected staging table ${stagingTable}.`
+    );
+  }
+
+  const canonicalStatement = extractCanonicalTableStatement(
+    canonicalSchema,
+    safeTable
+  );
+  database.exec(
+    canonicalStatement.replace(
+      `CREATE TABLE ${safeTable} (`,
+      `CREATE TABLE ${stagingTable} (`
+    )
+  );
+
+  const targetColumns = database
+    .prepare("SELECT name FROM pragma_table_info(?) ORDER BY cid")
+    .all(stagingTable) as Array<{ name: string }>;
+  const sourceColumns = new Set(
+    (
+      database
+        .prepare("SELECT name FROM pragma_table_info(?) ORDER BY cid")
+        .all(safeTable) as Array<{ name: string }>
+    ).map((row) => row.name)
+  );
+  const missingColumns = targetColumns
+    .map((row) => row.name)
+    .filter((column) => !sourceColumns.has(column));
+  if (missingColumns.length > 0) {
+    throw new Error(
+      `Compatibility migration cannot rebuild ${safeTable}; missing columns: ${missingColumns.join(", ")}.`
+    );
+  }
+
+  const quotedColumns = targetColumns
+    .map((row) => quoteSqlIdentifier(row.name))
+    .join(", ");
+  const sourceCount = (
+    database
+      .prepare(`SELECT COUNT(*) AS count FROM ${quoteSqlIdentifier(safeTable)}`)
+      .get() as { count: number }
+  ).count;
+  database.exec(
+    `INSERT INTO ${quoteSqlIdentifier(stagingTable)} (${quotedColumns}) ` +
+      `SELECT ${quotedColumns} FROM ${quoteSqlIdentifier(safeTable)}`
+  );
+  const copiedCount = (
+    database
+      .prepare(
+        `SELECT COUNT(*) AS count FROM ${quoteSqlIdentifier(stagingTable)}`
+      )
+      .get() as { count: number }
+  ).count;
+  if (copiedCount !== sourceCount) {
+    throw new Error(
+      `Compatibility migration copied ${copiedCount} of ${sourceCount} rows for ${safeTable}.`
+    );
+  }
+
+  database.exec(`DROP TABLE ${quoteSqlIdentifier(safeTable)}`);
+  database.exec(
+    `ALTER TABLE ${quoteSqlIdentifier(stagingTable)} RENAME TO ${quoteSqlIdentifier(safeTable)}`
+  );
+}
+
+function annotateDanglingCampaignCriteria(database: DatabaseSync) {
+  database.exec(`
+    UPDATE opportunity_campaigns
+    SET provenance_json = json_set(
+          provenance_json,
+          '$.compatibilityMigrations.workOpportunity139',
+          json_object(
+            'action', 'cleared_dangling_current_criteria',
+            'previousCriteriaVersionId', current_criteria_version_id
+          )
+        ),
+        current_criteria_version_id = NULL,
+        revision = revision + 1
+    WHERE current_criteria_version_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM campaign_criteria_versions
+        WHERE id = opportunity_campaigns.current_criteria_version_id
+      )
+  `);
+}
+
+function backfillLegacyApplicationCriteria(database: DatabaseSync) {
+  database.exec(`
+    UPDATE job_applications
+    SET criteria_version_id = COALESCE(
+          (
+            SELECT criteria.id
+            FROM opportunity_campaigns AS campaign
+            JOIN campaign_criteria_versions AS criteria
+              ON criteria.id = campaign.current_criteria_version_id
+             AND criteria.campaign_id = campaign.id
+            WHERE campaign.id = job_applications.primary_campaign_id
+          ),
+          (
+            SELECT criteria.id
+            FROM campaign_criteria_versions AS criteria
+            WHERE criteria.campaign_id = job_applications.primary_campaign_id
+            ORDER BY criteria.version DESC, criteria.id DESC
+            LIMIT 1
+          )
+        ),
+        provenance_json = json_set(
+          provenance_json,
+          '$.compatibilityMigrations.workOpportunity139',
+          json_object(
+            'basis', 'campaign_current_or_latest',
+            'reason', 'earlier schema did not retain the application criteria link'
+          )
+        ),
+        revision = revision + 1
+    WHERE criteria_version_id IS NULL
+      AND deleted_at IS NULL
+  `);
+
+  const unresolved = (
+    database
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM job_applications
+         WHERE deleted_at IS NULL AND criteria_version_id IS NULL`
+      )
+      .get() as { count: number }
+  ).count;
+  if (unresolved > 0) {
+    throw new Error(
+      `Compatibility migration cannot establish criteria provenance for ${unresolved} active job application(s).`
+    );
+  }
+}
+
+function backfillLegacyOfferRevisionSnapshots(database: DatabaseSync) {
+  database.exec(`
+    UPDATE job_offer_revisions
+    SET status = COALESCE(
+          (SELECT status FROM job_offers WHERE id = job_offer_revisions.offer_id),
+          'received'
+        ),
+        contingencies_json = COALESCE(
+          (SELECT contingencies_json FROM job_offers WHERE id = job_offer_revisions.offer_id),
+          '[]'
+        ),
+        expires_at = (
+          SELECT expires_at FROM job_offers WHERE id = job_offer_revisions.offer_id
+        ),
+        decision = COALESCE(
+          (SELECT decision FROM job_offers WHERE id = job_offer_revisions.offer_id),
+          ''
+        ),
+        rationale = COALESCE(
+          (SELECT rationale FROM job_offers WHERE id = job_offer_revisions.offer_id),
+          ''
+        ),
+        criteria_version_id = (
+          SELECT criteria_version_id FROM job_offers WHERE id = job_offer_revisions.offer_id
+        ),
+        planned_engagement_id = (
+          SELECT planned_engagement_id FROM job_offers WHERE id = job_offer_revisions.offer_id
+        ),
+        provenance_json = json_set(
+          provenance_json,
+          '$.compatibilityMigrations.workOpportunity139',
+          json_object(
+            'basis', 'parent_offer_snapshot',
+            'limitation', 'these fields were unavailable in the earlier revision schema'
+          )
+        )
+  `);
+}
+
+export async function prepareWorkOpportunitySchemaCompatibilityMigration(
+  database: DatabaseSync
+) {
+  const canonicalSchema = await readFile(
+    path.join(migrationsDir, WORK_OPPORTUNITY_CANONICAL_SCHEMA_MIGRATION),
+    "utf8"
+  );
+
+  addColumnIfMissing(
+    database,
+    "candidate_positioning_profiles",
+    "preferred_default_artifact_id",
+    "preferred_default_artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL"
+  );
+  const additiveColumns = [
+    [
+      "candidate_document_sets",
+      "confidentiality",
+      "confidentiality TEXT NOT NULL DEFAULT 'private' CHECK (confidentiality IN ('private', 'restricted', 'shareable'))"
+    ],
+    [
+      "candidate_document_sets",
+      "retention_policy_json",
+      "retention_policy_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(retention_policy_json) AND json_type(retention_policy_json) = 'object')"
+    ],
+    [
+      "candidate_document_sets",
+      "scope_project_ids_json",
+      "scope_project_ids_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(scope_project_ids_json) AND json_type(scope_project_ids_json) = 'array')"
+    ],
+    [
+      "candidate_document_sets",
+      "scope_tag_ids_json",
+      "scope_tag_ids_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(scope_tag_ids_json) AND json_type(scope_tag_ids_json) = 'array')"
+    ],
+    [
+      "candidate_document_sets",
+      "provenance_json",
+      "provenance_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(provenance_json) AND json_type(provenance_json) = 'object')"
+    ],
+    [
+      "application_response_templates",
+      "scope_project_ids_json",
+      "scope_project_ids_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(scope_project_ids_json) AND json_type(scope_project_ids_json) = 'array')"
+    ],
+    [
+      "application_response_templates",
+      "scope_tag_ids_json",
+      "scope_tag_ids_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(scope_tag_ids_json) AND json_type(scope_tag_ids_json) = 'array')"
+    ],
+    [
+      "application_response_templates",
+      "provenance_json",
+      "provenance_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(provenance_json) AND json_type(provenance_json) = 'object')"
+    ],
+    [
+      "job_applications",
+      "criteria_version_id",
+      "criteria_version_id TEXT REFERENCES campaign_criteria_versions(id)"
+    ],
+    [
+      "job_applications",
+      "reapplication_of_application_id",
+      "reapplication_of_application_id TEXT REFERENCES job_applications(id) ON DELETE SET NULL"
+    ],
+    [
+      "job_applications",
+      "reapplication_reason",
+      "reapplication_reason TEXT NOT NULL DEFAULT ''"
+    ],
+    [
+      "job_applications",
+      "reapplication_reviewed_at",
+      "reapplication_reviewed_at TEXT"
+    ],
+    [
+      "job_offers",
+      "negotiation_asks_json",
+      "negotiation_asks_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(negotiation_asks_json) AND json_type(negotiation_asks_json) = 'array')"
+    ],
+    ["job_offers", "response", "response TEXT NOT NULL DEFAULT ''"],
+    [
+      "job_offers",
+      "artifact_ids_json",
+      "artifact_ids_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(artifact_ids_json) AND json_type(artifact_ids_json) = 'array')"
+    ],
+    [
+      "job_offer_revisions",
+      "status",
+      "status TEXT NOT NULL DEFAULT 'received' CHECK (status IN ('expected', 'received', 'negotiating', 'revised', 'accepted', 'declined', 'expired', 'withdrawn'))"
+    ],
+    [
+      "job_offer_revisions",
+      "contingencies_json",
+      "contingencies_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(contingencies_json) AND json_type(contingencies_json) = 'array')"
+    ],
+    ["job_offer_revisions", "expires_at", "expires_at TEXT"],
+    ["job_offer_revisions", "decision", "decision TEXT NOT NULL DEFAULT ''"],
+    ["job_offer_revisions", "rationale", "rationale TEXT NOT NULL DEFAULT ''"],
+    [
+      "job_offer_revisions",
+      "criteria_version_id",
+      "criteria_version_id TEXT REFERENCES campaign_criteria_versions(id) ON DELETE SET NULL"
+    ],
+    [
+      "job_offer_revisions",
+      "planned_engagement_id",
+      "planned_engagement_id TEXT REFERENCES work_engagements(id) ON DELETE SET NULL"
+    ],
+    [
+      "application_transmission_previews",
+      "guard_context_json",
+      "guard_context_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(guard_context_json) AND json_type(guard_context_json) = 'object')"
+    ]
+  ] as const;
+
+  const applicationCriteriaWasMissing = !hasDatabaseColumn(
+    database,
+    "job_applications",
+    "criteria_version_id"
+  );
+  const offerRevisionStatusWasMissing = !hasDatabaseColumn(
+    database,
+    "job_offer_revisions",
+    "status"
+  );
+  for (const [table, column, definition] of additiveColumns) {
+    addColumnIfMissing(database, table, column, definition);
+  }
+
+  annotateDanglingCampaignCriteria(database);
+  if (applicationCriteriaWasMissing) {
+    backfillLegacyApplicationCriteria(database);
+  }
+  if (offerRevisionStatusWasMissing) {
+    backfillLegacyOfferRevisionSnapshots(database);
+  }
+
+  for (const table of WORK_OPPORTUNITY_COMPATIBILITY_TABLES) {
+    rebuildTableFromCanonicalWorkSchema(database, canonicalSchema, table);
+  }
+  for (const index of WORK_OPPORTUNITY_COMPATIBILITY_INDEXES) {
+    database.exec(extractCanonicalIndexStatement(canonicalSchema, index));
+  }
+  for (const trigger of WORK_OPPORTUNITY_COMPATIBILITY_TRIGGERS) {
+    database.exec(extractCanonicalTriggerStatement(canonicalSchema, trigger));
+  }
+}
+
+function assertNoForeignKeyViolations(
+  database: DatabaseSync,
+  migration: string
+) {
+  const violations = database
+    .prepare("PRAGMA foreign_key_check")
+    .all() as Array<{
+    table: string;
+  }>;
+  if (violations.length === 0) return;
+  const tables = [...new Set(violations.map((violation) => violation.table))]
+    .sort()
+    .join(", ");
+  throw new Error(
+    `${migration} produced ${violations.length} foreign-key violation(s) in: ${tables}.`
+  );
 }
 
 function backfillLegacyPairingClientMetadata(database: DatabaseSync) {
@@ -792,29 +1238,74 @@ export async function initializeDatabase(): Promise<void> {
     }
     pendingMigrations.push(file);
     const sql = await readFile(path.join(migrationsDir, file), "utf8");
-    database.exec("BEGIN");
-    try {
-      if (file === PEOPLE_LEGACY_SCHEMA_REPAIR_MIGRATION) {
-        await repairLegacyPeopleSchema(database);
-      }
-      if (file === PEER_QUERY_AUDIT_COMPATIBILITY_MIGRATION) {
-        prepareLegacyPeerQueryAuditMigration(database);
-      }
-      database.exec(sql);
-      if (file === SECURITY_PAIRING_METADATA_COMPATIBILITY_MIGRATION) {
-        backfillLegacyPairingClientMetadata(database);
-      }
-      if (file === COURSE_DEFINITION_INTEGRITY_MIGRATION) {
-        backfillCourseDefinitionIntegrity(database);
-      }
-      database
-        .prepare("INSERT INTO migrations (id, applied_at) VALUES (?, ?)")
-        .run(file, nowIso());
-      database.exec("COMMIT");
-    } catch (error) {
-      database.exec("ROLLBACK");
-      throw error;
+    const requiresForeignKeysDisabled =
+      file === WORK_OPPORTUNITY_SCHEMA_COMPATIBILITY_MIGRATION;
+    if (requiresForeignKeysDisabled) {
+      database.exec("PRAGMA foreign_keys = OFF");
     }
+    let migrationFailed = false;
+    let migrationFailure: unknown;
+    try {
+      database.exec("BEGIN");
+      try {
+        if (file === PEOPLE_LEGACY_SCHEMA_REPAIR_MIGRATION) {
+          await repairLegacyPeopleSchema(database);
+        }
+        if (file === PEER_QUERY_AUDIT_COMPATIBILITY_MIGRATION) {
+          prepareLegacyPeerQueryAuditMigration(database);
+        }
+        if (file === WORK_OPPORTUNITY_SCHEMA_COMPATIBILITY_MIGRATION) {
+          await prepareWorkOpportunitySchemaCompatibilityMigration(database);
+        }
+        database.exec(sql);
+        if (file === SECURITY_PAIRING_METADATA_COMPATIBILITY_MIGRATION) {
+          backfillLegacyPairingClientMetadata(database);
+        }
+        if (file === COURSE_DEFINITION_INTEGRITY_MIGRATION) {
+          backfillCourseDefinitionIntegrity(database);
+        }
+        if (requiresForeignKeysDisabled) {
+          assertNoForeignKeyViolations(database, file);
+        }
+        database
+          .prepare("INSERT INTO migrations (id, applied_at) VALUES (?, ?)")
+          .run(file, nowIso());
+        database.exec("COMMIT");
+      } catch (error) {
+        database.exec("ROLLBACK");
+        throw error;
+      }
+    } catch (error) {
+      migrationFailed = true;
+      migrationFailure = error;
+    }
+
+    let foreignKeyRestoreFailed = false;
+    let foreignKeyRestoreFailure: unknown;
+    if (requiresForeignKeysDisabled) {
+      try {
+        database.exec("PRAGMA foreign_keys = ON");
+        const foreignKeys = database.prepare("PRAGMA foreign_keys").get() as {
+          foreign_keys: number;
+        };
+        if (foreignKeys.foreign_keys !== 1) {
+          throw new Error(
+            `${file} could not restore SQLite foreign-key enforcement.`
+          );
+        }
+      } catch (error) {
+        foreignKeyRestoreFailed = true;
+        foreignKeyRestoreFailure = error;
+      }
+    }
+    if (migrationFailed && foreignKeyRestoreFailed) {
+      throw new AggregateError(
+        [migrationFailure, foreignKeyRestoreFailure],
+        `${file} failed and SQLite foreign-key enforcement could not be restored.`
+      );
+    }
+    if (migrationFailed) throw migrationFailure;
+    if (foreignKeyRestoreFailed) throw foreignKeyRestoreFailure;
   }
 
   logForgeDebug(
