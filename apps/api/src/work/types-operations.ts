@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   WORK_LIST_MAX,
+  applicationRepresentationsSchema,
   boundedText,
   createCriteriaVersionSchema,
   createJobApplicationSchema,
@@ -250,7 +251,7 @@ export const transmissionPreviewSchema = z
       .array(artifactVersionReferenceSchema)
       .max(100)
       .default([]),
-    representations: jsonRecord,
+    representations: applicationRepresentationsSchema,
     unresolvedGates: z
       .array(
         z

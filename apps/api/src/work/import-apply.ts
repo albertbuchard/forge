@@ -275,6 +275,39 @@ function snapshotLink(link: Record<string, unknown>): InventoryRecord {
   };
 }
 
+function inventoryReservedScopeLinks(state: ApplyImportState) {
+  const select = getDatabase().prepare(
+    `SELECT source_entity_type AS sourceEntityType,
+            source_entity_id AS sourceEntityId,
+            target_entity_type AS targetEntityType,
+            target_entity_id AS targetEntityId,
+            anchor_key AS anchorKey,
+            relationship,
+            created_by_actor AS createdByActor,
+            created_at AS createdAt
+     FROM entity_links
+     WHERE source_entity_type = ? AND source_entity_id = ?
+       AND anchor_key = 'work_scope'
+       AND target_entity_type IN ('project', 'tag')`
+  );
+  for (const root of state.rootRecords) {
+    const links = select.all(root.entityType, root.entityId) as Array<
+      Record<string, unknown>
+    >;
+    for (const link of links) {
+      const snapshot = snapshotLink(link);
+      if (
+        !state.importedLinks.some(
+          (existing) =>
+            existing.table === snapshot.table && existing.id === snapshot.id
+        )
+      ) {
+        state.importedLinks.push(snapshot);
+      }
+    }
+  }
+}
+
 type ApplyWorkImportInput = {
   access: WorkAccess;
   manifest: WorkImportManifest;
@@ -630,6 +663,7 @@ function finalizeAppliedImport(
   state: ApplyImportState,
   requestFingerprint: string
 ) {
+  inventoryReservedScopeLinks(state);
   inventoryCreatedMetadata({
     inventory: state.inventory,
     rootRecords: state.rootRecords,

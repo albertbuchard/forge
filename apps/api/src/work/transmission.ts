@@ -4,6 +4,7 @@ import type { AgentAction } from "../types.js";
 import type { CollaborationContext } from "../repositories/collaboration.js";
 import { getEntityOwnerId } from "../repositories/entity-ownership.js";
 import type { WorkAccess } from "./access.js";
+import { findProtectedApplicantField } from "./privacy.js";
 import {
   assertAuthorizedWorkReference,
   fingerprint,
@@ -661,6 +662,13 @@ export function createTransmissionPreview(
     input.applicationId,
     access
   );
+  if (findProtectedApplicantField(input.representations)) {
+    throw new HttpError(
+      400,
+      "work_transmission_protected_demographic_forbidden",
+      "Protected applicant demographic answers cannot be stored in a Work transmission preview."
+    );
+  }
   assertNoTransmissionSecrets({
     destination: input.destination,
     fields: input.fields,

@@ -139,49 +139,25 @@ export function buildRootScopeClause(
     clauses.push(
       `EXISTS (
         SELECT 1 FROM entity_links work_project_scope
-        WHERE (
-          work_project_scope.source_entity_type = ?
+        WHERE work_project_scope.source_entity_type = ?
           AND work_project_scope.source_entity_id = ${idColumn}
           AND work_project_scope.target_entity_type = 'project'
           AND work_project_scope.target_entity_id IN (${access.projectIds.map(() => "?").join(", ")})
-        ) OR (
-          work_project_scope.target_entity_type = ?
-          AND work_project_scope.target_entity_id = ${idColumn}
-          AND work_project_scope.source_entity_type = 'project'
-          AND work_project_scope.source_entity_id IN (${access.projectIds.map(() => "?").join(", ")})
-        )
       )`
     );
-    values.push(
-      input.entityType,
-      ...access.projectIds,
-      input.entityType,
-      ...access.projectIds
-    );
+    values.push(input.entityType, ...access.projectIds);
   }
   if (access.tagIds.length > 0) {
     clauses.push(
       `EXISTS (
         SELECT 1 FROM entity_links work_tag_scope
-        WHERE (
-          work_tag_scope.source_entity_type = ?
+        WHERE work_tag_scope.source_entity_type = ?
           AND work_tag_scope.source_entity_id = ${idColumn}
           AND work_tag_scope.target_entity_type = 'tag'
           AND work_tag_scope.target_entity_id IN (${access.tagIds.map(() => "?").join(", ")})
-        ) OR (
-          work_tag_scope.target_entity_type = ?
-          AND work_tag_scope.target_entity_id = ${idColumn}
-          AND work_tag_scope.source_entity_type = 'tag'
-          AND work_tag_scope.source_entity_id IN (${access.tagIds.map(() => "?").join(", ")})
-        )
       )`
     );
-    values.push(
-      input.entityType,
-      ...access.tagIds,
-      input.entityType,
-      ...access.tagIds
-    );
+    values.push(input.entityType, ...access.tagIds);
   }
   return { sql: clauses.join(" AND "), values };
 }

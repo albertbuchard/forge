@@ -385,6 +385,30 @@ test("Project and tag restrictions are enforced by durable relationship links", 
            AND anchor_key = 'work_scope'`
         )
         .run(organizationId);
+      const insertInboundScopeProbe = getDatabase().prepare(
+        `INSERT INTO entity_links (
+           source_entity_type, source_entity_id, target_entity_type,
+           target_entity_id, anchor_key, relationship, created_by_actor,
+           created_at
+         ) VALUES (?, ?, 'work_organization', ?, 'inbound_scope_probe', ?, ?, ?)`
+      );
+      const probeCreatedAt = new Date().toISOString();
+      insertInboundScopeProbe.run(
+        "project",
+        project.id,
+        organizationId,
+        "contains_work_record",
+        "scope-probe",
+        probeCreatedAt
+      );
+      insertInboundScopeProbe.run(
+        "tag",
+        tag.id,
+        organizationId,
+        "contains_work_record",
+        "scope-probe",
+        probeCreatedAt
+      );
 
       const inaccessible = await app.inject({
         method: "GET",
@@ -402,7 +426,7 @@ test("Project and tag restrictions are enforced by durable relationship links", 
       assert.equal(
         hidden.items.some((item) => item.id === organizationId),
         false,
-        "Legacy JSON scope columns must not grant authority without a direct link."
+        "Legacy JSON columns and inbound generic links must not grant Work authority without an outbound scope link."
       );
     }
   );
@@ -639,6 +663,49 @@ test("Application submission requires exact approval, sender binding, and direct
     });
     assert.equal(secretPreview.statusCode, 400, secretPreview.body);
     assert.match(secretPreview.body, /secret|credential|password/i);
+
+    const protectedDemographicPreview = await app.inject({
+      method: "POST",
+      url: "/api/v1/work/transmissions/previews",
+      headers: { authorization: sender.authorization },
+      payload: {
+        applicationId: application.id,
+        destination: {
+          name: "Example ATS",
+          url: "https://example.test/apply",
+          channel: "web_portal"
+        },
+        fields: { candidateName: "Test Candidate" },
+        answers: [],
+        artifactVersions: [],
+        representations: {
+          gender: "female",
+          veteranStatus: "not_a_veteran"
+        },
+        unresolvedGates: [],
+        idempotencyKey: "protected-demographic-preview-rejected"
+      }
+    });
+    assert.equal(
+      protectedDemographicPreview.statusCode,
+      400,
+      protectedDemographicPreview.body
+    );
+    assert.match(
+      protectedDemographicPreview.body,
+      /protected applicant demographic/i
+    );
+    assert.equal(
+      (
+        getDatabase()
+          .prepare(
+            "SELECT COUNT(*) AS count FROM application_transmission_previews WHERE application_id = ?"
+          )
+          .get(String(application.id)) as { count: number }
+      ).count,
+      0,
+      "A rejected demographic payload must not persist a draft preview."
+    );
 
     const preview = await injectJson<{
       preview: Record<string, unknown>;
@@ -986,6 +1053,13 @@ test("Accepting a recorded offer creates one planned Work Engagement and keeps b
 
 test("Private Work import previews, applies, and rolls back without subjective metric invention", async () => {
   await withWorkTestServer("private-import", async ({ app, cookie }) => {
+    const project = getDatabase()
+      .prepare("SELECT id FROM projects ORDER BY id ASC LIMIT 1")
+      .get() as { id: string } | undefined;
+    assert.ok(
+      project,
+      "The import fixture must contain a Project scope target."
+    );
     const manifest = {
       schemaVersion: 1,
       source: {
@@ -999,6 +1073,7 @@ test("Private Work import previews, applies, and rolls back without subjective m
         {
           id: "import_org",
           name: "Imported Research Organization",
+          scope: { projectIds: [project.id], tagIds: [] },
           provenance: { sourceKind: "import", sourceLabel: "Private export" }
         }
       ],
@@ -1127,6 +1202,30 @@ test("Private Work import previews, applies, and rolls back without subjective m
     assert.equal(applied.references.import_campaign, "import_campaign");
     assert.equal(applied.references.import_opportunity, "import_opportunity");
     assert.equal(applied.references.import_application, "import_application");
+    const receiptInventory = JSON.parse(
+      (
+        getDatabase()
+          .prepare(
+            "SELECT created_records_json AS inventory FROM work_operation_receipts WHERE id = ?"
+          )
+          .get(applied.receiptId) as { inventory: string }
+      ).inventory
+    ) as Array<{
+      table: string;
+      identity?: Record<string, unknown>;
+    }>;
+    assert.ok(
+      receiptInventory.some(
+        (entry) =>
+          entry.table === "entity_links" &&
+          entry.identity?.sourceEntityType === "work_organization" &&
+          entry.identity.sourceEntityId === "import_org" &&
+          entry.identity.targetEntityType === "project" &&
+          entry.identity.targetEntityId === project.id &&
+          entry.identity.anchorKey === "work_scope"
+      ),
+      "The receipt must inventory auto-created Work scope links for rollback."
+    );
     const importedApplication = getDatabase()
       .prepare(
         "SELECT status, revision, submitted_at FROM job_applications WHERE id = ?"
@@ -1202,6 +1301,20 @@ test("Private Work import previews, applies, and rolls back without subjective m
       !after.engagements.some((entry) => entry.id === "import_engagement")
     );
     assert.ok(!after.campaigns.some((entry) => entry.id === "import_campaign"));
+    assert.equal(
+      (
+        getDatabase()
+          .prepare(
+            `SELECT COUNT(*) AS count FROM entity_links
+             WHERE source_entity_type = 'work_organization'
+               AND source_entity_id = 'import_org'
+               AND anchor_key = 'work_scope'`
+          )
+          .get() as { count: number }
+      ).count,
+      0,
+      "Rollback must remove the import-created scope link."
+    );
 
     const prohibited = structuredClone(manifest);
     prohibited.source.digest = "b".repeat(64);
