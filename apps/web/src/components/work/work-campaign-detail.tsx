@@ -556,7 +556,11 @@ export function CampaignDetail({
                 </Badge>
               </div>
               {criteria?.length ? (
-                <div className="mt-4 overflow-x-auto">
+                <div
+                  className="mt-4 overflow-x-auto"
+                  tabIndex={0}
+                  aria-label="Campaign criteria matrix"
+                >
                   <table className="w-full min-w-[38rem] text-left text-sm">
                     <thead>
                       <tr className="text-xs text-[var(--ui-ink-faint)]">

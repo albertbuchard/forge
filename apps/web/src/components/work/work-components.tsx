@@ -139,9 +139,9 @@ export function StatStrip({
             {item.value}
           </dd>
           {item.detail ? (
-            <div className="mt-1 text-xs text-[var(--ui-ink-soft)]">
+            <dd className="mt-1 text-xs text-[var(--ui-ink-soft)]">
               {item.detail}
-            </div>
+            </dd>
           ) : null}
         </div>
       ))}

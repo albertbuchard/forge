@@ -270,7 +270,10 @@ export function WorkPage() {
 
   if (detail)
     return (
-      <>
+      <div
+        data-work-surface="ready"
+        className="grid min-w-0 gap-0 [&_button]:min-h-11 [&_button]:min-w-11 [&_select]:min-h-11"
+      >
         <WorkDetail
           kind={detail.kind}
           id={detail.id}
@@ -295,7 +298,7 @@ export function WorkPage() {
           initialEngagementId={checkInEngagementId}
           onSaved={refresh}
         />
-      </>
+      </div>
     );
   const primaryError =
     overviewQuery.error ??
@@ -444,7 +447,10 @@ export function WorkPage() {
     );
 
   return (
-    <div className="grid min-w-0 gap-0">
+    <div
+      data-work-surface="ready"
+      className="grid min-w-0 gap-0 [&_button]:min-h-11 [&_button]:min-w-11 [&_select]:min-h-11"
+    >
       <PageHero
         entityKind="work_engagement"
         title="Work"

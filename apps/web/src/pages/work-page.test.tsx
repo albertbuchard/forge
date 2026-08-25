@@ -393,9 +393,15 @@ describe("permanent Work experience", () => {
   it("renders every permanent section with concurrent jobs and an adjacent active search", async () => {
     renderWork();
 
-    expect(
-      await screen.findByRole("heading", { name: "Work", level: 1 })
-    ).toBeInTheDocument();
+    const workHeading = await screen.findByRole("heading", {
+      name: "Work",
+      level: 1
+    });
+    expect(workHeading).toBeInTheDocument();
+    const workSurface = workHeading.closest("[data-work-surface='ready']");
+    expect(workSurface).not.toBeNull();
+    expect(workSurface?.className).toContain("[&_button]:min-h-11");
+    expect(workSurface?.className).toContain("[&_select]:min-h-11");
     const sections = screen.getByRole("navigation", { name: "Work sections" });
     for (const label of [
       "Overview",
@@ -417,9 +423,11 @@ describe("permanent Work experience", () => {
     expect(
       screen.getAllByText("Freelance product builder").length
     ).toBeGreaterThan(0);
-    expect(screen.getByText("Current roles").parentElement).toHaveTextContent(
-      "2"
-    );
+    const currentRolesGroup = screen.getByText("Current roles").parentElement;
+    expect(currentRolesGroup).toHaveTextContent("2");
+    expect(
+      [...(currentRolesGroup?.children ?? [])].map((child) => child.tagName)
+    ).toEqual(["DT", "DD", "DD"]);
     expect(screen.getByText("Active searches").parentElement).toHaveTextContent(
       "1"
     );
@@ -481,6 +489,9 @@ describe("permanent Work experience", () => {
     expect(
       screen.getAllByText("Part-time hospitality shifts").length
     ).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: "campaigns" }).className
+    ).toContain("min-h-11");
   });
 
   it("uses the non-destructive opportunity switch with optimistic revision", async () => {
@@ -588,9 +599,7 @@ describe("permanent Work experience", () => {
         level: 1
       })
     ).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Start application" })
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Start application" }));
     const opportunitySelect = await screen.findByRole("combobox", {
       name: "Opportunity"
     });

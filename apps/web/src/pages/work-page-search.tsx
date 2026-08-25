@@ -603,7 +603,7 @@ export function SearchTab({
               onClick={() => setView(id)}
               aria-pressed={view === id}
               className={cn(
-                "min-h-9 whitespace-nowrap rounded-[14px] px-3 text-sm capitalize",
+                "min-h-11 whitespace-nowrap rounded-[14px] px-3 text-sm capitalize",
                 view === id
                   ? "bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
                   : "text-[var(--ui-ink-soft)]"
