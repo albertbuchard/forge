@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -286,6 +287,112 @@ describe("RemoteBrowserPairing", () => {
 
     await waitFor(() => expect(onPaired).toHaveBeenCalledTimes(1));
     expect(WebAuthnAbortService.cancelCeremony).toHaveBeenCalledTimes(1);
+  });
+
+  it("never starts device trust after the user chooses the paired session while registration begin is pending", async () => {
+    const pairing = {
+      requestId: "pair_browser_pending_begin_fallback",
+      deviceCode: "fg_device_pending_begin_fallback",
+      userCode: "BCDF-GHJK",
+      verificationUri: "/forge/pair",
+      expiresAt: Date.now() + 180_000,
+      intervalSeconds: 0,
+      masterPasswordAvailable: true,
+      privateKey: {} as CryptoKey,
+      publicJwk: {},
+      cancelProof: "signed-cancel-proof"
+    };
+    let resolveRegistrationBegin: (
+      value: Awaited<ReturnType<typeof beginTrustedBrowserRegistration>>
+    ) => void = () => undefined;
+    vi.mocked(beginRemoteBrowserPairing).mockResolvedValueOnce(pairing);
+    vi.mocked(pollRemoteBrowserPairing).mockResolvedValueOnce({
+      status: "approved",
+      clientId: "client_1234567890123456"
+    });
+    vi.mocked(beginTrustedBrowserRegistration).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRegistrationBegin = resolve;
+      })
+    );
+    const onPaired = vi.fn();
+
+    render(<RemoteBrowserPairing onPaired={onPaired} />);
+    const pairButton = screen.getByRole("button", {
+      name: "Pair this browser"
+    });
+    await waitFor(() => expect(pairButton).toBeEnabled());
+    fireEvent.click(pairButton);
+
+    const useSession = await screen.findByRole("button", {
+      name: "Use this browser session only"
+    });
+    fireEvent.click(useSession);
+    await waitFor(() => expect(onPaired).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      resolveRegistrationBegin({
+        challengeId: "tbc_pending_begin",
+        options: { challenge: "registration-challenge" }
+      });
+      await Promise.resolve();
+    });
+
+    expect(startRegistration).not.toHaveBeenCalled();
+    expect(completeTrustedBrowserRegistration).not.toHaveBeenCalled();
+  });
+
+  it("never starts device trust after the pairing view unmounts while registration begin is pending", async () => {
+    const pairing = {
+      requestId: "pair_browser_pending_begin_unmount",
+      deviceCode: "fg_device_pending_begin_unmount",
+      userCode: "BCDF-GHJK",
+      verificationUri: "/forge/pair",
+      expiresAt: Date.now() + 180_000,
+      intervalSeconds: 0,
+      masterPasswordAvailable: false,
+      privateKey: {} as CryptoKey,
+      publicJwk: {},
+      cancelProof: "signed-cancel-proof"
+    };
+    let resolveRegistrationBegin: (
+      value: Awaited<ReturnType<typeof beginTrustedBrowserRegistration>>
+    ) => void = () => undefined;
+    vi.mocked(beginRemoteBrowserPairing).mockResolvedValueOnce(pairing);
+    vi.mocked(pollRemoteBrowserPairing).mockResolvedValueOnce({
+      status: "approved",
+      clientId: "client_1234567890123456"
+    });
+    vi.mocked(beginTrustedBrowserRegistration).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRegistrationBegin = resolve;
+      })
+    );
+    const onPaired = vi.fn();
+
+    const view = render(<RemoteBrowserPairing onPaired={onPaired} />);
+    const pairButton = screen.getByRole("button", {
+      name: "Pair this browser"
+    });
+    await waitFor(() => expect(pairButton).toBeEnabled());
+    fireEvent.click(pairButton);
+    await screen.findByRole("button", {
+      name: "Use this browser session only"
+    });
+
+    view.unmount();
+    await act(async () => {
+      resolveRegistrationBegin({
+        challengeId: "tbc_pending_unmount",
+        options: { challenge: "registration-challenge" }
+      });
+      await Promise.resolve();
+    });
+
+    expect(WebAuthnAbortService.cancelCeremony).toHaveBeenCalled();
+    expect(startRegistration).not.toHaveBeenCalled();
+    expect(completeTrustedBrowserRegistration).not.toHaveBeenCalled();
+    expect(onPaired).not.toHaveBeenCalled();
   });
 
   it("shows an actionable bounded countdown when pending requests fill the cap", async () => {

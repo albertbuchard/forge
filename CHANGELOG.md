@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.73
+
+- Made **Use this browser session only** a definitive consent boundary. It now
+  invalidates a device-trust attempt even while the registration-begin request
+  is still pending, so a delayed response cannot open or complete a passkey
+  ceremony after the user declined durable device trust or left the view.
+- Made the packaged OpenClaw runtime identify itself from its own installed
+  package manifest. An OpenClaw-started Forge server can now be verified and
+  adopted by `npx forge-memory ui` after recovery instead of being rejected as
+  a healthy runtime with an unknown package version. Source and development
+  launches explicitly do not claim a packaged identity.
+
 ## 0.3.72
 
 - Kept an approved remote browser usable while optional device-passkey setup is

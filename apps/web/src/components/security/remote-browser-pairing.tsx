@@ -33,21 +33,35 @@ function deviceTrustEnrollmentTimeoutError() {
   );
 }
 
-async function registerCurrentDevice(clientId: string) {
+function deviceTrustEnrollmentCancelledError() {
+  return new DOMException(
+    "Device-passkey verification was cancelled.",
+    "AbortError"
+  );
+}
+
+async function registerCurrentDevice(
+  clientId: string,
+  isAttemptActive: () => boolean
+) {
   let timedOut = false;
   let timeout: number | null = null;
+  const assertAttemptActive = () => {
+    if (!isAttemptActive()) throw deviceTrustEnrollmentCancelledError();
+    if (timedOut) throw deviceTrustEnrollmentTimeoutError();
+  };
   const registration = async () => {
     const ceremony = await beginTrustedBrowserRegistration({
       clientId,
       label: `Forge device passkey on ${navigator.platform || "this device"}`
     });
-    if (timedOut) throw deviceTrustEnrollmentTimeoutError();
+    assertAttemptActive();
     const response = await startRegistration({
       optionsJSON: ceremony.options as unknown as Parameters<
         typeof startRegistration
       >[0]["optionsJSON"]
     });
-    if (timedOut) throw deviceTrustEnrollmentTimeoutError();
+    assertAttemptActive();
     await completeTrustedBrowserRegistration({
       clientId,
       challengeId: ceremony.challengeId,
@@ -93,9 +107,20 @@ export function RemoteBrowserPairing({
   const [masterPasswordPending, setMasterPasswordPending] = useState(false);
   const [pairedClientId, setPairedClientId] = useState<string | null>(null);
   const timer = useRef<number | null>(null);
+  const componentMounted = useRef(true);
+  const deviceTrustAttempt = useRef(0);
   const automaticRestoreState = useRef<"idle" | "in-flight" | "finished">(
     "idle"
   );
+
+  useEffect(() => {
+    componentMounted.current = true;
+    return () => {
+      componentMounted.current = false;
+      deviceTrustAttempt.current += 1;
+      WebAuthnAbortService.cancelCeremony();
+    };
+  }, []);
 
   useEffect(() => {
     if (automaticRestoreState.current !== "idle") return;
@@ -161,18 +186,23 @@ export function RemoteBrowserPairing({
         const result = await pollRemoteBrowserPairing(pairing);
         if (stopped) return;
         if (result.status === "approved") {
+          const attemptId = deviceTrustAttempt.current + 1;
+          deviceTrustAttempt.current = attemptId;
+          const isCurrentAttempt = () =>
+            componentMounted.current &&
+            deviceTrustAttempt.current === attemptId;
           setPairedClientId(result.clientId);
           setStatus("trusting");
           setMessage(
             "Pairing is approved. Confirm the device passkey once so Forge can restore access in compatible browsers without another pairing code."
           );
           try {
-            await registerCurrentDevice(result.clientId);
-            if (stopped) return;
+            await registerCurrentDevice(result.clientId, isCurrentAttempt);
+            if (!isCurrentAttempt()) return;
             setMessage("This device is trusted. Opening Forge…");
             await onPaired();
           } catch (error) {
-            if (stopped) return;
+            if (!isCurrentAttempt()) return;
             setStatus("paired");
             setMessage(
               error instanceof Error
@@ -357,13 +387,19 @@ export function RemoteBrowserPairing({
 
   const trustPairedBrowser = async () => {
     if (!pairedClientId) return;
+    const attemptId = deviceTrustAttempt.current + 1;
+    deviceTrustAttempt.current = attemptId;
+    const isCurrentAttempt = () =>
+      componentMounted.current && deviceTrustAttempt.current === attemptId;
     setStatus("trusting");
     setMessage(null);
     try {
-      await registerCurrentDevice(pairedClientId);
+      await registerCurrentDevice(pairedClientId, isCurrentAttempt);
+      if (!isCurrentAttempt()) return;
       setMessage("This device is trusted. Opening Forge…");
       await onPaired();
     } catch (error) {
+      if (!isCurrentAttempt()) return;
       setStatus("paired");
       setMessage(
         error instanceof Error
@@ -374,6 +410,7 @@ export function RemoteBrowserPairing({
   };
 
   const openPairedBrowserSession = async () => {
+    deviceTrustAttempt.current += 1;
     WebAuthnAbortService.cancelCeremony();
     setStatus("paired");
     setMessage("Opening Forge with this paired browser session…");

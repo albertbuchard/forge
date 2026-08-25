@@ -694,7 +694,8 @@ try {
         "x-forge-csrf": session.csrfToken,
         ...(args.body === undefined
           ? {}
-          : { "content-type": "application/json" })
+          : { "content-type": "application/json" }),
+        ...(args.headers ?? {})
       },
       body: args.body === undefined ? undefined : JSON.stringify(args.body)
     });
@@ -705,13 +706,19 @@ try {
   };
 
   mkdirSync(installRoot, { recursive: true });
+  const installedRuntimePackage = JSON.parse(
+    readFileSync(path.join(installedPluginRoot, "package.json"), "utf8")
+  );
+  const packedRuntimeEnvironment = { ...process.env };
+  delete packedRuntimeEnvironment.FORGE_RUNTIME_PACKAGE_NAME;
+  delete packedRuntimeEnvironment.FORGE_RUNTIME_PACKAGE_VERSION;
   child = spawn(
     process.execPath,
     [path.join(installedPluginRoot, "server", "index.js")],
     {
       cwd: installRoot,
       env: {
-        ...process.env,
+        ...packedRuntimeEnvironment,
         FORGE_DATA_ROOT: dataRoot,
         FORGE_OWNER_BROKER_BIN: peerRuntime.ownerBrokerBinaryPath,
         FORGE_OWNER_BROKER_SHA256: peerRuntime.ownerBrokerSha256,
@@ -744,11 +751,14 @@ try {
   await verifyPackedWebRoutes();
   const protectedHealth = await requestForge({
     method: "GET",
-    path: "/api/v1/health"
+    path: "/api/v1/health",
+    headers: { "x-forge-runtime-probe": "1" }
   });
   if (
     protectedHealth.status !== 200 ||
-    protectedHealth.body?.backend !== "forge-node-runtime"
+    protectedHealth.body?.backend !== "forge-node-runtime" ||
+    protectedHealth.body?.runtime?.packageName !== installedRuntimePackage.name ||
+    protectedHealth.body?.runtime?.packageVersion !== installedRuntimePackage.version
   ) {
     throw new Error(
       `packed runtime protected health returned unexpected response ${JSON.stringify(protectedHealth)}`

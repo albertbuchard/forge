@@ -140,6 +140,11 @@ a second owner approval. The user can decline or use **Use this browser session
 only**; the approved session remains usable, and **Finish trusting this device**
 can retry while that session remains active.
 
+Choosing **Use this browser session only** invalidates that exact device-trust
+attempt before Forge opens the application. If the server's registration-begin
+response arrives later, the browser does not start or complete a passkey
+ceremony. Leaving the pairing view applies the same cancellation boundary.
+
 A discoverable passkey can restore access in compatible browsers that use the
 same device credential provider and the exact same Forge HTTPS host. Browser
 cookies and local storage are not shared across browsers; the passkey is the
@@ -194,6 +199,12 @@ current local-browser handler. If a source runtime started by an older adapter
 lacks that handler, Forge performs a locked ownership transfer and preserves the
 configured data root. A failed transfer stops without adopting an unknown
 process and restores the verified prior runtime when possible.
+
+When the installed OpenClaw adapter starts the packaged Forge server, the server
+derives its runtime package name and version from its own installed manifest.
+This lets Forge Memory verify and adopt the recovered process without weakening
+the protected identity check. A source or development server does not claim the
+packaged identity.
 
 `npx forge-memory update` creates a pre-update data archive before changing the
 runtime cache or selected adapters. It stops if the required backup is not

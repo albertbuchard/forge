@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -16,11 +16,32 @@ const devDataRootWrapper = path.join(
 const tsxCliEntry = path.join(repoRoot, "node_modules", "tsx", "dist", "cli.mjs");
 const devModeFlag = (process.env.FORGE_OPENCLAW_DEV ?? "").trim().toLowerCase();
 const useDevRuntime = devModeFlag === "1" || devModeFlag === "true" || devModeFlag === "yes";
+const runtimePackageName = "forge-openclaw-plugin";
+
+function readPackagedRuntimeIdentity() {
+  const manifestPath = path.join(packageRoot, "package.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  if (
+    manifest?.name !== runtimePackageName ||
+    typeof manifest.version !== "string" ||
+    !manifest.version.trim()
+  ) {
+    throw new Error(
+      `Forge could not verify the packaged runtime identity in ${manifestPath}.`
+    );
+  }
+  return { name: manifest.name, version: manifest.version.trim() };
+}
 
 if (!useDevRuntime) {
+  const runtimeIdentity = readPackagedRuntimeIdentity();
+  process.env.FORGE_RUNTIME_PACKAGE_NAME = runtimeIdentity.name;
+  process.env.FORGE_RUNTIME_PACKAGE_VERSION = runtimeIdentity.version;
   process.chdir(packageRoot);
   await import(pathToFileURL(builtRuntimeEntry).href);
 } else {
+  delete process.env.FORGE_RUNTIME_PACKAGE_NAME;
+  delete process.env.FORGE_RUNTIME_PACKAGE_VERSION;
   if (!existsSync(devRuntimeEntry) || !existsSync(devDataRootWrapper) || !existsSync(tsxCliEntry)) {
     throw new Error(
       "FORGE_OPENCLAW_DEV is enabled, but the Forge repo dev runtime was not found. " +
