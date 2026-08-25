@@ -15,6 +15,10 @@ const openclawPackageUrl = new URL(
   "../../plugins/openclaw/package.json",
   import.meta.url
 );
+const hermesRuntimePackageUrl = new URL(
+  "../../plugins/hermes/forge_hermes/runtime/package.json",
+  import.meta.url
+);
 
 test("publishes the pinned Agent Messages media parser with the runtime", async () => {
   const [forgePackage, openclawPackage] = await Promise.all(
@@ -28,6 +32,18 @@ test("publishes the pinned Agent Messages media parser with the runtime", async 
     openclawPackage.dependencies["music-metadata"],
     forgePackage.dependencies["music-metadata"]
   );
+});
+
+test("pins the graph runtime to one clean-install-compatible version", async () => {
+  const packages = await Promise.all(
+    [forgePackageUrl, openclawPackageUrl, hermesRuntimePackageUrl].map(
+      async (url) => JSON.parse(await readFile(url, "utf8"))
+    )
+  );
+
+  for (const packageManifest of packages) {
+    assert.equal(packageManifest.dependencies["@xyflow/react"], "12.10.2");
+  }
 });
 
 test("builds the plugin runtime before Forge Memory exercises it", async () => {
@@ -46,7 +62,10 @@ test("builds the plugin runtime before Forge Memory exercises it", async () => {
 test("release rollback does not pass the aliased plugin manifest twice to git restore", async () => {
   const source = await readFile(releaseScriptUrl, "utf8");
   const cleanupStart = source.indexOf("cleanup_release_workspace() {");
-  const cleanupEnd = source.indexOf("\n}\n\nrollback_release_state()", cleanupStart);
+  const cleanupEnd = source.indexOf(
+    "\n}\n\nrollback_release_state()",
+    cleanupStart
+  );
   const cleanup = source.slice(cleanupStart, cleanupEnd);
 
   assert.notEqual(cleanupStart, -1);
