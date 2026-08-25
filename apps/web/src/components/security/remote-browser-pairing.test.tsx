@@ -9,7 +9,8 @@ import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   startAuthentication,
-  startRegistration
+  startRegistration,
+  WebAuthnAbortService
 } from "@simplewebauthn/browser";
 
 import { RemoteBrowserPairing } from "@/components/security/remote-browser-pairing";
@@ -27,7 +28,8 @@ import { ForgeApiError } from "@/lib/api-error";
 
 vi.mock("@simplewebauthn/browser", () => ({
   startAuthentication: vi.fn(),
-  startRegistration: vi.fn()
+  startRegistration: vi.fn(),
+  WebAuthnAbortService: { cancelCeremony: vi.fn() }
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -104,6 +106,42 @@ describe("RemoteBrowserPairing", () => {
       screen.getByRole("button", { name: "Restore this device" })
     ).toBeEnabled();
     expect(beginRemoteBrowserPairing).not.toHaveBeenCalled();
+  });
+
+  it("keeps ordinary pairing available while automatic device restoration is still waiting", async () => {
+    const pairing = {
+      requestId: "pair_browser_hanging_restore",
+      deviceCode: "fg_device_hanging_restore",
+      userCode: "BCDF-GHJK",
+      verificationUri: "/forge/pair",
+      expiresAt: Date.now() + 180_000,
+      intervalSeconds: 5,
+      masterPasswordAvailable: false,
+      privateKey: {} as CryptoKey,
+      publicJwk: {},
+      cancelProof: "signed-cancel-proof"
+    };
+    vi.mocked(beginTrustedBrowserAuthentication).mockResolvedValueOnce({
+      challengeId: "tbc_hanging_restore",
+      options: { challenge: "trusted-challenge" }
+    });
+    vi.mocked(startAuthentication).mockReturnValueOnce(
+      new Promise<Awaited<ReturnType<typeof startAuthentication>>>(
+        () => undefined
+      )
+    );
+    vi.mocked(beginRemoteBrowserPairing).mockResolvedValueOnce(pairing);
+
+    render(<RemoteBrowserPairing onPaired={vi.fn()} />);
+    await waitFor(() => expect(startAuthentication).toHaveBeenCalledTimes(1));
+    const pairButton = screen.getByRole("button", {
+      name: "Pair this browser"
+    });
+    expect(pairButton).toBeEnabled();
+    fireEvent.click(pairButton);
+
+    expect(WebAuthnAbortService.cancelCeremony).toHaveBeenCalled();
+    expect(await screen.findByText("BCDF-GHJK")).toBeInTheDocument();
   });
 
   it("enrolls a device passkey immediately after the one approved pairing", async () => {

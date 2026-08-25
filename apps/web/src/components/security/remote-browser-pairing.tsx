@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   startAuthentication,
-  startRegistration
+  startRegistration,
+  WebAuthnAbortService
 } from "@simplewebauthn/browser";
 import { KeyRound, ShieldCheck } from "lucide-react";
 
@@ -22,6 +23,8 @@ import {
 import { ForgeApiError } from "@/lib/api-error";
 
 type Pairing = Awaited<ReturnType<typeof beginRemoteBrowserPairing>>;
+
+const AUTOMATIC_DEVICE_RESTORE_TIMEOUT_MS = 8_000;
 
 async function registerCurrentDevice(clientId: string) {
   const ceremony = await beginTrustedBrowserRegistration({
@@ -73,32 +76,42 @@ export function RemoteBrowserPairing({
     if (automaticRestoreState.current !== "idle") return;
     automaticRestoreState.current = "in-flight";
     let stopped = false;
+    const isCurrentRestore = () =>
+      !stopped && automaticRestoreState.current === "in-flight";
+    const automaticTimeout = window.setTimeout(() => {
+      if (!isCurrentRestore()) return;
+      automaticRestoreState.current = "finished";
+      WebAuthnAbortService.cancelCeremony();
+      setStatus("idle");
+      setMessage(null);
+    }, AUTOMATIC_DEVICE_RESTORE_TIMEOUT_MS);
 
     const restore = async () => {
       try {
         const ceremony = await beginTrustedBrowserAuthentication();
-        if (stopped) return;
+        if (!isCurrentRestore()) return;
         setStatus("restoring");
         const response = await startAuthentication({
           optionsJSON: ceremony.options as unknown as Parameters<
             typeof startAuthentication
           >[0]["optionsJSON"]
         });
-        if (stopped) return;
+        if (!isCurrentRestore()) return;
         await completeTrustedBrowserAuthentication({
           challengeId: ceremony.challengeId,
           response
         });
-        if (stopped) return;
+        if (!isCurrentRestore()) return;
         automaticRestoreState.current = "finished";
         setMessage("This device is verified. Opening Forge…");
         await onPaired();
       } catch {
-        if (stopped) return;
+        if (!isCurrentRestore()) return;
         setStatus("idle");
         setMessage(null);
       } finally {
-        if (!stopped) {
+        window.clearTimeout(automaticTimeout);
+        if (isCurrentRestore()) {
           automaticRestoreState.current = "finished";
         }
       }
@@ -107,7 +120,9 @@ export function RemoteBrowserPairing({
     void restore();
     return () => {
       stopped = true;
+      window.clearTimeout(automaticTimeout);
       if (automaticRestoreState.current === "in-flight") {
+        WebAuthnAbortService.cancelCeremony();
         automaticRestoreState.current = "idle";
       }
     };
@@ -209,6 +224,8 @@ export function RemoteBrowserPairing({
   }, [retrySeconds, status]);
 
   const start = async () => {
+    automaticRestoreState.current = "finished";
+    WebAuthnAbortService.cancelCeremony();
     setStatus("starting");
     setMessage(null);
     setRetrySeconds(0);
@@ -468,8 +485,7 @@ export function RemoteBrowserPairing({
             pending={status === "starting"}
             pendingLabel="Creating secure request"
             disabled={
-              status === "checking" ||
-              status === "restoring" ||
+              status === "starting" ||
               (status === "limited" && retrySeconds > 0)
             }
           >
