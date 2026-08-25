@@ -2,6 +2,7 @@ import { getDatabase } from "../db.js";
 import { HttpError } from "../errors.js";
 import { getEntityOwnerId } from "../repositories/entity-ownership.js";
 import type { WorkAccess } from "./access.js";
+import { findProtectedApplicantField } from "./privacy.js";
 import {
   assertAuthorizedWorkReference,
   fingerprint,
@@ -627,6 +628,18 @@ export function previewWorkImport(
     );
   }
   assertNoProhibitedPrivateData(manifest);
+  for (const [index, application] of manifest.applications.entries()) {
+    const protectedPath = findProtectedApplicantField(
+      application.representations
+    );
+    if (protectedPath) {
+      throw new HttpError(
+        400,
+        "work_import_protected_demographic",
+        `Application ${index + 1} contains a protected demographic representation at representations.${protectedPath.join(".")}.`
+      );
+    }
+  }
   assertConfirmedContacts(manifest);
   for (const reference of manifest.artifactReferences) {
     verifyArtifactReference({

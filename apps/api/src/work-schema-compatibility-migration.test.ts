@@ -19,6 +19,7 @@ const migration137 = "137_trusted_browser_credentials.sql";
 const migration138 = "138_work_and_opportunity_management.sql";
 const migration139 = "139_work_opportunity_schema_compatibility.sql";
 const migration140 = "140_work_opportunity_history_correction.sql";
+const migration141 = "141_work_scope_relationship_authority.sql";
 const now = "2026-08-25T08:00:00.000Z";
 const later = "2026-08-25T09:00:00.000Z";
 
@@ -678,6 +679,115 @@ test("migration 139 preserves a missing legacy application criteria version as e
       JSON.parse(preserved.provenance_json).compatibilityMigrations
         .workOpportunity139.criteriaVersionState,
       "unknown_legacy_schema"
+    );
+    assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("migration 141 backfills only existing owner-compatible Work scope relationships", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-work-141-scope-links-")
+  );
+  try {
+    configureLegacyWikiAutoImport(false);
+    configureDatabase({ dataRoot: rootDir, seedDemoData: true });
+    await initializeDatabase();
+    let database = getDatabase();
+    const project = database
+      .prepare(
+        `SELECT project.id
+         FROM projects project
+         LEFT JOIN entity_owners owner
+           ON owner.entity_type = 'project' AND owner.entity_id = project.id
+         WHERE owner.user_id = 'user_operator' OR owner.user_id IS NULL
+         ORDER BY CASE WHEN owner.user_id = 'user_operator' THEN 0 ELSE 1 END,
+                  project.id ASC
+         LIMIT 1`
+      )
+      .get() as { id: string } | undefined;
+    const tag = database
+      .prepare(
+        `SELECT tag.id
+         FROM tags tag
+         LEFT JOIN entity_owners owner
+           ON owner.entity_type = 'tag' AND owner.entity_id = tag.id
+         WHERE owner.user_id = 'user_operator' OR owner.user_id IS NULL
+         ORDER BY CASE WHEN owner.user_id = 'user_operator' THEN 0 ELSE 1 END,
+                  tag.id ASC
+         LIMIT 1`
+      )
+      .get() as { id: string } | undefined;
+    assert.ok(project);
+    assert.ok(tag);
+
+    database
+      .prepare(
+        `INSERT INTO work_organizations (
+           id, owner_user_id, name, normalized_name,
+           scope_project_ids_json, scope_tag_ids_json,
+           created_at, updated_at
+         ) VALUES (?, 'user_operator', ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        "organization_work_141",
+        "Work 141 migration fixture",
+        "work 141 migration fixture",
+        JSON.stringify([project.id, "project_missing_work_141"]),
+        JSON.stringify([tag.id, "tag_missing_work_141"]),
+        now,
+        later
+      );
+    database.exec(`
+      DELETE FROM entity_links
+      WHERE source_entity_type = 'work_organization'
+        AND source_entity_id = 'organization_work_141';
+      DELETE FROM migrations WHERE id = '${migration141}';
+    `);
+
+    closeDatabase();
+    await initializeDatabase();
+    database = getDatabase();
+    assert.ok(
+      database
+        .prepare("SELECT 1 FROM migrations WHERE id = ?")
+        .get(migration141)
+    );
+    const links = database
+      .prepare(
+        `SELECT target_entity_type AS targetType,
+                target_entity_id AS targetId,
+                anchor_key AS anchorKey,
+                relationship
+         FROM entity_links
+         WHERE source_entity_type = 'work_organization'
+           AND source_entity_id = 'organization_work_141'
+         ORDER BY target_entity_type, target_entity_id`
+      )
+      .all() as Array<{
+      targetType: string;
+      targetId: string;
+      anchorKey: string;
+      relationship: string;
+    }>;
+    assert.deepEqual(
+      links.map((link) => ({ ...link })),
+      [
+        {
+          targetType: "project",
+          targetId: project.id,
+          anchorKey: "work_scope",
+          relationship: "project_context"
+        },
+        {
+          targetType: "tag",
+          targetId: tag.id,
+          anchorKey: "work_scope",
+          relationship: "tag_context"
+        }
+      ]
     );
     assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {

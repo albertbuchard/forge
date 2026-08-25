@@ -318,7 +318,8 @@ export function acceptOfferAsPlannedEngagement(input: {
     ownerUserId: input.access.mutationOwnerUserId,
     operationKind: "offer_acceptance",
     idempotencyKey: input.idempotencyKey,
-    requestFingerprint
+    requestFingerprint,
+    access: input.access
   });
   if (replay)
     return {

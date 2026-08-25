@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { findProtectedApplicantField } from "./privacy.js";
 
 export const WORK_LIST_MAX = 50;
 export const WORK_CONTEXT_NESTED_MAX = 25;
@@ -9,6 +10,19 @@ export const nonEmptyText = (max = 240) => z.string().trim().min(1).max(max);
 export const stringList = (max = 100, itemMax = 500) =>
   z.array(z.string().trim().min(1).max(itemMax)).max(max).default([]);
 export const jsonRecord = z.record(z.string(), z.unknown()).default({});
+export const applicationRepresentationsSchema = z
+  .record(z.string(), z.unknown())
+  .default({})
+  .superRefine((value, context) => {
+    const path = findProtectedApplicantField(value);
+    if (!path) return;
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path,
+      message:
+        "Protected applicant demographic answers are not stored as ordinary Work application representations."
+    });
+  });
 export const optionalDate = z.string().date().nullable().optional();
 export const optionalDateTime = z
   .string()
@@ -837,7 +851,7 @@ export const createJobApplicationSchema = z
     privateContacts: z.array(jsonRecord).max(100).default([]),
     positioningProfileId: boundedText(240).nullable().default(null),
     documentSetId: boundedText(240).nullable().default(null),
-    representations: jsonRecord,
+    representations: applicationRepresentationsSchema,
     unresolvedUserFacts: z.array(jsonRecord).max(100).default([]),
     lastContactAt: optionalDateTime,
     nextFollowUpAt: optionalDateTime,

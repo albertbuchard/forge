@@ -673,7 +673,8 @@ export function createTransmissionPreview(
     ownerUserId: access.mutationOwnerUserId,
     operationKind: "transmission_preview",
     idempotencyKey: input.idempotencyKey,
-    requestFingerprint
+    requestFingerprint,
+    access
   });
   if (replay)
     return {

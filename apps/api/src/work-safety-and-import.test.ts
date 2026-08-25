@@ -18,6 +18,9 @@ async function issueWorkAgent(input: {
   cookie: string;
   label: string;
   scopes: string[];
+  userIds?: string[];
+  projectIds?: string[];
+  tagIds?: string[];
 }) {
   const result = await injectJson<{
     token: {
@@ -37,9 +40,9 @@ async function issueWorkAgent(input: {
       approvalMode: "approval_by_default",
       scopes: input.scopes,
       scopePolicy: {
-        userIds: ["user_operator"],
-        projectIds: [],
-        tagIds: []
+        userIds: input.userIds ?? ["user_operator"],
+        projectIds: input.projectIds ?? [],
+        tagIds: input.tagIds ?? []
       }
     }
   });
@@ -193,6 +196,322 @@ test("Work agent scopes redact compensation and prevent fabricated user reports"
       authorization: agent.authorization
     });
     assert.deepEqual(trends.series, []);
+  });
+});
+
+test("Project and tag restrictions are enforced by durable relationship links", async () => {
+  await withWorkTestServer(
+    "relationship-authority",
+    async ({ app, cookie }) => {
+      const project = getDatabase()
+        .prepare(
+          `SELECT project.id
+         FROM projects project
+         LEFT JOIN entity_owners owner
+           ON owner.entity_type = 'project' AND owner.entity_id = project.id
+         WHERE owner.user_id = 'user_operator' OR owner.user_id IS NULL
+         ORDER BY CASE WHEN owner.user_id = 'user_operator' THEN 0 ELSE 1 END,
+                  project.id ASC
+         LIMIT 1`
+        )
+        .get() as { id: string } | undefined;
+      const tag = getDatabase()
+        .prepare(
+          `SELECT tag.id
+         FROM tags tag
+         LEFT JOIN entity_owners owner
+           ON owner.entity_type = 'tag' AND owner.entity_id = tag.id
+         WHERE owner.user_id = 'user_operator' OR owner.user_id IS NULL
+         ORDER BY CASE WHEN owner.user_id = 'user_operator' THEN 0 ELSE 1 END,
+                  tag.id ASC
+         LIMIT 1`
+        )
+        .get() as { id: string } | undefined;
+      assert.ok(
+        project,
+        "The isolated Forge fixture must contain one usable Project."
+      );
+      assert.ok(tag, "The isolated Forge fixture must contain one usable tag.");
+
+      const nonexistentScope = await app.inject({
+        method: "POST",
+        url: "/api/v1/work/organizations",
+        headers: { cookie },
+        payload: {
+          id: "organization_missing_scope_target",
+          name: "Organization with a missing Project",
+          scope: {
+            projectIds: ["project_that_does_not_exist"],
+            tagIds: []
+          },
+          provenance: userProvenance
+        }
+      });
+      assert.equal(nonexistentScope.statusCode, 404, nonexistentScope.body);
+      assert.match(nonexistentScope.body, /Project.*does not exist/i);
+      assert.equal(
+        (
+          getDatabase()
+            .prepare(
+              "SELECT COUNT(*) AS count FROM work_organizations WHERE id = ?"
+            )
+            .get("organization_missing_scope_target") as { count: number }
+        ).count,
+        0
+      );
+
+      const scopedAgent = await issueWorkAgent({
+        app,
+        cookie,
+        label: "Relationship-scoped Work editor",
+        scopes: ["work.read", "work.write"],
+        projectIds: [project.id],
+        tagIds: [tag.id]
+      });
+      const created = await injectJson<{
+        organization: Record<string, unknown>;
+      }>(app, cookie, {
+        method: "POST",
+        url: "/api/v1/work/organizations",
+        expectedStatus: 201,
+        authorization: scopedAgent.authorization,
+        payload: {
+          id: "organization_relationship_scoped",
+          name: "Relationship-scoped organization",
+          scope: { projectIds: [project.id], tagIds: [tag.id] },
+          provenance: { sourceKind: "agent", actorId: scopedAgent.agentId }
+        }
+      });
+      assert.equal(created.organization.revision, 1);
+      const organizationId = String(created.organization.id);
+
+      const storedScopeLinks = getDatabase()
+        .prepare(
+          `SELECT target_entity_type AS targetType,
+                target_entity_id AS targetId,
+                relationship,
+                anchor_key AS anchorKey
+         FROM entity_links
+         WHERE source_entity_type = 'work_organization'
+           AND source_entity_id = ?
+           AND anchor_key = 'work_scope'
+         ORDER BY target_entity_type, target_entity_id`
+        )
+        .all(organizationId) as Array<{
+        targetType: string;
+        targetId: string;
+        relationship: string;
+        anchorKey: string;
+      }>;
+      assert.deepEqual(
+        storedScopeLinks.map((link) => ({ ...link })),
+        [
+          {
+            targetType: "project",
+            targetId: project.id,
+            relationship: "project_context",
+            anchorKey: "work_scope"
+          },
+          {
+            targetType: "tag",
+            targetId: tag.id,
+            relationship: "tag_context",
+            anchorKey: "work_scope"
+          }
+        ]
+      );
+
+      const visible = await injectJson<{
+        items: Array<Record<string, unknown>>;
+      }>(app, cookie, {
+        method: "GET",
+        url: "/api/v1/work/organizations",
+        authorization: scopedAgent.authorization
+      });
+      assert.ok(visible.items.some((item) => item.id === organizationId));
+
+      const outsideOpportunity = await createOpportunity(app, cookie, {
+        id: "opportunity_outside_relationship_scope",
+        canonicalUrl: "https://example.test/jobs/outside-relationship-scope",
+        sourceIdentifier: "outside-relationship-scope",
+        title: "Original inaccessible opportunity title",
+        idempotencyKey: "outside-relationship-scope-operator"
+      });
+      const relabelAttempt = await app.inject({
+        method: "POST",
+        url: "/api/v1/work/opportunities/upsert",
+        headers: { authorization: scopedAgent.authorization },
+        payload: {
+          canonicalUrl: "https://example.test/jobs/outside-relationship-scope",
+          sourceName: "Example careers",
+          sourceIdentifier: "outside-relationship-scope",
+          title: "Unauthorized relabeled opportunity",
+          employerName: "Example Research",
+          scope: { projectIds: [project.id], tagIds: [tag.id] },
+          provenance: { sourceKind: "agent", actorId: scopedAgent.agentId },
+          idempotencyKey: "outside-relationship-scope-agent"
+        }
+      });
+      assert.equal(relabelAttempt.statusCode, 404, relabelAttempt.body);
+      assert.equal(
+        (
+          getDatabase()
+            .prepare("SELECT title FROM job_opportunities WHERE id = ?")
+            .get(String(outsideOpportunity.opportunity.id)) as { title: string }
+        ).title,
+        "Original inaccessible opportunity title"
+      );
+
+      const relationships = await injectJson<{
+        links: Array<Record<string, unknown>>;
+      }>(app, cookie, {
+        method: "PUT",
+        url: `/api/v1/work/relationships/work_organization/${organizationId}`,
+        authorization: scopedAgent.authorization,
+        payload: { expectedRevision: 1, links: [] }
+      });
+      assert.equal(
+        relationships.links.filter((link) => link.anchorKey === "work_scope")
+          .length,
+        2,
+        "The generic relationship editor must preserve authorization links."
+      );
+
+      getDatabase()
+        .prepare(
+          `DELETE FROM entity_links
+         WHERE source_entity_type = 'work_organization'
+           AND source_entity_id = ?
+           AND anchor_key = 'work_scope'`
+        )
+        .run(organizationId);
+
+      const inaccessible = await app.inject({
+        method: "GET",
+        url: `/api/v1/work/organizations/${organizationId}`,
+        headers: { authorization: scopedAgent.authorization }
+      });
+      assert.equal(inaccessible.statusCode, 404, inaccessible.body);
+      const hidden = await injectJson<{
+        items: Array<Record<string, unknown>>;
+      }>(app, cookie, {
+        method: "GET",
+        url: "/api/v1/work/organizations",
+        authorization: scopedAgent.authorization
+      });
+      assert.equal(
+        hidden.items.some((item) => item.id === organizationId),
+        false,
+        "Legacy JSON scope columns must not grant authority without a direct link."
+      );
+    }
+  );
+});
+
+test("Idempotent application-event replays re-authorize and redact for the current caller", async () => {
+  await withWorkTestServer("event-replay-privacy", async ({ app, cookie }) => {
+    const campaign = await createCampaign(app, cookie, {
+      id: "campaign_event_replay_privacy"
+    });
+    const opportunity = await createOpportunity(app, cookie, {
+      id: "opportunity_event_replay_privacy",
+      canonicalUrl: "https://example.test/jobs/event-replay-privacy",
+      sourceIdentifier: "event-replay-privacy",
+      idempotencyKey: "opportunity-event-replay-privacy"
+    });
+    const created = await injectJson<{
+      application: Record<string, unknown>;
+    }>(app, cookie, {
+      method: "POST",
+      url: "/api/v1/work/applications",
+      expectedStatus: 201,
+      payload: {
+        id: "application_event_replay_privacy",
+        opportunityId: opportunity.opportunity.id,
+        primaryCampaignId: campaign.id,
+        criteriaVersionId: campaign.currentCriteriaVersionId,
+        applicationRoute: {
+          name: "Private employer account",
+          url: "https://example.test/apply/private",
+          channel: "web_portal"
+        },
+        accountReference: "private-account-route",
+        privateContacts: [
+          {
+            name: "Private Recruiter",
+            email: "private-recruiter@example.test",
+            confirmed: true
+          }
+        ],
+        representations: {
+          workAuthorization: "Confirmed privately for this application"
+        },
+        status: "preparing",
+        nextAction: "Record the employer acknowledgement",
+        provenance: userProvenance
+      }
+    });
+    const eventPayload = {
+      expectedRevision: created.application.revision,
+      eventType: "acknowledgement",
+      occurredAt: "2026-08-25T10:00:00.000+02:00",
+      factualDescription:
+        "The employer account displayed a direct acknowledgement.",
+      nextAction: "Wait for the screening decision",
+      provenance: userProvenance,
+      idempotencyKey: "application-event-replay-privacy"
+    };
+    const captured = await injectJson<{
+      replayed: boolean;
+      application: Record<string, unknown>;
+    }>(app, cookie, {
+      method: "POST",
+      url: `/api/v1/work/applications/${created.application.id}/events`,
+      expectedStatus: 201,
+      payload: eventPayload
+    });
+    assert.equal(captured.replayed, false);
+    assert.equal(
+      captured.application.accountReference,
+      "private-account-route"
+    );
+
+    const boundedWriter = await issueWorkAgent({
+      app,
+      cookie,
+      label: "Application activity writer without transmission authority",
+      scopes: ["work.write"]
+    });
+    const replay = await injectJson<{
+      replayed: boolean;
+      application: Record<string, unknown>;
+      event: Record<string, unknown>;
+    }>(app, cookie, {
+      method: "POST",
+      url: `/api/v1/work/applications/${created.application.id}/events`,
+      authorization: boundedWriter.authorization,
+      payload: eventPayload
+    });
+    assert.equal(replay.replayed, true);
+    assert.equal("accountReference" in replay.application, false);
+    assert.equal("applicationRoute" in replay.application, false);
+    assert.equal("privateContacts" in replay.application, false);
+    assert.equal("representations" in replay.application, false);
+    assert.equal(replay.application.privateApplicationDetailsRedacted, true);
+    assert.equal("factualDescription" in replay.event, false);
+
+    const conflict = await app.inject({
+      method: "POST",
+      url: `/api/v1/work/applications/${created.application.id}/events`,
+      headers: { authorization: boundedWriter.authorization },
+      payload: {
+        ...eventPayload,
+        factualDescription:
+          "A different event must not reuse the same idempotency key."
+      }
+    });
+    assert.equal(conflict.statusCode, 409, conflict.body);
+    assert.match(conflict.body, /idempotency key.*different/i);
   });
 });
 
@@ -437,6 +756,51 @@ test("Application submission requires exact approval, sender binding, and direct
       }
     });
     assert.equal(replay.replayed, true);
+
+    const crossPrincipalReplay = await app.inject({
+      method: "POST",
+      url: "/api/v1/work/transmissions/verified-submissions",
+      headers: { authorization: otherSender.authorization },
+      payload: {
+        authorizationIdentity: authorization.authorization_identity,
+        previewDigest: authorization.preview_digest,
+        confirmationReceipt: "ATS receipt TEST-100",
+        trackingIdentifier: "TEST-100",
+        factualDescription: "The ATS displayed a submission receipt.",
+        idempotencyKey: "verified-submission-test-100"
+      }
+    });
+    assert.equal(
+      crossPrincipalReplay.statusCode,
+      403,
+      crossPrincipalReplay.body
+    );
+
+    const project = getDatabase()
+      .prepare("SELECT id FROM projects ORDER BY id ASC LIMIT 1")
+      .get() as { id: string } | undefined;
+    assert.ok(project);
+    const restrictedSender = await issueWorkAgent({
+      app,
+      cookie,
+      label: "Project-restricted application sender",
+      scopes: ["work.transmit"],
+      projectIds: [project.id]
+    });
+    const crossScopeReplay = await app.inject({
+      method: "POST",
+      url: "/api/v1/work/transmissions/verified-submissions",
+      headers: { authorization: restrictedSender.authorization },
+      payload: {
+        authorizationIdentity: authorization.authorization_identity,
+        previewDigest: authorization.preview_digest,
+        confirmationReceipt: "ATS receipt TEST-100",
+        trackingIdentifier: "TEST-100",
+        factualDescription: "The ATS displayed a submission receipt.",
+        idempotencyKey: "verified-submission-test-100"
+      }
+    });
+    assert.equal(crossScopeReplay.statusCode, 404, crossScopeReplay.body);
   });
 });
 
@@ -858,4 +1222,123 @@ test("Private Work import previews, applies, and rolls back without subjective m
     assert.equal(rejected.statusCode, 400, rejected.body);
     assert.match(rejected.body, /credential-like|prohibited/i);
   });
+});
+
+test("Private Work imports reject protected applicant demographics and allow work authorization", async () => {
+  await withWorkTestServer(
+    "import-protected-demographics",
+    async ({ app, cookie }) => {
+      const campaign = await createCampaign(app, cookie, {
+        id: "campaign_import_representation_safety"
+      });
+      const opportunity = await createOpportunity(app, cookie, {
+        id: "opportunity_import_representation_safety",
+        canonicalUrl: "https://example.test/jobs/import-representation-safety",
+        sourceIdentifier: "import-representation-safety",
+        idempotencyKey: "opportunity-import-representation-safety"
+      });
+      assert.equal(typeof campaign.currentCriteriaVersionId, "string");
+
+      const buildManifest = (representations: Record<string, unknown>) => ({
+        schemaVersion: 1,
+        source: {
+          label: "Reviewed private application export",
+          digest: "d".repeat(64),
+          observedAt: "2026-08-25T11:00:00.000+02:00"
+        },
+        ownerUserId: "user_operator",
+        applications: [
+          {
+            id: "import_representation_safety_application",
+            opportunityId: opportunity.opportunity.id,
+            primaryCampaignId: campaign.id,
+            criteriaVersionId: campaign.currentCriteriaVersionId,
+            applicationRoute: {
+              name: "Reviewed employer route",
+              url: "https://example.test/apply/import-representation-safety",
+              channel: "web_portal"
+            },
+            accountReference: "import-representation-safety-route",
+            status: "planned",
+            representations,
+            provenance: {
+              sourceKind: "import",
+              sourceLabel: "Reviewed private application export"
+            }
+          }
+        ]
+      });
+
+      const protectedRepresentations: Array<
+        [label: string, value: Record<string, unknown>]
+      > = [
+        ["gender", { gender: "private" }],
+        ["prefixed gender", { candidateGender: "private" }],
+        ["sex", { profile: { sex: "private" } }],
+        ["age", { age: 34 }],
+        ["date of birth", { dateOfBirth: "1992-01-01" }],
+        ["veteran status", { veteranStatus: "private" }],
+        ["military status", { military_status: "private" }],
+        ["pregnancy", { declarations: { pregnancy: "private" } }],
+        ["family status", { familyStatus: "private" }],
+        ["race", { race: "private" }],
+        ["ethnicity", { ethnicity: "private" }],
+        ["religion", { religion: "private" }],
+        ["disability", { disabilityStatus: "private" }],
+        ["sexual orientation", { sexualOrientation: "private" }],
+        ["nationality", { nationality: "private" }],
+        ["citizenship", { citizenship: "private" }],
+        [
+          "descriptor value",
+          { answer: { field: "Veteran status", value: "private" } }
+        ]
+      ];
+
+      for (const [label, representations] of protectedRepresentations) {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/v1/work/imports/preview",
+          headers: { cookie },
+          payload: buildManifest(representations)
+        });
+        assert.equal(response.statusCode, 400, `${label}: ${response.body}`);
+        assert.match(
+          response.body,
+          /protected applicant demographic/i,
+          `${label} must be rejected as protected applicant data.`
+        );
+      }
+
+      const directApply = await app.inject({
+        method: "POST",
+        url: "/api/v1/work/imports/apply",
+        headers: { cookie },
+        payload: {
+          manifest: buildManifest({
+            declarations: { veteranStatus: "private" }
+          }),
+          expectedPreviewDigest: "0".repeat(64),
+          idempotencyKey: "protected-representation-direct-apply"
+        }
+      });
+      assert.equal(directApply.statusCode, 400, directApply.body);
+      assert.match(directApply.body, /protected applicant demographic/i);
+
+      const allowed = await injectJson<{
+        readyToApply: boolean;
+        subjectiveMetricObservations: number;
+      }>(app, cookie, {
+        method: "POST",
+        url: "/api/v1/work/imports/preview",
+        payload: buildManifest({
+          workAuthorization: {
+            status: "confirmed",
+            sponsorshipRequired: false
+          }
+        })
+      });
+      assert.equal(allowed.readyToApply, true);
+      assert.equal(allowed.subjectiveMetricObservations, 0);
+    }
+  );
 });

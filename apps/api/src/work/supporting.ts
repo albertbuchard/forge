@@ -14,6 +14,7 @@ import {
   registerWorkRoot,
   rootConfig,
   rowToWorkRecord,
+  synchronizeWorkScopeLinks,
   type SqlRow
 } from "./repository-helpers.js";
 import {
@@ -24,6 +25,7 @@ import {
 type SupportingConfig = {
   table: string;
   prefix: string;
+  scopeEntityType?: string;
   parentField?: string;
   parentEntityType?: "opportunity_campaign" | "job_application";
   ownerField?: string;
@@ -49,12 +51,14 @@ export const supportingConfigs: Record<string, SupportingConfig> = {
   positioningProfile: {
     table: "candidate_positioning_profiles",
     prefix: "cprof",
+    scopeEntityType: "candidate_positioning_profile",
     ownerField: "owner_user_id",
     revisioned: true
   },
   documentSet: {
     table: "candidate_document_sets",
     prefix: "cdoc",
+    scopeEntityType: "candidate_document_set",
     ownerField: "owner_user_id",
     revisioned: true,
     privateProjection: true
@@ -62,6 +66,7 @@ export const supportingConfigs: Record<string, SupportingConfig> = {
   reusableResponse: {
     table: "application_response_templates",
     prefix: "aresp",
+    scopeEntityType: "application_response_template",
     ownerField: "owner_user_id",
     revisioned: true,
     privateProjection: true
@@ -122,6 +127,7 @@ export const supportingConfigs: Record<string, SupportingConfig> = {
   outreach: {
     table: "work_outreach",
     prefix: "wout",
+    scopeEntityType: "work_outreach",
     ownerField: "owner_user_id",
     revisioned: true
   }
@@ -146,6 +152,10 @@ function encodeValue(value: unknown) {
   if (Array.isArray(value) || (value && typeof value === "object"))
     return JSON.stringify(value);
   return value;
+}
+
+function stringValues(value: unknown) {
+  return Array.isArray(value) ? value.map(String) : [];
 }
 
 function normalizedData(
@@ -210,7 +220,10 @@ function assertOwnedRow(
     const columns = tableColumns(config.table);
     const scope =
       columns.has("scope_project_ids_json") && columns.has("scope_tag_ids_json")
-        ? buildRootScopeClause(access, config.ownerField)
+        ? buildRootScopeClause(access, {
+            entityType: String(config.scopeEntityType),
+            ownerColumn: config.ownerField
+          })
         : null;
     row = getDatabase()
       .prepare(
@@ -257,7 +270,14 @@ function assertOwnedSupportingReference(
   const columns = tableColumns(table);
   const scoped =
     columns.has("scope_project_ids_json") && columns.has("scope_tag_ids_json");
-  const scope = scoped ? buildRootScopeClause(access) : null;
+  const scope = scoped
+    ? buildRootScopeClause(access, {
+        entityType:
+          table === "candidate_positioning_profiles"
+            ? "candidate_positioning_profile"
+            : "candidate_document_set"
+      })
+    : null;
   const row = getDatabase()
     .prepare(
       `SELECT owner_user_id FROM ${table}
@@ -797,7 +817,10 @@ export function listSupportingRecords(input: {
       columns.has("scope_project_ids_json") &&
       columns.has("scope_tag_ids_json")
     ) {
-      const scope = buildRootScopeClause(input.access, config.ownerField);
+      const scope = buildRootScopeClause(input.access, {
+        entityType: String(config.scopeEntityType),
+        ownerColumn: config.ownerField
+      });
       clauses.push(scope.sql);
       values.push(...scope.values);
     } else {
@@ -814,12 +837,11 @@ export function listSupportingRecords(input: {
       values.push(input.parentId);
     } else if (config.parentEntityType) {
       const parent = rootConfig(config.parentEntityType);
-      const parentScope = buildRootScopeClause(
-        input.access,
-        `work_parent.${parent.ownerColumn}`,
-        "work_parent.scope_project_ids_json",
-        "work_parent.scope_tag_ids_json"
-      );
+      const parentScope = buildRootScopeClause(input.access, {
+        entityType: parent.entityType,
+        ownerColumn: `work_parent.${parent.ownerColumn}`,
+        idColumn: "work_parent.id"
+      });
       clauses.push(
         `EXISTS (
           SELECT 1 FROM ${parent.table} work_parent
@@ -912,7 +934,35 @@ export function createSupportingRecord(input: {
       )
       .run(...columns.map((column) => data[column] as never));
     if (input.kind === "outreach") {
-      registerWorkRoot("work_outreach", id, input.access.mutationOwnerUserId);
+      registerWorkRoot(
+        "work_outreach",
+        id,
+        input.access.mutationOwnerUserId,
+        input.access,
+        {
+          projectIds: Array.isArray(input.data.scopeProjectIds)
+            ? input.data.scopeProjectIds.map(String)
+            : [],
+          tagIds: Array.isArray(input.data.scopeTagIds)
+            ? input.data.scopeTagIds.map(String)
+            : []
+        }
+      );
+    } else if (config.ownerField && config.scopeEntityType) {
+      synchronizeWorkScopeLinks({
+        sourceEntityType: config.scopeEntityType,
+        sourceEntityId: id,
+        ownerUserId: input.access.mutationOwnerUserId,
+        access: input.access,
+        scope: {
+          projectIds: Array.isArray(input.data.scopeProjectIds)
+            ? input.data.scopeProjectIds.map(String)
+            : [],
+          tagIds: Array.isArray(input.data.scopeTagIds)
+            ? input.data.scopeTagIds.map(String)
+            : []
+        }
+      });
     }
     appendSupportingRecordLinks({
       kind: input.kind,
@@ -988,6 +1038,12 @@ export function updateSupportingRecord(input: {
   });
   const data = normalizedData(config, input.data);
   const entries = Object.entries(data);
+  const updatedScope = {
+    projectIds: stringValues(
+      input.data.scopeProjectIds ?? currentRecord.scopeProjectIds
+    ),
+    tagIds: stringValues(input.data.scopeTagIds ?? currentRecord.scopeTagIds)
+  };
   if (entries.length === 0) {
     throw new HttpError(
       400,
@@ -1016,6 +1072,20 @@ export function updateSupportingRecord(input: {
         "work_revision_conflict",
         "This Work record changed after it was opened."
       );
+    }
+    if (
+      config.ownerField &&
+      config.scopeEntityType &&
+      (input.data.scopeProjectIds !== undefined ||
+        input.data.scopeTagIds !== undefined)
+    ) {
+      synchronizeWorkScopeLinks({
+        sourceEntityType: config.scopeEntityType,
+        sourceEntityId: input.id,
+        ownerUserId: input.access.mutationOwnerUserId,
+        access: input.access,
+        scope: updatedScope
+      });
     }
     const stored = assertOwnedRow(config, input.id, input.access);
     recordSupportingRevision({

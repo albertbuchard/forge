@@ -155,12 +155,11 @@ export function rootScopeSql(
   alias = ""
 ) {
   const prefix = alias ? `${alias}.` : "";
-  return buildRootScopeClause(
-    access,
-    `${prefix}${config.ownerColumn}`,
-    `${prefix}scope_project_ids_json`,
-    `${prefix}scope_tag_ids_json`
-  );
+  return buildRootScopeClause(access, {
+    entityType: config.entityType,
+    ownerColumn: `${prefix}${config.ownerColumn}`,
+    idColumn: `${prefix}id`
+  });
 }
 
 export function getAuthorizedRoot(
@@ -191,9 +190,20 @@ export function getAuthorizedRoot(
 export function registerWorkRoot(
   entityType: string,
   id: string,
-  ownerUserId: string
+  ownerUserId: string,
+  access?: WorkAccess,
+  scope?: { projectIds: string[]; tagIds: string[] }
 ) {
   setEntityOwner(entityType, id, ownerUserId);
+  if (access && scope) {
+    synchronizeWorkScopeLinks({
+      sourceEntityType: entityType,
+      sourceEntityId: id,
+      ownerUserId,
+      access,
+      scope
+    });
+  }
 }
 
 export function recordWorkActivity(input: {
@@ -391,6 +401,63 @@ function validateAuthorizedWorkLink(input: {
   }
 }
 
+export const WORK_SCOPE_ANCHOR_KEY = "work_scope";
+
+export function synchronizeWorkScopeLinks(input: {
+  sourceEntityType: string;
+  sourceEntityId: string;
+  ownerUserId: string;
+  access: WorkAccess;
+  scope: { projectIds: string[]; tagIds: string[] };
+}) {
+  const targets = [
+    ...input.scope.projectIds.map((entityId) => ({
+      entityType: "project" as const,
+      entityId,
+      relationship: "project_context"
+    })),
+    ...input.scope.tagIds.map((entityId) => ({
+      entityType: "tag" as const,
+      entityId,
+      relationship: "tag_context"
+    }))
+  ];
+  for (const target of targets) {
+    validateAuthorizedWorkLink({
+      ownerUserId: input.ownerUserId,
+      access: input.access,
+      targetEntityType: target.entityType,
+      targetEntityId: target.entityId
+    });
+  }
+  getDatabase()
+    .prepare(
+      `DELETE FROM entity_links
+       WHERE source_entity_type = ? AND source_entity_id = ?
+         AND anchor_key = ? AND target_entity_type IN ('project', 'tag')`
+    )
+    .run(input.sourceEntityType, input.sourceEntityId, WORK_SCOPE_ANCHOR_KEY);
+  const insert = getDatabase().prepare(
+    `INSERT OR IGNORE INTO entity_links (
+      source_entity_type, source_entity_id, target_entity_type, target_entity_id,
+      anchor_key, relationship, created_by_actor, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const createdAt = nowIso();
+  for (const target of targets) {
+    insert.run(
+      input.sourceEntityType,
+      input.sourceEntityId,
+      target.entityType,
+      target.entityId,
+      WORK_SCOPE_ANCHOR_KEY,
+      target.relationship,
+      input.access.actor.id,
+      createdAt
+    );
+  }
+}
+
 export function assertAuthorizedWorkReference(input: {
   access: WorkAccess;
   entityType: string;
@@ -469,6 +536,13 @@ export function replaceAuthorizedWorkLinks(input: {
     anchorKey: string;
   }>;
 }) {
+  if (input.links.some((link) => link.anchorKey === WORK_SCOPE_ANCHOR_KEY)) {
+    throw new HttpError(
+      400,
+      "work_scope_anchor_reserved",
+      "Update Project and tag scope through the Work record, not the generic relationship editor."
+    );
+  }
   const ownerUserId = authorizedWorkEntityOwner(
     input.sourceEntityType,
     input.sourceEntityId,
@@ -520,15 +594,32 @@ export function replaceAuthorizedWorkLinks(input: {
         );
       }
     }
+    const preservedScopeLinks = listEntityLinksForEntity(
+      input.sourceEntityType,
+      input.sourceEntityId
+    ).filter(
+      (link) =>
+        link.sourceEntityType === input.sourceEntityType &&
+        link.sourceEntityId === input.sourceEntityId &&
+        link.anchorKey === WORK_SCOPE_ANCHOR_KEY
+    );
     replaceEntityLinksForSource({
       sourceEntityType: input.sourceEntityType,
       sourceEntityId: input.sourceEntityId,
-      links: input.links.map((link) => ({
-        entityType: link.targetEntityType,
-        entityId: link.targetEntityId,
-        relationship: link.relationship,
-        anchorKey: link.anchorKey
-      })),
+      links: [
+        ...preservedScopeLinks.map((link) => ({
+          entityType: link.targetEntityType,
+          entityId: link.targetEntityId,
+          relationship: link.relationship,
+          anchorKey: link.anchorKey
+        })),
+        ...input.links.map((link) => ({
+          entityType: link.targetEntityType,
+          entityId: link.targetEntityId,
+          relationship: link.relationship,
+          anchorKey: link.anchorKey
+        }))
+      ],
       actor: input.access.actor.id
     });
     recordWorkActivity({
@@ -717,6 +808,7 @@ export function getOperationReceipt(input: {
   operationKind: string;
   idempotencyKey: string;
   requestFingerprint: string;
+  access?: WorkAccess;
 }) {
   const row = getDatabase()
     .prepare(
@@ -734,7 +826,7 @@ export function getOperationReceipt(input: {
       "This idempotency key was already used for a different Work operation."
     );
   }
-  return rowToWorkRecord(row);
+  return rowToWorkRecord(row, input.access);
 }
 
 export function storeOperationReceipt(input: {

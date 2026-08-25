@@ -1,7 +1,8 @@
 import { getDatabase, runInTransaction } from "../db.js";
 import { HttpError } from "../errors.js";
 import type { WorkAccess } from "./access.js";
-import { assertScopeAssignment } from "./access.js";
+import { assertScopeAssignment, projectWorkRecord } from "./access.js";
+import { findProtectedApplicantField } from "./privacy.js";
 import {
   assertAuthorizedWorkReference,
   fingerprint,
@@ -14,6 +15,7 @@ import {
   registerWorkRoot,
   rowToWorkRecord,
   storeOperationReceipt,
+  synchronizeWorkScopeLinks,
   type SqlRow
 } from "./repository-helpers.js";
 import {
@@ -94,6 +96,13 @@ export function createJobApplication(
   input: CreateJobApplicationInput
 ) {
   assertScopeAssignment(access, input.scope);
+  if (findProtectedApplicantField(input.representations)) {
+    throw new HttpError(
+      400,
+      "work_protected_demographic_forbidden",
+      "Protected applicant demographic answers cannot be stored as ordinary Work application representations."
+    );
+  }
   if (
     ![
       "planned",
@@ -185,13 +194,15 @@ export function createJobApplication(
       input.opportunityId,
       input.accountReference
     ) as { id: string } | undefined;
-  if (active)
+  if (active) {
+    getAuthorizedRoot("job_application", active.id, access);
     throw new HttpError(
       409,
       "work_duplicate_application",
       "An active application already exists for this opportunity and account route.",
       { applicationId: active.id }
     );
+  }
   const terminal = getDatabase()
     .prepare(
       `SELECT id FROM job_applications
@@ -205,6 +216,9 @@ export function createJobApplication(
       input.opportunityId,
       input.accountReference
     ) as { id: string } | undefined;
+  if (terminal) {
+    getAuthorizedRoot("job_application", terminal.id, access);
+  }
   if (terminal && !input.reapplicationReason.trim()) {
     throw new HttpError(
       409,
@@ -288,7 +302,13 @@ export function createJobApplication(
       created_at: now,
       import_receipt_id: null
     });
-    registerWorkRoot("job_application", id, access.mutationOwnerUserId);
+    registerWorkRoot(
+      "job_application",
+      id,
+      access.mutationOwnerUserId,
+      access,
+      input.scope
+    );
     recordWorkActivity({
       entityType: "job_application",
       entityId: id,
@@ -307,6 +327,16 @@ export function updateJobApplication(
 ) {
   const before = getAuthorizedRoot("job_application", id, access);
   if (input.scope) assertScopeAssignment(access, input.scope);
+  if (
+    input.representations !== undefined &&
+    findProtectedApplicantField(input.representations)
+  ) {
+    throw new HttpError(
+      400,
+      "work_protected_demographic_forbidden",
+      "Protected applicant demographic answers cannot be stored as ordinary Work application representations."
+    );
+  }
   if (
     !access.canPrivateApplication &&
     [
@@ -394,6 +424,15 @@ export function updateJobApplication(
       expectedRevision: input.expectedRevision,
       data
     });
+    if (input.scope) {
+      synchronizeWorkScopeLinks({
+        sourceEntityType: "job_application",
+        sourceEntityId: id,
+        ownerUserId: access.mutationOwnerUserId,
+        access,
+        scope: input.scope
+      });
+    }
     insertRow("application_events", {
       id: newWorkId("jaevt"),
       application_id: id,
@@ -550,17 +589,33 @@ export function recordJobApplicationEvent(
   id: string,
   input: RecordJobApplicationEventInput
 ) {
+  getAuthorizedRoot("job_application", id, access);
   const requestFingerprint = fingerprint({ id, input });
   const replay = getOperationReceipt({
     ownerUserId: access.mutationOwnerUserId,
     operationKind: "job_application_event",
     idempotencyKey: input.idempotencyKey,
-    requestFingerprint
+    requestFingerprint,
+    access
   });
   if (replay) {
+    const projected = projectWorkRecord(
+      (replay.response as Record<string, unknown>) ?? {},
+      access
+    );
+    const application = getJobApplicationDetail(access, id);
+    const replayEventId =
+      projected.event && typeof projected.event === "object"
+        ? (projected.event as Record<string, unknown>).id
+        : null;
+    const currentEvent = (
+      (application as { events?: Array<Record<string, unknown>> }).events ?? []
+    ).find((event) => event.id === replayEventId);
     return {
       replayed: true,
-      ...((replay.response as Record<string, unknown>) ?? {})
+      ...projected,
+      ...(currentEvent ? { event: currentEvent } : {}),
+      application
     };
   }
   const application = getAuthorizedRoot("job_application", id, access);

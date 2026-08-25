@@ -55,6 +55,32 @@ function parseArray(value: unknown) {
   }
 }
 
+function getAuthorizedTransmissionPreview(input: {
+  access: WorkAccess;
+  authorizationIdentity: string;
+}) {
+  const row = getDatabase()
+    .prepare(
+      "SELECT * FROM application_transmission_previews WHERE authorization_identity = ? AND owner_user_id = ?"
+    )
+    .get(input.authorizationIdentity, input.access.mutationOwnerUserId) as
+    | SqlRow
+    | undefined;
+  if (!row) {
+    throw new HttpError(
+      404,
+      "work_transmission_authorization_not_found",
+      "The transmission authorization was not found."
+    );
+  }
+  getAuthorizedRoot(
+    "job_application",
+    String(row.application_id),
+    input.access
+  );
+  return row;
+}
+
 function recordSubmittedMaterialHistory(input: {
   access: WorkAccess;
   applicationId: string;
@@ -195,12 +221,36 @@ export function recordVerifiedSubmission(input: {
       "This operation requires work.transmit authority."
     );
   }
+  const replayBoundary = rowToWorkRecord(
+    getAuthorizedTransmissionPreview(input),
+    input.access
+  );
+  if (replayBoundary.previewDigest !== input.previewDigest) {
+    throw new HttpError(
+      409,
+      "work_transmission_authorization_invalid",
+      "The transmission authorization does not match this digest."
+    );
+  }
+  if (
+    !principalMatches(
+      input.access,
+      replayBoundary.authorizedPrincipal as Record<string, unknown>
+    )
+  ) {
+    throw new HttpError(
+      403,
+      "work_transmission_principal_mismatch",
+      "Only the exact authorized agent, token, or local client may complete or replay this transmission."
+    );
+  }
   const requestFingerprint = fingerprint(input);
   const replay = getOperationReceipt({
     ownerUserId: input.access.mutationOwnerUserId,
     operationKind: "verified_submission",
     idempotencyKey: input.idempotencyKey,
-    requestFingerprint
+    requestFingerprint,
+    access: input.access
   });
   if (replay)
     return {
@@ -208,19 +258,7 @@ export function recordVerifiedSubmission(input: {
       ...((replay.response as Record<string, unknown>) ?? {})
     };
   return runInTransaction(() => {
-    const row = getDatabase()
-      .prepare(
-        "SELECT * FROM application_transmission_previews WHERE authorization_identity = ? AND owner_user_id = ?"
-      )
-      .get(input.authorizationIdentity, input.access.mutationOwnerUserId) as
-      | SqlRow
-      | undefined;
-    if (!row)
-      throw new HttpError(
-        404,
-        "work_transmission_authorization_not_found",
-        "The transmission authorization was not found."
-      );
+    const row = getAuthorizedTransmissionPreview(input);
     const preview = rowToWorkRecord(row, input.access);
     if (
       preview.status !== "authorized" ||

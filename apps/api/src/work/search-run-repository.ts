@@ -55,7 +55,8 @@ export function recordSearchRun(input: {
     ownerUserId: input.access.mutationOwnerUserId,
     operationKind: "job_search_run",
     idempotencyKey: input.idempotencyKey,
-    requestFingerprint
+    requestFingerprint,
+    access: input.access
   });
   if (replay)
     return {
@@ -161,12 +162,11 @@ export function listSearchRuns(input: {
   }
   const limit = Math.min(Math.max(input.limit ?? 25, 1), 50);
   const offset = Math.max(input.offset ?? 0, 0);
-  const scope = buildRootScopeClause(
-    input.access,
-    "run.owner_user_id",
-    "campaign.scope_project_ids_json",
-    "campaign.scope_tag_ids_json"
-  );
+  const scope = buildRootScopeClause(input.access, {
+    entityType: "opportunity_campaign",
+    ownerColumn: "run.owner_user_id",
+    idColumn: "campaign.id"
+  });
   const clauses = [scope.sql];
   const values: Array<string | number> = [...scope.values];
   if (input.campaignId) {

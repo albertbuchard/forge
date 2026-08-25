@@ -1,4 +1,5 @@
 import type { AuthContext } from "../managers/contracts.js";
+import { getDatabase } from "../db.js";
 import { HttpError } from "../errors.js";
 import { getDefaultUser, listUsers } from "../repositories/users.js";
 import type { WorkActor } from "./types.js";
@@ -121,10 +122,14 @@ export function resolveWorkAccess(
 
 export function buildRootScopeClause(
   access: WorkAccess,
-  ownerColumn = "owner_user_id",
-  projectColumn = "scope_project_ids_json",
-  tagColumn = "scope_tag_ids_json"
+  input: {
+    entityType: string;
+    ownerColumn?: string;
+    idColumn?: string;
+  }
 ): { sql: string; values: string[] } {
+  const ownerColumn = input.ownerColumn ?? "owner_user_id";
+  const idColumn = input.idColumn ?? "id";
   if (access.ownerUserIds.length === 0) return { sql: "0 = 1", values: [] };
   const values: string[] = [...access.ownerUserIds];
   const clauses = [
@@ -132,17 +137,84 @@ export function buildRootScopeClause(
   ];
   if (access.projectIds.length > 0) {
     clauses.push(
-      `EXISTS (SELECT 1 FROM json_each(${projectColumn}) scoped_project WHERE scoped_project.value IN (${access.projectIds.map(() => "?").join(", ")}))`
+      `EXISTS (
+        SELECT 1 FROM entity_links work_project_scope
+        WHERE (
+          work_project_scope.source_entity_type = ?
+          AND work_project_scope.source_entity_id = ${idColumn}
+          AND work_project_scope.target_entity_type = 'project'
+          AND work_project_scope.target_entity_id IN (${access.projectIds.map(() => "?").join(", ")})
+        ) OR (
+          work_project_scope.target_entity_type = ?
+          AND work_project_scope.target_entity_id = ${idColumn}
+          AND work_project_scope.source_entity_type = 'project'
+          AND work_project_scope.source_entity_id IN (${access.projectIds.map(() => "?").join(", ")})
+        )
+      )`
     );
-    values.push(...access.projectIds);
+    values.push(
+      input.entityType,
+      ...access.projectIds,
+      input.entityType,
+      ...access.projectIds
+    );
   }
   if (access.tagIds.length > 0) {
     clauses.push(
-      `EXISTS (SELECT 1 FROM json_each(${tagColumn}) scoped_tag WHERE scoped_tag.value IN (${access.tagIds.map(() => "?").join(", ")}))`
+      `EXISTS (
+        SELECT 1 FROM entity_links work_tag_scope
+        WHERE (
+          work_tag_scope.source_entity_type = ?
+          AND work_tag_scope.source_entity_id = ${idColumn}
+          AND work_tag_scope.target_entity_type = 'tag'
+          AND work_tag_scope.target_entity_id IN (${access.tagIds.map(() => "?").join(", ")})
+        ) OR (
+          work_tag_scope.target_entity_type = ?
+          AND work_tag_scope.target_entity_id = ${idColumn}
+          AND work_tag_scope.source_entity_type = 'tag'
+          AND work_tag_scope.source_entity_id IN (${access.tagIds.map(() => "?").join(", ")})
+        )
+      )`
     );
-    values.push(...access.tagIds);
+    values.push(
+      input.entityType,
+      ...access.tagIds,
+      input.entityType,
+      ...access.tagIds
+    );
   }
   return { sql: clauses.join(" AND "), values };
+}
+
+function assertScopeTargetExists(
+  access: WorkAccess,
+  entityType: "project" | "tag",
+  entityId: string
+) {
+  const table = entityType === "project" ? "projects" : "tags";
+  const exists = getDatabase()
+    .prepare(`SELECT 1 AS present FROM ${table} WHERE id = ? LIMIT 1`)
+    .get(entityId) as { present: number } | undefined;
+  if (!exists) {
+    throw new HttpError(
+      404,
+      "work_scope_target_not_found",
+      `The selected ${entityType === "project" ? "Project" : "tag"} does not exist.`
+    );
+  }
+  const owner = getDatabase()
+    .prepare(
+      `SELECT user_id FROM entity_owners
+       WHERE entity_type = ? AND entity_id = ? LIMIT 1`
+    )
+    .get(entityType, entityId) as { user_id: string } | undefined;
+  if (owner && owner.user_id !== access.mutationOwnerUserId) {
+    throw new HttpError(
+      403,
+      "work_scope_owner_mismatch",
+      "A Work scope cannot reference another Forge owner's record."
+    );
+  }
 }
 
 export function assertScopeAssignment(
@@ -180,6 +252,7 @@ export function assertScopeAssignment(
         "The Work record cannot be linked to a Project outside this credential's scope."
       );
     }
+    assertScopeTargetExists(access, "project", projectId);
   }
   for (const tagId of scope.tagIds) {
     if (access.tagIds.length > 0 && !access.tagIds.includes(tagId)) {
@@ -189,6 +262,7 @@ export function assertScopeAssignment(
         "The Work record cannot be linked to a tag outside this credential's scope."
       );
     }
+    assertScopeTargetExists(access, "tag", tagId);
   }
 }
 

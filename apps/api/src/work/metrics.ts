@@ -513,7 +513,8 @@ export function recordWorkCheckIn(
     ownerUserId: access.mutationOwnerUserId,
     operationKind: "work_check_in",
     idempotencyKey: input.idempotencyKey,
-    requestFingerprint
+    requestFingerprint,
+    access
   });
   if (replay)
     return {

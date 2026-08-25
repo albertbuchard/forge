@@ -16,6 +16,7 @@ import {
   rootConfig,
   rootScopeSql,
   rowToWorkRecord,
+  synchronizeWorkScopeLinks,
   type SqlRow
 } from "./repository-helpers.js";
 import type {
@@ -378,7 +379,13 @@ export function createWorkOrganization(
       deleted_at: null,
       import_receipt_id: null
     });
-    registerWorkRoot("work_organization", id, access.mutationOwnerUserId);
+    registerWorkRoot(
+      "work_organization",
+      id,
+      access.mutationOwnerUserId,
+      access,
+      input.scope
+    );
     recordWorkActivity({
       entityType: "work_organization",
       entityId: id,
@@ -414,22 +421,36 @@ export function updateWorkOrganization(
   if (input.scope !== undefined) Object.assign(data, scopeColumns(input.scope));
   if (input.provenance !== undefined)
     data.provenance_json = json(input.provenance);
-  updateRevisionedRow({
-    table: "work_organizations",
-    id,
-    expectedRevision: input.expectedRevision,
-    data
+  return runInTransaction(() => {
+    updateRevisionedRow({
+      table: "work_organizations",
+      id,
+      expectedRevision: input.expectedRevision,
+      data
+    });
+    if (input.scope) {
+      synchronizeWorkScopeLinks({
+        sourceEntityType: "work_organization",
+        sourceEntityId: id,
+        ownerUserId: access.mutationOwnerUserId,
+        access,
+        scope: input.scope
+      });
+    }
+    const after = getAuthorizedRoot("work_organization", id, access);
+    recordWorkActivity({
+      entityType: "work_organization",
+      entityId: id,
+      eventType: "work_organization_updated",
+      title: "Organization updated",
+      actor: access.actor,
+      metadata: {
+        beforeRevision: before.revision,
+        afterRevision: after.revision
+      }
+    });
+    return after;
   });
-  const after = getAuthorizedRoot("work_organization", id, access);
-  recordWorkActivity({
-    entityType: "work_organization",
-    entityId: id,
-    eventType: "work_organization_updated",
-    title: "Organization updated",
-    actor: access.actor,
-    metadata: { beforeRevision: before.revision, afterRevision: after.revision }
-  });
-  return after;
 }
 
 function engagementData(
@@ -524,7 +545,13 @@ export function createWorkEngagement(
       created_at: now,
       import_receipt_id: null
     });
-    registerWorkRoot("work_engagement", id, access.mutationOwnerUserId);
+    registerWorkRoot(
+      "work_engagement",
+      id,
+      access.mutationOwnerUserId,
+      access,
+      input.scope
+    );
     recordWorkActivity({
       entityType: "work_engagement",
       entityId: id,
@@ -566,6 +593,15 @@ export function updateWorkEngagement(
       expectedRevision: input.expectedRevision,
       data: engagementData(input)
     });
+    if (input.scope) {
+      synchronizeWorkScopeLinks({
+        sourceEntityType: "work_engagement",
+        sourceEntityId: id,
+        ownerUserId: access.mutationOwnerUserId,
+        access,
+        scope: input.scope
+      });
+    }
     const after = getAuthorizedRoot("work_engagement", id, access);
     insertRow("work_engagement_events", {
       id: newWorkId("wevt"),
@@ -718,7 +754,13 @@ export function createOpportunityCampaign(
       deleted_at: null,
       import_receipt_id: null
     });
-    registerWorkRoot("opportunity_campaign", id, access.mutationOwnerUserId);
+    registerWorkRoot(
+      "opportunity_campaign",
+      id,
+      access.mutationOwnerUserId,
+      access,
+      input.scope
+    );
     if (input.initialCriteria) {
       createCampaignCriteriaVersion(access, id, {
         criteria: input.initialCriteria,
@@ -759,27 +801,38 @@ export function updateOpportunityCampaign(
       entityId: input.primaryGoalId
     });
   }
-  updateRevisionedRow({
-    table: "opportunity_campaigns",
-    id,
-    expectedRevision: input.expectedRevision,
-    data: campaignData(input)
-  });
-  const after = getAuthorizedRoot("opportunity_campaign", id, access);
-  recordWorkActivity({
-    entityType: "opportunity_campaign",
-    entityId: id,
-    eventType: "opportunity_campaign_updated",
-    title: "Opportunity Campaign updated",
-    actor: access.actor,
-    metadata: {
-      beforeRevision: before.revision,
-      afterRevision: after.revision,
-      priorStatus: before.status,
-      newStatus: after.status
+  return runInTransaction(() => {
+    updateRevisionedRow({
+      table: "opportunity_campaigns",
+      id,
+      expectedRevision: input.expectedRevision,
+      data: campaignData(input)
+    });
+    if (input.scope) {
+      synchronizeWorkScopeLinks({
+        sourceEntityType: "opportunity_campaign",
+        sourceEntityId: id,
+        ownerUserId: access.mutationOwnerUserId,
+        access,
+        scope: input.scope
+      });
     }
+    const after = getAuthorizedRoot("opportunity_campaign", id, access);
+    recordWorkActivity({
+      entityType: "opportunity_campaign",
+      entityId: id,
+      eventType: "opportunity_campaign_updated",
+      title: "Opportunity Campaign updated",
+      actor: access.actor,
+      metadata: {
+        beforeRevision: before.revision,
+        afterRevision: after.revision,
+        priorStatus: before.status,
+        newStatus: after.status
+      }
+    });
+    return getOpportunityCampaignDetail(access, id);
   });
-  return getOpportunityCampaignDetail(access, id);
 }
 
 export function createCampaignCriteriaVersion(

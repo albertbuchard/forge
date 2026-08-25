@@ -699,7 +699,8 @@ export function applyWorkImport(input: ApplyWorkImportInput) {
     ownerUserId: input.access.mutationOwnerUserId,
     operationKind: "work_import_apply",
     idempotencyKey: input.idempotencyKey,
-    requestFingerprint
+    requestFingerprint,
+    access: input.access
   });
   if (replay) {
     return {

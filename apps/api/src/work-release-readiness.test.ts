@@ -14,7 +14,8 @@ const repoRoot = path.resolve(
 const migrationNames = [
   "138_work_and_opportunity_management.sql",
   "139_work_opportunity_schema_compatibility.sql",
-  "140_work_opportunity_history_correction.sql"
+  "140_work_opportunity_history_correction.sql",
+  "141_work_scope_relationship_authority.sql"
 ] as const;
 
 const expectedWorkTables = [

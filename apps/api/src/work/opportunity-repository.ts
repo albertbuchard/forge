@@ -16,6 +16,7 @@ import {
   registerWorkRoot,
   rowToWorkRecord,
   storeOperationReceipt,
+  synchronizeWorkScopeLinks,
   type SqlRow
 } from "./repository-helpers.js";
 import {
@@ -446,7 +447,8 @@ export function upsertJobOpportunity(
       ownerUserId: access.mutationOwnerUserId,
       operationKind: "opportunity_upsert",
       idempotencyKey: input.idempotencyKey,
-      requestFingerprint
+      requestFingerprint,
+      access
     });
     if (replay) {
       const response = (replay.response ?? {}) as Record<string, unknown>;
@@ -461,9 +463,17 @@ export function upsertJobOpportunity(
           "The stored opportunity receipt is incomplete and cannot be replayed safely."
         );
       }
+      const opportunityId = String(
+        (response.opportunity as Record<string, unknown>).id ?? ""
+      );
+      const authorizedOpportunity = getAuthorizedRoot(
+        "job_opportunity",
+        opportunityId,
+        access
+      );
       return {
         replayed: true,
-        opportunity: response.opportunity as Record<string, unknown>,
+        opportunity: authorizedOpportunity,
         deduplicated: Boolean(response.deduplicated),
         referenceOnly: Boolean(response.referenceOnly),
         createdRecords: Array.isArray(replay.createdRecords)
@@ -490,6 +500,9 @@ export function upsertJobOpportunity(
       access.mutationOwnerUserId,
       input
     );
+    if (existing) {
+      getAuthorizedRoot("job_opportunity", existing.id, access);
+    }
     if (existing && options.insertOnly) {
       return {
         replayed: false,
@@ -564,7 +577,22 @@ export function upsertJobOpportunity(
         deleted_at: null,
         import_receipt_id: null
       });
-      registerWorkRoot("job_opportunity", id, access.mutationOwnerUserId);
+      registerWorkRoot(
+        "job_opportunity",
+        id,
+        access.mutationOwnerUserId,
+        access,
+        input.scope
+      );
+    }
+    if (existing) {
+      synchronizeWorkScopeLinks({
+        sourceEntityType: "job_opportunity",
+        sourceEntityId: id,
+        ownerUserId: access.mutationOwnerUserId,
+        access,
+        scope: input.scope
+      });
     }
     const source = refreshOpportunitySource({
       opportunityId: id,
@@ -945,6 +973,15 @@ export function updateJobOpportunity(
       expectedRevision: input.expectedRevision,
       data
     });
+    if (input.scope) {
+      synchronizeWorkScopeLinks({
+        sourceEntityType: "job_opportunity",
+        sourceEntityId: id,
+        ownerUserId: access.mutationOwnerUserId,
+        access,
+        scope: input.scope
+      });
+    }
     if (sourceRefreshRequested) {
       const observedAt = nowIso();
       const source = {
