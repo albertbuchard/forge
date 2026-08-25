@@ -26,6 +26,25 @@ function resolveVerifiedUserScope(principal: ForgePrincipal) {
   return [...new Set(normalized)].sort();
 }
 
+export function applicationScopesForVerifiedPrincipal(
+  principal: ForgePrincipal
+) {
+  const scopes = new Set(principal.scopes);
+  // Trusted browsers shipped with generic read/write before Work introduced
+  // domain scopes. Derive only ordinary Work access here so an update does not
+  // rotate the stored client epoch or revoke its device passkey. Sensitive
+  // compensation and transmission authority must remain explicit.
+  if (
+    principal.kind === "paired_client" &&
+    principal.clientType === "browser" &&
+    principal.profile === "trusted_personal_assistant"
+  ) {
+    if (scopes.has("read")) scopes.add("work.read");
+    if (scopes.has("write")) scopes.add("work.write");
+  }
+  return [...scopes].sort();
+}
+
 export class AuthenticationManager extends AbstractManager {
   readonly name = "AuthenticationManager";
   private readonly verifiedPrincipals = new WeakMap<
@@ -93,6 +112,7 @@ export class AuthenticationManager extends AbstractManager {
         verified.profile === "trusted_personal_assistant" ||
         verified.profile === "executor";
       const userIds = resolveVerifiedUserScope(verified);
+      const applicationScopes = applicationScopesForVerifiedPrincipal(verified);
       return {
         ...requestContext,
         actor: verified.subjectId,
@@ -101,7 +121,7 @@ export class AuthenticationManager extends AbstractManager {
           id: tokenId,
           agentId: verified.subjectId,
           agentLabel: verified.subjectId,
-          scopes: [...verified.scopes],
+          scopes: applicationScopes,
           trustLevel: trusted ? "trusted" : "viewer",
           autonomyMode: trusted ? "supervised" : "read_only",
           approvalMode: "explicit",

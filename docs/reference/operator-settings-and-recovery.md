@@ -101,9 +101,17 @@ an alternative way to approve one already-pending remote-browser pairing
 request. The remote browser must still use the configured HTTPS origin, present
 the exact short-lived request and user code, and prove possession of its own
 one-use P-256 key. Master-password approval is limited to the `viewer` or
-`trusted_personal_assistant` browser profiles and the `read` and `write` scopes;
-it cannot approve an operator profile, an API client, or machine authority.
-Each accepted browser receives its own sender-bound, revocable credential.
+`trusted_personal_assistant` browser profiles and ordinary `read`, `write`,
+`work.read`, and `work.write` scopes; it cannot approve an operator profile, an
+API client, machine authority, compensation access, or external transmission.
+Existing trusted-personal-assistant browser grants with the earlier generic
+`read` and `write` scopes inherit only the corresponding ordinary Work scopes,
+so an update does not force another pairing. Each accepted browser receives its
+own sender-bound, revocable credential.
+Forge then offers one device-passkey check so compatible browsers using the
+same credential provider and HTTPS origin can restore that exact scoped
+identity. The approved browser session remains available while this optional
+check runs, and Forge stops a stalled enrollment attempt after 15 seconds.
 
 Forge normalizes the password with Unicode NFC and derives its verifier with
 Argon2id using 19 MiB of memory, two operations, and parallelism one after an

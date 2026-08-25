@@ -25,22 +25,47 @@ import { ForgeApiError } from "@/lib/api-error";
 type Pairing = Awaited<ReturnType<typeof beginRemoteBrowserPairing>>;
 
 const AUTOMATIC_DEVICE_RESTORE_TIMEOUT_MS = 8_000;
+const DEVICE_TRUST_ENROLLMENT_TIMEOUT_MS = 15_000;
+
+function deviceTrustEnrollmentTimeoutError() {
+  return new Error(
+    "Device-passkey verification timed out. The paired browser session is still ready; use it now or retry device trust."
+  );
+}
 
 async function registerCurrentDevice(clientId: string) {
-  const ceremony = await beginTrustedBrowserRegistration({
-    clientId,
-    label: `Forge device passkey on ${navigator.platform || "this device"}`
+  let timedOut = false;
+  let timeout: number | null = null;
+  const registration = async () => {
+    const ceremony = await beginTrustedBrowserRegistration({
+      clientId,
+      label: `Forge device passkey on ${navigator.platform || "this device"}`
+    });
+    if (timedOut) throw deviceTrustEnrollmentTimeoutError();
+    const response = await startRegistration({
+      optionsJSON: ceremony.options as unknown as Parameters<
+        typeof startRegistration
+      >[0]["optionsJSON"]
+    });
+    if (timedOut) throw deviceTrustEnrollmentTimeoutError();
+    await completeTrustedBrowserRegistration({
+      clientId,
+      challengeId: ceremony.challengeId,
+      response
+    });
+  };
+  const expiration = new Promise<never>((_, reject) => {
+    timeout = window.setTimeout(() => {
+      timedOut = true;
+      WebAuthnAbortService.cancelCeremony();
+      reject(deviceTrustEnrollmentTimeoutError());
+    }, DEVICE_TRUST_ENROLLMENT_TIMEOUT_MS);
   });
-  const response = await startRegistration({
-    optionsJSON: ceremony.options as unknown as Parameters<
-      typeof startRegistration
-    >[0]["optionsJSON"]
-  });
-  await completeTrustedBrowserRegistration({
-    clientId,
-    challengeId: ceremony.challengeId,
-    response
-  });
+  try {
+    await Promise.race([registration(), expiration]);
+  } finally {
+    if (timeout !== null) window.clearTimeout(timeout);
+  }
 }
 
 export function RemoteBrowserPairing({
@@ -348,6 +373,13 @@ export function RemoteBrowserPairing({
     }
   };
 
+  const usePairedBrowserSession = async () => {
+    WebAuthnAbortService.cancelCeremony();
+    setStatus("paired");
+    setMessage("Opening Forge with this paired browser session…");
+    await onPaired();
+  };
+
   return (
     <Card
       role="region"
@@ -393,8 +425,7 @@ export function RemoteBrowserPairing({
             <Button
               type="button"
               variant="secondary"
-              disabled={status === "trusting"}
-              onClick={() => void onPaired()}
+              onClick={() => void usePairedBrowserSession()}
             >
               Use this browser session only
             </Button>

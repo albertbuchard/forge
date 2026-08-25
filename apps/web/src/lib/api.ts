@@ -1148,7 +1148,7 @@ export async function beginRemoteBrowserPairing() {
       clientName: `Forge browser on ${navigator.platform || "this device"}`,
       clientType: "browser",
       clientKeyThumbprint: await p256Thumbprint(publicJwk),
-      requestedScopes: ["read", "write"],
+      requestedScopes: ["read", "work.read", "work.write", "write"],
       requestedProfile: "trusted_personal_assistant"
     })
   });

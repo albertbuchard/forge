@@ -2,6 +2,14 @@
 
 ## 0.3.72
 
+- Kept an approved remote browser usable while optional device-passkey setup is
+  waiting. The browser-session fallback remains available immediately, and a
+  stalled passkey ceremony now stops after a bounded fifteen-second attempt
+  instead of trapping the user on the pairing screen.
+- Added ordinary Work read/write authority to trusted-personal-assistant browser
+  pairing. Existing paired browsers with the established generic read/write
+  grant inherit only `work.read` and `work.write` without re-pairing; sensitive
+  compensation and external-transmission scopes remain excluded.
 - Gave the canonical fast publication gate enough time to finish its existing
   typecheck, lint, build, focused-test, plugin, and release-audit work instead
   of cancelling healthy releases at the former ten-minute boundary.

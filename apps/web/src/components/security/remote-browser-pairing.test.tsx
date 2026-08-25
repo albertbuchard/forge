@@ -240,6 +240,54 @@ describe("RemoteBrowserPairing", () => {
     expect(onPaired).not.toHaveBeenCalled();
   });
 
+  it("keeps the paired browser usable while device-passkey enrollment is still waiting", async () => {
+    const pairing = {
+      requestId: "pair_browser_hanging_enrollment",
+      deviceCode: "fg_device_hanging_enrollment",
+      userCode: "BCDF-GHJK",
+      verificationUri: "/forge/pair",
+      expiresAt: Date.now() + 180_000,
+      intervalSeconds: 0,
+      masterPasswordAvailable: true,
+      privateKey: {} as CryptoKey,
+      publicJwk: {},
+      cancelProof: "signed-cancel-proof"
+    };
+    vi.mocked(beginRemoteBrowserPairing).mockResolvedValueOnce(pairing);
+    vi.mocked(pollRemoteBrowserPairing).mockResolvedValueOnce({
+      status: "approved",
+      clientId: "client_1234567890123456"
+    });
+    vi.mocked(beginTrustedBrowserRegistration).mockResolvedValueOnce({
+      challengeId: "tbc_1234567890123456",
+      options: { challenge: "registration-challenge" }
+    });
+    vi.mocked(startRegistration).mockReturnValueOnce(
+      new Promise<Awaited<ReturnType<typeof startRegistration>>>(
+        () => undefined
+      )
+    );
+    const onPaired = vi.fn();
+
+    render(<RemoteBrowserPairing onPaired={onPaired} />);
+    const pairButton = screen.getByRole("button", {
+      name: "Pair this browser"
+    });
+    await waitFor(() => expect(pairButton).toBeEnabled());
+    fireEvent.click(pairButton);
+    await waitFor(() => expect(startRegistration).toHaveBeenCalledTimes(1));
+
+    const useSession = screen.getByRole("button", {
+      name: "Use this browser session only"
+    });
+    expect(useSession).toBeEnabled();
+    vi.mocked(WebAuthnAbortService.cancelCeremony).mockClear();
+    fireEvent.click(useSession);
+
+    await waitFor(() => expect(onPaired).toHaveBeenCalledTimes(1));
+    expect(WebAuthnAbortService.cancelCeremony).toHaveBeenCalledTimes(1);
+  });
+
   it("shows an actionable bounded countdown when pending requests fill the cap", async () => {
     vi.mocked(beginRemoteBrowserPairing).mockRejectedValueOnce(
       new ForgeApiError({

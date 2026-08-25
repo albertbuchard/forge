@@ -217,7 +217,7 @@ export class PairingOwnerAuthorizationService<ServerContext = unknown> {
         request.requestedProfile
       ) ||
       request.requestedScopes.some(
-        (scope) => !["read", "write"].includes(scope)
+        (scope) => !["read", "work.read", "work.write", "write"].includes(scope)
       )
     ) {
       throw new Error(

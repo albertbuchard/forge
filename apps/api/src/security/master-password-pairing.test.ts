@@ -131,7 +131,7 @@ test("master password is opt-in, locally configured, and pairs one sender-bound 
         clientName: "Remote Forge browser",
         clientType: "browser",
         clientKeyThumbprint: key.thumbprint,
-        requestedScopes: ["read", "write"],
+        requestedScopes: ["read", "work.read", "work.write", "write"],
         requestedProfile: "trusted_personal_assistant"
       }
     });
@@ -226,9 +226,25 @@ test("master password is opt-in, locally configured, and pairs one sender-bound 
     assert.deepEqual(session.scopes, [
       "profile:trusted_personal_assistant",
       "read",
+      "work.read",
+      "work.write",
       "write"
     ]);
     assert.equal(session.profile, "trusted_personal_assistant");
+    const setCookieHeader = exchanged.headers["set-cookie"];
+    const setCookies = Array.isArray(setCookieHeader)
+      ? setCookieHeader
+      : [String(setCookieHeader)];
+    const browserCookie = setCookies
+      .map((value) => value.split(";", 1)[0]!)
+      .find((value) => value.startsWith("forge_session="));
+    assert.ok(browserCookie);
+    const work = await app.inject({
+      method: "GET",
+      url: "/api/v1/work",
+      headers: { ...remoteHeaders, cookie: browserCookie }
+    });
+    assert.equal(work.statusCode, 200, work.body);
   } finally {
     await app.close();
     await rm(root, { recursive: true, force: true });

@@ -400,6 +400,12 @@ describe("remote browser pairing client", () => {
     ) as Record<string, unknown>;
     expect(beginBody.clientType).toBe("browser");
     expect(beginBody.requestedProfile).toBe("trusted_personal_assistant");
+    expect(beginBody.requestedScopes).toEqual([
+      "read",
+      "work.read",
+      "work.write",
+      "write"
+    ]);
     expect(beginBody).not.toHaveProperty("privateKey");
 
     const pollBody = JSON.parse(

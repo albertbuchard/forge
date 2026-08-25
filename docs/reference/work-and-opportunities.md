@@ -304,6 +304,11 @@ Required scopes are:
 - `work.compensation.read` for private compensation reads and writes
 - `work.transmit` for external application transmission and offer acceptance
 
+A paired `trusted_personal_assistant` browser receives ordinary `work.read` and
+`work.write` alongside its generic browser read/write grant. Existing paired
+browsers inherit those two ordinary scopes without changing the stored
+credential. They do not inherit compensation or transmission authority.
+
 ## External Transmission Safety
 
 Forge never treats “send this application” as permission to improvise content or
