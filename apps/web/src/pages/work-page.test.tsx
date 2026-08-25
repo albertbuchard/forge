@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const workApiMocks = vi.hoisted(() => ({
   getWorkContext: vi.fn(),
+  getJobOpportunity: vi.fn(),
   listJobApplications: vi.fn(),
   listJobOpportunities: vi.fn(),
   listOpportunityCampaigns: vi.fn(),
@@ -350,6 +351,9 @@ function configureApi(overrides: { context?: Record<string, unknown> } = {}) {
   workApiMocks.listWorkOrganizations.mockResolvedValue(list(organizations));
   workApiMocks.listOpportunityCampaigns.mockResolvedValue(list(campaigns));
   workApiMocks.listJobOpportunities.mockResolvedValue(list(opportunities));
+  workApiMocks.getJobOpportunity.mockResolvedValue({
+    opportunity: opportunities[0]
+  });
   workApiMocks.listJobApplications.mockResolvedValue(list(applications));
   workApiMocks.listWorkMetricDefinitions.mockResolvedValue({ definitions });
   workApiMocks.listWorkSupportingRecords.mockResolvedValue(list([]));
@@ -528,7 +532,7 @@ describe("permanent Work experience", () => {
     const anchoredChoice = screen.getByRole("button", {
       name: "Overall satisfaction: Very high"
     });
-    expect(anchoredChoice.className).toContain("min-h-10");
+    expect(anchoredChoice.className).toContain("min-h-11");
     fireEvent.click(anchoredChoice);
     expect(anchoredChoice).toHaveAttribute("aria-pressed", "true");
   });
@@ -546,6 +550,9 @@ describe("permanent Work experience", () => {
       "aria-pressed",
       "true"
     );
+    expect(
+      screen.getByRole("button", { name: "Board view" }).className
+    ).toContain("min-h-11");
     fireEvent.click(screen.getByRole("button", { name: "List view" }));
     expect(screen.getByRole("button", { name: "List view" })).toHaveAttribute(
       "aria-pressed",
@@ -559,6 +566,40 @@ describe("permanent Work experience", () => {
     expect(
       screen.getByText(/Review the targeted curriculum vitae/)
     ).toBeInTheDocument();
+  });
+
+  it("keeps the exact detail opportunity selectable when the bounded list omits it", async () => {
+    const outsideOpportunity = {
+      ...opportunities[0]!,
+      id: "opportunity_outside_bounded_page",
+      title: "Opportunity outside the bounded page",
+      canonicalUrl: "https://example.test/jobs/outside-bounded-page",
+      sourceIdentifier: "outside-bounded-page"
+    };
+    workApiMocks.getJobOpportunity.mockResolvedValue({
+      opportunity: outsideOpportunity
+    });
+
+    renderWork(`/work/opportunities/${outsideOpportunity.id}`);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: outsideOpportunity.title,
+        level: 1
+      })
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start application" })
+    );
+    const opportunitySelect = await screen.findByRole("combobox", {
+      name: "Opportunity"
+    });
+    expect(opportunitySelect).toHaveValue(outsideOpportunity.id);
+    expect(
+      screen.getByRole("option", {
+        name: /Opportunity outside the bounded page/
+      })
+    ).toHaveValue(outsideOpportunity.id);
   });
 
   it("renders a truthful bounded-context notice and an actionable error state", async () => {

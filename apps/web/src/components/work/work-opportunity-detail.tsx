@@ -379,6 +379,11 @@ export function OpportunityDetail({
   onRefresh: () => Promise<void>;
 }) {
   const [applicationOpen, setApplicationOpen] = useState(false);
+  const applicationOpportunities = allOpportunities.some(
+    (candidate) => candidate.id === opportunity.id
+  )
+    ? allOpportunities
+    : [opportunity, ...allOpportunities];
   const [editing, setEditing] = useState(false);
   const [compensationEdited, setCompensationEdited] = useState(false);
   const [draft, setDraft] = useState(() => opportunityEditDraft(opportunity));
@@ -513,7 +518,7 @@ export function OpportunityDetail({
                   onChange={(event) =>
                     set({ organizationId: event.target.value })
                   }
-                  className="min-h-10 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
                 >
                   <option value="">No linked organization</option>
                   {organizations.map((organization) => (
@@ -591,7 +596,7 @@ export function OpportunityDetail({
                 <select
                   value={draft.workModel}
                   onChange={(event) => set({ workModel: event.target.value })}
-                  className="min-h-10 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
                 >
                   {["unknown", "remote", "hybrid", "on_site", "variable"].map(
                     (value) => (
@@ -675,7 +680,7 @@ export function OpportunityDetail({
                   onChange={(event) =>
                     set({ availabilityStatus: event.target.value })
                   }
-                  className="min-h-10 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
                 >
                   {["unknown", "live", "stale", "closed", "filled"].map(
                     (value) => (
@@ -689,7 +694,7 @@ export function OpportunityDetail({
                 <select
                   value={draft.disposition}
                   onChange={(event) => set({ disposition: event.target.value })}
-                  className="min-h-10 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
                 >
                   {[
                     "discovered",
@@ -840,7 +845,7 @@ export function OpportunityDetail({
                         setCompensationEdited(true);
                         set({ compensationPeriod: event.target.value });
                       }}
-                      className="min-h-10 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-2 text-sm"
+                      className="min-h-11 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-2 text-sm"
                     >
                       {["hour", "day", "week", "month", "year"].map((value) => (
                         <option key={value}>{value}</option>
@@ -1131,7 +1136,7 @@ export function OpportunityDetail({
                       type="button"
                       aria-pressed={opportunity.excitement === score}
                       onClick={() => mutation.mutate({ excitement: score })}
-                      className={`min-h-10 rounded-xl border text-sm ${opportunity.excitement === score ? "border-[var(--primary)] bg-[var(--ui-accent-soft)]" : "border-[var(--ui-border-subtle)]"}`}
+                      className={`min-h-11 rounded-xl border text-sm ${opportunity.excitement === score ? "border-[var(--primary)] bg-[var(--ui-accent-soft)]" : "border-[var(--ui-border-subtle)]"}`}
                     >
                       {score}
                     </button>
@@ -1155,7 +1160,7 @@ export function OpportunityDetail({
         onOpenChange={setApplicationOpen}
         userIds={userIds}
         campaigns={campaigns}
-        opportunities={allOpportunities}
+        opportunities={applicationOpportunities}
         initialOpportunityId={opportunity.id}
         onSaved={onRefresh}
       />

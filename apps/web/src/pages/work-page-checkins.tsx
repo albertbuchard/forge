@@ -116,7 +116,7 @@ export function CheckInsTab({
                     Number(event.target.value) as TrendWindowDays
                   )
                 }
-                className="min-h-10 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 text-sm text-[var(--ui-ink-strong)]"
+                className="min-h-11 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 text-sm text-[var(--ui-ink-strong)]"
               >
                 {[30, 90, 180, 365, 730].map((days) => (
                   <option key={days} value={days}>
@@ -218,7 +218,7 @@ export function CheckInsTab({
                 onChange={(event) =>
                   setSelectedComparisonMetric(event.target.value)
                 }
-                className="min-h-10 min-w-56 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 text-sm text-[var(--ui-ink-strong)]"
+                className="min-h-11 min-w-56 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 text-sm text-[var(--ui-ink-strong)]"
               >
                 {definitions
                   .filter((definition) => definition.enabled !== false)

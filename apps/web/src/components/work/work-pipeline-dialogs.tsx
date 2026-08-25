@@ -476,7 +476,7 @@ export function WorkCheckInDialog({
                     onClick={() =>
                       setValue({ values: { ...value.values, [key]: null } })
                     }
-                    className={`min-h-10 rounded-xl border text-xs ${current === null ? "border-[var(--primary)] bg-[var(--ui-accent-soft)]" : "border-[var(--ui-border-subtle)]"}`}
+                    className={`min-h-11 rounded-xl border text-xs ${current === null ? "border-[var(--primary)] bg-[var(--ui-accent-soft)]" : "border-[var(--ui-border-subtle)]"}`}
                   >
                     Skip
                   </button>
@@ -498,7 +498,7 @@ export function WorkCheckInDialog({
                             values: { ...value.values, [key]: choice }
                           })
                         }
-                        className={`min-h-10 rounded-xl border px-2 text-sm font-semibold ${current === choice ? "border-[var(--primary)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]" : "border-[var(--ui-border-subtle)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)]"}`}
+                        className={`min-h-11 rounded-xl border px-2 text-sm font-semibold ${current === choice ? "border-[var(--primary)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]" : "border-[var(--ui-border-subtle)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)]"}`}
                       >
                         <span className="block">{choice}</span>
                         {anchor ? (

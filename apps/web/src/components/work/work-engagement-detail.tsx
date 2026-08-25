@@ -196,7 +196,7 @@ export function EngagementDetail({
   });
   const archived = Boolean(engagement.deletedAt);
   const selectClass =
-    "min-h-10 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm";
+    "min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm";
   const field = "grid gap-1 text-xs text-[var(--ui-ink-soft)]";
   return (
     <div className="grid gap-5">
@@ -569,7 +569,7 @@ export function EngagementDetail({
                   Notice and transition
                 </h2>
                 <div className="grid gap-3">
-                  <label className="flex min-h-10 items-center gap-3 text-sm text-[var(--ui-ink-strong)]">
+                  <label className="flex min-h-11 items-center gap-3 text-sm text-[var(--ui-ink-strong)]">
                     <input
                       type="checkbox"
                       checked={draft.noticeUnknown}
@@ -628,7 +628,7 @@ export function EngagementDetail({
                   Private compensation
                 </h2>
                 <div className="grid gap-3">
-                  <label className="flex min-h-10 items-center gap-3 text-sm text-[var(--ui-ink-strong)]">
+                  <label className="flex min-h-11 items-center gap-3 text-sm text-[var(--ui-ink-strong)]">
                     <input
                       type="checkbox"
                       checked={draft.compensationUnknown}

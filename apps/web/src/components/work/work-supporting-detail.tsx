@@ -143,7 +143,7 @@ export function OrganizationOperationalDetail({
               <select
                 value={status}
                 onChange={(event) => setStatus(event.target.value)}
-                className="min-h-10 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
               >
                 {["active", "target", "excluded", "past", "archived"].map(
                   (value) => (

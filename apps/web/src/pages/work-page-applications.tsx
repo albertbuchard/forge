@@ -141,7 +141,7 @@ export function ApplicationsTab({
               <button
                 type="button"
                 className={cn(
-                  "rounded-[12px] p-2",
+                  "inline-flex min-h-11 min-w-11 items-center justify-center rounded-[12px] p-2",
                   view === "board" && "bg-[var(--ui-accent-soft)]"
                 )}
                 aria-label="Board view"
@@ -153,7 +153,7 @@ export function ApplicationsTab({
               <button
                 type="button"
                 className={cn(
-                  "rounded-[12px] p-2",
+                  "inline-flex min-h-11 min-w-11 items-center justify-center rounded-[12px] p-2",
                   view === "list" && "bg-[var(--ui-accent-soft)]"
                 )}
                 aria-label="List view"

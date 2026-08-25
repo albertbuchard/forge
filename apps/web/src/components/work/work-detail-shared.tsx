@@ -314,7 +314,7 @@ export function RelationshipEditor({
               aria-label="Linked entity type"
               value={targetType}
               onChange={(event) => setTargetType(event.target.value)}
-              className="min-h-10 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+              className="min-h-11 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
             >
               {RELATIONSHIP_TARGET_TYPES.map((type) => (
                 <option key={type} value={type}>

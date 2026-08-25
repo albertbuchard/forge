@@ -267,7 +267,7 @@ export function CampaignDetail({
                         .value as OpportunityCampaign["status"]
                     })
                   }
-                  className="min-h-10 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
                 >
                   {[
                     "draft",
@@ -291,7 +291,7 @@ export function CampaignDetail({
                   onChange={(event) =>
                     setCampaignDraft({ searchIntent: event.target.value })
                   }
-                  className="min-h-10 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
                 >
                   {[
                     "full_time_employment",
@@ -336,7 +336,7 @@ export function CampaignDetail({
                   onChange={(event) =>
                     setCampaignDraft({ priority: event.target.value })
                   }
-                  className="min-h-10 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
                 >
                   {["low", "normal", "high", "critical"].map((value) => (
                     <option key={value}>{readable(value)}</option>
@@ -350,7 +350,7 @@ export function CampaignDetail({
                   onChange={(event) =>
                     setCampaignDraft({ health: event.target.value })
                   }
-                  className="min-h-10 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
                 >
                   {["unknown", "healthy", "attention", "blocked"].map(
                     (value) => (
@@ -388,7 +388,7 @@ export function CampaignDetail({
                   onChange={(event) =>
                     setCampaignDraft({ urgency: event.target.value })
                   }
-                  className="min-h-10 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
                 >
                   {["low", "normal", "high", "urgent"].map((value) => (
                     <option key={value}>{readable(value)}</option>
@@ -474,7 +474,7 @@ export function CampaignDetail({
                       steppingStoneAssessment: event.target.value
                     })
                   }
-                  className="min-h-10 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
                 >
                   {[
                     "unknown",

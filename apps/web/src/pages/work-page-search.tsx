@@ -186,7 +186,7 @@ function OpportunityFilterBar({
   const set = (patch: Partial<OpportunityFilters>) =>
     onChange({ ...value, ...patch });
   const selectClass =
-    "min-h-10 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)]";
+    "min-h-11 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)]";
   const active = Object.entries(value).some(
     ([, entry]) =>
       entry === true || (typeof entry === "string" && entry.length > 0)
@@ -280,7 +280,7 @@ function OpportunityFilterBar({
           />
         </label>
         <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--ui-ink-medium)]">
-          <label className="flex min-h-10 items-center gap-2">
+          <label className="flex min-h-11 items-center gap-2">
             <input
               type="checkbox"
               checked={value.missingInformation}
@@ -290,7 +290,7 @@ function OpportunityFilterBar({
             />
             Missing facts
           </label>
-          <label className="flex min-h-10 items-center gap-2">
+          <label className="flex min-h-11 items-center gap-2">
             <input
               type="checkbox"
               checked={value.stale}
@@ -324,7 +324,7 @@ export function ApplicationFilterBar({
   const set = (patch: Partial<ApplicationFilters>) =>
     onChange({ ...value, ...patch });
   const selectClass =
-    "min-h-10 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)]";
+    "min-h-11 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)]";
   const active = Object.entries(value).some(
     ([, entry]) =>
       entry === true || (typeof entry === "string" && entry.length > 0)
@@ -417,7 +417,7 @@ export function ApplicationFilterBar({
             onChange={(event) => set({ deadlineBefore: event.target.value })}
           />
         </label>
-        <label className="flex min-h-10 items-center gap-2 text-sm text-[var(--ui-ink-medium)]">
+        <label className="flex min-h-11 items-center gap-2 text-sm text-[var(--ui-ink-medium)]">
           <input
             type="checkbox"
             checked={value.hasNextAction}
@@ -619,7 +619,7 @@ export function SearchTab({
             <select
               value={selectedCampaign?.id ?? ""}
               onChange={(event) => onSelectCampaign(event.target.value)}
-              className="min-h-10 min-w-56 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)]"
+              className="min-h-11 min-w-56 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)]"
             >
               {campaigns.map((campaign) => (
                 <option key={campaign.id} value={campaign.id}>

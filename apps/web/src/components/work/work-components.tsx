@@ -54,7 +54,7 @@ export function WorkTabBar({ active }: { active: WorkTabId }) {
             to={`/work?tab=${tab.id}`}
             aria-current={active === tab.id ? "page" : undefined}
             className={cn(
-              "inline-flex min-h-10 items-center rounded-full px-4 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--primary)_45%,transparent)]",
+              "inline-flex min-h-11 items-center rounded-full px-4 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--primary)_45%,transparent)]",
               active === tab.id
                 ? "bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)] shadow-[var(--ui-shadow-soft)]"
                 : "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
@@ -197,7 +197,7 @@ export function EngagementCard({
         <Link
           to={`/work/engagements/${encodeURIComponent(engagement.id)}`}
           aria-label={`Open ${engagement.title}`}
-          className="rounded-full p-2 text-[var(--ui-ink-faint)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full p-2 text-[var(--ui-ink-faint)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
         >
           <ChevronRight className="size-5" />
         </Link>

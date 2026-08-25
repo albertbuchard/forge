@@ -542,7 +542,7 @@ export function ApplicationWorkspaceDetail({
                     <select
                       value={newStatus}
                       onChange={(event) => setNewStatus(event.target.value)}
-                      className="min-h-10 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                      className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
                     >
                       {available.map((status) => (
                         <option key={status} value={status}>
