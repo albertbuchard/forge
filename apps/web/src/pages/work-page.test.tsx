@@ -11,7 +11,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const workApiMocks = vi.hoisted(() => ({
   getWorkContext: vi.fn(),
+  getJobApplication: vi.fn(),
   getJobOpportunity: vi.fn(),
+  getOpportunityCampaign: vi.fn(),
   listJobApplications: vi.fn(),
   listJobOpportunities: vi.fn(),
   listOpportunityCampaigns: vi.fn(),
@@ -347,12 +349,18 @@ function context(overrides: Record<string, unknown> = {}) {
 
 function configureApi(overrides: { context?: Record<string, unknown> } = {}) {
   workApiMocks.getWorkContext.mockResolvedValue(overrides.context ?? context());
+  workApiMocks.getJobApplication.mockResolvedValue({
+    application: applications[0]
+  });
   workApiMocks.listWorkEngagements.mockResolvedValue(list(currentEngagements));
   workApiMocks.listWorkOrganizations.mockResolvedValue(list(organizations));
   workApiMocks.listOpportunityCampaigns.mockResolvedValue(list(campaigns));
   workApiMocks.listJobOpportunities.mockResolvedValue(list(opportunities));
   workApiMocks.getJobOpportunity.mockResolvedValue({
     opportunity: opportunities[0]
+  });
+  workApiMocks.getOpportunityCampaign.mockResolvedValue({
+    campaign: campaigns[0]
   });
   workApiMocks.listJobApplications.mockResolvedValue(list(applications));
   workApiMocks.listWorkMetricDefinitions.mockResolvedValue({ definitions });
@@ -609,6 +617,30 @@ describe("permanent Work experience", () => {
         name: /Opportunity outside the bounded page/
       })
     ).toHaveValue(outsideOpportunity.id);
+  });
+
+  it("loads an application's exact opportunity and campaign when bounded overview lists omit them", async () => {
+    workApiMocks.getWorkContext.mockResolvedValue(context({ campaigns: [] }));
+    workApiMocks.listJobOpportunities.mockResolvedValue(list([]));
+    workApiMocks.listOpportunityCampaigns.mockResolvedValue(list([]));
+
+    renderWork(`/work/applications/${applications[0]!.id}`);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Application · Senior machine-learning research engineer",
+        level: 1
+      })
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Example Research/)).toBeInTheDocument();
+    expect(workApiMocks.getJobOpportunity).toHaveBeenCalledWith(
+      ["user_operator"],
+      "opportunity_research"
+    );
+    expect(workApiMocks.getOpportunityCampaign).toHaveBeenCalledWith(
+      ["user_operator"],
+      "campaign_research"
+    );
   });
 
   it("renders a truthful bounded-context notice and an actionable error state", async () => {

@@ -80,6 +80,39 @@ export function WorkDetail({
     queryFn: () => getJobApplication(userIds, id),
     enabled: kind === "applications" && userIds.length > 0
   });
+  const applicationOpportunityId =
+    kind === "applications"
+      ? applicationQuery.data?.application.opportunityId
+      : undefined;
+  const boundedApplicationOpportunity = opportunities.find(
+    (item) => item.id === applicationOpportunityId
+  );
+  const applicationOpportunityQuery = useQuery({
+    queryKey: ["work", "opportunity", applicationOpportunityId, userIds],
+    queryFn: () => getJobOpportunity(userIds, String(applicationOpportunityId)),
+    enabled:
+      kind === "applications" &&
+      userIds.length > 0 &&
+      Boolean(applicationOpportunityId) &&
+      !boundedApplicationOpportunity
+  });
+  const applicationCampaignId =
+    kind === "applications"
+      ? applicationQuery.data?.application.primaryCampaignId
+      : undefined;
+  const boundedApplicationCampaign = campaigns.find(
+    (item) => item.id === applicationCampaignId
+  );
+  const applicationCampaignQuery = useQuery({
+    queryKey: ["work", "campaign", applicationCampaignId, userIds],
+    queryFn: () =>
+      getOpportunityCampaign(userIds, String(applicationCampaignId)),
+    enabled:
+      kind === "applications" &&
+      userIds.length > 0 &&
+      Boolean(applicationCampaignId) &&
+      !boundedApplicationCampaign
+  });
   const supportingKind =
     kind === "interviews"
       ? "interview"
@@ -105,7 +138,13 @@ export function WorkDetail({
             : kind === "applications"
               ? applicationQuery
               : supportingQuery;
-  if (active.isLoading)
+  const linkedApplicationContextLoading =
+    kind === "applications" &&
+    Boolean(applicationQuery.data) &&
+    ((!boundedApplicationOpportunity &&
+      applicationOpportunityQuery.isLoading) ||
+      (!boundedApplicationCampaign && applicationCampaignQuery.isLoading));
+  if (active.isLoading || linkedApplicationContextLoading)
     return (
       <div className="p-6">
         <LoadingState
@@ -185,12 +224,13 @@ export function WorkDetail({
     return (
       <ApplicationWorkspaceDetail
         application={application}
-        opportunity={opportunities.find(
-          (item) => item.id === application.opportunityId
-        )}
-        campaign={campaigns.find(
-          (item) => item.id === application.primaryCampaignId
-        )}
+        opportunity={
+          boundedApplicationOpportunity ??
+          applicationOpportunityQuery.data?.opportunity
+        }
+        campaign={
+          boundedApplicationCampaign ?? applicationCampaignQuery.data?.campaign
+        }
         profiles={profiles}
         documentSets={documentSets}
         responses={responses}
