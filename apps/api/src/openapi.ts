@@ -11,6 +11,7 @@ import {
 } from "./work-openapi.js";
 import {
   TASK_CLOSEOUT_LIMITS,
+  activityEntityTypeValues,
   crudEntityTypeSchema,
   localSearchEntityTypeValues,
   localSearchEntityKindSchema
@@ -3944,32 +3945,7 @@ export function buildOpenApiDocument() {
       id: { type: "string" },
       entityType: {
         type: "string",
-        enum: [
-          "task",
-          "habit",
-          "goal",
-          "project",
-          "domain",
-          "psyche_value",
-          "behavior_pattern",
-          "behavior",
-          "belief_entry",
-          "mode_profile",
-          "mode_guide_session",
-          "flashcard",
-          "trigger_report",
-          "note",
-          "tag",
-          "task_run",
-          "system",
-          "insight",
-          "approval_request",
-          "agent_action",
-          "reward",
-          "session",
-          "event_type",
-          "emotion_definition"
-        ]
+        enum: [...activityEntityTypeValues]
       },
       entityId: { type: "string" },
       eventType: { type: "string" },

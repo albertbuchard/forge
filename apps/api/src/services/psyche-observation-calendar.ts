@@ -69,7 +69,21 @@ const ACTIVITY_ENTITY_LABELS: Record<ActivityEntityType, string> = {
   preference_item: "Preference item",
   questionnaire_instrument: "Questionnaire",
   sleep_session: "Sleep",
-  workout_session: "Workout"
+  workout_session: "Workout",
+  work_settings: "Work settings",
+  work_organization: "Work organization",
+  work_engagement: "Work engagement",
+  work_metric_definition: "Work metric definition",
+  work_metric_observation: "Work metric observation",
+  opportunity_campaign: "Opportunity campaign",
+  job_opportunity: "Job opportunity",
+  job_application: "Job application",
+  job_interview: "Job interview",
+  job_offer: "Job offer",
+  work_outreach: "Work outreach",
+  candidate_positioning_profile: "Candidate positioning profile",
+  candidate_document_set: "Candidate document set",
+  application_response_template: "Application response template"
 };
 
 const ACTIVITY_SOURCE_LABELS: Record<ActivitySource, string> = {

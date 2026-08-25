@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.71
+
+- Fixed the global Forge context and activity calendar so Work activity from
+  applications, engagements, campaigns, opportunities, check-ins, offers,
+  interviews, outreach, and candidate documents remains readable after real
+  Work data is created or imported. OpenAPI now derives its activity entity
+  values from the same typed contract, and supporting candidate records use
+  their canonical entity names instead of internal camelCase names.
+
 ## 0.3.70
 
 - Added a permanent Work area for concurrent employment, appointments,

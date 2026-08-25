@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { getDatabase } from "./db.js";
+import { activityEntityTypeValues } from "./types.js";
 import {
   createCampaign,
   createEngagement,
@@ -416,4 +417,111 @@ test("Opportunity Campaigns keep versioned criteria, deduplicated roles, and cam
       new Set([primary.id, secondary.id])
     );
   });
+});
+
+test("Work activity remains valid in the global context and OpenAPI contract", async () => {
+  await withWorkTestServer(
+    "global-activity-contract",
+    async ({ app, cookie }) => {
+      const campaign = await createCampaign(app, cookie, {
+        id: "campaign_global_activity"
+      });
+      const opportunity = await createOpportunity(app, cookie, {
+        id: "opportunity_global_activity",
+        idempotencyKey: "opportunity-global-activity"
+      });
+      const application = await injectJson<{
+        application: Record<string, unknown>;
+      }>(app, cookie, {
+        method: "POST",
+        url: "/api/v1/work/applications",
+        expectedStatus: 201,
+        payload: {
+          id: "application_global_activity",
+          opportunityId: opportunity.opportunity.id,
+          primaryCampaignId: campaign.id,
+          status: "preparing",
+          nextAction: "Review the application workspace",
+          provenance: userProvenance
+        }
+      });
+      const profile = await injectJson<{ record: Record<string, unknown> }>(
+        app,
+        cookie,
+        {
+          method: "POST",
+          url: "/api/v1/work/supporting/positioningProfile",
+          expectedStatus: 201,
+          payload: {
+            data: {
+              title: "Research positioning",
+              provenance: userProvenance
+            }
+          }
+        }
+      );
+
+      const storedTypes = getDatabase()
+        .prepare(
+          `SELECT entity_type
+         FROM activity_events
+         WHERE entity_id IN (?, ?)
+         ORDER BY entity_type`
+        )
+        .all(
+          String(application.application.id),
+          String(profile.record.id)
+        ) as Array<{
+        entity_type: string;
+      }>;
+      assert.deepEqual(
+        storedTypes.map((entry) => entry.entity_type),
+        ["candidate_positioning_profile", "job_application"]
+      );
+
+      const contextResponse = await app.inject({
+        method: "GET",
+        url: "/api/v1/context",
+        headers: { cookie }
+      });
+      assert.equal(contextResponse.statusCode, 200, contextResponse.body);
+      const context = contextResponse.json() as {
+        activity: Array<{ entityType: string; entityId: string }>;
+      };
+      assert.ok(
+        context.activity.some(
+          (entry) =>
+            entry.entityType === "job_application" &&
+            entry.entityId === application.application.id
+        )
+      );
+      assert.ok(
+        context.activity.some(
+          (entry) =>
+            entry.entityType === "candidate_positioning_profile" &&
+            entry.entityId === profile.record.id
+        )
+      );
+
+      const openApiResponse = await app.inject({
+        method: "GET",
+        url: "/api/v1/openapi.json",
+        headers: { cookie }
+      });
+      assert.equal(openApiResponse.statusCode, 200, openApiResponse.body);
+      const openApi = openApiResponse.json() as {
+        components: {
+          schemas: {
+            ActivityEvent: {
+              properties: { entityType: { enum: string[] } };
+            };
+          };
+        };
+      };
+      assert.deepEqual(
+        openApi.components.schemas.ActivityEvent.properties.entityType.enum,
+        [...activityEntityTypeValues]
+      );
+    }
+  );
 });

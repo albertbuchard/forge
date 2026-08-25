@@ -156,7 +156,7 @@ export const lifeForceStatKeySchema = z.enum([
   "composure",
   "flow"
 ]);
-export const activityEntityTypeSchema = z.enum([
+export const activityEntityTypeValues = [
   "task",
   "habit",
   "goal",
@@ -198,8 +198,23 @@ export const activityEntityTypeSchema = z.enum([
   "life_event",
   "artifact",
   "sleep_session",
-  "workout_session"
-]);
+  "workout_session",
+  "work_settings",
+  "work_organization",
+  "work_engagement",
+  "work_metric_definition",
+  "work_metric_observation",
+  "opportunity_campaign",
+  "job_opportunity",
+  "job_application",
+  "job_interview",
+  "job_offer",
+  "work_outreach",
+  "candidate_positioning_profile",
+  "candidate_document_set",
+  "application_response_template"
+] as const;
+export const activityEntityTypeSchema = z.enum(activityEntityTypeValues);
 export const activitySourceSchema = z.enum([
   "ui",
   "openclaw",

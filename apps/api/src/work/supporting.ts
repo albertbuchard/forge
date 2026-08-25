@@ -987,7 +987,7 @@ export function createSupportingRecord(input: {
       entityType:
         input.kind === "outreach"
           ? "work_outreach"
-          : (config.parentEntityType ?? input.kind),
+          : (config.parentEntityType ?? config.scopeEntityType ?? input.kind),
       entityId: input.kind === "outreach" ? id : String(input.parentId ?? id),
       eventType: `work_${input.kind}_created`,
       title: `${input.kind.replace(/([A-Z])/gu, " $1").trim()} added`,
@@ -1109,7 +1109,7 @@ export function updateSupportingRecord(input: {
       entityType:
         input.kind === "outreach"
           ? "work_outreach"
-          : (config.parentEntityType ?? input.kind),
+          : (config.parentEntityType ?? config.scopeEntityType ?? input.kind),
       entityId:
         input.kind === "outreach"
           ? input.id
