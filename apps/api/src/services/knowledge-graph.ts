@@ -36,6 +36,9 @@ import {
 } from "@/lib/knowledge-graph.js";
 import { getEntityVisual } from "@/lib/entity-visuals.js";
 import { listArtifacts } from "./artifacts.js";
+import type { WorkAccess } from "../work/access.js";
+import { listWorkRoots } from "../work/repository.js";
+import { rowToWorkRecord, type SqlRow } from "../work/repository-helpers.js";
 import {
   KNOWLEDGE_GRAPH_RELATION_FAMILY_MAP,
   buildKnowledgeGraphFocusHref,
@@ -75,6 +78,8 @@ type PersonLinkRow = {
   relationship: string;
 };
 
+type WorkLinkRow = PersonLinkRow;
+
 const GRAPH_RANGE = {
   from: "2000-01-01T00:00:00.000Z",
   to: "2100-01-01T00:00:00.000Z"
@@ -86,6 +91,7 @@ const KNOWLEDGE_GRAPH_NOTE_PAGE_LIMIT = 100;
 type KnowledgeGraphBuildOptions = {
   includePeople?: boolean;
   noteScope?: NoteReadScope;
+  workAccess?: WorkAccess | null;
 };
 
 function listKnowledgeGraphNotes(scope: NoteReadScope = {}) {
@@ -143,7 +149,15 @@ const BASE_NODE_SIZE: Record<KnowledgeGraphEntityKind, number> = {
   emotion: 30,
   workbench: 42,
   functor: 36,
-  chat: 36
+  chat: 36,
+  work_organization: 42,
+  work_engagement: 52,
+  opportunity_campaign: 50,
+  job_opportunity: 44,
+  job_application: 46,
+  job_interview: 36,
+  job_offer: 50,
+  work_outreach: 34
 };
 
 const WORKBENCH_SURFACE_ROUTES: Record<
@@ -267,7 +281,7 @@ function makeNode(input: {
   searchText?: string | null;
   previewStats?: Array<{
     label: string;
-    value: string | number | null | undefined;
+    value: unknown;
   }>;
   owner?: OwnedLike | null;
   tags?: Array<{ id: string; label: string }>;
@@ -371,6 +385,87 @@ function listPersonLinkRows(personIds: string[]): PersonLinkRow[] {
     .all(...personIds, ...personIds) as PersonLinkRow[];
 }
 
+const GRAPH_WORK_ROOT_TYPES = [
+  "work_organization",
+  "work_engagement",
+  "opportunity_campaign",
+  "job_opportunity",
+  "job_application",
+  "work_outreach"
+] as const;
+
+function listAllGraphWorkRoots(
+  entityType: (typeof GRAPH_WORK_ROOT_TYPES)[number],
+  access: WorkAccess
+) {
+  const items: Array<Record<string, unknown>> = [];
+  let offset = 0;
+  const limit = 250;
+  for (let page = 0; page < 4; page += 1) {
+    const result = listWorkRoots(entityType, access, {
+      sort: "updated_desc",
+      limit,
+      offset,
+      archived: "exclude"
+    });
+    items.push(...result.items);
+    if (!result.hasMore) break;
+    offset += result.items.length;
+  }
+  return items;
+}
+
+function listGraphApplicationChildren(
+  table: "job_interviews" | "job_offers",
+  applicationIds: string[],
+  access: WorkAccess
+) {
+  if (!access.canPrivateApplication || applicationIds.length === 0) return [];
+  const placeholders = applicationIds.map(() => "?").join(", ");
+  return (
+    getDatabase()
+      .prepare(
+        `SELECT * FROM ${table}
+         WHERE application_id IN (${placeholders})
+         ORDER BY updated_at DESC, id ASC
+         LIMIT 1000`
+      )
+      .all(...applicationIds) as SqlRow[]
+  ).map((row) => rowToWorkRecord(row, access));
+}
+
+function listGraphWorkLinkRows(accessibleRootKeys: Set<string>): WorkLinkRow[] {
+  if (accessibleRootKeys.size === 0) return [];
+  const workTypes = GRAPH_WORK_ROOT_TYPES.map(() => "?").join(", ");
+  return (
+    getDatabase()
+      .prepare(
+        `SELECT source_entity_type, source_entity_id, target_entity_type,
+                target_entity_id, relationship
+         FROM entity_links
+         WHERE source_entity_type IN (${workTypes})
+            OR target_entity_type IN (${workTypes})
+         ORDER BY created_at, source_entity_type, source_entity_id,
+                  target_entity_type, target_entity_id`
+      )
+      .all(...GRAPH_WORK_ROOT_TYPES, ...GRAPH_WORK_ROOT_TYPES) as WorkLinkRow[]
+  ).filter(
+    (row) =>
+      accessibleRootKeys.has(
+        `${row.source_entity_type}:${row.source_entity_id}`
+      ) ||
+      accessibleRootKeys.has(
+        `${row.target_entity_type}:${row.target_entity_id}`
+      )
+  );
+}
+
+function stringList(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : [];
+}
+
 function buildFocusPayload(
   graph: KnowledgeGraphPayload,
   focusNodeId: string
@@ -458,6 +553,49 @@ export function buildKnowledgeGraph(
       accessibleWikiSpaceIds === null || accessibleWikiSpaceIds.has(space.id)
   );
   const flows = listAiConnectors();
+  const workAccess = options.workAccess ?? null;
+  const workOrganizations = workAccess
+    ? listAllGraphWorkRoots("work_organization", workAccess)
+    : [];
+  const workEngagements = workAccess
+    ? listAllGraphWorkRoots("work_engagement", workAccess)
+    : [];
+  const opportunityCampaigns = workAccess
+    ? listAllGraphWorkRoots("opportunity_campaign", workAccess)
+    : [];
+  const jobOpportunities = workAccess
+    ? listAllGraphWorkRoots("job_opportunity", workAccess)
+    : [];
+  const jobApplications = workAccess
+    ? listAllGraphWorkRoots("job_application", workAccess)
+    : [];
+  const workOutreach = workAccess
+    ? listAllGraphWorkRoots("work_outreach", workAccess)
+    : [];
+  const jobApplicationIds = jobApplications.map((application) =>
+    String(application.id)
+  );
+  const jobInterviews = workAccess
+    ? listGraphApplicationChildren(
+        "job_interviews",
+        jobApplicationIds,
+        workAccess
+      )
+    : [];
+  const jobOffers = workAccess
+    ? listGraphApplicationChildren("job_offers", jobApplicationIds, workAccess)
+    : [];
+  const accessibleWorkRootKeys = new Set(
+    [
+      ...workOrganizations.map((item) => ["work_organization", item.id]),
+      ...workEngagements.map((item) => ["work_engagement", item.id]),
+      ...opportunityCampaigns.map((item) => ["opportunity_campaign", item.id]),
+      ...jobOpportunities.map((item) => ["job_opportunity", item.id]),
+      ...jobApplications.map((item) => ["job_application", item.id]),
+      ...workOutreach.map((item) => ["work_outreach", item.id])
+    ].map(([entityType, entityId]) => `${entityType}:${String(entityId)}`)
+  );
+  const workLinkRows = listGraphWorkLinkRows(accessibleWorkRootKeys);
 
   const nodes = new Map<string, KnowledgeGraphNode>();
   const edges = new Map<string, KnowledgeGraphEdge>();
@@ -467,6 +605,18 @@ export function buildKnowledgeGraph(
   const personLinkRows = listPersonLinkRows(people.map((person) => person.id));
   const noteById = new Map(notes.map((note) => [note.id, note]));
   const tagById = new Map(tags.map((tag) => [tag.id, tag]));
+  const workOrganizationById = new Map(
+    workOrganizations.map((organization) => [
+      String(organization.id),
+      organization
+    ])
+  );
+  const jobOpportunityById = new Map(
+    jobOpportunities.map((opportunity) => [String(opportunity.id), opportunity])
+  );
+  const jobApplicationById = new Map(
+    jobApplications.map((application) => [String(application.id), application])
+  );
 
   for (const goal of goals) {
     nodes.set(
@@ -859,6 +1009,461 @@ export function buildKnowledgeGraph(
       relationKind: "entity_link",
       label: link.relationship || "Related person",
       strength: 0.72,
+      directional: true,
+      structural: false
+    });
+  }
+
+  for (const organization of workOrganizations) {
+    const id = String(organization.id);
+    nodes.set(
+      buildKnowledgeGraphNodeId("work_organization", id),
+      makeNode({
+        entityType: "work_organization",
+        entityId: id,
+        entityKind: "work_organization",
+        title: String(organization.name ?? "Work organization"),
+        subtitle: String(organization.domain ?? organization.status ?? ""),
+        description: String(organization.description ?? ""),
+        searchText: [
+          organization.name,
+          organization.domain,
+          organization.description,
+          organization.status
+        ]
+          .filter(Boolean)
+          .join(" "),
+        previewStats: [
+          { label: "Status", value: organization.status },
+          { label: "Domain", value: organization.domain }
+        ],
+        href: getKnowledgeGraphEntityHref("work_organization", id),
+        updatedAt:
+          typeof organization.updatedAt === "string"
+            ? organization.updatedAt
+            : null
+      })
+    );
+  }
+
+  for (const engagement of workEngagements) {
+    const id = String(engagement.id);
+    const organization = engagement.organizationId
+      ? workOrganizationById.get(String(engagement.organizationId))
+      : null;
+    nodes.set(
+      buildKnowledgeGraphNodeId("work_engagement", id),
+      makeNode({
+        entityType: "work_engagement",
+        entityId: id,
+        entityKind: "work_engagement",
+        title: String(engagement.title ?? "Work engagement"),
+        subtitle: [organization?.name, engagement.roleFunction]
+          .filter(Boolean)
+          .join(" · "),
+        description: String(engagement.description ?? engagement.purpose ?? ""),
+        searchText: [
+          engagement.title,
+          engagement.roleFunction,
+          engagement.description,
+          engagement.purpose,
+          engagement.nextAction,
+          ...stringList(engagement.responsibilities),
+          ...stringList(engagement.successCriteria)
+        ]
+          .filter(Boolean)
+          .join(" "),
+        previewStats: [
+          { label: "Status", value: engagement.status },
+          { label: "Type", value: engagement.engagementType },
+          { label: "Started", value: engagement.startDate }
+        ],
+        href: getKnowledgeGraphEntityHref("work_engagement", id),
+        updatedAt:
+          typeof engagement.updatedAt === "string" ? engagement.updatedAt : null
+      })
+    );
+    if (engagement.organizationId) {
+      addEdge(edges, {
+        source: buildKnowledgeGraphNodeId(
+          "work_organization",
+          String(engagement.organizationId)
+        ),
+        target: buildKnowledgeGraphNodeId("work_engagement", id),
+        relationKind: "entity_link",
+        label: "Work engagement at organization",
+        strength: 0.96,
+        directional: true,
+        structural: true
+      });
+    }
+  }
+
+  for (const campaign of opportunityCampaigns) {
+    const id = String(campaign.id);
+    nodes.set(
+      buildKnowledgeGraphNodeId("opportunity_campaign", id),
+      makeNode({
+        entityType: "opportunity_campaign",
+        entityId: id,
+        entityKind: "opportunity_campaign",
+        title: String(campaign.title ?? "Opportunity campaign"),
+        subtitle: String(campaign.searchIntent ?? campaign.status ?? ""),
+        description: String(campaign.purpose ?? campaign.description ?? ""),
+        searchText: [
+          campaign.title,
+          campaign.purpose,
+          campaign.description,
+          campaign.longTermDestination,
+          campaign.currentStage,
+          campaign.nextAction,
+          ...stringList(campaign.intermediateRoles),
+          ...stringList(campaign.capabilitiesToAcquire),
+          ...stringList(campaign.blockers)
+        ]
+          .filter(Boolean)
+          .join(" "),
+        previewStats: [
+          { label: "Status", value: campaign.status },
+          { label: "Health", value: campaign.health },
+          { label: "Deadline", value: campaign.searchDeadline }
+        ],
+        href: getKnowledgeGraphEntityHref("opportunity_campaign", id),
+        updatedAt:
+          typeof campaign.updatedAt === "string" ? campaign.updatedAt : null
+      })
+    );
+    if (campaign.sourceEngagementId) {
+      addEdge(edges, {
+        source: buildKnowledgeGraphNodeId(
+          "work_engagement",
+          String(campaign.sourceEngagementId)
+        ),
+        target: buildKnowledgeGraphNodeId("opportunity_campaign", id),
+        relationKind: "entity_link",
+        label: "Motivates opportunity campaign",
+        strength: 0.92,
+        directional: true,
+        structural: true
+      });
+    }
+    if (campaign.primaryGoalId) {
+      addEdge(edges, {
+        source: buildKnowledgeGraphNodeId(
+          "goal",
+          String(campaign.primaryGoalId)
+        ),
+        target: buildKnowledgeGraphNodeId("opportunity_campaign", id),
+        relationKind: "entity_link",
+        label: "Goal guides campaign",
+        strength: 0.92,
+        directional: true,
+        structural: true
+      });
+    }
+  }
+
+  for (const opportunity of jobOpportunities) {
+    const id = String(opportunity.id);
+    nodes.set(
+      buildKnowledgeGraphNodeId("job_opportunity", id),
+      makeNode({
+        entityType: "job_opportunity",
+        entityId: id,
+        entityKind: "job_opportunity",
+        title: String(opportunity.title ?? "Job opportunity"),
+        subtitle: String(
+          opportunity.employerName ?? opportunity.roleFamily ?? ""
+        ),
+        description: String(opportunity.description ?? ""),
+        searchText: [
+          opportunity.title,
+          opportunity.employerName,
+          opportunity.roleFamily,
+          opportunity.seniority,
+          opportunity.description,
+          opportunity.sector,
+          opportunity.nextAction,
+          ...stringList(opportunity.responsibilities),
+          ...stringList(opportunity.requirements),
+          ...stringList(opportunity.skills),
+          ...stringList(opportunity.technologies)
+        ]
+          .filter(Boolean)
+          .join(" "),
+        previewStats: [
+          { label: "Disposition", value: opportunity.disposition },
+          { label: "Availability", value: opportunity.availabilityStatus },
+          { label: "Deadline", value: opportunity.applicationDeadline }
+        ],
+        href: getKnowledgeGraphEntityHref("job_opportunity", id),
+        updatedAt:
+          typeof opportunity.updatedAt === "string"
+            ? opportunity.updatedAt
+            : null
+      })
+    );
+    if (opportunity.organizationId) {
+      addEdge(edges, {
+        source: buildKnowledgeGraphNodeId(
+          "work_organization",
+          String(opportunity.organizationId)
+        ),
+        target: buildKnowledgeGraphNodeId("job_opportunity", id),
+        relationKind: "entity_link",
+        label: "Opportunity at organization",
+        strength: 0.9,
+        directional: true,
+        structural: true
+      });
+    }
+  }
+
+  for (const application of jobApplications) {
+    const id = String(application.id);
+    const opportunity = jobOpportunityById.get(
+      String(application.opportunityId)
+    );
+    nodes.set(
+      buildKnowledgeGraphNodeId("job_application", id),
+      makeNode({
+        entityType: "job_application",
+        entityId: id,
+        entityKind: "job_application",
+        title: opportunity
+          ? `Application · ${String(opportunity.title)}`
+          : "Job application",
+        subtitle: [opportunity?.employerName, application.status]
+          .filter(Boolean)
+          .join(" · "),
+        description: String(
+          application.nextAction ?? application.blocker ?? ""
+        ),
+        searchText: [
+          opportunity?.title,
+          opportunity?.employerName,
+          application.status,
+          application.nextAction,
+          application.blocker,
+          application.outcome
+        ]
+          .filter(Boolean)
+          .join(" "),
+        previewStats: [
+          { label: "Status", value: application.status },
+          { label: "Follow up", value: application.nextFollowUpAt },
+          { label: "Decision", value: application.decisionDeadline }
+        ],
+        href: getKnowledgeGraphEntityHref("job_application", id),
+        updatedAt:
+          typeof application.updatedAt === "string"
+            ? application.updatedAt
+            : null
+      })
+    );
+    addEdge(edges, {
+      source: buildKnowledgeGraphNodeId(
+        "opportunity_campaign",
+        String(application.primaryCampaignId)
+      ),
+      target: buildKnowledgeGraphNodeId("job_application", id),
+      relationKind: "entity_link",
+      label: "Campaign application",
+      strength: 0.98,
+      directional: true,
+      structural: true
+    });
+    addEdge(edges, {
+      source: buildKnowledgeGraphNodeId(
+        "job_opportunity",
+        String(application.opportunityId)
+      ),
+      target: buildKnowledgeGraphNodeId("job_application", id),
+      relationKind: "entity_link",
+      label: "Application for opportunity",
+      strength: 0.98,
+      directional: true,
+      structural: true
+    });
+  }
+
+  for (const interview of jobInterviews) {
+    const id = String(interview.id);
+    const application = jobApplicationById.get(String(interview.applicationId));
+    const opportunity = application
+      ? jobOpportunityById.get(String(application.opportunityId))
+      : null;
+    nodes.set(
+      buildKnowledgeGraphNodeId("job_interview", id),
+      makeNode({
+        entityType: "job_interview",
+        entityId: id,
+        entityKind: "job_interview",
+        title: opportunity
+          ? `Interview · ${String(opportunity.title)}`
+          : "Job interview",
+        subtitle: String(interview.stage ?? interview.format ?? ""),
+        description: String(interview.nextAction ?? interview.followUp ?? ""),
+        searchText: [
+          opportunity?.title,
+          interview.stage,
+          interview.format,
+          interview.nextAction,
+          ...stringList(interview.focusAreas)
+        ]
+          .filter(Boolean)
+          .join(" "),
+        previewStats: [
+          { label: "Stage", value: interview.stage },
+          { label: "When", value: interview.scheduledStartAt },
+          { label: "Format", value: interview.format }
+        ],
+        href: getKnowledgeGraphEntityHref("job_interview", id),
+        updatedAt:
+          typeof interview.updatedAt === "string" ? interview.updatedAt : null
+      })
+    );
+    addEdge(edges, {
+      source: buildKnowledgeGraphNodeId(
+        "job_application",
+        String(interview.applicationId)
+      ),
+      target: buildKnowledgeGraphNodeId("job_interview", id),
+      relationKind: "entity_link",
+      label: "Application interview",
+      strength: 0.96,
+      directional: true,
+      structural: true
+    });
+  }
+
+  for (const offer of jobOffers) {
+    const id = String(offer.id);
+    const application = jobApplicationById.get(String(offer.applicationId));
+    const opportunity = application
+      ? jobOpportunityById.get(String(application.opportunityId))
+      : null;
+    nodes.set(
+      buildKnowledgeGraphNodeId("job_offer", id),
+      makeNode({
+        entityType: "job_offer",
+        entityId: id,
+        entityKind: "job_offer",
+        title: opportunity
+          ? `Offer · ${String(opportunity.title)}`
+          : "Job offer",
+        subtitle: String(offer.status ?? ""),
+        description: String(offer.decision ?? offer.rationale ?? ""),
+        searchText: [
+          opportunity?.title,
+          opportunity?.employerName,
+          offer.status,
+          offer.decision
+        ]
+          .filter(Boolean)
+          .join(" "),
+        previewStats: [
+          { label: "Status", value: offer.status },
+          { label: "Expires", value: offer.expiresAt },
+          { label: "Decision", value: offer.decision }
+        ],
+        href: getKnowledgeGraphEntityHref("job_offer", id),
+        updatedAt: typeof offer.updatedAt === "string" ? offer.updatedAt : null
+      })
+    );
+    addEdge(edges, {
+      source: buildKnowledgeGraphNodeId(
+        "job_application",
+        String(offer.applicationId)
+      ),
+      target: buildKnowledgeGraphNodeId("job_offer", id),
+      relationKind: "entity_link",
+      label: "Application offer",
+      strength: 0.98,
+      directional: true,
+      structural: true
+    });
+    if (offer.plannedEngagementId) {
+      addEdge(edges, {
+        source: buildKnowledgeGraphNodeId("job_offer", id),
+        target: buildKnowledgeGraphNodeId(
+          "work_engagement",
+          String(offer.plannedEngagementId)
+        ),
+        relationKind: "entity_link",
+        label: "Offer created planned engagement",
+        strength: 0.98,
+        directional: true,
+        structural: true
+      });
+    }
+  }
+
+  for (const outreach of workOutreach) {
+    const id = String(outreach.id);
+    const organization = outreach.organizationId
+      ? workOrganizationById.get(String(outreach.organizationId))
+      : null;
+    nodes.set(
+      buildKnowledgeGraphNodeId("work_outreach", id),
+      makeNode({
+        entityType: "work_outreach",
+        entityId: id,
+        entityKind: "work_outreach",
+        title: organization
+          ? `Outreach · ${String(organization.name)}`
+          : "Work outreach",
+        subtitle: String(outreach.status ?? outreach.channel ?? ""),
+        description: String(outreach.nextAction ?? ""),
+        searchText: [
+          organization?.name,
+          outreach.status,
+          outreach.channel,
+          outreach.nextAction
+        ]
+          .filter(Boolean)
+          .join(" "),
+        previewStats: [
+          { label: "Status", value: outreach.status },
+          { label: "Channel", value: outreach.channel },
+          { label: "Follow up", value: outreach.followUpAt }
+        ],
+        href: getKnowledgeGraphEntityHref("work_outreach", id),
+        updatedAt:
+          typeof outreach.updatedAt === "string" ? outreach.updatedAt : null
+      })
+    );
+    for (const [entityType, entityId, label] of [
+      ["opportunity_campaign", outreach.campaignId, "Campaign outreach"],
+      ["work_organization", outreach.organizationId, "Organization outreach"],
+      ["person", outreach.personId, "Person outreach"]
+    ] as const) {
+      if (!entityId) continue;
+      addEdge(edges, {
+        source: buildKnowledgeGraphNodeId(entityType, String(entityId)),
+        target: buildKnowledgeGraphNodeId("work_outreach", id),
+        relationKind: "entity_link",
+        label,
+        strength: 0.82,
+        directional: true,
+        structural: false
+      });
+    }
+  }
+
+  for (const link of workLinkRows) {
+    addEdge(edges, {
+      source: buildKnowledgeGraphNodeId(
+        link.source_entity_type as KnowledgeGraphEntityType,
+        link.source_entity_id
+      ),
+      target: buildKnowledgeGraphNodeId(
+        link.target_entity_type as KnowledgeGraphEntityType,
+        link.target_entity_id
+      ),
+      relationKind: "entity_link",
+      label: link.relationship || "Related Work context",
+      strength: 0.76,
       directional: true,
       structural: false
     });

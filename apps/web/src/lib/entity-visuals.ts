@@ -7,6 +7,7 @@ import {
   FileText,
   FolderOpen,
   GitBranch,
+  Handshake,
   Heart,
   ListTodo,
   Network,
@@ -55,7 +56,15 @@ export const ENTITY_KINDS = [
   "emotion",
   "workbench",
   "functor",
-  "chat"
+  "chat",
+  "work_organization",
+  "work_engagement",
+  "opportunity_campaign",
+  "job_opportunity",
+  "job_application",
+  "job_interview",
+  "job_offer",
+  "work_outreach"
 ] as const;
 export type EntityKind = (typeof ENTITY_KINDS)[number];
 
@@ -291,6 +300,62 @@ const ENTITY_VISUAL_SEEDS: ReadonlyArray<EntityVisualSeed> = [
     icon: Bot,
     iconName: "Bot",
     accentRgb: [129, 140, 248]
+  },
+  {
+    kind: "work_organization",
+    label: "Work organization",
+    icon: FolderOpen,
+    iconName: "FolderOpen",
+    accentRgb: [125, 211, 252]
+  },
+  {
+    kind: "work_engagement",
+    label: "Work engagement",
+    icon: Handshake,
+    iconName: "Handshake",
+    accentRgb: [45, 212, 191]
+  },
+  {
+    kind: "opportunity_campaign",
+    label: "Opportunity campaign",
+    icon: Compass,
+    iconName: "Compass",
+    accentRgb: [250, 204, 21]
+  },
+  {
+    kind: "job_opportunity",
+    label: "Job opportunity",
+    icon: Sparkles,
+    iconName: "Sparkles",
+    accentRgb: [251, 146, 60]
+  },
+  {
+    kind: "job_application",
+    label: "Job application",
+    icon: FileText,
+    iconName: "FileText",
+    accentRgb: [129, 140, 248]
+  },
+  {
+    kind: "job_interview",
+    label: "Interview",
+    icon: CalendarDays,
+    iconName: "CalendarDays",
+    accentRgb: [56, 189, 248]
+  },
+  {
+    kind: "job_offer",
+    label: "Job offer",
+    icon: Target,
+    iconName: "Target",
+    accentRgb: [52, 211, 153]
+  },
+  {
+    kind: "work_outreach",
+    label: "Work outreach",
+    icon: UserRound,
+    iconName: "UserRound",
+    accentRgb: [251, 113, 133]
   }
 ] as const;
 

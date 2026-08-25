@@ -4,6 +4,14 @@ export type KnowledgeGraphView = "graph" | "hierarchy";
 
 export type KnowledgeGraphEntityType =
   | CrudEntityType
+  | "work_organization"
+  | "work_engagement"
+  | "opportunity_campaign"
+  | "job_opportunity"
+  | "job_application"
+  | "job_interview"
+  | "job_offer"
+  | "work_outreach"
   | "wiki_space"
   | "workbench_flow"
   | "workbench_surface";
@@ -36,7 +44,15 @@ export type KnowledgeGraphEntityKind =
   | "emotion"
   | "workbench"
   | "functor"
-  | "chat";
+  | "chat"
+  | "work_organization"
+  | "work_engagement"
+  | "opportunity_campaign"
+  | "job_opportunity"
+  | "job_application"
+  | "job_interview"
+  | "job_offer"
+  | "work_outreach";
 
 export type KnowledgeGraphRelationKind =
   | "goal_project"
@@ -252,6 +268,23 @@ export const KNOWLEDGE_GRAPH_HIERARCHY_LANES = [
     id: "projects",
     label: "Projects",
     kinds: ["project"]
+  },
+  {
+    id: "work",
+    label: "Work",
+    kinds: ["work_engagement", "work_organization"]
+  },
+  {
+    id: "opportunities",
+    label: "Opportunity management",
+    kinds: [
+      "opportunity_campaign",
+      "job_opportunity",
+      "job_application",
+      "job_interview",
+      "job_offer",
+      "work_outreach"
+    ]
   },
   {
     id: "tasks",
@@ -530,6 +563,22 @@ export function getKnowledgeGraphEntityHref(
       return `/calendar`;
     case "artifact":
       return `/artifacts/${encodeURIComponent(entityId)}`;
+    case "work_organization":
+      return `/work/organizations/${encodeURIComponent(entityId)}`;
+    case "work_engagement":
+      return `/work/engagements/${encodeURIComponent(entityId)}`;
+    case "opportunity_campaign":
+      return `/work/campaigns/${encodeURIComponent(entityId)}`;
+    case "job_opportunity":
+      return `/work/opportunities/${encodeURIComponent(entityId)}`;
+    case "job_application":
+      return `/work/applications/${encodeURIComponent(entityId)}`;
+    case "job_interview":
+      return `/work/interviews/${encodeURIComponent(entityId)}`;
+    case "job_offer":
+      return `/work/offers/${encodeURIComponent(entityId)}`;
+    case "work_outreach":
+      return `/work/outreach/${encodeURIComponent(entityId)}`;
     case "event_type":
     case "emotion_definition":
       return "/psyche/reports";

@@ -12,6 +12,7 @@ import {
   Gauge,
   GitBranch,
   GraduationCap,
+  Handshake,
   HeartPulse,
   Inbox,
   LayoutDashboard,
@@ -230,6 +231,13 @@ export const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     labelKey: "common.routeLabels.today",
     detailKey: "common.routeDetails.today",
     icon: Clock3
+  },
+  {
+    id: "work",
+    to: "/work",
+    label: "Work",
+    detail: ROUTE_VIEW_CATALOG["work-index"].description,
+    icon: Handshake
   },
   {
     id: "rewards",

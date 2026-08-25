@@ -262,6 +262,56 @@ const lifeForceRouteSpecs = {
   }
 } as const satisfies Record<string, SpecializedRouteSpec>;
 
+export const WORK_ROUTE_SPECS = {
+  overview: { method: "GET", path: "/api/v1/work", requiresAgentToken: true },
+  context: { method: "GET", path: "/api/v1/work/context", requiresAgentToken: true },
+  settings: { method: "GET", path: "/api/v1/work/settings", requiresAgentToken: true },
+  updateOpportunitySearch: { method: "PATCH", path: "/api/v1/work/settings/opportunity-search", requiresAgentToken: true },
+  listOrganizations: { method: "GET", path: "/api/v1/work/organizations", requiresAgentToken: true },
+  createOrganization: { method: "POST", path: "/api/v1/work/organizations", requiresAgentToken: true },
+  organizationDetail: { method: "GET", path: "/api/v1/work/organizations/:id", requiresAgentToken: true },
+  updateOrganization: { method: "PATCH", path: "/api/v1/work/organizations/:id", requiresAgentToken: true },
+  listEngagements: { method: "GET", path: "/api/v1/work/engagements", requiresAgentToken: true },
+  createEngagement: { method: "POST", path: "/api/v1/work/engagements", requiresAgentToken: true },
+  engagementDetail: { method: "GET", path: "/api/v1/work/engagements/:id", requiresAgentToken: true },
+  updateEngagement: { method: "PATCH", path: "/api/v1/work/engagements/:id", requiresAgentToken: true },
+  metricDefinitions: { method: "GET", path: "/api/v1/work/metrics/definitions", requiresAgentToken: true },
+  createMetricDefinition: { method: "POST", path: "/api/v1/work/metrics/definitions", requiresAgentToken: true },
+  recordCheckIn: { method: "POST", path: "/api/v1/work/check-ins", requiresAgentToken: true },
+  metricTrends: { method: "GET", path: "/api/v1/work/metrics/trends", requiresAgentToken: true },
+  listCampaigns: { method: "GET", path: "/api/v1/work/campaigns", requiresAgentToken: true },
+  createCampaign: { method: "POST", path: "/api/v1/work/campaigns", requiresAgentToken: true },
+  campaignDetail: { method: "GET", path: "/api/v1/work/campaigns/:id", requiresAgentToken: true },
+  updateCampaign: { method: "PATCH", path: "/api/v1/work/campaigns/:id", requiresAgentToken: true },
+  createCriteriaVersion: { method: "POST", path: "/api/v1/work/campaigns/:id/criteria", requiresAgentToken: true },
+  listOpportunities: { method: "GET", path: "/api/v1/work/opportunities", requiresAgentToken: true },
+  upsertOpportunity: { method: "POST", path: "/api/v1/work/opportunities/upsert", requiresAgentToken: true },
+  opportunityDetail: { method: "GET", path: "/api/v1/work/opportunities/:id", requiresAgentToken: true },
+  updateOpportunity: { method: "PATCH", path: "/api/v1/work/opportunities/:id", requiresAgentToken: true },
+  evaluateOpportunity: { method: "POST", path: "/api/v1/work/campaigns/:campaignId/opportunities/:opportunityId/evaluations", requiresAgentToken: true },
+  listApplications: { method: "GET", path: "/api/v1/work/applications", requiresAgentToken: true },
+  createApplication: { method: "POST", path: "/api/v1/work/applications", requiresAgentToken: true },
+  applicationDetail: { method: "GET", path: "/api/v1/work/applications/:id", requiresAgentToken: true },
+  updateApplication: { method: "PATCH", path: "/api/v1/work/applications/:id", requiresAgentToken: true },
+  transitionApplication: { method: "POST", path: "/api/v1/work/applications/:id/transitions", requiresAgentToken: true },
+  recordApplicationEvent: { method: "POST", path: "/api/v1/work/applications/:id/events", requiresAgentToken: true },
+  listSupporting: { method: "GET", path: "/api/v1/work/supporting/:kind", requiresAgentToken: true },
+  createSupporting: { method: "POST", path: "/api/v1/work/supporting/:kind", requiresAgentToken: true },
+  supportingDetail: { method: "GET", path: "/api/v1/work/supporting/:kind/:id", requiresAgentToken: true },
+  updateSupporting: { method: "PATCH", path: "/api/v1/work/supporting/:kind/:id", requiresAgentToken: true },
+  listSearchRuns: { method: "GET", path: "/api/v1/work/search-runs", requiresAgentToken: true },
+  recordSearchRun: { method: "POST", path: "/api/v1/work/search-runs", requiresAgentToken: true },
+  searchRunDetail: { method: "GET", path: "/api/v1/work/search-runs/:id", requiresAgentToken: true },
+  acceptOffer: { method: "POST", path: "/api/v1/work/offers/:id/accept", requiresAgentToken: true },
+  listRelationships: { method: "GET", path: "/api/v1/work/relationships/:entityType/:id", requiresAgentToken: true },
+  replaceRelationships: { method: "PUT", path: "/api/v1/work/relationships/:entityType/:id", requiresAgentToken: true },
+  archive: { method: "POST", path: "/api/v1/work/:entityType/:id/archive", requiresAgentToken: true },
+  restore: { method: "POST", path: "/api/v1/work/:entityType/:id/restore", requiresAgentToken: true },
+  createTransmissionPreview: { method: "POST", path: "/api/v1/work/transmissions/previews", requiresAgentToken: true },
+  requestTransmissionApproval: { method: "POST", path: "/api/v1/work/transmissions/previews/:id/request-approval", requiresAgentToken: true },
+  recordVerifiedSubmission: { method: "POST", path: "/api/v1/work/transmissions/verified-submissions", requiresAgentToken: true }
+} as const satisfies Record<string, SpecializedRouteSpec>;
+
 const workbenchRouteSpecs = {
   boxCatalog: { method: "GET", path: "/api/v1/workbench/catalog/boxes" },
   listFlows: { method: "GET", path: "/api/v1/workbench/flows" },
@@ -1958,6 +2008,14 @@ export function registerForgePluginTools(
     description:
       "Call one allowed dedicated Life Force route after the conversation has narrowed to overview, profile update, weekday template, or fatigue signal. Do not use batch CRUD for Life Force.",
     routeSpecs: lifeForceRouteSpecs
+  });
+
+  registerSpecializedRouteTool(api, config, {
+    name: "forge_call_work_route",
+    label: "Forge Work Route",
+    description:
+      "Call one bounded Work route for current or planned Work Engagements, confirmed check-ins and trends, Opportunity Campaigns, sourced opportunities, criteria-versioned evaluations, applications, supporting records, exact relationships, search-run evidence, offers, or reviewed external-transmission state. This is career and job context, not Forge's active task-run tool forge_get_current_work and not Workbench. Read the complete context or exact record before changing it. Never represent an agent suggestion as a user-reported work metric. Never claim submission from prepared material: create an exact transmission preview, request the central approval, and record a verified submission only from direct completion evidence. Every call requires a scoped agent token; reads need work.read, mutations need work.write, private application transmission needs work.transmit, and compensation reads need work.compensation.read.",
+    routeSpecs: WORK_ROUTE_SPECS
   });
 
   registerSpecializedRouteTool(api, config, {

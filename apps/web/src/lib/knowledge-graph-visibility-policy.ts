@@ -213,6 +213,54 @@ export const KNOWLEDGE_GRAPH_NODE_VISIBILITY_POLICY = {
     disclosureGroup: "workspace",
     rationale:
       "Chats are conversational sources rather than calm overview landmarks."
+  },
+  work_organization: {
+    label: "Work organizations",
+    defaultVisible: true,
+    disclosureGroup: "people-and-evidence",
+    rationale: "Organizations provide the employer and client context for work."
+  },
+  work_engagement: {
+    label: "Work engagements",
+    defaultVisible: true,
+    disclosureGroup: "execution",
+    rationale: "Current and planned work arrangements are durable life context."
+  },
+  opportunity_campaign: {
+    label: "Opportunity campaigns",
+    defaultVisible: true,
+    disclosureGroup: "direction",
+    rationale: "Campaigns explain active strategies for finding paid work."
+  },
+  job_opportunity: {
+    label: "Job opportunities",
+    defaultVisible: true,
+    disclosureGroup: "execution",
+    rationale: "Shortlisted opportunities are active decisions, not transient search noise."
+  },
+  job_application: {
+    label: "Job applications",
+    defaultVisible: true,
+    disclosureGroup: "execution",
+    rationale: "Applications are active commitments with deadlines and next actions."
+  },
+  job_interview: {
+    label: "Interviews",
+    defaultVisible: false,
+    disclosureGroup: "time",
+    rationale: "Interviews are time-bound application detail available on demand."
+  },
+  job_offer: {
+    label: "Job offers",
+    defaultVisible: true,
+    disclosureGroup: "direction",
+    rationale: "Offers are consequential work decisions that deserve prominence."
+  },
+  work_outreach: {
+    label: "Work outreach",
+    defaultVisible: false,
+    disclosureGroup: "people-and-evidence",
+    rationale: "Outreach is supporting relationship activity available on demand."
   }
 } satisfies Record<KnowledgeGraphEntityKind, KnowledgeGraphVisibilityPolicy>;
 

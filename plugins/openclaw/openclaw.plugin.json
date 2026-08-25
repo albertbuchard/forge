@@ -36,6 +36,7 @@
       "forge_call_peer_route",
       "forge_call_people_route",
       "forge_call_wiki_route",
+      "forge_call_work_route",
       "forge_call_workbench_route",
       "forge_clone_questionnaire",
       "forge_complete_questionnaire_run",

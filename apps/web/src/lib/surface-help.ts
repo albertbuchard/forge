@@ -152,6 +152,15 @@ const SURFACE_HELP_BY_ID: Record<string, SurfaceHelp> = {
     primaryAction:
       "Use it when the system feels too broad and you need a single practical runway."
   },
+  work: {
+    title: "Work",
+    purpose:
+      "Work keeps current and planned jobs, contracts, appointments, freelance engagements, check-ins, opportunity searches, applications, and career transitions in one connected area.",
+    primaryAction:
+      "Review each current engagement and its next action, record a quick check-in, or turn on Looking for opportunities to create or resume a search campaign.",
+    metricNote:
+      "Work check-ins use anchored responses and preserve each observation. Trends describe recorded experience over time; they do not diagnose health or invent values between check-ins."
+  },
   rewards: {
     title: "Trophy Hall",
     purpose:

@@ -253,6 +253,7 @@ export function FlowField({
   labelHelp,
   hint,
   error,
+  className,
   children
 }: {
   label: string;
@@ -260,10 +261,11 @@ export function FlowField({
   labelHelp?: string;
   hint?: string;
   error?: string | null;
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <div className="grid min-w-0 max-w-full gap-2">
+    <div className={cn("grid min-w-0 max-w-full gap-2", className)}>
       <label className="grid min-w-0 max-w-full gap-2">
         <span className="flex min-w-0 max-w-full items-center gap-2 text-sm font-medium text-[var(--ui-ink-strong)]">
           <span className="min-w-0 break-words">{label}</span>

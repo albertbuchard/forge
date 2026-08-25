@@ -16,6 +16,14 @@ function getKnowledgeGraphNotesHref(node: KnowledgeGraphNode): string | null {
     case "workbench_flow":
     case "workbench_surface":
     case "wiki_space":
+    case "work_organization":
+    case "work_engagement":
+    case "opportunity_campaign":
+    case "job_opportunity":
+    case "job_application":
+    case "job_interview":
+    case "job_offer":
+    case "work_outreach":
       return null;
     default:
       return getEntityNotesHref(node.entityType, node.entityId);

@@ -204,6 +204,7 @@ import type {
   CaptureProposal,
   CaptureReceipt,
   LocalSearchEntityKind,
+  LocalSearchEntityType,
   LocalSearchResponse,
   RelationshipProposalDecision,
   RelationshipProposalList,
@@ -7099,7 +7100,7 @@ export function searchEntities(input: {
 
 export function searchLocalRecords(input: {
   query?: string;
-  entityTypes?: CrudEntityType[];
+  entityTypes?: LocalSearchEntityType[];
   entityKinds?: LocalSearchEntityKind[];
   userIds?: string[];
   limit?: number;

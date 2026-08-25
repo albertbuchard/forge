@@ -345,6 +345,11 @@ export const TodayPage = lazy(() =>
     default: module.TodayPage
   }))
 );
+export const WorkPage = lazy(() =>
+  import("@/pages/work-page").then((module) => ({
+    default: module.WorkPage
+  }))
+);
 export const VitalsPage = lazy(() =>
   import("@/pages/vitals-page").then((module) => ({
     default: module.VitalsPage

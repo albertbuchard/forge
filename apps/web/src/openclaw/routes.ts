@@ -25,6 +25,7 @@ import {
   makeApiRouteKey,
   type ApiRouteKey
 } from "./parity.js";
+import { WORK_ROUTE_SPECS } from "./tools.js";
 import type {
   ForgePluginCliApi,
   ForgePluginRouteApi,
@@ -208,6 +209,46 @@ const exact = (path: string, operation: ExactRouteOperation): RouteGroup => ({
     { ...operation, pattern: new RegExp(`^${path.replaceAll("/", "\\/")}$`) }
   ]
 });
+
+function escapeRouteSegment(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function routeTemplatePattern(path: string) {
+  const pattern = path
+    .split("/")
+    .map((segment) =>
+      segment.startsWith(":") ? "([^/]+)" : escapeRouteSegment(segment)
+    )
+    .join("\\/");
+  return new RegExp(`^${pattern}$`);
+}
+
+function mirroredSpecializedRouteGroup(
+  pluginPrefix: string,
+  apiPrefix: string,
+  routeSpecs: typeof WORK_ROUTE_SPECS
+): RouteGroup {
+  return {
+    path: pluginPrefix,
+    match: "prefix",
+    operations: Object.values(routeSpecs).map((spec) => {
+      const pluginPath = spec.path.replace(apiPrefix, pluginPrefix);
+      const operation: ProxyRouteOperation = {
+        method: spec.method,
+        pattern: routeTemplatePattern(pluginPath),
+        upstreamPath: spec.path,
+        requiresToken: true,
+        target: (_match, url) =>
+          passthroughSearch(url.pathname.replace(pluginPrefix, apiPrefix), url)
+      };
+      if (spec.method !== "GET") {
+        operation.requestBody = "json";
+      }
+      return operation;
+    })
+  };
+}
 
 export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
   exact("/forge/v1/health", {
@@ -556,6 +597,11 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
       }
     ]
   },
+  mirroredSpecializedRouteGroup(
+    "/forge/v1/work",
+    "/api/v1/work",
+    WORK_ROUTE_SPECS
+  ),
   {
     path: "/forge/v1/workbench",
     match: "prefix",

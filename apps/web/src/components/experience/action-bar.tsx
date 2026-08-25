@@ -208,6 +208,17 @@ function getAuxiliaryVisual(
   }
 }
 
+const WORK_SEARCH_ENTITY_TYPES = new Set([
+  "work_organization",
+  "work_engagement",
+  "opportunity_campaign",
+  "job_opportunity",
+  "job_application",
+  "job_interview",
+  "job_offer",
+  "work_outreach"
+]);
+
 export function mapLocalSearchResultsToActionBarItems(
   results: LocalSearchResult[],
   pinned: Array<{
@@ -217,6 +228,9 @@ export function mapLocalSearchResultsToActionBarItems(
   }> = []
 ) {
   return results.map((result): ActionBarItem => {
+    const navigationEntityType = WORK_SEARCH_ENTITY_TYPES.has(result.entityType)
+      ? undefined
+      : (result.entityType as CrudEntityType);
     const kind =
       result.entityKind && isEntityKind(result.entityKind)
         ? result.entityKind
@@ -251,7 +265,7 @@ export function mapLocalSearchResultsToActionBarItems(
       icon: auxiliaryVisual.icon,
       tileClassName: auxiliaryVisual.tileClassName,
       badgeClassName: auxiliaryVisual.badgeClassName,
-      entityType: result.entityType,
+      entityType: navigationEntityType,
       entityId: result.entityId,
       pinId:
         pinned.find(

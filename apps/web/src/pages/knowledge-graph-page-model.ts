@@ -93,6 +93,14 @@ export function getKnowledgeGraphNodeNotesHref(node: KnowledgeGraphNode) {
     case "workbench_flow":
     case "workbench_surface":
     case "wiki_space":
+    case "work_organization":
+    case "work_engagement":
+    case "opportunity_campaign":
+    case "job_opportunity":
+    case "job_application":
+    case "job_interview":
+    case "job_offer":
+    case "work_outreach":
       return null;
     default:
       return getEntityNotesHref(node.entityType, node.entityId);
@@ -308,20 +316,16 @@ export function buildOptimisticKnowledgeGraphPayload(
   });
   const nodes = filtered.nodes.filter((node) => visibleNodeIds.has(node.id));
   const edges = filtered.edges.filter(
-    (edge) =>
-      visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)
+    (edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)
   );
   const kinds = nodes.reduce<Record<string, number>>((counts, node) => {
     counts[node.entityKind] = (counts[node.entityKind] ?? 0) + 1;
     return counts;
   }, {});
-  const relationKinds = edges.reduce<Record<string, number>>(
-    (counts, edge) => {
-      counts[edge.relationKind] = (counts[edge.relationKind] ?? 0) + 1;
-      return counts;
-    },
-    {}
-  );
+  const relationKinds = edges.reduce<Record<string, number>>((counts, edge) => {
+    counts[edge.relationKind] = (counts[edge.relationKind] ?? 0) + 1;
+    return counts;
+  }, {});
 
   return {
     ...source,

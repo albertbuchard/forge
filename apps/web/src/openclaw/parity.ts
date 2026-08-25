@@ -1,3 +1,5 @@
+import { WORK_ROUTE_SPECS } from "./tools.js";
+
 export type ApiRouteKey = `${Uppercase<string>} ${string}`;
 
 export type ForgeSupportedPluginApiRoute = {
@@ -38,6 +40,7 @@ const REQUIRED_MIRRORED_SPECIALIZED_DOMAIN_SURFACES = new Set([
   "movement",
   "lifeForce",
   "life_force",
+  "work",
   "workbench",
   "courses"
 ]);
@@ -588,6 +591,11 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
     { method: "POST", path: "/api/v1/task-runs/:id/focus", purpose: "work" },
     { method: "POST", path: "/api/v1/task-runs/:id/complete", purpose: "work" },
     { method: "POST", path: "/api/v1/task-runs/:id/release", purpose: "work" },
+    ...Object.values(WORK_ROUTE_SPECS).map((spec) => ({
+      method: spec.method,
+      path: spec.path,
+      purpose: "work" as const
+    })),
     { method: "POST", path: "/api/v1/insights", purpose: "insights" }
   ];
 

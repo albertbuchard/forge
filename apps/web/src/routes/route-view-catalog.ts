@@ -499,6 +499,14 @@ export const ROUTE_VIEW_CATALOG = {
     tone: "execution",
     skeleton: { blocks: 6, columns: 2, sideRail: true }
   },
+  "work-index": {
+    surfaceId: "work-index",
+    title: "Work",
+    description:
+      "Understand current jobs, work experience over time, opportunity searches, applications, and career transitions together.",
+    tone: "execution",
+    skeleton: { blocks: 6, columns: 2, sideRail: true }
+  },
   workbench: {
     surfaceId: "workbench",
     title: "Workbench",
@@ -786,6 +794,7 @@ const ROUTE_VIEW_PATH_MATCHERS: RouteViewPathMatcher[] = [
   { viewId: "wiki-edit", match: matches(/^\/wiki\/edit\/[^/]+$/) },
   { viewId: "wiki-index", match: exactly("/wiki") },
   { viewId: "today-index", match: exactly("/today") },
+  { viewId: "work-index", match: startsWithSegment("/work") },
   { viewId: "workbench-flow", match: matches(/^\/workbench\/[^/]+$/) },
   { viewId: "workbench", match: exactly("/workbench") },
   { viewId: "activity-index", match: exactly("/activity") },

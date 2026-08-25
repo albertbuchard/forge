@@ -55,6 +55,8 @@ const MOBILE_KNOWLEDGE_GRAPH_MIGRATION = "mobile-knowledge-graph-default-v1";
 const DESKTOP_ATTENTION_MIGRATION = "desktop-attention-default-v1";
 const MOBILE_ATTENTION_MIGRATION = "mobile-attention-default-v1";
 const DESKTOP_COURSES_MIGRATION = "desktop-courses-default-v1";
+const DESKTOP_WORK_MIGRATION = "desktop-work-default-v1";
+const MOBILE_WORK_MIGRATION = "mobile-work-default-v1";
 
 export function shouldCaptureRouteIntent(event: ReactMouseEvent) {
   return (
@@ -148,10 +150,15 @@ function readStoredNavIds(storageKey: string, defaults: string[]) {
       return applyMissingRouteMigration(
         applyMissingRouteMigration(
           applyMissingRouteMigration(
-            resolved,
-            DESKTOP_KNOWLEDGE_GRAPH_MIGRATION,
-            "knowledge-graph",
-            "calendar"
+            applyMissingRouteMigration(
+              resolved,
+              DESKTOP_KNOWLEDGE_GRAPH_MIGRATION,
+              "knowledge-graph",
+              "calendar"
+            ),
+            DESKTOP_WORK_MIGRATION,
+            "work",
+            "today"
           ),
           DESKTOP_COURSES_MIGRATION,
           "courses",
@@ -165,10 +172,15 @@ function readStoredNavIds(storageKey: string, defaults: string[]) {
     if (storageKey === MOBILE_NAV_STORAGE_KEY) {
       return applyMissingRouteMigration(
         applyMissingRouteMigration(
-          resolved,
-          MOBILE_KNOWLEDGE_GRAPH_MIGRATION,
-          "knowledge-graph",
-          "notes"
+          applyMissingRouteMigration(
+            resolved,
+            MOBILE_KNOWLEDGE_GRAPH_MIGRATION,
+            "knowledge-graph",
+            "notes"
+          ),
+          MOBILE_WORK_MIGRATION,
+          "work",
+          "today"
         ),
         MOBILE_ATTENTION_MIGRATION,
         "attention",
@@ -203,6 +215,7 @@ export function useShellNavigationState(routePathname: string) {
     readStoredNavIds(MOBILE_NAV_STORAGE_KEY, [
       requirePrimaryRoute("overview").id,
       requirePrimaryRoute("today").id,
+      requirePrimaryRoute("work").id,
       requirePrimaryRoute("kanban").id,
       requirePrimaryRoute("notes").id,
       requirePrimaryRoute("knowledge-graph").id

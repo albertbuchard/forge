@@ -6,8 +6,13 @@ import { buildCourseOpenApiPaths } from "./course-openapi.js";
 import { buildSecurityPairingOpenApiPaths } from "./security-pairing-openapi.js";
 import { buildAgentMessageOpenApiPaths } from "./agent-message-openapi.js";
 import {
+  buildWorkOpenApiComponents,
+  buildWorkOpenApiPaths
+} from "./work-openapi.js";
+import {
   TASK_CLOSEOUT_LIMITS,
   crudEntityTypeSchema,
+  localSearchEntityTypeValues,
   localSearchEntityKindSchema
 } from "./types.js";
 import {
@@ -882,6 +887,11 @@ const API_TAGS = [
     description: "Recurring commitments and habit check-ins."
   },
   {
+    name: "Work",
+    description:
+      "Current and planned Work Engagements, longitudinal check-ins, Opportunity Campaigns, Job Opportunities, applications, interviews, offers, and safe automation."
+  },
+  {
     name: "Calendar",
     description:
       "Calendar connections, work blocks, timeboxes, and native Forge events."
@@ -980,6 +990,7 @@ const API_TAG_GROUPS = [
       "Tasks",
       "Task Runs",
       "Habits",
+      "Work",
       "Calendar",
       "Life Events",
       "Notes",
@@ -1045,6 +1056,9 @@ function resolveTagsForPath(path: string) {
   }
   if (path.startsWith("/api/v1/workbench")) {
     return ["Workbench"];
+  }
+  if (path === "/api/v1/work" || path.startsWith("/api/v1/work/")) {
+    return ["Work"];
   }
   if (path.startsWith("/api/v1/screen-time")) {
     return ["Health"];
@@ -1495,7 +1509,7 @@ export function buildOpenApiDocument() {
       relationKind: { type: "string" },
       relatedEntityType: {
         type: "string",
-        enum: [...crudEntityTypeSchema.options]
+        enum: [...localSearchEntityTypeValues]
       },
       relatedEntityId: { type: "string" }
     }
@@ -1518,7 +1532,7 @@ export function buildOpenApiDocument() {
     properties: {
       entityType: {
         type: "string",
-        enum: [...crudEntityTypeSchema.options]
+        enum: [...localSearchEntityTypeValues]
       },
       entityId: { type: "string" },
       entityKind: nullable({
@@ -1560,12 +1574,12 @@ export function buildOpenApiDocument() {
     properties: {
       eligibleEntityTypes: {
         type: "array",
-        minItems: crudEntityTypeSchema.options.length,
-        maxItems: crudEntityTypeSchema.options.length,
+        minItems: localSearchEntityTypeValues.length,
+        maxItems: localSearchEntityTypeValues.length,
         uniqueItems: true,
         items: {
           type: "string",
-          enum: [...crudEntityTypeSchema.options]
+          enum: [...localSearchEntityTypeValues]
         }
       },
       indexedDocuments: { type: "integer", minimum: 0, maximum: 3000 },
@@ -13832,6 +13846,7 @@ export function buildOpenApiDocument() {
       },
       schemas: {
         ...buildPeerOpenApiComponents(),
+        ...buildWorkOpenApiComponents(),
         ValidationIssue: validationIssue,
         ValidationExpectedShape: validationExpectedShape,
         ErrorResponse: errorResponse,
@@ -14179,6 +14194,7 @@ export function buildOpenApiDocument() {
       ...buildCourseOpenApiPaths(),
       ...buildSecurityPairingOpenApiPaths(),
       ...buildAgentMessageOpenApiPaths(),
+      ...buildWorkOpenApiPaths(),
       ...buildLaunchpadOpenApiPaths(),
       "/api/v1/comparisons/catalog": {
         get: {
@@ -14373,11 +14389,11 @@ export function buildOpenApiDocument() {
                 "Repeat to keep results within one or more Forge CRUD record families.",
               schema: {
                 type: "array",
-                maxItems: crudEntityTypeSchema.options.length,
+                maxItems: localSearchEntityTypeValues.length,
                 uniqueItems: true,
                 items: {
                   type: "string",
-                  enum: [...crudEntityTypeSchema.options]
+                  enum: [...localSearchEntityTypeValues]
                 }
               }
             },

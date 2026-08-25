@@ -3826,6 +3826,101 @@ Preferred opening question:
 
 - "What are you trying to inspect, change, run, or publish through Workbench?"
 
+## Work and opportunities
+
+Aim: help the user understand and manage current work, longitudinal work experience,
+and opportunity searches through one permanent Work area without confusing it with
+Forge task execution.
+
+Arc:
+
+1. Start from the user's practical question: current role facts, how a role is going,
+   a check-in, a trend, a transition, a search campaign, one opportunity, an
+   application, an interview or offer, or documents and next actions.
+2. Read the complete Work context when the answer depends on current engagements,
+   notice periods, availability, linked goals or strategies, recent check-ins,
+   blockers, or active campaigns. Do not rebuild that context from unrelated searches.
+3. Treat each simultaneous employment, appointment, contract, freelance engagement,
+   shift role, or advisory role as a separate Work Engagement. Keep overlapping dates
+   and relationships truthful.
+4. For a check-in, identify the engagement, metric, time, scale value, and whether the
+   value is directly confirmed by the user. Preserve optional context without turning
+   a quick mobile check-in into a long questionnaire.
+5. For opportunity seeking, keep the permanent Work area visible. The “Looking for
+   opportunities” preference may foreground campaigns, but turning it off never
+   deletes or rewrites campaign, opportunity, application, or outcome history.
+6. Keep materially different intentions as separate Opportunity Campaigns. Version
+   criteria before evaluating against changed constraints, and retain the exact
+   criteria version on each evaluation.
+7. Upsert sourced opportunities with provenance and deduplication. Preserve unknowns;
+   never invent compensation, eligibility, sponsorship, availability, or employer
+   facts.
+8. Create an application workspace from an exact opportunity and primary campaign.
+   Preparing documents or answers is not evidence that an application was submitted.
+9. Before any external transmission, present the exact recipient, route, fields, and
+   artifact versions in a digest-bound preview. Request central approval and record a
+   verified submission only after direct completion evidence from the same authorized
+   principal.
+10. When an offer is accepted, offer to create a planned Work Engagement through the
+    dedicated acceptance action. Preserve the offer, application, and campaign history.
+
+Lane-to-route map:
+
+- Work overview and complete agent context -> overview or context
+- “Looking for opportunities” preference -> settings then updateOpportunitySearch
+- current, planned, or past roles -> listEngagements, engagementDetail,
+  createEngagement, or updateEngagement
+- built-in or user-defined work metrics -> metricDefinitions or createMetricDefinition
+- user-confirmed longitudinal entry -> recordCheckIn
+- trend and meaningful-change review -> metricTrends
+- concurrent search strategies and versioned constraints -> listCampaigns,
+  campaignDetail, createCampaign, updateCampaign, or createCriteriaVersion
+- sourced role discovery and deduplication -> listOpportunities,
+  opportunityDetail, upsertOpportunity, or updateOpportunity
+- campaign-specific fit history -> evaluateOpportunity
+- application workspace and guarded lifecycle -> listApplications,
+  applicationDetail, createApplication, updateApplication, or transitionApplication
+- interviews, offers, outreach, document profiles, reusable responses, policies,
+  queries, artifacts, and search runs -> the exact supporting or recordSearchRun
+  route key published in onboarding
+- accepted offer to planned engagement -> acceptOffer
+- bidirectional links -> listRelationships or replaceRelationships
+- safe soft deletion and restoration -> archive or restore
+- external transmission -> createTransmissionPreview, then
+  requestTransmissionApproval, then recordVerifiedSubmission only with direct
+  evidence
+
+Safety and truth rules:
+
+- Use forge_call_work_route; do not use shared batch CRUD for Work domain records.
+- Require work.read for reads and work.write for mutations. Compensation requires
+  work.compensation.read; external transmission requires work.transmit.
+- Keep user, project, and tag scope on every Work read and write.
+- Never store credentials, passwords, tokens, or protected demographic answers as
+  ordinary Work records or Artifacts.
+- Never turn an agent suggestion into a user-reported metric. Show evidence and ask
+  for confirmation before changing criteria or explaining subjective dissatisfaction.
+- Never overwrite an earlier check-in, criteria version, evaluation, application
+  event, or submission receipt to make the current state look cleaner.
+- Never infer submission, acknowledgement, interview, rejection, offer, or acceptance
+  from prepared materials alone.
+- Read the affected detail back after mutations when the next decision depends on
+  the exact resulting state.
+
+Ready to act when:
+
+- the exact engagement, campaign, opportunity, application, or supporting record is
+  known, or a current scoped list can resolve it
+- the user scope and required Work scopes are available
+- a subjective metric is directly confirmed when it will be stored as user-entered
+- any external transmission has the exact preview, approval, principal, and direct
+  completion evidence required by the dedicated flow
+
+Preferred opening question:
+
+- “Are you trying to understand your current work, record how a role is going, manage
+  an opportunity search, or move one application forward?”
+
 ## Course
 
 Aim: help the user choose, continue visually or by voice, understand, submit, review,

@@ -885,6 +885,8 @@ import {
 import type { BackgroundJobAuthorization } from "./managers/platform/background-job-manager.js";
 import { registerPeopleRoutes } from "./routes/people.js";
 import { registerCourseRoutes } from "./routes/courses.js";
+import { registerWorkRoutes } from "./work/routes.js";
+import { resolveWorkAccess } from "./work/access.js";
 import { ensureBuiltInCourses } from "./repositories/courses.js";
 import { registerPeerSharingRoutes } from "./routes/peer-sharing.js";
 import { registerAgentMessageRoutes } from "./agent-messages/routes.js";
@@ -7182,6 +7184,25 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       '{"routeKey":"weekdayTemplate","pathParams":{"weekday":"monday"},"body":{"points":[{"hour":13,"freeAp":-4}]}}'
   },
   {
+    toolName: "forge_call_work_route",
+    summary:
+      "Call one bounded Work route for jobs and other work arrangements, longitudinal check-ins, opportunity searches, applications, offers, and verified external-transmission evidence.",
+    whenToUse:
+      "Use for the permanent Work area and Job Search capability. This is distinct from forge_get_current_work, which describes active task execution, and from Workbench graph flows.",
+    inputShape:
+      "{ routeKey: string, pathParams?: { id?: string, kind?: string, entityType?: string, campaignId?: string, opportunityId?: string }, query?: object, body?: object }",
+    requiredFields: ["routeKey"],
+    notes: [
+      "Choose routeKey from live onboarding specializedDomainSurfaces.work.routeKeys and methodRoutes.",
+      "Every call needs a configured scoped agent token. Reads require work.read, mutations require work.write, private application transmission requires work.transmit, and compensation reads require work.compensation.read.",
+      "Read context or the exact record before mutation, carry expectedRevision on existing-record changes, and use stable idempotency keys only for exact retries.",
+      "Agent-suggested work observations remain suggestions until the user confirms them. Never relabel them as user-reported values.",
+      "Prepared application material is not submission evidence. External action requires an exact transmission preview, central approval, and direct completion evidence before recordVerifiedSubmission."
+    ],
+    example:
+      '{"routeKey":"context","query":{"userIds":["user_operator"],"trendWindowDays":90}}'
+  },
+  {
     toolName: "forge_call_workbench_route",
     summary:
       "Call one allowed dedicated Workbench route after the conversation has narrowed to flow catalog/detail, flow CRUD, execution, run history, published output, node result, or latest node output.",
@@ -8168,7 +8189,11 @@ function buildAgentOnboardingPayload(request: {
       "artifact.uploadBytes",
       "artifact.updateMetadata",
       "artifact.link",
-      "artifact.enrichWithLlm"
+      "artifact.enrichWithLlm",
+      "work.read",
+      "work.write",
+      "work.compensation.read",
+      "work.transmit"
     ],
     recommendedTrustLevel: "trusted" as const,
     recommendedAutonomyMode: "approval_required" as const,
@@ -9167,6 +9192,148 @@ function buildAgentOnboardingPayload(request: {
             "If the user already knows they want a profile change, weekday-template edit, or right-now fatigue signal, skip the broad lane question and ask only for the missing weekday, profile field, or signal detail."
           ]
         },
+        work: {
+          classification: "specialized_domain_surface",
+          aliases: ["Work", "jobs", "job search", "career", "opportunities"],
+          routeTool: "forge_call_work_route",
+          summary:
+            "Permanent Work context for concurrent Work Engagements, confirmed longitudinal check-ins, Opportunity Campaigns, sourced roles, criteria-versioned evaluations, applications, documents, interviews, offers, outreach, and safe external-transmission state.",
+          routeKeys: [
+            "overview",
+            "context",
+            "settings",
+            "updateOpportunitySearch",
+            "listOrganizations",
+            "createOrganization",
+            "organizationDetail",
+            "updateOrganization",
+            "listEngagements",
+            "createEngagement",
+            "engagementDetail",
+            "updateEngagement",
+            "metricDefinitions",
+            "createMetricDefinition",
+            "recordCheckIn",
+            "metricTrends",
+            "listCampaigns",
+            "createCampaign",
+            "campaignDetail",
+            "updateCampaign",
+            "createCriteriaVersion",
+            "listOpportunities",
+            "upsertOpportunity",
+            "opportunityDetail",
+            "updateOpportunity",
+            "evaluateOpportunity",
+            "listApplications",
+            "createApplication",
+            "applicationDetail",
+            "updateApplication",
+            "transitionApplication",
+            "listSupporting",
+            "createSupporting",
+            "supportingDetail",
+            "updateSupporting",
+            "recordSearchRun",
+            "acceptOffer",
+            "listRelationships",
+            "replaceRelationships",
+            "archive",
+            "restore",
+            "createTransmissionPreview",
+            "requestTransmissionApproval",
+            "recordVerifiedSubmission"
+          ],
+          routeSelectionQuestions: [
+            "Does the user need current-work context, one exact work arrangement, a confirmed check-in, a search campaign, an opportunity evaluation, an application workspace, or an external-transmission review?",
+            "Which exact owner, engagement, campaign, opportunity, application, or supporting record is involved?",
+            "For an existing-record change, what revision did the latest authorized read return?",
+            "For a metric, did the user directly confirm the value, or is it still only an agent suggestion?",
+            "For external action, is the job preparation, exact preview, approval request, or direct submission evidence?"
+          ],
+          methodRoutes: {
+            overview: "GET /api/v1/work",
+            context: "GET /api/v1/work/context",
+            settings: "GET /api/v1/work/settings",
+            updateOpportunitySearch:
+              "PATCH /api/v1/work/settings/opportunity-search",
+            listOrganizations: "GET /api/v1/work/organizations",
+            createOrganization: "POST /api/v1/work/organizations",
+            organizationDetail: "GET /api/v1/work/organizations/:id",
+            updateOrganization: "PATCH /api/v1/work/organizations/:id",
+            listEngagements: "GET /api/v1/work/engagements",
+            createEngagement: "POST /api/v1/work/engagements",
+            engagementDetail: "GET /api/v1/work/engagements/:id",
+            updateEngagement: "PATCH /api/v1/work/engagements/:id",
+            metricDefinitions: "GET /api/v1/work/metrics/definitions",
+            createMetricDefinition: "POST /api/v1/work/metrics/definitions",
+            recordCheckIn: "POST /api/v1/work/check-ins",
+            metricTrends: "GET /api/v1/work/metrics/trends",
+            listCampaigns: "GET /api/v1/work/campaigns",
+            createCampaign: "POST /api/v1/work/campaigns",
+            campaignDetail: "GET /api/v1/work/campaigns/:id",
+            updateCampaign: "PATCH /api/v1/work/campaigns/:id",
+            createCriteriaVersion: "POST /api/v1/work/campaigns/:id/criteria",
+            listOpportunities: "GET /api/v1/work/opportunities",
+            upsertOpportunity: "POST /api/v1/work/opportunities/upsert",
+            opportunityDetail: "GET /api/v1/work/opportunities/:id",
+            updateOpportunity: "PATCH /api/v1/work/opportunities/:id",
+            evaluateOpportunity:
+              "POST /api/v1/work/campaigns/:campaignId/opportunities/:opportunityId/evaluations",
+            listApplications: "GET /api/v1/work/applications",
+            createApplication: "POST /api/v1/work/applications",
+            applicationDetail: "GET /api/v1/work/applications/:id",
+            updateApplication: "PATCH /api/v1/work/applications/:id",
+            transitionApplication:
+              "POST /api/v1/work/applications/:id/transitions",
+            listSupporting: "GET /api/v1/work/supporting/:kind",
+            createSupporting: "POST /api/v1/work/supporting/:kind",
+            supportingDetail: "GET /api/v1/work/supporting/:kind/:id",
+            updateSupporting: "PATCH /api/v1/work/supporting/:kind/:id",
+            recordSearchRun: "POST /api/v1/work/search-runs",
+            acceptOffer: "POST /api/v1/work/offers/:id/accept",
+            listRelationships: "GET /api/v1/work/relationships/:entityType/:id",
+            replaceRelationships:
+              "PUT /api/v1/work/relationships/:entityType/:id",
+            archive: "POST /api/v1/work/:entityType/:id/archive",
+            restore: "POST /api/v1/work/:entityType/:id/restore",
+            createTransmissionPreview:
+              "POST /api/v1/work/transmissions/previews",
+            requestTransmissionApproval:
+              "POST /api/v1/work/transmissions/previews/:id/request-approval",
+            recordVerifiedSubmission:
+              "POST /api/v1/work/transmissions/verified-submissions"
+          },
+          readRoutes: {
+            overview: "/api/v1/work",
+            context: "/api/v1/work/context",
+            engagements: "/api/v1/work/engagements",
+            campaigns: "/api/v1/work/campaigns",
+            opportunities: "/api/v1/work/opportunities",
+            applications: "/api/v1/work/applications",
+            trends: "/api/v1/work/metrics/trends"
+          },
+          writeRoutes: {
+            checkIn: "/api/v1/work/check-ins",
+            opportunityUpsert: "/api/v1/work/opportunities/upsert",
+            evaluation:
+              "/api/v1/work/campaigns/:campaignId/opportunities/:opportunityId/evaluations",
+            applicationTransition: "/api/v1/work/applications/:id/transitions",
+            transmissionPreview: "/api/v1/work/transmissions/previews",
+            transmissionApproval:
+              "/api/v1/work/transmissions/previews/:id/request-approval",
+            verifiedSubmission:
+              "/api/v1/work/transmissions/verified-submissions"
+          },
+          notes: [
+            "Work is permanent and remains visible even when Looking for opportunities is off. Turning that setting off never deletes or rewrites history.",
+            "forge_get_current_work remains the active task-run read. forge_call_work_route is the career, jobs, and opportunity-management surface; Workbench remains the graph-flow surface.",
+            "Use the compound context call before a multi-step agent workflow so criteria versions, current pipeline, next actions, linked goals, and recent Work trends stay coherent.",
+            "Every opportunity evaluation records the exact criteria version. Re-evaluation appends history and never silently rewrites an earlier judgment.",
+            "Agent metric suggestions must stay suggested until the user confirms them. Stress and burnout-risk language is reflective, not a medical diagnosis.",
+            "External transmission requires an exact digest-bound preview, one central approval, the same authorized principal, and direct completion evidence. Prepared files or a ready-to-submit status are never submission proof."
+          ]
+        },
         workbench: {
           classification: "specialized_domain_surface",
           aliases: ["workbench", "Workbench"],
@@ -9618,6 +9785,7 @@ function buildAgentOnboardingPayload(request: {
         "forge_call_movement_route",
         "forge_call_life_event_route",
         "forge_call_life_force_route",
+        "forge_call_work_route",
         "forge_call_workbench_route",
         "forge_call_course_route"
       ],
@@ -9709,6 +9877,7 @@ function buildAgentOnboardingPayload(request: {
       ],
       rewardWorkflow: ["forge_grant_reward_bonus"],
       workWorkflow: [
+        "forge_call_work_route",
         "forge_adjust_work_minutes",
         "forge_log_work",
         "forge_start_task_run",
@@ -14755,6 +14924,11 @@ export async function buildServer(
     authorization: managers.authorization,
     llm: managers.llm
   });
+  await registerWorkRoutes(app, {
+    authenticate: authenticateRequest,
+    authorization: managers.authorization,
+    getTokenById: (tokenId) => managers.token.getTokenById(tokenId) ?? undefined
+  });
   await registerPeerSharingRoutes(app, {
     authenticate: authenticateRequest,
     authenticateCompanion: (request) => {
@@ -15809,7 +15983,11 @@ export async function buildServer(
         },
         {
           includePeople,
-          noteScope: noteReadScopeForAuth(auth, userIds)
+          noteScope: noteReadScopeForAuth(auth, userIds),
+          workAccess:
+            auth.session || hasTokenScope(auth, "work.read")
+              ? resolveWorkAccess(auth, query)
+              : null
         }
       )
     };
@@ -15842,7 +16020,11 @@ export async function buildServer(
         userIds,
         {
           includePeople,
-          noteScope: noteReadScopeForAuth(auth, userIds)
+          noteScope: noteReadScopeForAuth(auth, userIds),
+          workAccess:
+            auth.session || hasTokenScope(auth, "work.read")
+              ? resolveWorkAccess(auth, query)
+              : null
         }
       )
     };
@@ -15872,7 +16054,10 @@ export async function buildServer(
       {},
       {
         includePeople: true,
-        noteScope: noteReadScopeForAuth(auth, userIds)
+        noteScope: noteReadScopeForAuth(auth, userIds),
+        workAccess: resolveWorkAccess(auth, {
+          userIds: query.userIds
+        })
       }
     );
     return searchLocalDocuments({
@@ -15904,7 +16089,10 @@ export async function buildServer(
       {},
       {
         includePeople: true,
-        noteScope: noteReadScopeForAuth(auth, userIds)
+        noteScope: noteReadScopeForAuth(auth, userIds),
+        workAccess: resolveWorkAccess(auth, {
+          userIds: userIds ?? []
+        })
       }
     );
     const search = searchLocalDocuments({
@@ -15918,7 +16106,12 @@ export async function buildServer(
       scopeTombstones: listLocalSearchScopeTombstones(userIds),
       limit: 5
     });
-    return buildCaptureProposal({ intent, searchResults: search.results });
+    return buildCaptureProposal({
+      intent,
+      searchResults: search.results.filter(
+        (result) => crudEntityTypeSchema.safeParse(result.entityType).success
+      ) as Parameters<typeof buildCaptureProposal>[0]["searchResults"]
+    });
   };
   app.post("/api/v1/capture/proposals", async (request, reply) => {
     const auth = requireOperatorSession(
@@ -16168,7 +16361,10 @@ export async function buildServer(
       {},
       {
         includePeople: true,
-        noteScope: noteReadScopeForAuth(auth, [input.ownerUserId])
+        noteScope: noteReadScopeForAuth(auth, [input.ownerUserId]),
+        workAccess: resolveWorkAccess(auth, {
+          userIds: [input.ownerUserId]
+        })
       }
     );
     return createOwnerRelationshipProposals({

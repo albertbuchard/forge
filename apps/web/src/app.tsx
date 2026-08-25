@@ -85,6 +85,7 @@ import {
   WikiEditorPage,
   WikiIngestHistoryPage,
   WikiPage,
+  WorkPage,
   WorkbenchFlowPage,
   WorkbenchPage,
   WorkoutDetailPage
@@ -780,6 +781,15 @@ export function App() {
               "Today",
               "Current work, time, and daily runway.",
               <TodayPage />
+            )}
+          />
+          <Route
+            path="work/*"
+            element={surface(
+              "work-index",
+              "Work",
+              "Current work, longitudinal check-ins, opportunity searches, applications, and career transitions.",
+              <WorkPage />
             )}
           />
           <Route

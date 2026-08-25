@@ -73,7 +73,11 @@ const STOP_WORDS = new Set([
   "work"
 ]);
 
-export type RelationshipProposalSourceDocument = LocalSearchDocument & {
+export type RelationshipProposalSourceDocument = Omit<
+  LocalSearchDocument,
+  "entityType"
+> & {
+  entityType: CrudEntityType;
   ownerUserId: string;
   authorized?: boolean;
   deleted?: boolean;
@@ -132,7 +136,9 @@ export type RelationshipProposalDecisionResult =
     }
   | { status: "not_found" | "conflict" | "expired" | "unavailable" };
 
-function entityKey(document: Pick<LocalSearchDocument, "entityType" | "entityId">) {
+function entityKey(
+  document: Pick<LocalSearchDocument, "entityType" | "entityId">
+) {
   return `${document.entityType}:${document.entityId}`;
 }
 
@@ -151,9 +157,11 @@ function normalizeText(value: string) {
 }
 
 function tokenize(value: string) {
-  return normalizeText(value)
-    .match(/[\p{L}\p{N}]+/gu)
-    ?.filter((term) => term.length >= 3 && !STOP_WORDS.has(term)) ?? [];
+  return (
+    normalizeText(value)
+      .match(/[\p{L}\p{N}]+/gu)
+      ?.filter((term) => term.length >= 3 && !STOP_WORDS.has(term)) ?? []
+  );
 }
 
 function documentTerms(document: LocalSearchDocument) {
@@ -188,10 +196,16 @@ function orderCandidate(
   if (SUPPORTING_TYPES.has(right.entityType) && left.entityType === "goal") {
     return { source: right, target: left, relationship: "supports" };
   }
-  if (EVIDENCE_TYPES.has(left.entityType) && !EVIDENCE_TYPES.has(right.entityType)) {
+  if (
+    EVIDENCE_TYPES.has(left.entityType) &&
+    !EVIDENCE_TYPES.has(right.entityType)
+  ) {
     return { source: left, target: right, relationship: "informs" };
   }
-  if (EVIDENCE_TYPES.has(right.entityType) && !EVIDENCE_TYPES.has(left.entityType)) {
+  if (
+    EVIDENCE_TYPES.has(right.entityType) &&
+    !EVIDENCE_TYPES.has(left.entityType)
+  ) {
     return { source: right, target: left, relationship: "informs" };
   }
   return entityKey(left).localeCompare(entityKey(right)) <= 0
@@ -242,13 +256,19 @@ export function generateRelationshipProposalCandidates(input: {
         document.deleted !== true
     )
     .slice(0, RELATIONSHIP_PROPOSAL_MAX_SOURCE_DOCUMENTS);
-  const terms = new Map(eligible.map((document) => [entityKey(document), documentTerms(document)]));
+  const terms = new Map(
+    eligible.map((document) => [entityKey(document), documentTerms(document)])
+  );
   const candidates: RelationshipProposalCandidate[] = [];
   let comparisons = 0;
   let truncated = input.documents.length > eligible.length;
 
   outer: for (let leftIndex = 0; leftIndex < eligible.length; leftIndex += 1) {
-    for (let rightIndex = leftIndex + 1; rightIndex < eligible.length; rightIndex += 1) {
+    for (
+      let rightIndex = leftIndex + 1;
+      rightIndex < eligible.length;
+      rightIndex += 1
+    ) {
       if (comparisons >= maxComparisons) {
         truncated = true;
         break outer;
@@ -266,11 +286,18 @@ export function generateRelationshipProposalCandidates(input: {
       const ordered = orderCandidate(left, right);
       const requiredOverlap = ordered.relationship === "related" ? 3 : 2;
       if (shared.length < requiredOverlap) continue;
-      const smallerTermCount = Math.max(1, Math.min(leftTerms.size, rightTerms.size));
+      const smallerTermCount = Math.max(
+        1,
+        Math.min(leftTerms.size, rightTerms.size)
+      );
       const coverage = shared.length / smallerTermCount;
       const confidence = Math.min(
         0.99,
-        Number((0.72 + shared.length * 0.06 + Math.min(coverage, 1) * 0.12).toFixed(4))
+        Number(
+          (0.72 + shared.length * 0.06 + Math.min(coverage, 1) * 0.12).toFixed(
+            4
+          )
+        )
       );
       if (confidence < RELATIONSHIP_PROPOSAL_CONFIDENCE_THRESHOLD) continue;
       const sourceTerms = terms.get(entityKey(ordered.source))!;
@@ -307,7 +334,10 @@ export function generateRelationshipProposalCandidates(input: {
       left.relationship.localeCompare(right.relationship)
   );
   return {
-    candidates: candidates.slice(0, RELATIONSHIP_PROPOSAL_MAX_PENDING_PER_OWNER),
+    candidates: candidates.slice(
+      0,
+      RELATIONSHIP_PROPOSAL_MAX_PENDING_PER_OWNER
+    ),
     consideredDocuments: eligible.length,
     comparisons,
     unauthorizedCandidateCount: candidates.filter(
@@ -361,12 +391,17 @@ function readRow(id: string, ownerUserId: string) {
 function getString(record: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
     const value = record[key];
-    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+    if (typeof value === "string" && value.trim().length > 0)
+      return value.trim();
   }
   return null;
 }
 
-function liveEndpoint(entityTypeValue: string, entityId: string, ownerUserId: string) {
+function liveEndpoint(
+  entityTypeValue: string,
+  entityId: string,
+  ownerUserId: string
+) {
   const parsedType = crudEntityTypeSchema.safeParse(entityTypeValue);
   if (!parsedType.success) return null;
   const entityType = parsedType.data;
@@ -394,7 +429,9 @@ function liveEndpoint(entityTypeValue: string, entityId: string, ownerUserId: st
   };
 }
 
-function mapVisibleProposal(row: RelationshipProposalRow): RelationshipProposal | null {
+function mapVisibleProposal(
+  row: RelationshipProposalRow
+): RelationshipProposal | null {
   if (row.status !== "pending") return null;
   const source = liveEndpoint(
     row.source_entity_type,
@@ -503,14 +540,24 @@ export function selectOwnerRelationshipProposalDocuments(
 ): RelationshipProposalSourceDocument[] {
   if (!getUserById(ownerUserId)) return [];
   return documents.flatMap((document) => {
+    const entityType = crudEntityTypeSchema.safeParse(document.entityType);
     if (
-      getEntityOwnerId(document.entityType, document.entityId) !== ownerUserId ||
-      isEntityDeleted(document.entityType, document.entityId) ||
-      !getEntityById(document.entityType, document.entityId)
+      !entityType.success ||
+      getEntityOwnerId(entityType.data, document.entityId) !== ownerUserId ||
+      isEntityDeleted(entityType.data, document.entityId) ||
+      !getEntityById(entityType.data, document.entityId)
     ) {
       return [];
     }
-    return [{ ...document, ownerUserId, authorized: true, deleted: false }];
+    return [
+      {
+        ...document,
+        entityType: entityType.data,
+        ownerUserId,
+        authorized: true,
+        deleted: false
+      }
+    ];
   });
 }
 
@@ -565,7 +612,9 @@ export function createOwnerRelationshipProposals(input: {
         )
         .map((row) => `${row.canonical_pair_key}:${row.relationship}`)
     );
-    const pendingCount = existingRows.filter((row) => row.status === "pending").length;
+    const pendingCount = existingRows.filter(
+      (row) => row.status === "pending"
+    ).length;
     const available = Math.max(
       0,
       RELATIONSHIP_PROPOSAL_MAX_PENDING_PER_OWNER - pendingCount
@@ -633,7 +682,9 @@ export function listOwnerRelationshipProposals(
   return runInTransaction(() => {
     expireAndPrune(ownerUserId, now);
     const visible: RelationshipProposal[] = [];
-    for (const row of readRows(ownerUserId).filter((item) => item.status === "pending")) {
+    for (const row of readRows(ownerUserId).filter(
+      (item) => item.status === "pending"
+    )) {
       const proposal = mapVisibleProposal(row);
       if (proposal) visible.push(proposal);
       else scrubAsExpired(row.id, now.toISOString());

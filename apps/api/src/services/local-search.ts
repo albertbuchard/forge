@@ -1,6 +1,9 @@
 import { getDatabase } from "../db.js";
 import { HttpError } from "../errors.js";
-import { crudEntityTypeSchema, type CrudEntityType } from "../types.js";
+import {
+  crudEntityTypeSchema,
+  type CrudEntityType
+} from "../types.js";
 import type {
   KnowledgeGraphEdge,
   KnowledgeGraphEntityKind,
@@ -14,6 +17,29 @@ export const LOCAL_SEARCH_MAX_EVIDENCE = 3;
 export const LOCAL_SEARCH_MAX_DOCUMENT_CHARACTERS = 6_000;
 export const LOCAL_SEARCH_MAX_DOCUMENT_BYTES = 3 * 1024 * 1024;
 export const LOCAL_SEARCH_MAX_RELATIONSHIPS = 750;
+
+export type WorkSearchEntityType =
+  | "work_organization"
+  | "work_engagement"
+  | "opportunity_campaign"
+  | "job_opportunity"
+  | "job_application"
+  | "job_interview"
+  | "job_offer"
+  | "work_outreach";
+
+export type LocalSearchEntityType = CrudEntityType | WorkSearchEntityType;
+
+export const LOCAL_SEARCH_WORK_ENTITY_TYPES = [
+  "work_organization",
+  "work_engagement",
+  "opportunity_campaign",
+  "job_opportunity",
+  "job_application",
+  "job_interview",
+  "job_offer",
+  "work_outreach"
+] as const satisfies readonly WorkSearchEntityType[];
 
 export const LOCAL_SEARCH_GRAPH_ENTITY_TYPES = [
   "goal",
@@ -53,10 +79,11 @@ export const LOCAL_SEARCH_SUPPLEMENTAL_ENTITY_TYPES = [
 ] as const satisfies readonly CrudEntityType[];
 
 export const LOCAL_SEARCH_ELIGIBLE_ENTITY_TYPES = Object.freeze([
-  ...crudEntityTypeSchema.options
+  ...crudEntityTypeSchema.options,
+  ...LOCAL_SEARCH_WORK_ENTITY_TYPES
 ]);
 
-const ELIGIBLE_ENTITY_TYPE_SET = new Set<CrudEntityType>(
+const ELIGIBLE_ENTITY_TYPE_SET = new Set<LocalSearchEntityType>(
   LOCAL_SEARCH_ELIGIBLE_ENTITY_TYPES
 );
 
@@ -91,7 +118,15 @@ const LOCAL_SEARCH_SOURCE_TABLES = [
   "preference_items",
   "questionnaire_instruments",
   "health_sleep_sessions",
-  "health_workout_sessions"
+  "health_workout_sessions",
+  "work_organizations",
+  "work_engagements",
+  "opportunity_campaigns",
+  "job_opportunities",
+  "job_applications",
+  "job_interviews",
+  "job_offers",
+  "work_outreach"
 ] as const;
 
 type LocalSearchField = {
@@ -103,7 +138,7 @@ type LocalSearchField = {
 
 export type LocalSearchDocument = {
   key: string;
-  entityType: CrudEntityType;
+  entityType: LocalSearchEntityType;
   entityId: string;
   entityKind: KnowledgeGraphEntityKind | null;
   title: string;
@@ -129,7 +164,7 @@ export type LocalSearchRelationshipEvidence = {
   label: string;
   excerpt: string;
   relationKind: string;
-  relatedEntityType: CrudEntityType;
+  relatedEntityType: LocalSearchEntityType;
   relatedEntityId: string;
 };
 
@@ -138,7 +173,7 @@ export type LocalSearchEvidence =
   | LocalSearchRelationshipEvidence;
 
 export type LocalSearchResult = {
-  entityType: CrudEntityType;
+  entityType: LocalSearchEntityType;
   entityId: string;
   entityKind: KnowledgeGraphEntityKind | null;
   title: string;
@@ -155,7 +190,7 @@ export type LocalSearchResponse = {
   retrievalMode: "local_lexical_structural";
   results: LocalSearchResult[];
   coverage: {
-    eligibleEntityTypes: CrudEntityType[];
+    eligibleEntityTypes: LocalSearchEntityType[];
     indexedDocuments: number;
     indexedRelationships: number;
     deletionTombstonesApplied: number;
@@ -261,17 +296,17 @@ function truncate(value: string, maximum: number) {
   return `${value.slice(0, Math.max(0, maximum - 1)).trimEnd()}…`;
 }
 
-function humanizeEntityType(entityType: CrudEntityType) {
+function humanizeEntityType(entityType: LocalSearchEntityType) {
   return entityType
     .split("_")
     .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
     .join(" ");
 }
 
-function isCrudEntityType(value: unknown): value is CrudEntityType {
+function isLocalSearchEntityType(value: unknown): value is LocalSearchEntityType {
   return (
     typeof value === "string" &&
-    ELIGIBLE_ENTITY_TYPE_SET.has(value as CrudEntityType)
+    ELIGIBLE_ENTITY_TYPE_SET.has(value as LocalSearchEntityType)
   );
 }
 
@@ -777,7 +812,7 @@ export function listSupplementalLocalSearchDocuments(userIds?: string[]) {
 }
 
 export function buildLocalSearchSourceHref(
-  entityType: CrudEntityType,
+  entityType: LocalSearchEntityType,
   entityId: string,
   entity: Record<string, unknown> = {}
 ) {
@@ -851,12 +886,28 @@ export function buildLocalSearchSourceHref(
       return `/sleep?focus=${id}`;
     case "workout_session":
       return `/sports/workouts/${id}`;
+    case "work_organization":
+      return `/work/organizations/${id}`;
+    case "work_engagement":
+      return `/work/engagements/${id}`;
+    case "opportunity_campaign":
+      return `/work/campaigns/${id}`;
+    case "job_opportunity":
+      return `/work/opportunities/${id}`;
+    case "job_application":
+      return `/work/applications/${id}`;
+    case "job_interview":
+      return `/work/interviews/${id}`;
+    case "job_offer":
+      return `/work/offers/${id}`;
+    case "work_outreach":
+      return `/work/outreach/${id}`;
   }
 }
 
 export function buildGraphLocalSearchDocuments(nodes: KnowledgeGraphNode[]) {
   return nodes.flatMap((node): LocalSearchDocument[] => {
-    if (!isCrudEntityType(node.entityType)) {
+    if (!isLocalSearchEntityType(node.entityType)) {
       return [];
     }
     const fields = buildGraphFields(node);
@@ -895,7 +946,7 @@ export function buildSupplementalLocalSearchDocuments(
   return matches.flatMap((match): LocalSearchDocument[] => {
     if (
       match.deleted === true ||
-      !isCrudEntityType(match.entityType) ||
+      !isLocalSearchEntityType(match.entityType) ||
       typeof match.id !== "string" ||
       !match.entity ||
       typeof match.entity !== "object" ||
@@ -968,7 +1019,7 @@ export function listLocalSearchDeletionTombstones() {
     .all() as Array<{ entity_type: string; entity_id: string }>;
   return new Set(
     rows
-      .filter((row) => isCrudEntityType(row.entity_type))
+      .filter((row) => isLocalSearchEntityType(row.entity_type))
       .map((row) => `${row.entity_type}:${row.entity_id}`)
   );
 }
@@ -1003,7 +1054,7 @@ export function listLocalSearchScopeTombstones(userIds?: string[]) {
   }>;
   return new Set(
     rows
-      .filter((row) => isCrudEntityType(row.entity_type))
+      .filter((row) => isLocalSearchEntityType(row.entity_type))
       .map((row) => `${row.entity_type}:${row.entity_id}`)
   );
 }
@@ -1188,7 +1239,7 @@ export function searchLocalDocuments(input: {
   edges?: KnowledgeGraphEdge[];
   deletionTombstones?: Set<string>;
   scopeTombstones?: Set<string>;
-  entityTypes?: CrudEntityType[];
+  entityTypes?: LocalSearchEntityType[];
   entityKinds?: KnowledgeGraphEntityKind[];
   limit?: number;
 }): LocalSearchResponse {

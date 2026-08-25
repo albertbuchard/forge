@@ -76,6 +76,7 @@ const routeModules = {
   wiki: () => import("@/pages/wiki-page"),
   wikiEditor: () => import("@/pages/wiki-editor-page"),
   wikiIngestHistory: () => import("@/pages/wiki-ingest-history-page"),
+  work: () => import("@/pages/work-page"),
   workbench: () => import("@/pages/workbench-page"),
   workbenchFlow: () => import("@/pages/workbench-flow-page"),
   workoutDetail: () => import("@/pages/workout-detail-page")
@@ -125,6 +126,7 @@ const routeMatchers: Array<[RegExp, RouteModuleKey]> = [
   [/^\/wiki\/ingest-history\/?$/, "wikiIngestHistory"],
   [/^\/wiki\/(?:new|edit\/[^/]+)\/?$/, "wikiEditor"],
   [/^\/wiki(?:\/page\/[^/]+)?\/?$/, "wiki"],
+  [/^\/work(?:\/[^/]+\/[^/]+)?\/?$/, "work"],
   [/^\/workbench\/[^/]+\/?$/, "workbenchFlow"],
   [/^\/workbench\/?$/, "workbench"],
   [/^\/settings\/mobile\/lab\/?$/, "companionLab"],

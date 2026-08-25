@@ -154,6 +154,16 @@ export type CrudEntityType =
   | "questionnaire_instrument"
   | "sleep_session"
   | "workout_session";
+export type WorkSearchEntityType =
+  | "work_organization"
+  | "work_engagement"
+  | "opportunity_campaign"
+  | "job_opportunity"
+  | "job_application"
+  | "job_interview"
+  | "job_offer"
+  | "work_outreach";
+export type LocalSearchEntityType = CrudEntityType | WorkSearchEntityType;
 export type LocalSearchEntityKind =
   | "goal"
   | "project"
@@ -178,7 +188,15 @@ export type LocalSearchEntityKind =
   | "flashcard"
   | "report"
   | "event_type"
-  | "emotion";
+  | "emotion"
+  | "work_organization"
+  | "work_engagement"
+  | "opportunity_campaign"
+  | "job_opportunity"
+  | "job_application"
+  | "job_interview"
+  | "job_offer"
+  | "work_outreach";
 export type LocalSearchEvidence =
   | {
       kind: "text";
@@ -192,11 +210,11 @@ export type LocalSearchEvidence =
       label: string;
       excerpt: string;
       relationKind: string;
-      relatedEntityType: CrudEntityType;
+      relatedEntityType: LocalSearchEntityType;
       relatedEntityId: string;
     };
 export interface LocalSearchResult {
-  entityType: CrudEntityType;
+  entityType: LocalSearchEntityType;
   entityId: string;
   entityKind: LocalSearchEntityKind | null;
   title: string;
@@ -212,7 +230,7 @@ export interface LocalSearchResponse {
   retrievalMode: "local_lexical_structural";
   results: LocalSearchResult[];
   coverage: {
-    eligibleEntityTypes: CrudEntityType[];
+    eligibleEntityTypes: LocalSearchEntityType[];
     indexedDocuments: number;
     indexedRelationships: number;
     deletionTombstonesApplied: number;

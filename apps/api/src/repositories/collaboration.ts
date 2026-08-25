@@ -15,6 +15,10 @@ import { createTask } from "./tasks.js";
 import { recordInsightAppliedReward } from "./rewards.js";
 import { resolveUserForMutation } from "./users.js";
 import {
+  authorizeTransmissionAgentAction,
+  rejectTransmissionApprovalAction
+} from "../work/transmission.js";
+import {
   agentActionSchema,
   approvalRequestSchema,
   createAgentActionSchema,
@@ -190,6 +194,9 @@ function mapAction(row: AgentActionRow): AgentAction {
 }
 
 function shouldRequireApproval(input: CreateAgentActionInput, token?: AgentTokenSummary | null): boolean {
+  if (input.actionType === "work_application_transmission") {
+    return true;
+  }
   if (!token) {
     return input.riskLevel !== "low";
   }
@@ -633,6 +640,9 @@ function executeAgentAction(action: AgentAction, context: CollaborationContext):
     const project = createProject(action.payload as never, { source: context.source, actor: context.actor ?? null });
     return { projectId: project.id };
   }
+  if (action.actionType === "work_application_transmission") {
+    return authorizeTransmissionAgentAction(action, context);
+  }
   return { deferred: true };
 }
 
@@ -765,59 +775,72 @@ export function listAgentActions(agentId: string): AgentAction[] {
 }
 
 export function approveApprovalRequest(approvalId: string, note: string, actor: string | null): ApprovalRequest | undefined {
-  const row = getApprovalRequestRow(approvalId);
-  if (!row || row.status !== "pending") {
-    return row ? mapApproval(row) : undefined;
-  }
-
-  const approvedAt = new Date().toISOString();
-  getDatabase()
-    .prepare(
-      `UPDATE approval_requests
-       SET status = 'approved', approved_by = ?, approved_at = ?, resolution_note = ?, updated_at = ?
-       WHERE id = ?`
-    )
-    .run(actor, approvedAt, note, approvedAt, approvalId);
-
-  const actionRow = getDatabase()
-    .prepare(
-      `SELECT
-         id, agent_id, token_id, action_type, risk_level, status, title, summary, payload_json, idempotency_key,
-         approval_request_id, outcome_json, created_at, updated_at, completed_at
-       FROM agent_actions
-       WHERE approval_request_id = ?`
-    )
-    .get(approvalId) as AgentActionRow | undefined;
-
-  if (actionRow) {
-    const action = mapAction(actionRow);
-    const outcome = executeAgentAction(action, {
+  return runInTransaction(() => {
+    const row = getApprovalRequestRow(approvalId);
+    if (!row || row.status !== "pending") {
+      return row ? mapApproval(row) : undefined;
+    }
+    const approvedAt = new Date().toISOString();
+    const actionRow = getDatabase()
+      .prepare(
+        `SELECT
+           id, agent_id, token_id, action_type, risk_level, status, title, summary, payload_json, idempotency_key,
+           approval_request_id, outcome_json, created_at, updated_at, completed_at
+         FROM agent_actions
+         WHERE approval_request_id = ?`
+      )
+      .get(approvalId) as AgentActionRow | undefined;
+    if (actionRow) {
+      const action = mapAction(actionRow);
+      const outcome = executeAgentAction(action, {
+        actor,
+        source: "ui",
+        token: null
+      });
+      if (outcome.deferred === true) {
+        throw new HttpError(
+          409,
+          "agent_action_handler_missing",
+          `No executable handler is registered for ${action.actionType}.`
+        );
+      }
+      getDatabase()
+        .prepare(
+          `UPDATE agent_actions
+           SET status = 'executed', outcome_json = ?, updated_at = ?, completed_at = ?
+           WHERE id = ? AND status = 'pending_approval'`
+        )
+        .run(JSON.stringify(outcome), approvedAt, approvedAt, action.id);
+      getDatabase()
+        .prepare(
+          `UPDATE approval_requests
+           SET status = 'executed', approved_by = ?, approved_at = ?,
+               resolution_note = ?, updated_at = ?
+           WHERE id = ? AND status = 'pending'`
+        )
+        .run(actor, approvedAt, note, approvedAt, approvalId);
+    } else {
+      getDatabase()
+        .prepare(
+          `UPDATE approval_requests
+           SET status = 'approved', approved_by = ?, approved_at = ?,
+               resolution_note = ?, updated_at = ?
+           WHERE id = ? AND status = 'pending'`
+        )
+        .run(actor, approvedAt, note, approvedAt, approvalId);
+    }
+    recordActivityEvent({
+      entityType: "approval_request",
+      entityId: approvalId,
+      eventType: "approval_request_approved",
+      title: `Approval request approved`,
+      description: note || "A pending agent action was approved.",
       actor,
       source: "ui",
-      token: null
+      metadata: {}
     });
-    getDatabase()
-      .prepare(
-        `UPDATE agent_actions
-         SET status = 'executed', outcome_json = ?, updated_at = ?, completed_at = ?
-         WHERE id = ?`
-      )
-      .run(JSON.stringify(outcome), approvedAt, approvedAt, action.id);
-    getDatabase().prepare(`UPDATE approval_requests SET status = 'executed', updated_at = ? WHERE id = ?`).run(approvedAt, approvalId);
-  }
-
-  recordActivityEvent({
-    entityType: "approval_request",
-    entityId: approvalId,
-    eventType: "approval_request_approved",
-    title: `Approval request approved`,
-    description: note || "A pending agent action was approved.",
-    actor,
-    source: "ui",
-    metadata: {}
+    return mapApproval(getApprovalRequestRow(approvalId)!);
   });
-
-  return mapApproval(getApprovalRequestRow(approvalId)!);
 }
 
 export function rejectApprovalRequest(approvalId: string, note: string, actor: string | null): ApprovalRequest | undefined {
@@ -837,6 +860,16 @@ export function rejectApprovalRequest(approvalId: string, note: string, actor: s
   getDatabase()
     .prepare(`UPDATE agent_actions SET status = 'rejected', updated_at = ? WHERE approval_request_id = ?`)
     .run(rejectedAt, approvalId);
+  const actionRow = getDatabase()
+    .prepare(
+      `SELECT
+         id, agent_id, token_id, action_type, risk_level, status, title, summary,
+         payload_json, idempotency_key, approval_request_id, outcome_json,
+         created_at, updated_at, completed_at
+       FROM agent_actions WHERE approval_request_id = ?`
+    )
+    .get(approvalId) as AgentActionRow | undefined;
+  if (actionRow) rejectTransmissionApprovalAction(mapAction(actionRow));
 
   recordActivityEvent({
     entityType: "approval_request",

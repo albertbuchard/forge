@@ -3668,8 +3668,34 @@ export const actionBarFilterIdSchema = z.enum([
   "belief_entry",
   "mode_profile",
   "flashcard",
-  "trigger_report"
+  "trigger_report",
+  "work_organization",
+  "work_engagement",
+  "opportunity_campaign",
+  "job_opportunity",
+  "job_application",
+  "job_interview",
+  "job_offer",
+  "work_outreach"
 ]);
+
+export const workSearchEntityTypeValues = [
+  "work_organization",
+  "work_engagement",
+  "opportunity_campaign",
+  "job_opportunity",
+  "job_application",
+  "job_interview",
+  "job_offer",
+  "work_outreach"
+] as const;
+
+export const localSearchEntityTypeValues = [
+  ...crudEntityTypeSchema.options,
+  ...workSearchEntityTypeValues
+] as const;
+
+export const localSearchEntityTypeSchema = z.enum(localSearchEntityTypeValues);
 
 export const localSearchEntityKindSchema = z.enum([
   "goal",
@@ -3695,7 +3721,15 @@ export const localSearchEntityKindSchema = z.enum([
   "flashcard",
   "report",
   "event_type",
-  "emotion"
+  "emotion",
+  "work_organization",
+  "work_engagement",
+  "opportunity_campaign",
+  "job_opportunity",
+  "job_application",
+  "job_interview",
+  "job_offer",
+  "work_outreach"
 ]);
 
 function readRepeatedLocalSearchQueryValues(value: unknown) {
@@ -3715,7 +3749,7 @@ export const localSearchQuerySchema = z
     q: z.string().trim().max(200).default(""),
     entityType: z.preprocess(
       readRepeatedLocalSearchQueryValues,
-      z.array(crudEntityTypeSchema).max(crudEntityTypeSchema.options.length)
+      z.array(localSearchEntityTypeSchema).max(64)
     ),
     entityKind: z.preprocess(
       readRepeatedLocalSearchQueryValues,

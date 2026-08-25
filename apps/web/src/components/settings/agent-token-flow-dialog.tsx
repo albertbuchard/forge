@@ -35,7 +35,11 @@ const FULL_OPERATOR_SCOPES = [
   "artifact.uploadBytes",
   "artifact.updateMetadata",
   "artifact.link",
-  "artifact.enrichWithLlm"
+  "artifact.enrichWithLlm",
+  "work.read",
+  "work.write",
+  "work.compensation.read",
+  "work.transmit"
 ] as const;
 
 const TOKEN_SCOPE_OPTIONS = [
@@ -159,6 +163,30 @@ const TOKEN_SCOPE_OPTIONS = [
     label: "Artifact enrichment",
     description:
       "Request bounded metadata enrichment through an approved model."
+  },
+  {
+    value: "work.read",
+    label: "Work read",
+    description:
+      "Read scoped Work Engagements, confirmed trends, campaigns, opportunities, and application summaries."
+  },
+  {
+    value: "work.write",
+    label: "Work write",
+    description:
+      "Create and update scoped Work records without external transmission authority."
+  },
+  {
+    value: "work.compensation.read",
+    label: "Work compensation",
+    description:
+      "Read private compensation and benefit fields for authorized Work records."
+  },
+  {
+    value: "work.transmit",
+    label: "Application transmission",
+    description:
+      "Read private application material and request exact, owner-approved external transmissions."
   }
 ] as const;
 
@@ -168,7 +196,8 @@ const REVIEW_FIRST_SCOPES = new Set([
   "wiki:read",
   "people:read:basic",
   "peer:status",
-  "artifact.readMetadata"
+  "artifact.readMetadata",
+  "work.read"
 ]);
 
 const DEFAULT_BOOTSTRAP_POLICY = {

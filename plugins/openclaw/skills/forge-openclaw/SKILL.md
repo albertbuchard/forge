@@ -1,6 +1,6 @@
 ---
 name: forge-openclaw-plugin
-description: Use when the user wants to save, search, update, review, start, stop, reward, explain, compare, learn, or run Forge records, or when the conversation is clearly about a Forge entity or domain surface such as a goal, project, strategy, task, habit, person, People or peer sharing, note, wiki_page, artifact, calendar_event, calendar_connection, work_block_template, task_timebox, task_run, work_adjustment, insight, preference item, preference context, preference catalog, preference judgment, preference signal, questionnaire instrument, questionnaire run, self observation, operator_overview, operator_context, calendar_overview, sleep_overview, sports_overview, training_load, weight_loss, movement, life_force, workbench, course, concept, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, flashcard, trigger_report, event_type, emotion_definition, sleep_session, or workout_session. Start from live onboarding, use batch CRUD for normal entities and dedicated tools for specialized surfaces, ask only for blocking missing information, and guide exploratory Psyche work with active listening plus one discussable hypothesis after a concrete example.
+description: Use when the user wants to save, search, update, review, start, stop, reward, explain, compare, learn, or run Forge records, or when the conversation is clearly about a Forge entity or domain surface such as a goal, project, strategy, task, habit, person, People or peer sharing, note, wiki_page, artifact, calendar_event, calendar_connection, work_block_template, task_timebox, task_run, work_adjustment, work engagement, work check-in, opportunity campaign, job opportunity, job application, insight, preference item, preference context, preference catalog, preference judgment, preference signal, questionnaire instrument, questionnaire run, self observation, operator_overview, operator_context, calendar_overview, sleep_overview, sports_overview, training_load, weight_loss, movement, life_force, workbench, course, concept, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, flashcard, trigger_report, event_type, emotion_definition, sleep_session, or workout_session. Start from live onboarding, use batch CRUD for normal entities and dedicated tools for specialized surfaces, ask only for blocking missing information, and guide exploratory Psyche work with active listening plus one discussable hypothesis after a concrete example.
 ---
 
 Forge is the user's structured system for planning work, doing work, reflecting on patterns, and keeping a truthful record of what is happening. Use it when the user is clearly working inside that system, or when they are describing something that naturally belongs there and would benefit from being stored, updated, reviewed, or acted on in Forge. Keep the conversation natural first. Do not turn every message into intake. When a real Forge entity is clearly present, name the exact entity type plainly, help with the substance of the conversation, and then offer Forge once, lightly, if storing it would genuinely help.
@@ -218,6 +218,17 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   back after progress or terminal writes. Original voice is available only through
   the current message lease and only when the connected runtime accepts audio; never
   invent a transcript or use that operation as generic Artifact download.
+- Work and Opportunity Management is a permanent specialized domain surface, not
+  execution `work`, a task, or generic batch CRUD. Use `forge_call_work_route` and
+  the live `specializedDomainSurfaces.work` route catalog for Work Engagements,
+  user-confirmed longitudinal check-ins, metric trends, Opportunity Campaigns,
+  sourced opportunities, versioned evaluations, applications, interviews, offers,
+  documents, search runs, outreach, and typed relationships. Read Work context before
+  making a recommendation. Never represent an agent-suggested metric as user-entered,
+  silently change search criteria, infer submission from prepared material, or expose
+  compensation without `work.compensation.read`. External application transmission
+  requires `work.transmit`, an exact digest-bound preview, central approval, the same
+  authorized principal, and direct completion evidence.
 - Movement, Life Events, Life Force, and Workbench are specialized domain surfaces. Read
   `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and use
   the dedicated route families for timeline/overlay repair, Life Events chronology/calendar/ticket/status, energy templates/signals,

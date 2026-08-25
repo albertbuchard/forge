@@ -1,6 +1,6 @@
 ---
 name: forge-codex
-description: Use Forge's curated MCP tools to read, create, update, link, review, learn, and navigate Forge records and specialized domain surfaces. Trigger for Forge planning, People and peer sharing, calendar, preferences, Psyche, questionnaires, health, wiki, artifacts, Movement, Life Events, Life Force, Workbench, Course, Concept, agent-runtime, and guided question-flow requests where Codex must choose the correct batch or dedicated API path.
+description: Use Forge's curated MCP tools to read, create, update, link, review, learn, and navigate Forge records and specialized domain surfaces. Trigger for Forge planning, Work Engagements, work check-ins, Opportunity Campaigns, job opportunities and applications, People and peer sharing, calendar, preferences, Psyche, questionnaires, health, wiki, artifacts, Movement, Life Events, Life Force, Workbench, Course, Concept, agent-runtime, and guided question-flow requests where Codex must choose the correct batch or dedicated API path.
 ---
 
 # Forge Codex
@@ -211,6 +211,17 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   back after progress or terminal writes. Retrieve original voice only under the
   current lease and only when this runtime accepts audio; never invent a transcript
   or use that operation as generic Artifact download.
+- Work and Opportunity Management is a permanent specialized domain surface, not
+  execution `work`, a task, or generic batch CRUD. Use `forge_call_work_route` and
+  the live `specializedDomainSurfaces.work` route catalog for Work Engagements,
+  user-confirmed longitudinal check-ins, metric trends, Opportunity Campaigns,
+  sourced opportunities, versioned evaluations, applications, interviews, offers,
+  documents, search runs, outreach, and typed relationships. Read Work context before
+  making a recommendation. Never represent an agent-suggested metric as user-entered,
+  silently change search criteria, infer submission from prepared material, or expose
+  compensation without `work.compensation.read`. External application transmission
+  requires `work.transmit`, an exact digest-bound preview, central approval, the same
+  authorized principal, and direct completion evidence.
 - Movement, Life Events, Life Force, and Workbench are specialized domain surfaces. Read
   `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and use
   the dedicated route families for timeline/overlay repair, Life Events chronology/calendar/ticket/status, energy templates/signals,
