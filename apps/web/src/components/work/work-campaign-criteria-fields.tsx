@@ -1,7 +1,4 @@
-import {
-  FlowChoiceGrid,
-  FlowField
-} from "@/components/flows/question-flow-dialog";
+import { FlowField } from "@/components/flows/question-flow-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { NativeSelect } from "@/components/work/work-dialog-helpers";

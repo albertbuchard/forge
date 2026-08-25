@@ -1,5 +1,3 @@
-import { workEntityTypes, workLinkTargetTypes } from "./work/types.js";
-
 export type JsonSchema = Record<string, unknown>;
 
 export const security = [{ operatorSession: [] }, { bearerAuth: [] }];

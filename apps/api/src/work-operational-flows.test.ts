@@ -385,7 +385,7 @@ test("campaign targets, sources, policies, and search runs preserve exact criter
           .prepare(
             "SELECT COUNT(*) AS count FROM work_supporting_revisions WHERE record_id = ?"
           )
-          .get(roleTarget.record.id) as { count: number }
+          .get(String(roleTarget.record.id)) as { count: number }
       ).count,
       2
     );

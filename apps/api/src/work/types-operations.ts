@@ -14,7 +14,6 @@ import {
   optionalDateTime,
   queryBoolean,
   stringList,
-  updateWorkOrganizationSchema,
   upsertJobOpportunitySchema,
   workActorSchema,
   workEntityTypeSchema,

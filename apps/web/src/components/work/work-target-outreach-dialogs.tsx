@@ -20,8 +20,6 @@ import {
   recordValue,
   Select
 } from "./work-operational-dialog-shared";
-import type { AutomationDialogKind } from "./work-automation-dialogs";
-
 type OutreachDraft = {
   campaignId: string;
   organizationId: string;

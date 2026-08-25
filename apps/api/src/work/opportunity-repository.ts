@@ -28,9 +28,6 @@ import {
   updateRevisionedRow
 } from "./repository-write-helpers.js";
 import type {
-  CreateJobApplicationInput,
-  RecordJobApplicationEventInput,
-  UpdateJobApplicationInput,
   UpdateJobOpportunityInput,
   UpsertJobOpportunityInput
 } from "./types.js";

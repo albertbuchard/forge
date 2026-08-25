@@ -243,25 +243,28 @@ export function ApplicationEventDialog({
   application: JobApplication;
   onSaved: () => Promise<void> | void;
 }) {
-  const fresh = (): ApplicationEventDraft => ({
-    eventType: "email",
-    occurredAt: localDateTime(new Date().toISOString()),
-    factualDescription: "",
-    outcome: "",
-    nextAction: application.nextAction ?? "",
-    nextFollowUpAt: localDateTime(application.nextFollowUpAt),
-    dueAt: "",
-    sourceArtifactId: ""
-  });
-  const [draft, setDraft] = useState<ApplicationEventDraft>(fresh);
+  const fresh = useMemo<ApplicationEventDraft>(
+    () => ({
+      eventType: "email",
+      occurredAt: localDateTime(new Date().toISOString()),
+      factualDescription: "",
+      outcome: "",
+      nextAction: application.nextAction ?? "",
+      nextFollowUpAt: localDateTime(application.nextFollowUpAt),
+      dueAt: "",
+      sourceArtifactId: ""
+    }),
+    [application.nextAction, application.nextFollowUpAt]
+  );
+  const [draft, setDraft] = useState<ApplicationEventDraft>(() => fresh);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (open) {
-      setDraft(fresh());
+      setDraft(fresh);
       setError(null);
     }
-  }, [open, application.id, application.revision]);
+  }, [fresh, open]);
   const steps = useMemo<Array<QuestionFlowStep<ApplicationEventDraft>>>(
     () => [
       {
@@ -365,7 +368,7 @@ export function ApplicationEventDialog({
         )
       }
     ],
-    [application.id, application.revision]
+    []
   );
   return (
     <QuestionFlowDialog

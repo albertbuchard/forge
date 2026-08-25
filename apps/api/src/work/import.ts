@@ -1,30 +1,18 @@
-import { getDatabase, runInTransaction } from "../db.js";
+import { getDatabase } from "../db.js";
 import { HttpError } from "../errors.js";
 import { getEntityOwnerId } from "../repositories/entity-ownership.js";
 import type { WorkAccess } from "./access.js";
 import {
-  appendAuthorizedWorkLinks,
   assertAuthorizedWorkReference,
   fingerprint,
-  getOperationReceipt,
-  newWorkId,
-  nowIso,
   rowToWorkRecord,
-  storeOperationReceipt,
   type SqlRow
 } from "./repository-helpers.js";
 import {
   applicationTransitions,
-  createCampaignCriteriaVersion,
-  createJobApplication,
-  createOpportunityCampaign,
-  createWorkEngagement,
-  createWorkOrganization,
   findJobOpportunityDuplicate,
-  opportunityDedupeKey,
-  upsertJobOpportunity
+  opportunityDedupeKey
 } from "./repository.js";
-import { createSupportingRecord } from "./supporting.js";
 import type { WorkImportManifest } from "./types-operations.js";
 
 type RollbackClass =

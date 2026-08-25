@@ -6,23 +6,15 @@ import { hasMaterialValue } from "./repository-write-helpers.js";
 import {
   assertAuthorizedWorkReference,
   appendAuthorizedWorkLinks,
-  fingerprint,
   getAuthorizedRoot,
-  getOperationReceipt,
   listAuthorizedWorkLinks,
   newWorkId,
   nowIso,
   recordWorkActivity,
   registerWorkRoot,
   rowToWorkRecord,
-  storeOperationReceipt,
   type SqlRow
 } from "./repository-helpers.js";
-import {
-  createWorkEngagement,
-  transitionJobApplication
-} from "./repository.js";
-import type { CreateWorkEngagementInput } from "./types.js";
 import {
   recordOfferRevision,
   recordSupportingRevision

@@ -367,7 +367,7 @@ test("Opportunity Campaigns keep versioned criteria, deduplicated roles, and cam
          WHERE campaign_id = ? AND opportunity_id = ?
          ORDER BY evaluation_version`
       )
-      .all(primary.id, discovered.opportunity.id) as Array<{
+      .all(String(primary.id), String(discovered.opportunity.id)) as Array<{
       evaluation_version: number;
       criteria_version_id: string;
       hard_gate_result: string;

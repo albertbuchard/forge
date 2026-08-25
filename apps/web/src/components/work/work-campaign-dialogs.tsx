@@ -389,10 +389,13 @@ export function CampaignCriteriaDialog({
   const currentVersion = ((campaign.criteriaVersions as
     | WorkRecord[]
     | undefined) ?? [])[0];
-  const currentDocument =
-    currentVersion?.criteria && typeof currentVersion.criteria === "object"
-      ? (currentVersion.criteria as WorkRecord)
-      : undefined;
+  const currentDocument = useMemo(
+    () =>
+      currentVersion?.criteria && typeof currentVersion.criteria === "object"
+        ? (currentVersion.criteria as WorkRecord)
+        : undefined,
+    [currentVersion?.criteria]
+  );
   const [draft, setDraft] = useState(() =>
     criteriaDraftFromDocument(currentDocument)
   );
@@ -405,7 +408,7 @@ export function CampaignCriteriaDialog({
       setRationale("");
       setError(null);
     }
-  }, [campaign.updatedAt, currentVersion?.id, open]);
+  }, [currentDocument, open]);
   const value = { criteria: draft, rationale };
   const steps: Array<QuestionFlowStep<typeof value>> = [
     {

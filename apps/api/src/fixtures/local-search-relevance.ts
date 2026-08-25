@@ -19,10 +19,14 @@ type FixtureRecord = {
   importance?: number;
 };
 
+type RelevanceFixtureDocument = LocalSearchDocument & {
+  entityType: CrudEntityType;
+};
+
 function fixtureDocument(
   entityId: string,
   record: FixtureRecord
-): LocalSearchDocument {
+): RelevanceFixtureDocument {
   return {
     key: `${record.entityType}:${entityId}`,
     entityType: record.entityType,
@@ -61,7 +65,7 @@ function fixtureDocument(
   };
 }
 
-export const LOCAL_SEARCH_RELEVANCE_DOCUMENTS: LocalSearchDocument[] = [
+export const LOCAL_SEARCH_RELEVANCE_DOCUMENTS: RelevanceFixtureDocument[] = [
   fixtureDocument("goal_continuity", {
     entityType: "goal",
     entityKind: "goal",
@@ -399,8 +403,8 @@ export const LOCAL_SEARCH_RELEVANCE_EDGES: KnowledgeGraphEdge[] = [
 ];
 
 function cloneFixtureDocumentForOtherUser(
-  document: LocalSearchDocument
-): LocalSearchDocument {
+  document: RelevanceFixtureDocument
+): RelevanceFixtureDocument {
   const otherId = `${document.entityId}_other`;
   const replaceRecordId = (value: string | null) =>
     value

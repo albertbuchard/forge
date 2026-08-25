@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { InjectOptions } from "light-my-request";
+import type { z } from "zod";
 
 import { buildServer } from "./app.js";
 import { closeDatabase } from "./db.js";
 import { issueTestOperatorSessionCookie } from "./security/test-operator-authority.js";
+import { campaignCriterionSchema } from "./work/types.js";
 
 export type WorkTestServer = Awaited<ReturnType<typeof buildServer>>;
 
@@ -53,14 +56,17 @@ export async function injectJson<T>(
     authorization?: string;
   }
 ) {
-  const response = await app.inject({
+  const request: InjectOptions = {
     method: input.method,
     url: input.url,
     headers: input.authorization
       ? { authorization: input.authorization }
       : { cookie },
-    ...(input.payload === undefined ? {} : { payload: input.payload })
-  });
+    ...(input.payload === undefined
+      ? {}
+      : { payload: input.payload as InjectOptions["payload"] })
+  };
+  const response = await app.inject(request);
   assert.equal(
     response.statusCode,
     input.expectedStatus ?? 200,
@@ -74,7 +80,9 @@ export const userProvenance = {
   sourceLabel: "Work integration test"
 };
 
-export const baseCriterion = {
+type CampaignCriterionInput = z.input<typeof campaignCriterionSchema>;
+
+export const baseCriterion: CampaignCriterionInput = {
   key: "location_remote",
   section: "geography" as const,
   field: "workModel",
@@ -88,7 +96,9 @@ export const baseCriterion = {
   disqualificationRule: "Reject roles that require full-time on-site work."
 };
 
-export function initialCriteria(overrides: Partial<typeof baseCriterion> = {}) {
+export function initialCriteria(
+  overrides: Partial<CampaignCriterionInput> = {}
+) {
   return {
     schemaVersion: 1 as const,
     criteria: [{ ...baseCriterion, ...overrides }],

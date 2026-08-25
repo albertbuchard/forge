@@ -308,7 +308,7 @@ export function acceptOfferAsPlannedEngagement(input: {
       "work_offer_not_found",
       "The Job Offer was not found."
     );
-  const application = getAuthorizedRoot(
+  getAuthorizedRoot(
     "job_application",
     String(offer.application_id),
     input.access

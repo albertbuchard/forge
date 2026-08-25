@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Plus, Search, Sparkles, ToggleLeft, ToggleRight } from "lucide-react";
+import { Plus, Sparkles, ToggleLeft, ToggleRight } from "lucide-react";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

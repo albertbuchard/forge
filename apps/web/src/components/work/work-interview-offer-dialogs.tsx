@@ -819,7 +819,7 @@ export function OfferDialog({
         )
       }
     ],
-    [offer]
+    []
   );
   return (
     <QuestionFlowDialog

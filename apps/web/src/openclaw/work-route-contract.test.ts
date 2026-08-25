@@ -32,7 +32,7 @@ const testConfig = {
   timeoutMs: 15000
 } as const;
 
-function registeredWorkTool(apiToken = testConfig.apiToken) {
+function registeredWorkTool(apiToken: string = testConfig.apiToken) {
   const tools: RegisteredTool[] = [];
   registerForgePluginTools(
     {

@@ -275,7 +275,6 @@ export function WorkPage() {
           kind={detail.kind}
           id={detail.id}
           userIds={userIds}
-          engagements={engagements}
           organizations={organizations}
           campaigns={campaigns}
           opportunities={opportunities}

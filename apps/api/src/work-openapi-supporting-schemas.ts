@@ -1,6 +1,5 @@
 import type { JsonSchema } from "./work-openapi-shared.js";
 import {
-  response,
   provenance,
   searchCostConstraints,
   searchRateConstraints,

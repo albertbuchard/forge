@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Clock3, Link2, Plus, Save } from "lucide-react";
@@ -12,7 +12,7 @@ import {
   readable
 } from "@/components/work/work-components";
 import { replaceWorkRelationships } from "@/lib/work-api";
-import type { WorkRecord, WorkTrendSeries } from "@/lib/work-api";
+import type { WorkRecord } from "@/lib/work-api";
 export type WorkDetailKind =
   | "engagements"
   | "organizations"
@@ -153,20 +153,27 @@ export function RelationshipEditor({
   userIds: string[];
   onRefresh: () => Promise<void>;
 }) {
-  const records = Array.isArray(links)
-    ? (links as Array<Record<string, unknown>>)
-    : [];
-  const outgoing = records
-    .filter(
-      (link) =>
-        link.sourceEntityType === entityType && link.sourceEntityId === entityId
-    )
-    .map((link) => ({
-      targetEntityType: String(link.targetEntityType),
-      targetEntityId: String(link.targetEntityId),
-      relationship: String(link.relationship ?? "related"),
-      anchorKey: String(link.anchorKey ?? "")
-    }));
+  const records = useMemo(
+    () =>
+      Array.isArray(links) ? (links as Array<Record<string, unknown>>) : [],
+    [links]
+  );
+  const outgoing = useMemo(
+    () =>
+      records
+        .filter(
+          (link) =>
+            link.sourceEntityType === entityType &&
+            link.sourceEntityId === entityId
+        )
+        .map((link) => ({
+          targetEntityType: String(link.targetEntityType),
+          targetEntityId: String(link.targetEntityId),
+          relationship: String(link.relationship ?? "related"),
+          anchorKey: String(link.anchorKey ?? "")
+        })),
+    [entityId, entityType, records]
+  );
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(outgoing);
   const [targetType, setTargetType] = useState<string>("goal");
@@ -175,7 +182,7 @@ export function RelationshipEditor({
   const [anchorKey, setAnchorKey] = useState("");
   useEffect(() => {
     if (!editing) setDraft(outgoing);
-  }, [links, editing]);
+  }, [editing, outgoing]);
   const save = useMutation({
     mutationFn: () =>
       replaceWorkRelationships(userIds, entityType, entityId, {

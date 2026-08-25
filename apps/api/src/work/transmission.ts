@@ -15,10 +15,6 @@ import {
   storeOperationReceipt,
   type SqlRow
 } from "./repository-helpers.js";
-import {
-  getJobApplicationDetail,
-  transitionJobApplication
-} from "./repository.js";
 
 type TransmissionPreviewInput = {
   applicationId: string;

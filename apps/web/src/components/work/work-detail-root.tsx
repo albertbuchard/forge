@@ -12,11 +12,10 @@ import type {
   JobApplication,
   JobOpportunity,
   OpportunityCampaign,
-  WorkEngagement,
   WorkRecord,
   WorkTrendSeries
 } from "@/lib/work-api";
-import { EventTimeline, record } from "./work-detail-shared";
+import { EventTimeline } from "./work-detail-shared";
 import type { WorkDetailKind } from "./work-detail-shared";
 import { EngagementDetail } from "./work-engagement-detail";
 import { CampaignDetail } from "./work-campaign-detail";
@@ -31,7 +30,6 @@ export function WorkDetail({
   kind,
   id,
   userIds,
-  engagements,
   organizations,
   campaigns,
   opportunities,
@@ -46,7 +44,6 @@ export function WorkDetail({
   kind: WorkDetailKind;
   id: string;
   userIds: string[];
-  engagements: WorkEngagement[];
   organizations: WorkRecord[];
   campaigns: OpportunityCampaign[];
   opportunities: JobOpportunity[];

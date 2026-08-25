@@ -324,7 +324,7 @@ test("Application submission requires exact approval, sender binding, and direct
         `SELECT authorization_identity, preview_digest, status
          FROM application_transmission_previews WHERE id = ?`
       )
-      .get(preview.preview.id) as {
+      .get(String(preview.preview.id)) as {
       authorization_identity: string;
       preview_digest: string;
       status: string;
@@ -442,7 +442,7 @@ test("Accepting a recorded offer creates one planned Work Engagement and keeps b
       .prepare(
         "SELECT authorization_identity, preview_digest FROM application_transmission_previews WHERE id = ?"
       )
-      .get(preview.preview.id) as {
+      .get(String(preview.preview.id)) as {
       authorization_identity: string;
       preview_digest: string;
     };
@@ -710,7 +710,10 @@ test("Private Work import previews, applies, and rolls back without subjective m
 
     const prohibited = structuredClone(manifest);
     prohibited.source.digest = "b".repeat(64);
-    prohibited.organizations[0]!.provenance = {
+    const prohibitedOrganization = prohibited.organizations[0] as unknown as {
+      provenance: Record<string, unknown>;
+    };
+    prohibitedOrganization.provenance = {
       sourceKind: "import",
       sourceLabel: "Private export",
       evidence: [{ authorization: `Bearer ${"x".repeat(32)}` }]

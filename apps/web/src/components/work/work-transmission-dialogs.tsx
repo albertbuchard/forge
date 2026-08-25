@@ -297,12 +297,17 @@ export function VerifiedSubmissionDialog({
   application: JobApplication;
   onSaved: () => Promise<void> | void;
 }) {
-  const authorized = (application.transmissionPreviews ?? []).filter(
-    (preview) =>
-      preview.status === "authorized" &&
-      preview.authorizationIdentity &&
-      preview.previewDigest
+  const authorized = useMemo(
+    () =>
+      (application.transmissionPreviews ?? []).filter(
+        (preview) =>
+          preview.status === "authorized" &&
+          preview.authorizationIdentity &&
+          preview.previewDigest
+      ),
+    [application.transmissionPreviews]
   );
+  const defaultPreviewId = String(authorized[0]?.id ?? "");
   const [draft, setDraft] = useState<VerifiedDraft>({
     previewId: "",
     confirmationReceipt: "",
@@ -317,7 +322,7 @@ export function VerifiedSubmissionDialog({
   useEffect(() => {
     if (open)
       setDraft({
-        previewId: String(authorized[0]?.id ?? ""),
+        previewId: defaultPreviewId,
         confirmationReceipt: "",
         trackingIdentifier: "",
         evidenceArtifactId: "",
@@ -325,7 +330,7 @@ export function VerifiedSubmissionDialog({
           "The application was submitted and the destination confirmed receipt.",
         occurredAt: localDateTime(new Date().toISOString())
       });
-  }, [open, application.updatedAt]);
+  }, [application.updatedAt, defaultPreviewId, open]);
   const steps = useMemo<Array<QuestionFlowStep<VerifiedDraft>>>(
     () => [
       {

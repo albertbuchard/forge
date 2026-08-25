@@ -1,6 +1,5 @@
 import type { JsonSchema } from "./work-openapi-shared.js";
 import {
-  security,
   response,
   body,
   idParameter,
@@ -11,8 +10,7 @@ import {
   withTypedResponse,
   withReplayResponses,
   withOnlyTypedSuccess,
-  provenance,
-  scope
+  provenance
 } from "./work-openapi-shared.js";
 import {
   workOrganizationInput,
