@@ -8,6 +8,7 @@ import { buildServer } from "./app.js";
 import { closeDatabase } from "./db.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { todayPriorityDecisionSchema } from "./today-priority-types.js";
+import { getRuntimeTimeZone } from "@/lib/date-keys.js";
 
 const operatorCookie = issueTestOperatorSessionCookie;
 
@@ -102,10 +103,11 @@ test("Today priority route is authenticated, owner-scoped, and canonical", async
     const token = (tokenResponse.json() as { token: { token: string } }).token
       .token;
     const authorization = { authorization: `Bearer ${token}` };
+    const runtimeTimeZone = encodeURIComponent(getRuntimeTimeZone());
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/v1/today/priority?userIds=user_operator&timeZone=UTC&candidateLimit=5",
+      url: `/api/v1/today/priority?userIds=user_operator&timeZone=${runtimeTimeZone}&candidateLimit=5`,
       headers: authorization
     });
     assert.equal(response.statusCode, 200, response.body);
@@ -166,7 +168,7 @@ test("Today priority route is authenticated, owner-scoped, and canonical", async
 
     const activeResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/today/priority?userIds=user_operator&timeZone=UTC",
+      url: `/api/v1/today/priority?userIds=user_operator&timeZone=${runtimeTimeZone}`,
       headers: authorization
     });
     assert.equal(activeResponse.statusCode, 200, activeResponse.body);

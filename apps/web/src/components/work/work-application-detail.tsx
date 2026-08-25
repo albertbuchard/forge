@@ -45,7 +45,7 @@ import {
   FactsGrid,
   record
 } from "./work-detail-shared";
-import { APPLICATION_TRANSITIONS } from "./work-opportunity-detail";
+import { APPLICATION_TRANSITIONS } from "./work-application-transitions";
 
 export function ApplicationWorkspaceDetail({
   application,
