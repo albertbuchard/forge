@@ -6,6 +6,10 @@ const releaseScriptUrl = new URL(
   "./release-forge-openclaw-plugin.sh",
   import.meta.url
 );
+const hermesReleaseScriptUrl = new URL(
+  "./release-forge-hermes-plugin.sh",
+  import.meta.url
+);
 const releaseWorkflowUrl = new URL(
   "../../.github/workflows/release-openclaw-plugin.yml",
   import.meta.url
@@ -103,6 +107,40 @@ test("release rollback does not pass the aliased plugin manifest twice to git re
   assert.equal(cleanup.includes("${PLUGIN_MANIFEST}"), false);
   assert.match(cleanup, /ls-files --error-unmatch/u);
   assert.match(cleanup, /tracked_paths/u);
+});
+
+test("prepare mode fixes a local candidate without pushing it", async () => {
+  const scripts = await Promise.all(
+    [releaseScriptUrl, hermesReleaseScriptUrl].map((url) =>
+      readFile(url, "utf8")
+    )
+  );
+
+  for (const source of scripts) {
+    const createAndPublishBlock = source.slice(
+      source.indexOf("if ! is_publish_from_tag_mode; then", source.indexOf("main() {")),
+      source.indexOf('if [[ "${SKIP_UPLOAD}" == "1" ]]', source.indexOf("main() {"))
+    );
+    const prepareBlock = source.slice(
+      source.indexOf("if is_prepare_mode; then", source.indexOf("main() {")),
+      source.indexOf("publish_package", source.indexOf("main() {"))
+    );
+
+    assert.match(
+      createAndPublishBlock,
+      /if is_full_mode; then[\s\S]*push_release "\$\{next_version\}"[\s\S]*fi/u
+    );
+    assert.equal(
+      createAndPublishBlock.replace(
+        /if is_full_mode; then[\s\S]*push_release "\$\{next_version\}"[\s\S]*fi/u,
+        ""
+      ).includes('push_release "${next_version}"'),
+      false
+    );
+    assert.match(prepareBlock, /Release prepared locally\./u);
+    assert.match(prepareBlock, /No commit or tag was pushed\./u);
+    assert.equal(prepareBlock.includes("push_release"), false);
+  }
 });
 
 test("hardens the ephemeral runner home before packed owner authentication", async () => {

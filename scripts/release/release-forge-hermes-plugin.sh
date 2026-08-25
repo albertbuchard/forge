@@ -47,8 +47,8 @@ This script:
 4. runs the Forge + Hermes verification suite
 5. smoke-installs the built Hermes wheel into a temporary virtualenv
 6. commits and tags the Forge nested repo
-7. pushes main + the Hermes release tag to origin
-8. uploads the Hermes Python package to PyPI through twine in full mode, or leaves upload to CI in prepare mode
+7. keeps the commit and tag local in prepare mode, or pushes them in full mode
+8. uploads the Hermes Python package to PyPI in full mode; after an explicitly reviewed prepare-mode push, GitHub Actions publishes from the Hermes tag
 EOF
 }
 
@@ -539,8 +539,8 @@ main() {
       run_verification_suite
       run_temp_install_smoke
       restore_openclaw_build_side_effects
+      push_release "${next_version}"
     fi
-    push_release "${next_version}"
   fi
   if [[ "${SKIP_UPLOAD}" == "1" ]]; then
     cat <<EOF
@@ -553,10 +553,12 @@ EOF
   fi
   if is_prepare_mode; then
     cat <<EOF
-Release prepared.
+Release prepared locally.
 
-Pushed tag: ${HERMES_TAG_PREFIX}${next_version}
-CI should publish forge-hermes-plugin==${next_version}.
+Local commit: $(git -C "${FORGE_DIR}" rev-parse --short HEAD)
+Local tag: ${HERMES_TAG_PREFIX}${next_version}
+No commit or tag was pushed. Push only after the canonical migration, import,
+readback, rollback preview, and outgoing privacy gates pass.
 EOF
     return 0
   fi

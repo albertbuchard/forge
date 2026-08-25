@@ -75,8 +75,8 @@ This script:
 2. bumps the Forge plugin version across all publish/runtime surfaces, including forge-memory
 3. runs the verification suite
 4. commits and tags the Forge nested repo
-5. pushes main + tag to origin
-6. publishes forge-openclaw-plugin to npm in full mode, or leaves that step to CI in prepare mode; forge-memory publishes through its GitHub Actions trusted-publishing workflow on the same v<version> tag
+5. keeps the commit and tag local in prepare mode, or pushes them in full mode
+6. publishes forge-openclaw-plugin to npm in full mode; after an explicitly reviewed prepare-mode push, GitHub Actions publishes forge-openclaw-plugin and forge-memory from the same v<version> tag
 
 The default fast profile runs the bounded publication-critical checks. Set
 FORGE_RELEASE_TEST_PROFILE=full to append the exhaustive server suite.
@@ -614,8 +614,8 @@ main() {
         npm run build:openclaw-plugin
         npm run smoke:packed-openclaw-runtime
       )
+      push_release "${next_version}"
     fi
-    push_release "${next_version}"
   fi
   if [[ "${SKIP_UPLOAD}" == "1" ]]; then
     cat <<EOF
@@ -629,11 +629,12 @@ EOF
   fi
   if is_prepare_mode; then
     cat <<EOF
-Release prepared.
+Release prepared locally.
 
-Pushed tag: v${next_version}
-CI should publish forge-openclaw-plugin@${next_version}.
-CI should also publish forge-memory@${next_version} from the same tag.
+Local commit: $(git -C "${FORGE_DIR}" rev-parse --short HEAD)
+Local tag: v${next_version}
+No commit or tag was pushed. Push only after the canonical migration, import,
+readback, rollback preview, and outgoing privacy gates pass.
 EOF
     return 0
   fi

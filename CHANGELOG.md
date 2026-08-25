@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.74
+
+- Kept opportunity and application detail actions attached to the exact record
+  being viewed, even when that record falls outside a bounded overview page.
+  Starting an application now includes the current opportunity, and an
+  application workspace loads its linked opportunity and primary campaign
+  directly instead of showing incomplete context.
+- Finished the Work mobile accessibility repair. Work buttons and selectors now
+  meet the 44-pixel touch target, campaign criteria are keyboard-focusable and
+  labelled, and the summary strip uses valid definition-list semantics.
+- Made prepare-only OpenClaw and Hermes releases genuinely local. Prepare mode
+  now creates the reviewed commit and tag without pushing either one, so a
+  canonical migration, import readback, rollback preview, and outgoing privacy
+  gate can run against one immutable candidate before publication.
+
 ## 0.3.73
 
 - Made **Use this browser session only** a definitive consent boundary. It now
