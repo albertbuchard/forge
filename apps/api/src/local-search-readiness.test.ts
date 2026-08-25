@@ -185,7 +185,7 @@ test("KNOW-09 freezes a representative, owner-partitioned relevance fixture", ()
   );
   assert.equal(LOCAL_SEARCH_DEVELOPMENT_QUERIES.length, 80);
   assert.equal(LOCAL_SEARCH_HELD_OUT_QUERIES.length, 40);
-  assert.equal(LOCAL_SEARCH_RELEVANCE_DOCUMENTS.length, 31);
+  assert.equal(LOCAL_SEARCH_RELEVANCE_DOCUMENTS.length, 39);
   assert.deepEqual(
     [
       ...new Set(

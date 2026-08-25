@@ -21625,7 +21625,11 @@ test("settings and local agent token management persist through the versioned AP
       "artifact.uploadBytes",
       "artifact.updateMetadata",
       "artifact.link",
-      "artifact.enrichWithLlm"
+      "artifact.enrichWithLlm",
+      "work.read",
+      "work.write",
+      "work.compensation.read",
+      "work.transmit"
     ]);
     assert.equal(
       onboardingBody.onboarding.recommendedAutonomyMode,
@@ -22778,6 +22782,7 @@ test("settings and local agent token management persist through the versioned AP
         "forge_get_operator_context",
         "forge_get_current_work",
         "forge_get_today_priority",
+        "forge_get_daily_briefing",
         "forge_get_psyche_overview",
         "forge_get_psyche_schema_catalog",
         "forge_get_sleep_overview",
@@ -22861,6 +22866,7 @@ test("settings and local agent token management persist through the versioned AP
     assert.deepEqual(
       onboardingBody.onboarding.recommendedPluginTools.workWorkflow,
       [
+        "forge_call_work_route",
         "forge_adjust_work_minutes",
         "forge_log_work",
         "forge_start_task_run",

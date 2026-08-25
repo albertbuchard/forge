@@ -1,15 +1,17 @@
-import type { CrudEntityType } from "../types.js";
 import type {
   KnowledgeGraphEdge,
   KnowledgeGraphEntityKind
 } from "@/lib/knowledge-graph-types.js";
-import type { LocalSearchDocument } from "../services/local-search.js";
+import type {
+  LocalSearchDocument,
+  LocalSearchEntityType
+} from "../services/local-search.js";
 
 export const LOCAL_SEARCH_RELEVANCE_FIXTURE_VERSION =
   "forge-local-search-relevance-v1";
 
 type FixtureRecord = {
-  entityType: CrudEntityType;
+  entityType: LocalSearchEntityType;
   entityKind: KnowledgeGraphEntityKind | null;
   title: string;
   detail: string;
@@ -20,7 +22,7 @@ type FixtureRecord = {
 };
 
 type RelevanceFixtureDocument = LocalSearchDocument & {
-  entityType: CrudEntityType;
+  entityType: LocalSearchEntityType;
 };
 
 function fixtureDocument(
@@ -319,6 +321,70 @@ export const LOCAL_SEARCH_RELEVANCE_DOCUMENTS: RelevanceFixtureDocument[] = [
     detail: "Moderate strength training followed by deliberate recovery.",
     body: "workout session strength training recovery exercise",
     sourceHref: "/sports/workouts/workout_strength"
+  }),
+  fixtureDocument("organization_helios", {
+    entityType: "work_organization",
+    entityKind: "work_organization",
+    title: "Helios Clinical AI Institute",
+    detail: "A target organization for causal health research and engineering.",
+    body: "clinical artificial intelligence institute causal health research employer target",
+    sourceHref: "/work/organizations/organization_helios"
+  }),
+  fixtureDocument("engagement_clinical_ml", {
+    entityType: "work_engagement",
+    entityKind: "work_engagement",
+    title: "Clinical machine-learning research appointment",
+    detail: "A current hybrid role with protected research time and an upcoming review.",
+    body: "current work engagement clinical machine learning appointment workload research review",
+    sourceHref: "/work/engagements/engagement_clinical_ml"
+  }),
+  fixtureDocument("campaign_remote_health", {
+    entityType: "opportunity_campaign",
+    entityKind: "opportunity_campaign",
+    title: "Remote clinical AI transition campaign",
+    detail: "An active search for research engineering roles that fit current work and recovery commitments.",
+    body: "opportunity campaign job search remote clinical AI transition criteria current work recovery",
+    sourceHref: "/work/campaigns/campaign_remote_health"
+  }),
+  fixtureDocument("opportunity_causal_health", {
+    entityType: "job_opportunity",
+    entityKind: "job_opportunity",
+    title: "Causal health research engineer",
+    detail: "A remote role combining causal inference, clinical data, and production model evaluation.",
+    body: "job opportunity remote causal health research engineer clinical data production evaluation",
+    sourceHref: "/work/opportunities/opportunity_causal_health"
+  }),
+  fixtureDocument("application_causal_health", {
+    entityType: "job_application",
+    entityKind: "job_application",
+    title: "Submitted causal health application",
+    detail: "A verified submission awaiting an employer response and follow-up date.",
+    body: "job application submitted confirmation follow up employer response causal health",
+    sourceHref: "/work/applications/application_causal_health"
+  }),
+  fixtureDocument("interview_research_panel", {
+    entityType: "job_interview",
+    entityKind: "job_interview",
+    title: "Research engineering panel interview",
+    detail: "A scheduled panel discussion with a protected preparation block.",
+    body: "job interview research engineering panel scheduled preparation calendar",
+    sourceHref: "/work/interviews/interview_research_panel"
+  }),
+  fixtureDocument("offer_hybrid_research", {
+    entityType: "job_offer",
+    entityKind: "job_offer",
+    title: "Hybrid research engineering offer",
+    detail: "An offer under review against relocation, workload, and compensation criteria.",
+    body: "job offer hybrid research engineering comparison relocation workload compensation decision",
+    sourceHref: "/work/offers/offer_hybrid_research"
+  }),
+  fixtureDocument("outreach_mentor_intro", {
+    entityType: "work_outreach",
+    entityKind: "work_outreach",
+    title: "Mentor introduction request",
+    detail: "A drafted networking message about the clinical AI transition campaign.",
+    body: "work outreach mentor introduction networking drafted message clinical AI campaign",
+    sourceHref: "/work/outreach/outreach_mentor_intro"
   })
 ];
 
@@ -442,7 +508,7 @@ export const LOCAL_SEARCH_RELEVANCE_OTHER_USER_TOMBSTONES = new Set(
 
 export type LocalSearchRelevanceJudgment = {
   documentKey: string;
-  entityType: CrudEntityType;
+  entityType: LocalSearchEntityType;
   relevance: 0 | 1 | 2 | 3;
 };
 
@@ -460,7 +526,7 @@ const documentByEntityType = new Map(
   ])
 );
 
-function documentFor(entityType: CrudEntityType) {
+function documentFor(entityType: LocalSearchEntityType) {
   const document = documentByEntityType.get(entityType);
   if (!document) {
     throw new Error(`Missing local-search fixture for ${entityType}.`);
@@ -469,8 +535,8 @@ function documentFor(entityType: CrudEntityType) {
 }
 
 function judgmentsFor(
-  primaryType: CrudEntityType,
-  secondaryType?: CrudEntityType
+  primaryType: LocalSearchEntityType,
+  secondaryType?: LocalSearchEntityType
 ): LocalSearchRelevanceJudgment[] {
   const primary = documentFor(primaryType);
   const primaryOther = cloneFixtureDocumentForOtherUser(primary);
@@ -506,8 +572,8 @@ function judgmentsFor(
 }
 
 type HeldOutPair = readonly [
-  primary: CrudEntityType,
-  secondary: CrudEntityType,
+  primary: LocalSearchEntityType,
+  secondary: LocalSearchEntityType,
   query: string
 ];
 
@@ -534,28 +600,28 @@ const HELD_OUT_QUERY_PAIRS: readonly HeldOutPair[] = [
   ],
   [
     "strategy",
-    "artifact",
-    "decision rule that demands measurements before broadening a reviewed control"
+    "work_engagement",
+    "measured rollout strategy for improving a current clinical research appointment"
   ],
   [
-    "goal",
+    "work_organization",
     "strategy",
-    "protect offline planning and require measured proof before expanding"
+    "clinical research organization that requires measured evidence before expanding"
   ],
   [
     "sleep_session",
-    "habit",
-    "eight hours on a steady schedule followed by a low stress evening walk"
+    "job_opportunity",
+    "remote health research opportunity that protects a stable sleep schedule"
   ],
   [
-    "workout_session",
+    "job_application",
     "habit",
-    "moderate full body lifting with rest and a quiet walk afterward"
+    "follow up on the submitted application while preserving the evening recovery walk"
   ],
   [
     "work_block_template",
-    "tag",
-    "ninety minutes of drafting with concentration and no interruptions"
+    "job_interview",
+    "protected ninety minute drafting block for research panel interview preparation"
   ],
   [
     "trigger_report",
@@ -563,9 +629,9 @@ const HELD_OUT_QUERY_PAIRS: readonly HeldOutPair[] = [
     "review recurring interruptions that damage concentration"
   ],
   [
-    "note",
-    "artifact",
-    "database restore instructions and the report that documents retention controls"
+    "work_organization",
+    "opportunity_campaign",
+    "clinical AI organization targeted by the active remote transition search"
   ],
   [
     "artifact",
@@ -579,18 +645,18 @@ const HELD_OUT_QUERY_PAIRS: readonly HeldOutPair[] = [
   ],
   [
     "insight",
-    "sleep_session",
-    "observation that steady sleep timing improves the first work session"
+    "work_engagement",
+    "morning focus observation connected to the current clinical research appointment"
   ],
   [
-    "questionnaire_instrument",
+    "job_offer",
     "insight",
-    "short daily questions about rest and energy linked to a morning concentration observation"
+    "hybrid research offer decision informed by evidence about stable morning focus"
   ],
   [
     "life_event",
-    "calendar_event",
-    "the Lausanne household move and its nearby heart specialist visit"
+    "work_outreach",
+    "relocation transition and mentor introduction for clinical AI work"
   ],
   [
     "event_type",
@@ -598,15 +664,19 @@ const HELD_OUT_QUERY_PAIRS: readonly HeldOutPair[] = [
     "a durable home transition alongside a dated specialist visit"
   ],
   [
-    "mode_profile",
+    "work_outreach",
     "work_block_template",
-    "a calm patient revision state for a ninety minute drafting session"
+    "draft a mentor introduction message inside a protected writing block"
   ],
-  ["task_timebox", "artifact", "scheduled access log security audit"],
+  [
+    "task_timebox",
+    "job_opportunity",
+    "scheduled review of the remote causal health research opportunity"
+  ],
   [
     "preference_context",
-    "life_event",
-    "relocation housing and routine preferences"
+    "job_offer",
+    "compare the hybrid research offer against relocation and commute preferences"
   ],
   ["psyche_value", "artifact", "privacy responsibility and retention evidence"],
   ["behavior", "psyche_value", "careful capacity decisions protect trust"],
@@ -627,7 +697,11 @@ const HELD_OUT_QUERY_PAIRS: readonly HeldOutPair[] = [
     "mode_guide_session",
     "guided reminder that recovery supports work"
   ],
-  ["habit", "flashcard", "budget recovery in an evening routine"],
+  [
+    "job_application",
+    "flashcard",
+    "application follow up reminder that recovery remains part of the work"
+  ],
   ["life_event", "event_type", "relocation as a durable life transition"],
   [
     "emotion_definition",
@@ -656,14 +730,22 @@ const HELD_OUT_QUERY_PAIRS: readonly HeldOutPair[] = [
     "work environment energy preferences"
   ],
   ["questionnaire_instrument", "sleep_session", "daily sleep and energy check"],
-  ["sleep_session", "workout_session", "recovery after a strength session"],
+  [
+    "opportunity_campaign",
+    "workout_session",
+    "active job search that must fit alongside strength training recovery"
+  ],
   ["workout_session", "habit", "evening movement and exercise recovery"],
   [
     "emotion_definition",
     "belief_entry",
     "grounded response to urgency pressure"
   ],
-  ["calendar_event", "workout_session", "scheduled health and exercise session"]
+  [
+    "calendar_event",
+    "job_interview",
+    "scheduled specialist visit and research panel interview"
+  ]
 ];
 
 if (HELD_OUT_QUERY_PAIRS.length !== 40) {
@@ -701,50 +783,16 @@ const DEVELOPMENT_SINGLE_FAMILY_QUERIES =
 // Neither set is transformed, suffixed, or otherwise derived from the other.
 const DEVELOPMENT_CROSS_FAMILY_QUERY_PAIRS: readonly HeldOutPair[] = [
   ["goal", "project", "keep mobile plans usable without connectivity"],
-  ["task", "goal", "verify restored work and rotate its recovery key"],
-  ["project", "note", "phone capture synchronization and restoration steps"],
-  ["note", "task", "database recovery drill with a replacement key"],
-  ["strategy", "artifact", "require a result before widening access controls"],
-  ["goal", "strategy", "protect essential planning through measured rollout"],
-  ["sleep_session", "habit", "stable eight hour rest followed by a quiet walk"],
-  [
-    "workout_session",
-    "habit",
-    "moderate training with deliberate evening rest"
-  ],
-  ["work_block_template", "tag", "protected drafting without interruptions"],
-  ["trigger_report", "tag", "find recurring concentration breakers"],
-  ["note", "artifact", "decrypt the database restoration checklist report"],
-  ["artifact", "person", "Samira reviews retention and access controls"],
-  ["person", "task_timebox", "Samira inspects scheduled privileged events"],
-  ["insight", "sleep_session", "stable rest improves the first focus session"],
-  [
-    "questionnaire_instrument",
-    "insight",
-    "energy answers linked to concentration observations"
-  ],
-  [
-    "life_event",
-    "calendar_event",
-    "Lausanne move alongside the specialist appointment"
-  ],
-  [
-    "event_type",
-    "calendar_event",
-    "durable transition next to a dated appointment"
-  ],
-  [
-    "mode_profile",
-    "work_block_template",
-    "patient editing inside a protected drafting sprint"
-  ]
+  ["task", "goal", "verify restored work and rotate its recovery key"]
 ];
 
 export const LOCAL_SEARCH_DEVELOPMENT_QUERIES: LocalSearchRelevanceQuery[] = [
   ...DEVELOPMENT_SINGLE_FAMILY_QUERIES,
   ...DEVELOPMENT_CROSS_FAMILY_QUERY_PAIRS.map(
     ([primary, secondary, query], index) => ({
-      id: `development-${String(index + 63).padStart(2, "0")}`,
+      id: `development-${String(
+        index + LOCAL_SEARCH_RELEVANCE_DOCUMENTS.length * 2 + 1
+      ).padStart(2, "0")}`,
       query,
       partition: "allowed" as const,
       judgments: judgmentsFor(primary, secondary)
@@ -759,4 +807,4 @@ if (LOCAL_SEARCH_DEVELOPMENT_QUERIES.length !== 80) {
 }
 
 export const LOCAL_SEARCH_HELD_OUT_QUERY_SHA256 =
-  "43627a99b34a4ad0f7c43d384f435f072581c8517e683152c71becad2098d5d2";
+  "85b6b4a2aefbd743a9d2e9b6a62c396b6353ad39635db19085cd1a26d1a41631";
