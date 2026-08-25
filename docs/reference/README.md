@@ -21,6 +21,7 @@ These files are durable Forge references for setup, architecture, and current op
 - [Launchpad](./launchpad.md)
 - [Distribution](./distribution.md)
 - [Artifact Store](./artifact-store.md)
+- [Work and opportunities](./work-and-opportunities.md)
 - [Agent Messages](./agent-messages.md)
 - [Life Events](./life-events.md)
 - [Workbench](./workbench.md)

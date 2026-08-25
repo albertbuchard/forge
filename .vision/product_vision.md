@@ -64,7 +64,25 @@ calendar reconciliation, ticket artifact import, travel segments, status reads, 
 back into the same general Forge entity graph. Life Events can be brief moments or
 longer spans such as stays, festivals, visits, retreats, holidays, work phases, health
 episodes, and custom periods.
-companion side includes the iPhone app and related agent/tooling surfaces. All of those
+
+The Work side is a permanent personal-work record, not another task board. It represents
+several overlapping Work Engagements at once, including employment, appointments,
+contracts, freelance or fractional work, shifts, self-employment, and advisory work. Each
+engagement keeps its facts, relationships, objectives, documents, notice and availability,
+compensation privacy, and longitudinal user-confirmed check-ins. Job search lives inside
+this Work area through separate Opportunity Campaigns, sourced opportunities, criteria-
+versioned evaluations, applications, interviews, offers, outreach, and exact document use.
+Turning “Looking for opportunities” off changes the current foreground state but never
+deletes or rewrites search history.
+
+Authorized agents use one compound Work context for current roles, confirmed trends,
+linked goals and strategies, blockers, campaigns, and next actions. They may research,
+deduplicate, evaluate, and prepare workspaces, but they must preserve unknowns and ask only
+for unresolved user facts. No agent may report a submission from prepared material,
+change subjective criteria without confirmation, or transmit an application without an
+exact preview, central approval, sender binding, and direct completion evidence.
+
+The companion side includes the iPhone app and related agent/tooling surfaces. All of those
 pieces should use one shared entity language and one shared data model.
 
 The learning side spans Courses and Concepts. Courses are reusable ordered paths with modules, daily work, activities, proof rubrics, points, and grades. Concepts are durable Forge entities that sit underneath those paths: one definition and one mastery, evidence, and review record can appear in many courses. The normal Forge shell provides fast course and concept navigation; the lesson itself can take the full page while keeping Forge theme and identity context. Written proofs are reviewed through Forge's existing configured model connection, with the work saved and the grade withheld whenever a trustworthy assessment is unavailable.

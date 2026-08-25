@@ -30,6 +30,13 @@ The shared curated tool catalog also exposes `forge_get_daily_briefing` for one
 exact visible owner's evidence-backed work, schedule, capacity, and recent-activity
 picture. It preserves the route's freshness, omission, partial, and conflict states.
 
+The catalog exposes `forge_call_work_route` for permanent personal Work rather
+than task execution: concurrent Work Engagements, confirmed longitudinal
+check-ins, Opportunity Campaigns, sourced opportunities, criteria-versioned
+evaluations, applications, supporting records, search runs, accepted offers,
+relationships, and reviewed external transmission. Private import remains a
+local-operator action.
+
 Audio acceptance and understanding depend on the installed Codex runtime. A
 ChatGPT-authenticated Codex session uses its configured subscription allowance;
 Forge does not silently substitute a separately billed OpenAI API request and

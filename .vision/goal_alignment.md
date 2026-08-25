@@ -30,6 +30,20 @@ Forge should provide Courses as structured learning paths through first-class Co
 
 Forge should provide **Agent Messages** as durable asynchronous mail between an authenticated owner and connected agents. A message may carry text, one original voice Artifact, or both; it preserves sender, initial and current recipient, timestamps, immutable provenance, audit history, and an idempotent lifecycle from delivery through claim, progress, acknowledgement, handling, failure, or forwarding. Atomic lease claims must prevent two polling agents from executing the same request, while actor-bound exact retry receipts recover a committed operation after response loss without crossing agent or owner authority. Outbox traversal uses immutable-delivery keyset order. Inbox traversal uses newest-unread-eligible-agent-event keyset order with a frozen first-page event horizon, so current pages stay stable while later activity is promoted on refresh; claim and lease events do not create Inbox mail. Detail resolves the complete retained forwarding/retry chain. The only agent-readable Artifact bytes are the original voice for the specifically addressed, currently leased, nonterminal message. Web and native SwiftUI clients share default-agent routing and mailbox semantics, but only the iPhone promises a durable offline outbox. That outbox remains AES-GCM encrypted at rest and retries only during foreground or iOS-granted background-processing time, without promising a background deadline or silently transferring voice to a transcription provider.
 
+Forge should provide **Work** as a permanent top-level area for the person's real work,
+whether or not they are currently looking for another role. It must represent concurrent
+Work Engagements, preserve role facts and privacy-controlled compensation, connect each
+engagement to the general Forge graph, and record user-confirmed experience metrics over
+time without collapsing them into one mutable satisfaction score. Job search belongs
+inside Work through independent Opportunity Campaigns whose structured criteria,
+opportunity evaluations, applications, documents, interviews, offers, search runs, and
+outcomes retain their exact historical versions and provenance. The “Looking for
+opportunities” control is non-destructive. External application transmission requires an
+exact digest-bound preview, central approval, sender binding, and direct completion
+evidence. A private import path may ingest authoritative personal records only through a
+reviewed dry run and must never place personal data in public source or invent subjective
+metrics.
+
 Forge should stay modern and production-grade:
 
 - React 19

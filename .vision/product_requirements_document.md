@@ -547,3 +547,51 @@ removes a shared voice Artifact only after every retained message, reservation,
 version, entity link, and policy reference is gone. A durable cleanup job plus
 the content-addressed Artifact blob lock makes interrupted physical removal
 recoverable at startup.
+
+### 18. Work And Opportunity Management Contract
+
+Work is a permanent top-level area for a person's current, planned, and past paid work.
+It must remain available when no job search is active and must represent several
+overlapping Work Engagements without forcing a primary job. Employment, appointments,
+contracts, freelance or fractional engagements, shifts, self-employment, and advisory
+work use the same core entity with typed facts for dates, notice, schedule, location,
+workload, compensation, responsibilities, people, objectives, documents, privacy,
+provenance, and lifecycle history.
+
+Work experience is longitudinal. Versioned metric definitions and immutable observations
+record user-confirmed satisfaction, creativity, financial adequacy, growth, learning,
+autonomy, meaning, sustainability, stress and burnout risk without medical overclaim,
+work-life balance, flexibility, security, relationships, fairness, alignment, environment,
+ownership, energy, and future excitement. Built-ins retain canonical meanings while users
+may change display labels, disable them, or add structured custom metrics. Agent suggestions
+remain suggestions until the user confirms them; missing observations remain missing.
+
+The “Looking for opportunities” setting foregrounds Job searches but never deletes or
+rewrites paused or historical records. Each materially different search intention is an
+Opportunity Campaign with its own date window, targets, policies, versioned structured
+criteria, saved queries, automation settings, search runs, applications, artifacts, and
+history. One sourced Job Opportunity may match several campaigns, and every evaluation
+retains the exact criteria version, evidence, hard-gate result, uncertainty, score,
+confidence, recommendation, and human override used at that time.
+
+Applications keep a guarded lifecycle and immutable events. Preparation, approval,
+submission, acknowledgement, interviews, assessment, offers, rejection, withdrawal, and
+closure are separate evidence-backed states. Every application retains its primary
+campaign, exact positioning profile, artifact versions, reusable answer adaptations,
+representations, contacts, next action, and direct receipts. An accepted offer can create
+one planned Work Engagement idempotently without rewriting the offer, application, or
+campaign history.
+
+All Work records use owner, project, and tag scope plus the general entity-link graph.
+Agents read a bounded compound context before mutating. Compensation requires
+`work.compensation.read`; mutations require `work.write`; external transmission requires
+`work.transmit`. Transmission uses a digest-bound preview of recipient, route, fields,
+answers, and artifact versions, followed by central approval bound to the same sender and
+direct completion evidence. Prepared material alone never proves submission.
+
+Private migration is a normal insert-only Work import with source and manifest digests,
+typed references, deduplication, exact rollback inventory, conflict detection, dry-run
+counts, and atomic apply or rollback. Public source, fixtures, documentation, packages,
+and generated contracts must contain no personal employment facts, contact details,
+salary, credentials, protected demographic answers, or conversation-derived material.
+Subjective observations are never inferred during import.

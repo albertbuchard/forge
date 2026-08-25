@@ -437,9 +437,13 @@ export function rollbackWorkImport(input: {
     for (const campaignId of campaignRootIds) {
       getDatabase()
         .prepare(
-          "UPDATE opportunity_campaigns SET current_criteria_version_id = NULL WHERE id = ?"
+          `UPDATE opportunity_campaigns
+           SET current_criteria_version_id = NULL,
+               revision = revision + 1,
+               updated_at = ?
+           WHERE id = ?`
         )
-        .run(campaignId);
+        .run(now, campaignId);
     }
     for (const applicationId of applicationRootIds) {
       const application = records.find(
@@ -480,14 +484,26 @@ export function rollbackWorkImport(input: {
     for (const record of [...records].reverse()) {
       if (record.classification !== "soft_delete_root") continue;
       if (record.table === "job_applications") continue;
+      const lifecycle = (
+        {
+          work_organizations: { column: "status", value: "archived" },
+          work_engagements: { column: "status", value: "archived" },
+          opportunity_campaigns: { column: "status", value: "archived" },
+          job_opportunities: { column: "disposition", value: "archived" }
+        } as Record<string, { column: string; value: string }>
+      )[record.table];
       const extra =
         record.table === "opportunity_campaigns"
           ? ", current_criteria_version_id = NULL"
           : "";
+      const lifecycleUpdate = lifecycle
+        ? `, ${lifecycle.column} = '${lifecycle.value}'`
+        : "";
       const result = getDatabase()
         .prepare(
           `UPDATE ${record.table}
            SET deleted_at = ?, revision = revision + 1, updated_at = ?${extra}
+               ${lifecycleUpdate}
            WHERE id = ? AND deleted_at IS NULL`
         )
         .run(now, now, record.id);

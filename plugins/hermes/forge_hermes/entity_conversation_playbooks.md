@@ -3837,7 +3837,7 @@ Arc:
 1. Start from the user's practical question: current role facts, how a role is going,
    a check-in, a trend, a transition, a search campaign, one opportunity, an
    application, an interview or offer, or documents and next actions.
-2. Read the complete Work context when the answer depends on current engagements,
+2. Read the complete Work context when the answer depends on concurrent Work Engagements,
    notice periods, availability, linked goals or strategies, recent check-ins,
    blockers, or active campaigns. Do not rebuild that context from unrelated searches.
 3. Treat each simultaneous employment, appointment, contract, freelance engagement,
@@ -3857,10 +3857,10 @@ Arc:
    facts.
 8. Create an application workspace from an exact opportunity and primary campaign.
    Preparing documents or answers is not evidence that an application was submitted.
-9. Before any external transmission, present the exact recipient, route, fields, and
-   artifact versions in a digest-bound preview. Request central approval and record a
-   verified submission only after direct completion evidence from the same authorized
-   principal.
+9. Before any external transmission, create an exact transmission preview that
+   presents the recipient, route, fields, and artifact versions and binds them to a
+   digest. Request central approval and record a verified submission only after
+   direct completion evidence from the same authorized principal.
 10. When an offer is accepted, offer to create a planned Work Engagement through the
     dedicated acceptance action. Preserve the offer, application, and campaign history.
 

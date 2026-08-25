@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-08-20T21:03:52.401Z",
+  "generatedAt": "2026-08-25T05:24:04.787Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
     "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG",
-    "catalogEntryCount": 89,
-    "documentedToolCount": 89,
-    "catalogSha256": "35f32b5392c373bd75b043f14d276464c358635c35cab91e1d72a56c5f44bdcd"
+    "catalogEntryCount": 90,
+    "documentedToolCount": 90,
+    "catalogSha256": "e4aa8f84b4427e9e887e39fa01b8f7fa58202d71ccae7b68fd91aca5b9b9c832"
   },
   "groups": [
     {
@@ -336,6 +336,27 @@
         "Wiki pages are specialized CRUD and must not be sent through shared batch entity routes."
       ],
       "example": "{\"routeKey\":\"readBySlug\",\"pathParams\":{\"slug\":\"research/methods/causal-dag\"}}",
+      "catalogDocumented": true
+    },
+    {
+      "name": "forge_call_work_route",
+      "groupId": "work",
+      "groupTitle": "Work, Tasks, And Time",
+      "label": "Forge Work Route",
+      "summary": "Call one bounded Work route for jobs and other work arrangements, longitudinal check-ins, opportunity searches, applications, offers, and verified external-transmission evidence.",
+      "whenToUse": "Use for the permanent Work area and Job Search capability. This is distinct from forge_get_current_work, which describes active task execution, and from Workbench graph flows.",
+      "inputShape": "{ routeKey: string, pathParams?: { id?: string, kind?: string, entityType?: string, campaignId?: string, opportunityId?: string }, query?: object, body?: object }",
+      "requiredFields": [
+        "routeKey"
+      ],
+      "notes": [
+        "Choose routeKey from live onboarding specializedDomainSurfaces.work.routeKeys and methodRoutes.",
+        "Every call needs a configured scoped agent token. Reads require work.read, mutations require work.write, private application transmission requires work.transmit, and compensation reads require work.compensation.read.",
+        "Read context or the exact record before mutation, carry expectedRevision on existing-record changes, and use stable idempotency keys only for exact retries.",
+        "Agent-suggested work observations remain suggestions until the user confirms them. Never relabel them as user-reported values.",
+        "Prepared application material is not submission evidence. External action requires an exact transmission preview, central approval, and direct completion evidence before recordVerifiedSubmission."
+      ],
+      "example": "{\"routeKey\":\"context\",\"query\":{\"userIds\":[\"user_operator\"],\"trendWindowDays\":90}}",
       "catalogDocumented": true
     },
     {

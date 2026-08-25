@@ -582,6 +582,7 @@ The curated tool contract is:
 - `forge_call_movement_route`
 - `forge_call_life_event_route`
 - `forge_call_life_force_route`
+- `forge_call_work_route`
 - `forge_call_workbench_route`
 - `forge_call_artifact_route`
 
@@ -591,6 +592,14 @@ Live work rule:
 - use the real task-run tools for active work
 - use `forge_adjust_work_minutes` when a task or project already exists and only the tracked minutes need correction
 - use `forge_log_work` only when the work already happened and you are logging it as a finished work item after the fact
+
+Permanent Work rule:
+
+- execution work and task runs remain the task surface above
+- real jobs, appointments, contracts, confirmed experience trends, Opportunity Campaigns, opportunities, and applications use `forge_call_work_route`
+- read compound Work context before changing a campaign or application
+- never write an agent suggestion as a user-reported metric or claim submission from prepared material
+- compensation needs `work.compensation.read`; external transmission needs `work.transmit`, an exact preview, central approval, sender binding, and direct completion evidence
 
 ## Exact batch payload rules
 

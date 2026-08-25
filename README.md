@@ -356,6 +356,7 @@ has opened.
 - calendar and time: native events, Life Events, mirrored calendars, provider connections, work block templates, and task timeboxes
 - planning and execution: goals, strategies, projects, issues, tasks, subtasks, task runs, habits, work adjustments, and git-linked completion reports
 - agents and collaboration: OpenClaw, Hermes, Codex, Claude Code, explicit human and bot users, owner/assignee filters, runtime sessions, approvals, and audited actions
+- permanent Work context: concurrent jobs and contracts, confirmed experience trends, Opportunity Campaigns, sourced roles, application pipelines, and exact submitted materials through [Work and opportunities](./docs/reference/work-and-opportunities.md)
 - asynchronous agent mail: text and first-class voice Artifacts, default or selected routing, encrypted iPhone offline delivery, atomic claim leases, progress, forwarding, results, and immutable history through [Agent Messages](./docs/reference/agent-messages.md)
 - progress: XP, levels, streaks, trophies, optional downloadable art packs, and local reward history
 

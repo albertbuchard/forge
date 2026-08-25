@@ -56,7 +56,8 @@ const REVIEWED_VIEWER_SAFE_POST_ROUTES = new Set([
 
 export const REVIEWED_ORDINARY_SENSITIVE_ROUTES = new Set([
   "POST /api/v1/entities/restore",
-  "POST /api/v1/attention-inbox/:id/restore"
+  "POST /api/v1/attention-inbox/:id/restore",
+  "POST /api/v1/work/transmissions/previews/:id/request-approval"
 ]);
 
 const REVIEWED_SENSITIVE_ROUTE_TERMS =

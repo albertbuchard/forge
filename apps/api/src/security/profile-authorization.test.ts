@@ -112,7 +112,8 @@ test("profile rules keep ordinary workflows available while isolating execution 
 
   for (const ordinaryRestore of [
     contract("POST", "/api/v1/entities/restore"),
-    contract("POST", "/api/v1/attention-inbox/:id/restore")
+    contract("POST", "/api/v1/attention-inbox/:id/restore"),
+    contract("POST", "/api/v1/work/transmissions/previews/:id/request-approval")
   ]) {
     assert.equal(routeAuthorizationRisk(ordinaryRestore), "ordinary");
     assert.equal(
@@ -129,7 +130,8 @@ test("profile rules keep ordinary workflows available while isolating execution 
   }
   assert.deepEqual([...REVIEWED_ORDINARY_SENSITIVE_ROUTES].sort(), [
     "POST /api/v1/attention-inbox/:id/restore",
-    "POST /api/v1/entities/restore"
+    "POST /api/v1/entities/restore",
+    "POST /api/v1/work/transmissions/previews/:id/request-approval"
   ]);
   assert.equal(
     routeAuthorizationRisk(

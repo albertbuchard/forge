@@ -9,6 +9,7 @@ import {
   listAuthorizedWorkLinks,
   newWorkId,
   nowIso,
+  parseJson,
   recordWorkActivity,
   registerWorkRoot,
   replaceAuthorizedWorkLinks,
@@ -623,6 +624,7 @@ export function getWorkEngagementDetail(
     ...engagement,
     events: events.map((row) => rowToWorkRecord(row, access)),
     observations: observations.map((row) => rowToWorkRecord(row, access)),
+    history: listWorkActivityHistory("work_engagement", id, access),
     links: listAuthorizedWorkLinks("work_engagement", id, access)
   };
 }
@@ -866,6 +868,11 @@ export function getOpportunityCampaignDetail(access: WorkAccess, id: string) {
     .all(id) as SqlRow[];
   return {
     ...campaign,
+    currentCriteria:
+      criteria
+        .map((row) => rowToWorkRecord(row, access))
+        .find((version) => version.id === campaign.currentCriteriaVersionId) ??
+      null,
     criteriaVersions: criteria.map((row) => rowToWorkRecord(row, access)),
     roleTargets: roleTargets.map((row) => rowToWorkRecord(row, access)),
     organizationTargets: organizationTargets.map((row) =>
@@ -876,6 +883,51 @@ export function getOpportunityCampaignDetail(access: WorkAccess, id: string) {
     history: listWorkActivityHistory("opportunity_campaign", id, access),
     links: listAuthorizedWorkLinks("opportunity_campaign", id, access)
   };
+}
+
+const archivalLifecycleColumns: Record<
+  string,
+  { column: "status" | "disposition"; fallback: string }
+> = {
+  work_organization: { column: "status", fallback: "past" },
+  work_engagement: { column: "status", fallback: "ended" },
+  opportunity_campaign: { column: "status", fallback: "paused" },
+  job_opportunity: { column: "disposition", fallback: "closed" }
+};
+
+function priorArchivedLifecycle(
+  entityType: string,
+  entityId: string,
+  current: Record<string, unknown>
+) {
+  const lifecycle = archivalLifecycleColumns[entityType];
+  if (!lifecycle) return null;
+  const row = getDatabase()
+    .prepare(
+      `SELECT metadata_json
+       FROM activity_events
+       WHERE entity_type = ? AND entity_id = ? AND event_type = ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1`
+    )
+    .get(entityType, entityId, `${entityType}_archived`) as
+    | { metadata_json: string }
+    | undefined;
+  const metadata = row ? parseJson(row.metadata_json, {}) : {};
+  const prior =
+    metadata &&
+    typeof metadata === "object" &&
+    !Array.isArray(metadata) &&
+    typeof (metadata as Record<string, unknown>).priorLifecycle === "string"
+      ? String((metadata as Record<string, unknown>).priorLifecycle)
+      : null;
+  const currentValue = current[lifecycle.column];
+  return (
+    prior ??
+    (typeof currentValue === "string" && currentValue !== "archived"
+      ? currentValue
+      : lifecycle.fallback)
+  );
 }
 
 export {
@@ -910,9 +962,16 @@ export function softDeleteWorkRoot(
       );
     const current = getAuthorizedRoot(entityType, id, access);
     const archivedAt = nowIso();
+    const lifecycle = archivalLifecycleColumns[entityType];
+    const priorLifecycle = lifecycle
+      ? String(current[lifecycle.column] ?? lifecycle.fallback)
+      : null;
     const result = getDatabase()
       .prepare(
-        `UPDATE ${config.table} SET deleted_at = ?, revision = revision + 1, updated_at = ? WHERE id = ? AND revision = ?`
+        `UPDATE ${config.table}
+         SET deleted_at = ?${lifecycle ? `, ${lifecycle.column} = 'archived'` : ""},
+             revision = revision + 1, updated_at = ?
+         WHERE id = ? AND revision = ?`
       )
       .run(archivedAt, archivedAt, id, expectedRevision);
     if (Number(result.changes) !== 1)
@@ -927,7 +986,7 @@ export function softDeleteWorkRoot(
         engagement_id: id,
         event_type: "archived",
         prior_status: current.status ?? null,
-        new_status: current.status ?? null,
+        new_status: "archived",
         factual_description:
           "Work Engagement archived without deleting its history.",
         changes_json: json({
@@ -946,7 +1005,11 @@ export function softDeleteWorkRoot(
       entityId: id,
       eventType: `${entityType}_archived`,
       title: "Work record archived",
-      actor: access.actor
+      actor: access.actor,
+      metadata: {
+        ...(priorLifecycle ? { priorLifecycle } : {}),
+        archivedLifecycle: lifecycle ? "archived" : null
+      }
     });
     return getAuthorizedRoot(entityType, id, access, { includeDeleted: true });
   });
@@ -984,11 +1047,21 @@ export function restoreWorkRoot(
       }
     }
     const restoredAt = nowIso();
+    const lifecycle = archivalLifecycleColumns[entityType];
+    const restoredLifecycle = priorArchivedLifecycle(entityType, id, current);
     const result = getDatabase()
       .prepare(
-        `UPDATE ${config.table} SET deleted_at = NULL, revision = revision + 1, updated_at = ? WHERE id = ? AND revision = ?`
+        `UPDATE ${config.table}
+         SET deleted_at = NULL${lifecycle ? `, ${lifecycle.column} = ?` : ""},
+             revision = revision + 1, updated_at = ?
+         WHERE id = ? AND revision = ?`
       )
-      .run(restoredAt, id, expectedRevision);
+      .run(
+        ...(lifecycle ? [restoredLifecycle] : []),
+        restoredAt,
+        id,
+        expectedRevision
+      );
     if (Number(result.changes) !== 1)
       throw new HttpError(
         409,
@@ -1000,8 +1073,8 @@ export function restoreWorkRoot(
         id: newWorkId("wevt"),
         engagement_id: id,
         event_type: "restored",
-        prior_status: current.status ?? null,
-        new_status: current.status ?? null,
+        prior_status: "archived",
+        new_status: restoredLifecycle,
         factual_description:
           "Work Engagement restored with its history intact.",
         changes_json: json({
@@ -1020,7 +1093,10 @@ export function restoreWorkRoot(
       entityId: id,
       eventType: `${entityType}_restored`,
       title: "Work record restored",
-      actor: access.actor
+      actor: access.actor,
+      metadata: {
+        ...(restoredLifecycle ? { restoredLifecycle } : {})
+      }
     });
     return getAuthorizedRoot(entityType, id, access);
   });

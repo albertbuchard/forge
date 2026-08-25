@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.3.70
+
+- Added a permanent Work area for concurrent employment, appointments,
+  contracts, freelance engagements, shifts, advisory work, and planned or past
+  roles. Work Engagements preserve dates, notice and availability, schedule,
+  compensation privacy, responsibilities, people, objectives, documents,
+  provenance, links, and reversible lifecycle history.
+- Added user-confirmed Work check-ins with versioned built-in and custom metric
+  definitions, consistent response scales, contextual observations, trends,
+  meaningful changes, and safeguards that prevent an agent suggestion from
+  becoming a user-reported value.
+- Added concurrent Opportunity Campaigns with versioned structured criteria,
+  role and organization targets, saved searches, automation policies, sourced
+  and deduplicated opportunities, campaign-specific evaluation history, and
+  non-destructive “Looking for opportunities” state.
+- Added guarded application workspaces, immutable stage events, exact document
+  and answer use, interviews, offers, outreach, search-run evidence, duplicate
+  protection, and accepted-offer conversion into one planned Work Engagement.
+- Added exact external-transmission previews, central approval, sender binding,
+  direct completion evidence, private-data redaction, and a dry-run/apply/
+  rollback import path that never embeds personal data or invents subjective
+  Work metrics.
+- Added the complete typed Work HTTP/OpenAPI surface and the bounded
+  `forge_call_work_route` contract across OpenClaw, Codex, and Hermes, including
+  compound campaign context and explicit compensation and transmission scopes.
+- Added the responsive Work experience with Overview, Current work, Check-ins,
+  Goals and plans, Job searches, Applications, and Documents sections, plus
+  list and board pipelines, global search, deep links, truthful empty and error
+  states, and keyboard- and touch-operable dialogs.
+
 ## 0.3.66
 
 - Made remote-browser authorization device-first: Forge now attempts silent

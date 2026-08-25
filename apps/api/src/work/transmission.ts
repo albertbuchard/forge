@@ -433,8 +433,8 @@ export function prepareTransmissionMaterials(input: {
     ) as SqlRow | undefined;
   const opportunityRow = getDatabase()
     .prepare(
-      `SELECT id, owner_user_id, revision, compensation_json, status,
-              freshness_state, updated_at, deleted_at
+      `SELECT id, owner_user_id, revision, compensation_json, disposition,
+              availability_status, updated_at, deleted_at
        FROM job_opportunities WHERE id = ? LIMIT 1`
     )
     .get(applicationRow.opportunity_id) as SqlRow | undefined;
@@ -463,8 +463,8 @@ export function prepareTransmissionMaterials(input: {
     opportunityRevision: opportunityRow.revision,
     opportunityFactsDigest: fingerprint({
       compensation: opportunityRow.compensation_json,
-      status: opportunityRow.status,
-      freshnessState: opportunityRow.freshness_state,
+      disposition: opportunityRow.disposition,
+      availabilityStatus: opportunityRow.availability_status,
       updatedAt: opportunityRow.updated_at
     }),
     automationPolicy: policyRow

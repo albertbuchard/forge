@@ -42,7 +42,9 @@ const toolGroups = [
     id: "work",
     title: "Work, Tasks, And Time",
     match: (tool: string) =>
-      /current_work|task_run|work_minutes|log_work|reward|insight/.test(tool)
+      /current_work|call_work_route|task_run|work_minutes|log_work|reward|insight/.test(
+        tool
+      )
   },
   {
     id: "wiki",

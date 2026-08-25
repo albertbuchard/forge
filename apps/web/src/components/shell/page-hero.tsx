@@ -143,7 +143,7 @@ export function PageHero({
             hasHeaderMeta ? "mt-3" : ""
           )}
         >
-          <div
+          <h1
             className="min-w-0 text-[clamp(1.85rem,3.5vw,4rem)] font-medium leading-[0.92] text-[var(--ui-ink-strong)]"
             style={{
               transform:
@@ -152,7 +152,7 @@ export function PageHero({
             }}
           >
             {title}
-          </div>
+          </h1>
           {resolvedHelpContent ? (
             <InfoTooltip
               className="mt-2 shrink-0"
@@ -166,9 +166,8 @@ export function PageHero({
           ) : null}
         </div>
         <div
-          className="mt-2 min-w-0 max-w-3xl text-[14px] leading-6 text-[var(--ui-ink-soft)] sm:text-[15px]"
+          className="mt-2 min-w-0 max-w-3xl text-[14px] leading-6 text-[var(--ui-ink-soft)] opacity-[var(--forge-shell-hero-description-opacity)] sm:text-[15px]"
           style={{
-            opacity: "var(--forge-shell-hero-description-opacity)",
             transform:
               "translateY(var(--forge-shell-hero-description-translate-y))"
           }}
