@@ -1,5 +1,7 @@
-Forge Companion 1.0.175 republishes the verified Agent Messages experience and its native Talk to agent composer, aligned with Forge 0.3.65.
+Forge Companion 1.0.176 adds Forge's permanent Work area and improves remote device pairing, aligned with Forge 0.3.70.
 
-Send text, a voice note, or both to the default agent or another connected Forge agent. Talk to agent starts recording immediately when microphone access is available, while text remains usable when it is not. The native inbox and outbox show queued, delivery, progress, acknowledgement, result, failure, forwarding, and history states.
+Work brings current jobs, appointments, contracts, freelance work, goals, check-ins, opportunity searches, applications, people, and documents into one connected view. You can track several overlapping roles and several concurrent searches without losing paused or completed history.
 
-Offline messages remain in an AES-GCM encrypted queue protected by a device-only Keychain key. Forge retries when connectivity and iOS execution time return, labels Wi-Fi and background waiting honestly, and never promises an Apple background deadline. Authorized notifications contain only the agent label and generic state, not message or transcript content.
+Opportunity campaigns keep their own criteria, targets, evaluations, applications, interviews, offers, search runs, and next actions. Agents can retrieve one bounded Work context, preserve source evidence, and prepare an application without claiming it was submitted. External transmission still requires an exact preview, approval, and direct completion evidence.
+
+Remote pairing no longer blocks ordinary pairing while a device passkey check is waiting. Automatic restoration now stops after a bounded wait, while the normal pairing and optional master-password paths remain available.
