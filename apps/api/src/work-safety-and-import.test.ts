@@ -196,6 +196,59 @@ test("Work agent scopes redact compensation and prevent fabricated user reports"
   });
 });
 
+test("A legacy application with unknown criteria provenance cannot be transmitted", async () => {
+  await withWorkTestServer(
+    "legacy-criteria-transmission",
+    async ({ app, cookie }) => {
+      const { application } = await createReadyApplication({ app, cookie });
+      const sender = await issueWorkAgent({
+        app,
+        cookie,
+        label: "Legacy application sender",
+        scopes: ["work.read", "work.write", "work.transmit"]
+      });
+      getDatabase()
+        .prepare(
+          `UPDATE job_applications
+           SET criteria_version_id = NULL,
+               provenance_json = json_set(
+                 provenance_json,
+                 '$.compatibilityMigrations.workOpportunity139',
+                 json_object(
+                   'criteriaVersionState', 'unknown_legacy_schema',
+                   'reason', 'test fixture for an earlier schema'
+                 )
+               ),
+               revision = revision + 1
+           WHERE id = ?`
+        )
+        .run(String(application.id));
+
+      const preview = await app.inject({
+        method: "POST",
+        url: "/api/v1/work/transmissions/previews",
+        headers: { authorization: sender.authorization },
+        payload: {
+          applicationId: application.id,
+          destination: {
+            name: "Example ATS",
+            url: "https://example.test/apply",
+            channel: "web_portal"
+          },
+          fields: { candidateName: "Test Candidate" },
+          answers: [],
+          artifactVersions: [],
+          representations: {},
+          unresolvedGates: [],
+          idempotencyKey: "legacy-criteria-preview-rejected"
+        }
+      });
+      assert.equal(preview.statusCode, 409, preview.body);
+      assert.match(preview.body, /exact campaign criteria version/i);
+    }
+  );
+});
+
 test("Application submission requires exact approval, sender binding, and direct completion evidence", async () => {
   await withWorkTestServer("verified-transmission", async ({ app, cookie }) => {
     const { application } = await createReadyApplication({ app, cookie });

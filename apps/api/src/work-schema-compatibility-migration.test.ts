@@ -18,6 +18,7 @@ const migrationsDir = path.resolve(moduleDir, "..", "migrations");
 const migration137 = "137_trusted_browser_credentials.sql";
 const migration138 = "138_work_and_opportunity_management.sql";
 const migration139 = "139_work_opportunity_schema_compatibility.sql";
+const migration140 = "140_work_opportunity_history_correction.sql";
 const now = "2026-08-25T08:00:00.000Z";
 const later = "2026-08-25T09:00:00.000Z";
 
@@ -114,7 +115,7 @@ function buildObservedEarly138Schema(canonical: string): string {
       ""
     ],
     [
-      "  import_receipt_id TEXT,\n  CHECK (deleted_at IS NOT NULL OR criteria_version_id IS NOT NULL)\n) STRICT;\n\nCREATE INDEX idx_job_applications_owner_status",
+      "  import_receipt_id TEXT,\n  CHECK (\n    deleted_at IS NOT NULL\n    OR criteria_version_id IS NOT NULL\n    OR COALESCE(\n      json_extract(\n        provenance_json,\n        '$.compatibilityMigrations.workOpportunity139.criteriaVersionState'\n      ),\n      ''\n    ) = 'unknown_legacy_schema'\n  )\n) STRICT;\n\nCREATE INDEX idx_job_applications_owner_status",
       "  import_receipt_id TEXT\n) STRICT;\n\nCREATE INDEX idx_job_applications_owner_status"
     ],
     [
@@ -138,20 +139,26 @@ function buildObservedEarly138Schema(canonical: string): string {
   schema = replaceRequiredInTable(
     schema,
     "job_offer_revisions",
-    "  status TEXT NOT NULL CHECK (status IN ('expected', 'received', 'negotiating', 'revised', 'accepted', 'declined', 'expired', 'withdrawn')),\n",
+    "  status TEXT CHECK (status IS NULL OR status IN ('expected', 'received', 'negotiating', 'revised', 'accepted', 'declined', 'expired', 'withdrawn')),\n",
     ""
   );
   schema = replaceRequiredInTable(
     schema,
     "job_offer_revisions",
-    "  contingencies_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(contingencies_json) AND json_type(contingencies_json) = 'array'),\n",
+    "  contingencies_json TEXT CHECK (contingencies_json IS NULL OR (json_valid(contingencies_json) AND json_type(contingencies_json) = 'array')),\n",
     ""
   );
   schema = replaceRequiredInTable(
     schema,
     "job_offer_revisions",
-    "  expires_at TEXT,\n  decision TEXT NOT NULL DEFAULT '',\n  rationale TEXT NOT NULL DEFAULT '',\n  criteria_version_id TEXT REFERENCES campaign_criteria_versions(id) ON DELETE SET NULL,\n  planned_engagement_id TEXT REFERENCES work_engagements(id) ON DELETE SET NULL,\n  actor_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(actor_json) AND json_type(actor_json) = 'object'),",
+    "  expires_at TEXT,\n  decision TEXT,\n  rationale TEXT,\n  criteria_version_id TEXT REFERENCES campaign_criteria_versions(id) ON DELETE SET NULL,\n  planned_engagement_id TEXT REFERENCES work_engagements(id) ON DELETE SET NULL,\n  actor_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(actor_json) AND json_type(actor_json) = 'object'),",
     "  actor_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(actor_json) AND json_type(actor_json) = 'object'),"
+  );
+  schema = replaceRequiredInTable(
+    schema,
+    "job_offer_revisions",
+    "  UNIQUE (offer_id, version),\n  CHECK (\n    (\n      status IS NOT NULL\n      AND contingencies_json IS NOT NULL\n      AND decision IS NOT NULL\n      AND rationale IS NOT NULL\n    )\n    OR COALESCE(\n      json_extract(\n        provenance_json,\n        '$.compatibilityMigrations.workOpportunity139.historicalFieldsState'\n      ),\n      ''\n    ) = 'unknown_legacy_schema'\n  )",
+    "  UNIQUE (offer_id, version)"
   );
   return schema;
 }
@@ -384,16 +391,16 @@ test("migration 139 upgrades the observed early Work schema atomically and prese
          FROM job_applications WHERE id = 'application_work_139'`
       )
       .get() as {
-      criteria_version_id: string;
+      criteria_version_id: string | null;
       reapplication_reason: string;
       provenance_json: string;
     };
-    assert.equal(application.criteria_version_id, "criteria_work_139");
+    assert.equal(application.criteria_version_id, null);
     assert.equal(application.reapplication_reason, "");
     assert.equal(
       JSON.parse(application.provenance_json).compatibilityMigrations
-        .workOpportunity139.basis,
-      "campaign_current_or_latest"
+        .workOpportunity139.criteriaVersionState,
+      "unknown_legacy_schema"
     );
 
     const offerRevision = database
@@ -402,17 +409,18 @@ test("migration 139 upgrades the observed early Work schema atomically and prese
                 criteria_version_id, planned_engagement_id, provenance_json
          FROM job_offer_revisions WHERE id = 'offer_revision_work_139'`
       )
-      .get() as Record<string, string>;
-    assert.equal(offerRevision.status, "negotiating");
-    assert.equal(offerRevision.contingencies_json, '["review"]');
-    assert.equal(offerRevision.expires_at, later);
-    assert.equal(offerRevision.decision, "pending");
-    assert.equal(offerRevision.criteria_version_id, "criteria_work_139");
-    assert.equal(offerRevision.planned_engagement_id, "engagement_work_139");
+      .get() as Record<string, string | null>;
+    assert.equal(offerRevision.status, null);
+    assert.equal(offerRevision.contingencies_json, null);
+    assert.equal(offerRevision.expires_at, null);
+    assert.equal(offerRevision.decision, null);
+    assert.equal(offerRevision.rationale, null);
+    assert.equal(offerRevision.criteria_version_id, null);
+    assert.equal(offerRevision.planned_engagement_id, null);
     assert.equal(
-      JSON.parse(offerRevision.provenance_json).compatibilityMigrations
-        .workOpportunity139.basis,
-      "parent_offer_snapshot"
+      JSON.parse(String(offerRevision.provenance_json)).compatibilityMigrations
+        .workOpportunity139.historicalFieldsState,
+      "unknown_legacy_schema"
     );
 
     const expectedDefaults = [
@@ -452,7 +460,7 @@ test("migration 139 upgrades the observed early Work schema atomically and prese
     assert.throws(
       () =>
         database.exec(
-          "UPDATE job_applications SET criteria_version_id = NULL, revision = revision + 1 WHERE id = 'application_work_139'"
+          "UPDATE job_applications SET criteria_version_id = NULL, provenance_json = '{}', revision = revision + 1 WHERE id = 'application_work_139'"
         ),
       /CHECK constraint failed/u
     );
@@ -490,6 +498,36 @@ test("migration 139 upgrades the observed early Work schema atomically and prese
       }
     );
 
+    database.exec(`
+      UPDATE job_applications
+      SET deleted_at = NULL,
+          criteria_version_id = 'criteria_work_139',
+          provenance_json = json_set(
+            '{}',
+            '$.compatibilityMigrations.workOpportunity139',
+            json_object('basis', 'campaign_current_or_latest')
+          ),
+          revision = revision + 1
+      WHERE id = 'application_work_139';
+
+      UPDATE job_offer_revisions
+      SET status = 'negotiating',
+          contingencies_json = '["review"]',
+          expires_at = '${later}',
+          decision = 'pending',
+          rationale = 'Copied from the current offer',
+          criteria_version_id = 'criteria_work_139',
+          planned_engagement_id = 'engagement_work_139',
+          provenance_json = json_set(
+            '{}',
+            '$.compatibilityMigrations.workOpportunity139',
+            json_object('basis', 'parent_offer_snapshot')
+          )
+      WHERE id = 'offer_revision_work_139';
+
+      DELETE FROM migrations WHERE id = '${migration140}';
+    `);
+
     closeDatabase();
     await initializeDatabase();
     database = getDatabase();
@@ -501,6 +539,49 @@ test("migration 139 upgrades the observed early Work schema atomically and prese
       ).count,
       1
     );
+    assert.equal(
+      (
+        database
+          .prepare("SELECT COUNT(*) AS count FROM migrations WHERE id = ?")
+          .get(migration140) as { count: number }
+      ).count,
+      1
+    );
+    const correctedApplication = database
+      .prepare(
+        `SELECT criteria_version_id, provenance_json
+         FROM job_applications WHERE id = 'application_work_139'`
+      )
+      .get() as { criteria_version_id: string | null; provenance_json: string };
+    assert.equal(correctedApplication.criteria_version_id, null);
+    assert.equal(
+      JSON.parse(correctedApplication.provenance_json).compatibilityMigrations
+        .workOpportunity139.correction,
+      "removed a current-or-latest campaign inference"
+    );
+    const correctedOfferRevision = database
+      .prepare(
+        `SELECT status, contingencies_json, expires_at, decision, rationale,
+                criteria_version_id, planned_engagement_id, provenance_json
+         FROM job_offer_revisions WHERE id = 'offer_revision_work_139'`
+      )
+      .get() as Record<string, string | null>;
+    for (const field of [
+      "status",
+      "contingencies_json",
+      "expires_at",
+      "decision",
+      "rationale",
+      "criteria_version_id",
+      "planned_engagement_id"
+    ]) {
+      assert.equal(correctedOfferRevision[field], null, field);
+    }
+    assert.equal(
+      JSON.parse(String(correctedOfferRevision.provenance_json))
+        .compatibilityMigrations.workOpportunity139.correction,
+      "removed a parent-offer snapshot inference"
+    );
     assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     closeDatabase();
@@ -508,7 +589,7 @@ test("migration 139 upgrades the observed early Work schema atomically and prese
   }
 });
 
-test("migration 139 fails closed and rolls back when an active legacy application has no criteria provenance", async () => {
+test("migration 139 preserves a missing legacy application criteria version as explicit unknown", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-work-139-unresolved-")
   );
@@ -565,10 +646,7 @@ test("migration 139 fails closed and rolls back when an active legacy applicatio
 
     configureLegacyWikiAutoImport(false);
     configureDatabase({ dataRoot: rootDir, seedDemoData: false });
-    await assert.rejects(
-      initializeDatabase(),
-      /cannot establish criteria provenance for 1 active job application/u
-    );
+    await initializeDatabase();
     database = getDatabase();
     assert.equal(
       (
@@ -578,26 +656,28 @@ test("migration 139 fails closed and rolls back when an active legacy applicatio
       ).foreign_keys,
       1
     );
-    assert.equal(
+    assert.ok(
       database
         .prepare("SELECT 1 FROM migrations WHERE id = ?")
-        .get(migration139),
-      undefined
-    );
-    assert.equal(
-      database
-        .prepare(
-          "SELECT 1 FROM pragma_table_info('job_applications') WHERE name = 'criteria_version_id'"
-        )
-        .get(),
-      undefined
+        .get(migration139)
     );
     assert.ok(
       database
-        .prepare(
-          "SELECT 1 FROM job_applications WHERE id = 'application_work_139_unresolved'"
-        )
-        .get()
+        .prepare("SELECT 1 FROM migrations WHERE id = ?")
+        .get(migration140)
+    );
+    const preserved = database
+      .prepare(
+        `SELECT criteria_version_id, provenance_json
+         FROM job_applications
+         WHERE id = 'application_work_139_unresolved'`
+      )
+      .get() as { criteria_version_id: string | null; provenance_json: string };
+    assert.equal(preserved.criteria_version_id, null);
+    assert.equal(
+      JSON.parse(preserved.provenance_json).compatibilityMigrations
+        .workOpportunity139.criteriaVersionState,
+      "unknown_legacy_schema"
     );
     assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {

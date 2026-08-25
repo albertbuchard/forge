@@ -516,7 +516,17 @@ CREATE TABLE job_applications (
   updated_at TEXT NOT NULL,
   deleted_at TEXT,
   import_receipt_id TEXT,
-  CHECK (deleted_at IS NOT NULL OR criteria_version_id IS NOT NULL)
+  CHECK (
+    deleted_at IS NOT NULL
+    OR criteria_version_id IS NOT NULL
+    OR COALESCE(
+      json_extract(
+        provenance_json,
+        '$.compatibilityMigrations.workOpportunity139.criteriaVersionState'
+      ),
+      ''
+    ) = 'unknown_legacy_schema'
+  )
 ) STRICT;
 
 CREATE INDEX idx_job_applications_owner_status
@@ -631,23 +641,38 @@ CREATE TABLE job_offer_revisions (
   id TEXT PRIMARY KEY,
   offer_id TEXT NOT NULL REFERENCES job_offers(id) ON DELETE CASCADE,
   version INTEGER NOT NULL CHECK (version >= 1),
-  status TEXT NOT NULL CHECK (status IN ('expected', 'received', 'negotiating', 'revised', 'accepted', 'declined', 'expired', 'withdrawn')),
+  status TEXT CHECK (status IS NULL OR status IN ('expected', 'received', 'negotiating', 'revised', 'accepted', 'declined', 'expired', 'withdrawn')),
   terms_json TEXT NOT NULL CHECK (json_valid(terms_json) AND json_type(terms_json) = 'object'),
   private_compensation_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(private_compensation_json) AND json_type(private_compensation_json) = 'object'),
-  contingencies_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(contingencies_json) AND json_type(contingencies_json) = 'array'),
+  contingencies_json TEXT CHECK (contingencies_json IS NULL OR (json_valid(contingencies_json) AND json_type(contingencies_json) = 'array')),
   negotiation_asks_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(negotiation_asks_json) AND json_type(negotiation_asks_json) = 'array'),
   response TEXT NOT NULL DEFAULT '',
   artifact_ids_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(artifact_ids_json) AND json_type(artifact_ids_json) = 'array'),
   expires_at TEXT,
-  decision TEXT NOT NULL DEFAULT '',
-  rationale TEXT NOT NULL DEFAULT '',
+  decision TEXT,
+  rationale TEXT,
   criteria_version_id TEXT REFERENCES campaign_criteria_versions(id) ON DELETE SET NULL,
   planned_engagement_id TEXT REFERENCES work_engagements(id) ON DELETE SET NULL,
   actor_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(actor_json) AND json_type(actor_json) = 'object'),
   provenance_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(provenance_json) AND json_type(provenance_json) = 'object'),
   created_at TEXT NOT NULL,
   import_receipt_id TEXT,
-  UNIQUE (offer_id, version)
+  UNIQUE (offer_id, version),
+  CHECK (
+    (
+      status IS NOT NULL
+      AND contingencies_json IS NOT NULL
+      AND decision IS NOT NULL
+      AND rationale IS NOT NULL
+    )
+    OR COALESCE(
+      json_extract(
+        provenance_json,
+        '$.compatibilityMigrations.workOpportunity139.historicalFieldsState'
+      ),
+      ''
+    ) = 'unknown_legacy_schema'
+  )
 ) STRICT;
 
 CREATE TABLE job_search_sources (

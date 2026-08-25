@@ -33,6 +33,8 @@ const PEER_QUERY_AUDIT_COMPATIBILITY_MIGRATION =
   "134a_peer_query_audit_compatibility.sql";
 const WORK_OPPORTUNITY_SCHEMA_COMPATIBILITY_MIGRATION =
   "139_work_opportunity_schema_compatibility.sql";
+const WORK_OPPORTUNITY_HISTORY_CORRECTION_MIGRATION =
+  "140_work_opportunity_history_correction.sql";
 const WORK_OPPORTUNITY_CANONICAL_SCHEMA_MIGRATION =
   "138_work_and_opportunity_management.sql";
 
@@ -378,31 +380,14 @@ function annotateDanglingCampaignCriteria(database: DatabaseSync) {
   `);
 }
 
-function backfillLegacyApplicationCriteria(database: DatabaseSync) {
+function preserveLegacyApplicationCriteriaUnknowns(database: DatabaseSync) {
   database.exec(`
     UPDATE job_applications
-    SET criteria_version_id = COALESCE(
-          (
-            SELECT criteria.id
-            FROM opportunity_campaigns AS campaign
-            JOIN campaign_criteria_versions AS criteria
-              ON criteria.id = campaign.current_criteria_version_id
-             AND criteria.campaign_id = campaign.id
-            WHERE campaign.id = job_applications.primary_campaign_id
-          ),
-          (
-            SELECT criteria.id
-            FROM campaign_criteria_versions AS criteria
-            WHERE criteria.campaign_id = job_applications.primary_campaign_id
-            ORDER BY criteria.version DESC, criteria.id DESC
-            LIMIT 1
-          )
-        ),
-        provenance_json = json_set(
+    SET provenance_json = json_set(
           provenance_json,
           '$.compatibilityMigrations.workOpportunity139',
           json_object(
-            'basis', 'campaign_current_or_latest',
+            'criteriaVersionState', 'unknown_legacy_schema',
             'reason', 'earlier schema did not retain the application criteria link'
           )
         ),
@@ -410,59 +395,80 @@ function backfillLegacyApplicationCriteria(database: DatabaseSync) {
     WHERE criteria_version_id IS NULL
       AND deleted_at IS NULL
   `);
-
-  const unresolved = (
-    database
-      .prepare(
-        `SELECT COUNT(*) AS count
-         FROM job_applications
-         WHERE deleted_at IS NULL AND criteria_version_id IS NULL`
-      )
-      .get() as { count: number }
-  ).count;
-  if (unresolved > 0) {
-    throw new Error(
-      `Compatibility migration cannot establish criteria provenance for ${unresolved} active job application(s).`
-    );
-  }
 }
 
-function backfillLegacyOfferRevisionSnapshots(database: DatabaseSync) {
+function preserveLegacyOfferRevisionUnknowns(database: DatabaseSync) {
   database.exec(`
     UPDATE job_offer_revisions
-    SET status = COALESCE(
-          (SELECT status FROM job_offers WHERE id = job_offer_revisions.offer_id),
-          'received'
-        ),
-        contingencies_json = COALESCE(
-          (SELECT contingencies_json FROM job_offers WHERE id = job_offer_revisions.offer_id),
-          '[]'
-        ),
-        expires_at = (
-          SELECT expires_at FROM job_offers WHERE id = job_offer_revisions.offer_id
-        ),
-        decision = COALESCE(
-          (SELECT decision FROM job_offers WHERE id = job_offer_revisions.offer_id),
-          ''
-        ),
-        rationale = COALESCE(
-          (SELECT rationale FROM job_offers WHERE id = job_offer_revisions.offer_id),
-          ''
-        ),
-        criteria_version_id = (
-          SELECT criteria_version_id FROM job_offers WHERE id = job_offer_revisions.offer_id
-        ),
-        planned_engagement_id = (
-          SELECT planned_engagement_id FROM job_offers WHERE id = job_offer_revisions.offer_id
-        ),
+    SET provenance_json = json_set(
+          provenance_json,
+          '$.compatibilityMigrations.workOpportunity139',
+          json_object(
+            'historicalFieldsState', 'unknown_legacy_schema',
+            'unavailableFields', json_array(
+              'status',
+              'contingencies',
+              'expiresAt',
+              'decision',
+              'rationale',
+              'criteriaVersionId',
+              'plannedEngagementId'
+            ),
+            'reason', 'earlier schema did not retain these offer revision fields'
+          )
+        )
+  `);
+}
+
+function repairPreviouslyInferredLegacyHistory(database: DatabaseSync) {
+  database.exec(`
+    UPDATE job_applications
+    SET criteria_version_id = NULL,
         provenance_json = json_set(
           provenance_json,
           '$.compatibilityMigrations.workOpportunity139',
           json_object(
-            'basis', 'parent_offer_snapshot',
-            'limitation', 'these fields were unavailable in the earlier revision schema'
+            'criteriaVersionState', 'unknown_legacy_schema',
+            'reason', 'earlier schema did not retain the application criteria link',
+            'correction', 'removed a current-or-latest campaign inference'
+          )
+        ),
+        revision = revision + 1
+    WHERE json_extract(
+      provenance_json,
+      '$.compatibilityMigrations.workOpportunity139.basis'
+    ) = 'campaign_current_or_latest';
+
+    UPDATE job_offer_revisions
+    SET status = NULL,
+        contingencies_json = NULL,
+        expires_at = NULL,
+        decision = NULL,
+        rationale = NULL,
+        criteria_version_id = NULL,
+        planned_engagement_id = NULL,
+        provenance_json = json_set(
+          provenance_json,
+          '$.compatibilityMigrations.workOpportunity139',
+          json_object(
+            'historicalFieldsState', 'unknown_legacy_schema',
+            'unavailableFields', json_array(
+              'status',
+              'contingencies',
+              'expiresAt',
+              'decision',
+              'rationale',
+              'criteriaVersionId',
+              'plannedEngagementId'
+            ),
+            'reason', 'earlier schema did not retain these offer revision fields',
+            'correction', 'removed a parent-offer snapshot inference'
           )
         )
+    WHERE json_extract(
+      provenance_json,
+      '$.compatibilityMigrations.workOpportunity139.basis'
+    ) = 'parent_offer_snapshot';
   `);
 }
 
@@ -555,16 +561,16 @@ export async function prepareWorkOpportunitySchemaCompatibilityMigration(
     [
       "job_offer_revisions",
       "status",
-      "status TEXT NOT NULL DEFAULT 'received' CHECK (status IN ('expected', 'received', 'negotiating', 'revised', 'accepted', 'declined', 'expired', 'withdrawn'))"
+      "status TEXT CHECK (status IS NULL OR status IN ('expected', 'received', 'negotiating', 'revised', 'accepted', 'declined', 'expired', 'withdrawn'))"
     ],
     [
       "job_offer_revisions",
       "contingencies_json",
-      "contingencies_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(contingencies_json) AND json_type(contingencies_json) = 'array')"
+      "contingencies_json TEXT CHECK (contingencies_json IS NULL OR (json_valid(contingencies_json) AND json_type(contingencies_json) = 'array'))"
     ],
     ["job_offer_revisions", "expires_at", "expires_at TEXT"],
-    ["job_offer_revisions", "decision", "decision TEXT NOT NULL DEFAULT ''"],
-    ["job_offer_revisions", "rationale", "rationale TEXT NOT NULL DEFAULT ''"],
+    ["job_offer_revisions", "decision", "decision TEXT"],
+    ["job_offer_revisions", "rationale", "rationale TEXT"],
     [
       "job_offer_revisions",
       "criteria_version_id",
@@ -598,10 +604,10 @@ export async function prepareWorkOpportunitySchemaCompatibilityMigration(
 
   annotateDanglingCampaignCriteria(database);
   if (applicationCriteriaWasMissing) {
-    backfillLegacyApplicationCriteria(database);
+    preserveLegacyApplicationCriteriaUnknowns(database);
   }
   if (offerRevisionStatusWasMissing) {
-    backfillLegacyOfferRevisionSnapshots(database);
+    preserveLegacyOfferRevisionUnknowns(database);
   }
 
   for (const table of WORK_OPPORTUNITY_COMPATIBILITY_TABLES) {
@@ -613,6 +619,7 @@ export async function prepareWorkOpportunitySchemaCompatibilityMigration(
   for (const trigger of WORK_OPPORTUNITY_COMPATIBILITY_TRIGGERS) {
     database.exec(extractCanonicalTriggerStatement(canonicalSchema, trigger));
   }
+  repairPreviouslyInferredLegacyHistory(database);
 }
 
 function assertNoForeignKeyViolations(
@@ -1238,8 +1245,10 @@ export async function initializeDatabase(): Promise<void> {
     }
     pendingMigrations.push(file);
     const sql = await readFile(path.join(migrationsDir, file), "utf8");
-    const requiresForeignKeysDisabled =
-      file === WORK_OPPORTUNITY_SCHEMA_COMPATIBILITY_MIGRATION;
+    const requiresForeignKeysDisabled = [
+      WORK_OPPORTUNITY_SCHEMA_COMPATIBILITY_MIGRATION,
+      WORK_OPPORTUNITY_HISTORY_CORRECTION_MIGRATION
+    ].includes(file);
     if (requiresForeignKeysDisabled) {
       database.exec("PRAGMA foreign_keys = OFF");
     }
@@ -1254,7 +1263,10 @@ export async function initializeDatabase(): Promise<void> {
         if (file === PEER_QUERY_AUDIT_COMPATIBILITY_MIGRATION) {
           prepareLegacyPeerQueryAuditMigration(database);
         }
-        if (file === WORK_OPPORTUNITY_SCHEMA_COMPATIBILITY_MIGRATION) {
+        if (
+          file === WORK_OPPORTUNITY_SCHEMA_COMPATIBILITY_MIGRATION ||
+          file === WORK_OPPORTUNITY_HISTORY_CORRECTION_MIGRATION
+        ) {
           await prepareWorkOpportunitySchemaCompatibilityMigration(database);
         }
         database.exec(sql);

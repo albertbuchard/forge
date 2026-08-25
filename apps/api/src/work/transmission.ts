@@ -432,6 +432,13 @@ export function prepareTransmissionMaterials(input: {
       "An application must be in ready to submit before an exact transmission preview can be approved."
     );
   }
+  if (!applicationRow.criteria_version_id) {
+    throw new HttpError(
+      409,
+      "work_transmission_criteria_provenance_required",
+      "This legacy application does not retain the exact campaign criteria version used. Review it and create a current application record before transmitting anything."
+    );
+  }
   const artifactVersions = verifyArtifactVersions(
     input.artifactVersions,
     input.accessOrOwner

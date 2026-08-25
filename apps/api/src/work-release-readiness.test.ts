@@ -11,7 +11,11 @@ const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../.."
 );
-const migrationName = "138_work_and_opportunity_management.sql";
+const migrationNames = [
+  "138_work_and_opportunity_management.sql",
+  "139_work_opportunity_schema_compatibility.sql",
+  "140_work_opportunity_history_correction.sql"
+] as const;
 
 const expectedWorkTables = [
   "application_artifact_uses",
@@ -103,9 +107,7 @@ test("migration 138 creates the complete relational Work ontology without foreig
   });
 });
 
-test("migration 138 is byte-identical across every installable runtime surface", () => {
-  const sourcePath = path.join(repoRoot, "apps/api/migrations", migrationName);
-  const source = readFileSync(sourcePath);
+test("Work migrations are byte-identical across every installable runtime surface", () => {
   const destinations = [
     "plugins/openclaw/server/migrations",
     "plugins/openclaw/dist/server/apps/api/migrations",
@@ -114,18 +116,26 @@ test("migration 138 is byte-identical across every installable runtime surface",
     "plugins/hermes/forge_hermes/runtime/apps/api/migrations",
     "plugins/hermes/forge_hermes/runtime/dist/server/apps/api/migrations"
   ];
-  for (const destination of destinations) {
-    const copy = path.join(repoRoot, destination, migrationName);
-    assert.equal(
-      existsSync(copy),
-      true,
-      `${destination} is missing ${migrationName}`
+  for (const migrationName of migrationNames) {
+    const sourcePath = path.join(
+      repoRoot,
+      "apps/api/migrations",
+      migrationName
     );
-    assert.deepEqual(
-      readFileSync(copy),
-      source,
-      `${destination}/${migrationName}`
-    );
+    const source = readFileSync(sourcePath);
+    for (const destination of destinations) {
+      const copy = path.join(repoRoot, destination, migrationName);
+      assert.equal(
+        existsSync(copy),
+        true,
+        `${destination} is missing ${migrationName}`
+      );
+      assert.deepEqual(
+        readFileSync(copy),
+        source,
+        `${destination}/${migrationName}`
+      );
+    }
   }
 });
 
@@ -196,7 +206,9 @@ test("handwritten Work modules stay bounded and public production sources contai
     ...filesBelow(path.join(repoRoot, "apps/api/src")).filter((file) =>
       /^work-openapi.*\.ts$/u.test(path.basename(file))
     ),
-    path.join(repoRoot, "apps/api/migrations", migrationName),
+    ...migrationNames.map((migrationName) =>
+      path.join(repoRoot, "apps/api/migrations", migrationName)
+    ),
     path.join(repoRoot, "scripts/database/import-work-data.mjs")
   ];
   const prohibited = [
