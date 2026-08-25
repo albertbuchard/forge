@@ -38,7 +38,15 @@ describe("entity visuals", () => {
       "emotion",
       "workbench",
       "functor",
-      "chat"
+      "chat",
+      "work_organization",
+      "work_engagement",
+      "opportunity_campaign",
+      "job_opportunity",
+      "job_application",
+      "job_interview",
+      "job_offer",
+      "work_outreach"
     ]);
 
     for (const kind of ENTITY_KINDS) {

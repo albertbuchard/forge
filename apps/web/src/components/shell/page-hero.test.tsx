@@ -46,4 +46,20 @@ describe("PageHero", () => {
       )
     ).toBeInTheDocument();
   });
+
+  it("adopts a supplied level-one heading without nesting another heading", () => {
+    const { container } = render(
+      <PageHero
+        title={<h1 className="font-editorial">Agent Messages</h1>}
+        titleText="Agent Messages"
+        description="Asynchronous messages for connected agents."
+      />
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Agent Messages" })
+    ).toHaveClass("font-editorial");
+    expect(container.querySelectorAll("h1")).toHaveLength(1);
+    expect(container.querySelector("h1 h1")).toBeNull();
+  });
 });

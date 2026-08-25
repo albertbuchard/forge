@@ -13,6 +13,7 @@ provides_tools:
   - forge_call_wiki_route
   - forge_call_movement_route
   - forge_call_life_force_route
+  - forge_call_work_route
   - forge_call_workbench_route
   - forge_call_agent_messages_route
   - forge_call_artifact_route

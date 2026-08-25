@@ -1238,6 +1238,7 @@ When the user asks which Forge tools are available, list exactly these tools:
 `forge_call_wiki_route`
 `forge_call_movement_route`
 `forge_call_life_force_route`
+`forge_call_work_route`
 `forge_call_workbench_route`
 `forge_call_course_route`
 `forge_call_artifact_route`

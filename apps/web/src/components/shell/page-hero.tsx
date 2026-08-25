@@ -1,4 +1,9 @@
-import type { ReactNode } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  type CSSProperties,
+  type ReactNode
+} from "react";
 import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { getEntityVisual, type EntityKind } from "@/lib/entity-visuals";
@@ -92,6 +97,25 @@ export function PageHero({
   const resolvedHelpContent =
     helpContent ?? (typeof description === "string" ? description : null);
   const hasHeaderMeta = Boolean(entityVisual || resolvedEyebrow || badge);
+  const titleClassName =
+    "min-w-0 text-[clamp(1.85rem,3.5vw,4rem)] font-medium leading-[0.92] text-[var(--ui-ink-strong)]";
+  const titleStyle: CSSProperties = {
+    transform:
+      "translateY(var(--forge-shell-hero-title-translate-y)) scale(var(--forge-shell-hero-title-scale))",
+    transformOrigin: "top left"
+  };
+  const renderedTitle =
+    isValidElement<{ className?: string; style?: CSSProperties }>(title) &&
+    title.type === "h1" ? (
+      cloneElement(title, {
+        className: cn(titleClassName, title.props.className),
+        style: { ...titleStyle, ...title.props.style }
+      })
+    ) : (
+      <h1 className={titleClassName} style={titleStyle}>
+        {title}
+      </h1>
+    );
   return (
     <header
       className="relative min-w-0 w-full max-w-full overflow-visible border-b border-[var(--ui-border-subtle)] px-5 py-5 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:px-7 lg:py-6"
@@ -143,16 +167,7 @@ export function PageHero({
             hasHeaderMeta ? "mt-3" : ""
           )}
         >
-          <h1
-            className="min-w-0 text-[clamp(1.85rem,3.5vw,4rem)] font-medium leading-[0.92] text-[var(--ui-ink-strong)]"
-            style={{
-              transform:
-                "translateY(var(--forge-shell-hero-title-translate-y)) scale(var(--forge-shell-hero-title-scale))",
-              transformOrigin: "top left"
-            }}
-          >
-            {title}
-          </h1>
+          {renderedTitle}
           {resolvedHelpContent ? (
             <InfoTooltip
               className="mt-2 shrink-0"

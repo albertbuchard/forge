@@ -46,7 +46,7 @@ describe("useShellNavigationState migrations", () => {
     );
 
     const { result } = renderHook(() => useShellNavigationState("/overview"));
-    expect(result.current.desktopNavIds).toEqual(["overview", "today"]);
+    expect(result.current.desktopNavIds).toEqual(["overview", "today", "work"]);
 
     act(() => result.current.setDesktopNavIds(["today", "overview"]));
     expect(result.current.desktopNavIds).toEqual(["today", "overview"]);

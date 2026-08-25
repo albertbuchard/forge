@@ -72,7 +72,7 @@ const edges = [
 describe("knowledge graph visibility policy", () => {
   it("defines an intentional policy for every compile-time node and relation kind", () => {
     expect(Object.keys(KNOWLEDGE_GRAPH_NODE_VISIBILITY_POLICY)).toHaveLength(
-      28
+      36
     );
     expect(
       Object.keys(KNOWLEDGE_GRAPH_RELATION_VISIBILITY_POLICY)
@@ -106,7 +106,13 @@ describe("knowledge graph visibility policy", () => {
       "pattern",
       "behavior",
       "belief",
-      "mode"
+      "mode",
+      "work_organization",
+      "work_engagement",
+      "opportunity_campaign",
+      "job_opportunity",
+      "job_application",
+      "job_offer"
     ]);
     expect(
       Object.entries(KNOWLEDGE_GRAPH_NODE_VISIBILITY_POLICY)
@@ -126,7 +132,9 @@ describe("knowledge graph visibility policy", () => {
       "emotion",
       "workbench",
       "functor",
-      "chat"
+      "chat",
+      "job_interview",
+      "work_outreach"
     ]);
     expect(
       Object.entries(KNOWLEDGE_GRAPH_RELATION_VISIBILITY_POLICY)

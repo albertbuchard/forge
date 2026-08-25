@@ -1511,10 +1511,10 @@ describe("forge onboarding contract", () => {
           /quick capture[\s\S]*guided formulation[\s\S]*review-first[\s\S]*action-first[\s\S]*simple storage request/i
         ),
         operationLaneRule: expect.stringMatching(
-          /Normal stored entities[\s\S]*added, updated, reviewed or navigated, linked, or placed[\s\S]*Action workflows[\s\S]*start, continue, complete, adjust, judge, signal, publish, sync, or observe[\s\S]*Attention[\s\S]*list, snooze, dismiss, or restore[\s\S]*Entity Navigation[\s\S]*list or touch[\s\S]*pin and unpin stay human-only[\s\S]*Movement, Life Events, Life Force, and Workbench[\s\S]*review, correct, repair, run, inspect, publish, preserve, calendar-sync, ticket-import, or status[\s\S]*Psyche entities[\s\S]*formulation lane/i
+          /Work and Opportunity Management[\s\S]*user-confirmed check-in[\s\S]*exact criteria version[\s\S]*without claiming submission[\s\S]*direct completion evidence[\s\S]*Normal stored entities[\s\S]*added, updated, reviewed or navigated, linked, or placed[\s\S]*Action workflows[\s\S]*start, continue, complete, adjust, judge, signal, publish, sync, or observe[\s\S]*Attention[\s\S]*list, snooze, dismiss, or restore[\s\S]*Entity Navigation[\s\S]*list or touch[\s\S]*pin and unpin stay human-only[\s\S]*Movement, Life Events, Life Force, and Workbench[\s\S]*review, correct, repair, run, inspect, publish, preserve, calendar-sync, ticket-import, or status[\s\S]*Psyche entities[\s\S]*formulation lane/i
         ),
         specializedSurfaceRule: expect.stringMatching(
-          /Attention and Entity Navigation[\s\S]*forge_call_attention_route[\s\S]*forge_call_entity_navigation_route[\s\S]*pin or unpin human-only[\s\S]*Movement, Life Events, Life Force, and Workbench[\s\S]*forge_call_movement_route[\s\S]*forge_call_life_event_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*route-key tool is unavailable, stale, or missing[\s\S]*methodRoutes[\s\S]*do not fall back to generic batch CRUD[\s\S]*read the relevant view back[\s\S]*\/forge\/v1\/attention[\s\S]*\/forge\/v1\/entity-navigation[\s\S]*\/forge\/v1\/movement[\s\S]*\/forge\/v1\/life-events[\s\S]*\/forge\/v1\/life-force[\s\S]*\/forge\/v1\/workbench/i
+          /Work and Opportunity Management[\s\S]*forge_call_work_route[\s\S]*specializedDomainSurfaces\.work[\s\S]*preserve criteria and evaluation history[\s\S]*work\.compensation\.read[\s\S]*work\.transmit[\s\S]*direct completion evidence[\s\S]*\/forge\/v1\/work[\s\S]*Attention and Entity Navigation[\s\S]*forge_call_attention_route[\s\S]*forge_call_entity_navigation_route[\s\S]*pin or unpin human-only[\s\S]*Movement, Life Events, Life Force, and Workbench[\s\S]*forge_call_movement_route[\s\S]*forge_call_life_event_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*route-key tool is unavailable, stale, or missing[\s\S]*methodRoutes[\s\S]*do not fall back to generic batch CRUD[\s\S]*read the relevant view back[\s\S]*\/forge\/v1\/attention[\s\S]*\/forge\/v1\/entity-navigation[\s\S]*\/forge\/v1\/movement[\s\S]*\/forge\/v1\/life-events[\s\S]*\/forge\/v1\/life-force[\s\S]*\/forge\/v1\/workbench/i
         ),
         reviewShortcutRule: expect.stringMatching(
           /reviewing or correcting an existing record[\s\S]*correct read posture[\s\S]*shared batch search or read hints[\s\S]*wiki\/calendar dedicated reads[\s\S]*read-model routes[\s\S]*Movement, Life Events, Life Force, or Workbench dedicated reads[\s\S]*answer the practical question/i
@@ -1547,6 +1547,7 @@ describe("forge onboarding contract", () => {
       "forge_call_movement_route",
       "forge_call_life_event_route",
       "forge_call_life_force_route",
+      "forge_call_work_route",
       "forge_call_workbench_route",
       "forge_call_course_route"
     ]);

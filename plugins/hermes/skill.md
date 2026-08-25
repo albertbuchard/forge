@@ -274,6 +274,17 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   back after progress or terminal writes. Hermes is text-only and deliberately omits
   original-voice retrieval; keep the message pending or forward it when voice is
   necessary instead of inventing a transcript or discarding the original Artifact.
+- Work and Opportunity Management is a permanent specialized domain surface, not
+  execution `work`, a task, or generic batch CRUD. Use `forge_call_work_route` and
+  the live `specializedDomainSurfaces.work` route catalog for Work Engagements,
+  user-confirmed longitudinal check-ins, metric trends, Opportunity Campaigns,
+  sourced opportunities, versioned evaluations, applications, interviews, offers,
+  documents, search runs, outreach, and typed relationships. Read Work context before
+  making a recommendation. Never represent an agent-suggested metric as user-entered,
+  silently change search criteria, infer submission from prepared material, or expose
+  compensation without `work.compensation.read`. External application transmission
+  requires `work.transmit`, an exact digest-bound preview, central approval, the same
+  authorized principal, and direct completion evidence.
 - Movement, Life Events, Life Force, and Workbench are specialized domain surfaces. Read
   `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and use
   the dedicated route families for timeline/overlay repair, Life Events chronology/calendar/ticket/status, energy templates/signals,
