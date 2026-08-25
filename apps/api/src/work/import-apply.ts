@@ -571,6 +571,7 @@ function importOpportunityAndApplicationRoots(state: ApplyImportState) {
              last_contact_at = COALESCE(last_contact_at, ?),
              closed_at = COALESCE(closed_at, ?),
              outcome = CASE WHEN ? <> '' THEN ? ELSE outcome END,
+             revision = revision + 1,
              updated_at = ?
          WHERE id = ?`
       )

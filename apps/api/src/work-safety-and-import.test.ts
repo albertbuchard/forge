@@ -6,6 +6,7 @@ import {
   createCampaign,
   createEngagement,
   createOpportunity,
+  initialCriteria,
   injectJson,
   userProvenance,
   withWorkTestServer,
@@ -601,15 +602,75 @@ test("Private Work import previews, applies, and rolls back without subjective m
           title: "Imported transition search",
           status: "active",
           searchIntent: "full_time_employment",
+          initialCriteria: initialCriteria(),
           provenance: { sourceKind: "import", sourceLabel: "Private export" }
         }
       ],
       criteriaVersions: [],
       roleTargets: [],
       organizationTargets: [],
-      opportunities: [],
-      applications: [],
-      applicationEvents: [],
+      opportunities: [
+        {
+          id: "import_opportunity",
+          organizationId: "import_org",
+          canonicalUrl: "https://example.com/jobs/imported-research-role",
+          sourceName: "Reviewed private export",
+          sourceIdentifier: "imported-research-role",
+          title: "Imported research role",
+          employerName: "Imported Research Organization",
+          availabilityStatus: "live",
+          disposition: "applied",
+          provenance: {
+            sourceKind: "import",
+            sourceLabel: "Private export",
+            evidence: [{ kind: "reviewed_private_source", direct: true }]
+          },
+          idempotencyKey: "import-private-opportunity"
+        }
+      ],
+      applications: [
+        {
+          id: "import_application",
+          opportunityId: "import_opportunity",
+          primaryCampaignId: "import_campaign",
+          criteriaVersionId: null,
+          applicationRoute: {
+            name: "Direct employer form",
+            url: "https://example.com/jobs/imported-research-role",
+            channel: "web_portal"
+          },
+          accountReference: "imported-research-role",
+          status: "submitted",
+          nextAction: "Wait for a verified response",
+          provenance: {
+            sourceKind: "import",
+            sourceLabel: "Private export",
+            evidence: [{ kind: "submission_confirmation", direct: true }]
+          }
+        }
+      ],
+      applicationEvents: [
+        {
+          applicationRef: "import_application",
+          eventType: "submitted",
+          priorStatus: null,
+          newStatus: "submitted",
+          occurredAt: "2026-08-24T09:00:00.000+02:00",
+          actor: {
+            kind: "system",
+            id: "private_import",
+            label: "Reviewed private import",
+            source: "system"
+          },
+          factualDescription:
+            "The reviewed private source records a direct submission confirmation.",
+          provenance: {
+            sourceKind: "import",
+            sourceLabel: "Private export",
+            evidence: [{ kind: "submission_confirmation", direct: true }]
+          }
+        }
+      ],
       links: [],
       artifactReferences: []
     };
@@ -647,6 +708,23 @@ test("Private Work import previews, applies, and rolls back without subjective m
     assert.equal(applied.references.import_org, "import_org");
     assert.equal(applied.references.import_engagement, "import_engagement");
     assert.equal(applied.references.import_campaign, "import_campaign");
+    assert.equal(applied.references.import_opportunity, "import_opportunity");
+    assert.equal(applied.references.import_application, "import_application");
+    const importedApplication = getDatabase()
+      .prepare(
+        "SELECT status, revision, submitted_at FROM job_applications WHERE id = ?"
+      )
+      .get("import_application") as {
+      status: string;
+      revision: number;
+      submitted_at: string | null;
+    };
+    assert.equal(importedApplication.status, "submitted");
+    assert.equal(importedApplication.revision, 3);
+    assert.equal(
+      importedApplication.submitted_at,
+      "2026-08-24T09:00:00.000+02:00"
+    );
     assert.equal(
       (
         getDatabase()
