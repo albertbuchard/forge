@@ -475,7 +475,7 @@ CREATE TABLE job_applications (
   owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   opportunity_id TEXT NOT NULL REFERENCES job_opportunities(id),
   primary_campaign_id TEXT NOT NULL REFERENCES opportunity_campaigns(id),
-  criteria_version_id TEXT NOT NULL REFERENCES campaign_criteria_versions(id),
+  criteria_version_id TEXT REFERENCES campaign_criteria_versions(id),
   candidate_user_id TEXT NOT NULL REFERENCES users(id),
   application_route_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(application_route_json) AND json_type(application_route_json) = 'object'),
   account_reference TEXT NOT NULL DEFAULT '',
