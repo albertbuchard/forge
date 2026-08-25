@@ -19,6 +19,18 @@ const hermesRuntimePackageUrl = new URL(
   "../../plugins/hermes/forge_hermes/runtime/package.json",
   import.meta.url
 );
+const openclawBuildScriptUrl = new URL(
+  "../../plugins/openclaw/scripts/build.mjs",
+  import.meta.url
+);
+const openclawServerEntrySourceUrl = new URL(
+  "../../plugins/openclaw/scripts/server-entry-source.mjs",
+  import.meta.url
+);
+const openclawServerEntryUrl = new URL(
+  "../../plugins/openclaw/server/index.js",
+  import.meta.url
+);
 
 test("publishes the pinned Agent Messages media parser with the runtime", async () => {
   const [forgePackage, openclawPackage] = await Promise.all(
@@ -59,6 +71,23 @@ test("builds the plugin runtime before Forge Memory exercises it", async () => {
   assert.equal(source.indexOf(buildCommand, buildPosition + 1), -1);
 });
 
+test("builds the packaged server entry from one identity-stamping source", async () => {
+  const [buildSource, authoritativeEntry, packagedEntry] = await Promise.all([
+    readFile(openclawBuildScriptUrl, "utf8"),
+    readFile(openclawServerEntrySourceUrl, "utf8"),
+    readFile(openclawServerEntryUrl, "utf8")
+  ]);
+
+  assert.equal(packagedEntry, authoritativeEntry);
+  assert.match(
+    buildSource,
+    /copyFile\(pluginServerEntrySource, path\.join\(pluginServerDir, "index\.js"\)\)/u
+  );
+  assert.match(authoritativeEntry, /FORGE_RUNTIME_PACKAGE_NAME/u);
+  assert.match(authoritativeEntry, /FORGE_RUNTIME_PACKAGE_VERSION/u);
+  assert.match(authoritativeEntry, /readPackagedRuntimeIdentity/u);
+});
+
 test("release rollback does not pass the aliased plugin manifest twice to git restore", async () => {
   const source = await readFile(releaseScriptUrl, "utf8");
   const cleanupStart = source.indexOf("cleanup_release_workspace() {");
@@ -72,6 +101,8 @@ test("release rollback does not pass the aliased plugin manifest twice to git re
   assert.notEqual(cleanupEnd, -1);
   assert.equal(cleanup.match(/\$\{ROOT_MANIFEST\}/g)?.length, 1);
   assert.equal(cleanup.includes("${PLUGIN_MANIFEST}"), false);
+  assert.match(cleanup, /ls-files --error-unmatch/u);
+  assert.match(cleanup, /tracked_paths/u);
 });
 
 test("hardens the ephemeral runner home before packed owner authentication", async () => {

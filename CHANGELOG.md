@@ -11,6 +11,11 @@
   adopted by `npx forge-memory ui` after recovery instead of being rejected as
   a healthy runtime with an unknown package version. Source and development
   launches explicitly do not claim a packaged identity.
+- Made the packaged server launcher derive from one checked-in source instead
+  of an embedded build-script copy, preventing a build from silently replacing
+  the runtime-identity repair with stale code. Failed release cleanup now
+  restores only tracked paths, so an optional absent build path cannot block
+  recovery of an already committed source file.
 
 ## 0.3.72
 

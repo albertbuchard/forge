@@ -95,7 +95,9 @@ cleanup_release_workspace() {
     "${FORGE_DIR}/plugins/codex/runtime/dist" \
     "${FORGE_DIR}/plugins/codex/runtime/apps/api/migrations"
 
-  git -C "${FORGE_DIR}" restore --source=HEAD --staged --worktree -- \
+  local candidate relative existing
+  local tracked_paths=()
+  for candidate in \
     "${ROOT_MANIFEST}" \
     "${PLUGIN_PACKAGE_JSON}" \
     "${PLUGIN_PACKAGE_LOCK_JSON}" \
@@ -105,10 +107,23 @@ cleanup_release_workspace() {
     "${HERMES_PLUGIN_RUNTIME_PACKAGE_JSON}" \
     "${FORGE_MEMORY_PACKAGE_JSON}" \
     "${FORGE_MEMORY_PACKAGE_LOCK_JSON}" \
-    "plugins/openclaw/server" \
-    "plugins/openclaw/apps/api/migrations" \
-    "plugins/codex/runtime/dist" \
-    "plugins/codex/runtime/apps/api/migrations" >/dev/null 2>&1 || true
+    "${FORGE_DIR}/plugins/openclaw/server" \
+    "${FORGE_DIR}/plugins/openclaw/apps/api/migrations" \
+    "${FORGE_DIR}/plugins/codex/runtime/dist" \
+    "${FORGE_DIR}/plugins/codex/runtime/apps/api/migrations"
+  do
+    relative="${candidate#"${FORGE_DIR}/"}"
+    git -C "${FORGE_DIR}" ls-files --error-unmatch -- "${relative}" >/dev/null 2>&1 \
+      || continue
+    for existing in "${tracked_paths[@]}"; do
+      [[ "${existing}" == "${relative}" ]] && continue 2
+    done
+    tracked_paths+=("${relative}")
+  done
+  if [[ ${#tracked_paths[@]} -gt 0 ]]; then
+    git -C "${FORGE_DIR}" restore --source=HEAD --staged --worktree -- \
+      "${tracked_paths[@]}" >/dev/null 2>&1 || true
+  fi
 }
 
 rollback_release_state() {
