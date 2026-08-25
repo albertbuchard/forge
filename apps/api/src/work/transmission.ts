@@ -128,10 +128,37 @@ function verifyArtifactVersions(
   });
 }
 
-const prohibitedTransmissionKey =
-  /^(?:password|passwordHash|secret|secretToken|token|apiKey|privateKey|credential|credentials)$/iu;
+const prohibitedTransmissionValue =
+  /(?:-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\bBearer\s+[A-Za-z0-9._~-]{12,})/u;
+
+function isProhibitedTransmissionKey(key: string) {
+  const normalized = key.replaceAll(/[^a-z0-9]/giu, "").toLowerCase();
+  return (
+    normalized.includes("password") ||
+    normalized.includes("passphrase") ||
+    normalized.includes("secret") ||
+    normalized.includes("privatekey") ||
+    normalized.includes("credential") ||
+    normalized === "token" ||
+    normalized.endsWith("accesstoken") ||
+    normalized.endsWith("refreshtoken") ||
+    normalized.endsWith("authtoken") ||
+    normalized.endsWith("sessiontoken") ||
+    normalized === "apikey"
+  );
+}
 
 function assertNoTransmissionSecrets(value: unknown, path = "transmission") {
+  if (typeof value === "string") {
+    if (prohibitedTransmissionValue.test(value)) {
+      throw new HttpError(
+        400,
+        "work_transmission_secret_forbidden",
+        `Credentials and secrets cannot be stored in a Work transmission preview (${path}).`
+      );
+    }
+    return;
+  }
   if (Array.isArray(value)) {
     value.forEach((entry, index) =>
       assertNoTransmissionSecrets(entry, `${path}[${index}]`)
@@ -140,7 +167,7 @@ function assertNoTransmissionSecrets(value: unknown, path = "transmission") {
   }
   if (!value || typeof value !== "object") return;
   for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    if (prohibitedTransmissionKey.test(key)) {
+    if (isProhibitedTransmissionKey(key)) {
       throw new HttpError(
         400,
         "work_transmission_secret_forbidden",

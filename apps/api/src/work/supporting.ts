@@ -12,6 +12,7 @@ import {
   nowIso,
   recordWorkActivity,
   registerWorkRoot,
+  rootConfig,
   rowToWorkRecord,
   type SqlRow
 } from "./repository-helpers.js";
@@ -807,9 +808,28 @@ export function listSupportingRecords(input: {
     }
   }
   if (config.parentField) {
-    assertParent(config, input.parentId, input.access);
-    clauses.push(`${config.parentField} = ?`);
-    values.push(String(input.parentId));
+    if (input.parentId) {
+      assertParent(config, input.parentId, input.access);
+      clauses.push(`${config.parentField} = ?`);
+      values.push(input.parentId);
+    } else if (config.parentEntityType) {
+      const parent = rootConfig(config.parentEntityType);
+      const parentScope = buildRootScopeClause(
+        input.access,
+        `work_parent.${parent.ownerColumn}`,
+        "work_parent.scope_project_ids_json",
+        "work_parent.scope_tag_ids_json"
+      );
+      clauses.push(
+        `EXISTS (
+          SELECT 1 FROM ${parent.table} work_parent
+          WHERE work_parent.id = ${config.table}.${config.parentField}
+            AND work_parent.deleted_at IS NULL
+            AND ${parentScope.sql}
+        )`
+      );
+      values.push(...parentScope.values);
+    }
   }
   if (config.privateProjection && !input.access.canPrivateApplication) {
     return {

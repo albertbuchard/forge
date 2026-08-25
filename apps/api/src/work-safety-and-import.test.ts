@@ -257,7 +257,7 @@ test("Application submission requires exact approval, sender binding, and direct
           url: "https://example.test/apply",
           channel: "web_portal"
         },
-        fields: { password: "never-store-this" },
+        fields: { api_key: "never-store-this" },
         answers: [],
         artifactVersions: [],
         representations: {},

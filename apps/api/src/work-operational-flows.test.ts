@@ -505,6 +505,18 @@ test("application workspaces connect reviewed reusable answers and interview pre
     assert.equal(interview.record.applicationId, created.application.id);
     assert.equal(interview.record.stage, "technical_interview");
 
+    const globalInterviews = await injectJson<{
+      items: Array<Record<string, unknown>>;
+      total: number;
+    }>(app, cookie, {
+      method: "GET",
+      url: "/api/v1/work/supporting/interview?limit=50"
+    });
+    assert.equal(globalInterviews.total, 1);
+    assert.ok(
+      globalInterviews.items.some((entry) => entry.id === interview.record.id)
+    );
+
     const detail = await injectJson<{
       application: Record<string, unknown>;
     }>(app, cookie, {
