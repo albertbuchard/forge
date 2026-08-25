@@ -1994,11 +1994,58 @@ run(["stop"]);
 
 fs.mkdirSync(dataRoot, { recursive: true });
 fs.writeFileSync(path.join(dataRoot, "forge.sqlite"), "");
+const redundantBackupFiles = [
+  path.join(dataRoot, "backups", "recursive-backup.sqlite"),
+  path.join(dataRoot, "release-snapshots", "release-copy.sqlite"),
+  path.join(dataRoot, "forge.sqlite.before-smoke.bak"),
+  path.join(dataRoot, "forge.sqlite.before-smoke.bak-shm"),
+  path.join(dataRoot, "forge.sqlite.before-smoke.bak-wal")
+];
+for (const redundantBackupFile of redundantBackupFiles) {
+  fs.mkdirSync(path.dirname(redundantBackupFile), { recursive: true });
+  fs.writeFileSync(redundantBackupFile, "redundant historical backup\n");
+}
+const nestedUserBakFile = path.join(
+  dataRoot,
+  "artifacts",
+  "user-document.bak"
+);
+fs.mkdirSync(path.dirname(nestedUserBakFile), { recursive: true });
+fs.writeFileSync(nestedUserBakFile, "user artifact, not a top-level backup\n");
 
 const exportPath = path.join(tempHome, "forge-export.tar.gz");
 run(["export", "--output", exportPath, "--json"]);
 if (!fs.existsSync(exportPath)) {
   throw new Error("Expected forge-memory export to create an archive");
+}
+const archiveListing = spawnSync("tar", ["-tzf", exportPath], {
+  encoding: "utf8"
+});
+if (archiveListing.status !== 0) {
+  throw new Error(
+    `Expected the Forge export archive to be readable: ${archiveListing.stderr}`
+  );
+}
+const archiveEntries = archiveListing.stdout
+  .split("\n")
+  .map((entry) => entry.replace(/^\.\//u, "").trim())
+  .filter(Boolean);
+if (!archiveEntries.includes("data/forge.sqlite")) {
+  throw new Error("Expected the Forge export to preserve the live database");
+}
+if (!archiveEntries.includes("data/artifacts/user-document.bak")) {
+  throw new Error("Expected the Forge export to preserve nested user artifacts");
+}
+for (const redundantBackupFile of redundantBackupFiles) {
+  if (
+    archiveEntries.some((entry) =>
+      entry.endsWith(`/${path.basename(redundantBackupFile)}`)
+    )
+  ) {
+    throw new Error(
+      `Expected the Forge export to omit redundant backup ${redundantBackupFile}`
+    );
+  }
 }
 
 const configPath = path.join(tempHome, ".forge", "config.json");

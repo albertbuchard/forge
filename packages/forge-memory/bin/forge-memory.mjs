@@ -44,7 +44,15 @@ const DEFAULT_WEB_PORT = 3027;
 const FORGE_PLUGIN_ID = "forge-openclaw-plugin";
 const ADAPTERS = ["openclaw", "hermes", "codex", "claude"];
 const DEFAULT_UPDATE_BACKUP_CONFIRM_THRESHOLD_BYTES = 100 * 1024 * 1024;
-const BACKUP_SKIP_TOP_LEVEL = new Set(["exports", "logs", "run", "runtime"]);
+const BACKUP_SKIP_TOP_LEVEL = new Set([
+  "backups",
+  "exports",
+  "logs",
+  "release-snapshots",
+  "run",
+  "runtime"
+]);
+const BACKUP_SKIP_TOP_LEVEL_FILE = /\.bak(?:-(?:shm|wal))?$/u;
 const OPENCLAW_RUNTIME_LOCK_REFRESH_MS = 10_000;
 const OPENCLAW_RUNTIME_LOCK_TIMEOUT_MS = 120_000;
 const WINDOWS_LEASE_RENAME_MAX_ATTEMPTS = 20;
@@ -5307,11 +5315,7 @@ async function createForgeDataExport(config, { outputPath, json = false }) {
     recursive: true,
     force: false,
     errorOnExist: false,
-    filter: (source) => {
-      const relative = path.relative(config.dataRoot, source);
-      if (!relative) return true;
-      return !BACKUP_SKIP_TOP_LEVEL.has(relative.split(path.sep)[0]);
-    }
+    filter: (source) => includeInForgeDataBackup(config.dataRoot, source)
   });
   if (fs.existsSync(configPath())) {
     await fsp.copyFile(
@@ -5358,17 +5362,24 @@ async function createForgeDataExport(config, { outputPath, json = false }) {
   };
 }
 
-async function directorySize(root, { skipTopLevel = new Set() } = {}) {
+function includeInForgeDataBackup(root, candidate) {
+  const relative = path.relative(root, candidate);
+  if (!relative) return true;
+  const segments = relative.split(path.sep);
+  if (BACKUP_SKIP_TOP_LEVEL.has(segments[0])) return false;
+  return !(
+    segments.length === 1 && BACKUP_SKIP_TOP_LEVEL_FILE.test(segments[0])
+  );
+}
+
+async function directorySize(root, { filter = () => true } = {}) {
   if (!fs.existsSync(root)) return 0;
   let total = 0;
   const walk = async (current) => {
     const entries = await fsp.readdir(current, { withFileTypes: true });
     for (const entry of entries) {
       const absolute = path.join(current, entry.name);
-      const relative = path.relative(root, absolute);
-      if (relative && skipTopLevel.has(relative.split(path.sep)[0])) {
-        continue;
-      }
+      if (!filter(absolute)) continue;
       if (entry.isDirectory()) {
         await walk(absolute);
         continue;
@@ -5412,7 +5423,7 @@ class ManagedSkillUpdateConfirmationError extends Error {
 
 async function createUpdateBackup(config, parsed) {
   const sourceBytes = await directorySize(config.dataRoot, {
-    skipTopLevel: BACKUP_SKIP_TOP_LEVEL
+    filter: (candidate) => includeInForgeDataBackup(config.dataRoot, candidate)
   });
   const thresholdBytes = updateBackupConfirmThresholdBytes();
   const needsConfirmation =

@@ -93,7 +93,7 @@ jobs:
   release-gate:
     name: Canonical People release gate
     runs-on: ${{ inputs.full_test && 'macos-26' || 'ubuntu-latest' }}
-    timeout-minutes: ${{ inputs.full_test && 240 || 10 }}
+    timeout-minutes: ${{ inputs.full_test && 240 || 20 }}
     permissions:
       contents: read
     outputs:

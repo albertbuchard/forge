@@ -552,6 +552,10 @@ test("reusable CI has no Apple credentials while iOS publication remains fail-cl
     reusable,
     /runs-on: \$\{\{ inputs\.full_test && 'macos-26' \|\| 'ubuntu-latest' \}\}/
   );
+  assert.match(
+    reusable,
+    /timeout-minutes: \$\{\{ inputs\.full_test && 240 \|\| 20 \}\}/
+  );
   const fastAdmission = stepBlock(reusable, "Run fast publication admission");
   for (const command of [
     "check:server",

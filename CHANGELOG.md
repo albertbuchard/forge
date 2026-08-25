@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.72
+
+- Gave the canonical fast publication gate enough time to finish its existing
+  typecheck, lint, build, focused-test, plugin, and release-audit work instead
+  of cancelling healthy releases at the former ten-minute boundary.
+- Kept Forge Memory update backups bounded to live Forge data. Safety exports
+  now omit existing `backups/`, `release-snapshots/`, and top-level SQLite
+  `.bak`, `.bak-shm`, and `.bak-wal` files instead of recursively backing up
+  redundant historical copies. The live database, security store, browser
+  credentials, artifacts, and user data remain in the update backup.
+
 ## 0.3.71
 
 - Fixed the global Forge context and activity calendar so Work activity from
