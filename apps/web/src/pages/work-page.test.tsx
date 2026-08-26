@@ -464,6 +464,16 @@ describe("permanent Work experience", () => {
     expect(workSurface).not.toBeNull();
     expect(workSurface?.className).toContain("[&_button]:min-h-11");
     expect(workSurface?.className).toContain("[&_select]:min-h-11");
+    const workMain = workSurface?.querySelector("main");
+    expect(workMain).toHaveClass(
+      "grid-cols-[minmax(0,1fr)]",
+      "[&>*]:min-w-0"
+    );
+    expect(workMain?.firstElementChild).toHaveClass(
+      "min-w-0",
+      "grid-cols-1",
+      "[&>*]:min-w-0"
+    );
     const sections = screen.getByRole("navigation", { name: "Work sections" });
     const mobileSectionTrigger = screen.getByRole("button", {
       name: "Work sections: Overview"
