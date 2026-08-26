@@ -11,6 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const workApiMocks = vi.hoisted(() => ({
   getWorkContext: vi.fn(),
+  getWorkRelationships: vi.fn(),
+  getWorkSettings: vi.fn(),
   getJobApplication: vi.fn(),
   getJobOpportunity: vi.fn(),
   getOpportunityCampaign: vi.fn(),
@@ -22,7 +24,12 @@ const workApiMocks = vi.hoisted(() => ({
   listWorkOrganizations: vi.fn(),
   listWorkSupportingRecords: vi.fn(),
   updateOpportunitySearchSetting: vi.fn(),
-  recordWorkCheckIn: vi.fn()
+  recordWorkCheckIn: vi.fn(),
+  replaceWorkRelationships: vi.fn()
+}));
+
+const apiMocks = vi.hoisted(() => ({
+  searchLocalRecords: vi.fn()
 }));
 
 const shellState = vi.hoisted(() => ({
@@ -45,6 +52,11 @@ vi.mock("@/components/shell/app-shell", () => ({
 vi.mock("@/lib/work-api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/work-api")>()),
   ...workApiMocks
+}));
+
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api")>()),
+  ...apiMocks
 }));
 
 import { WorkPage } from "@/pages/work-page-root";
@@ -349,6 +361,19 @@ function context(overrides: Record<string, unknown> = {}) {
 
 function configureApi(overrides: { context?: Record<string, unknown> } = {}) {
   workApiMocks.getWorkContext.mockResolvedValue(overrides.context ?? context());
+  workApiMocks.getWorkSettings.mockResolvedValue({
+    settings: [
+      {
+        ownerUserId: "user_operator",
+        lookingForOpportunities: true,
+        revision: 4
+      }
+    ]
+  });
+  workApiMocks.getWorkRelationships.mockResolvedValue({
+    links: [],
+    related: []
+  });
   workApiMocks.getJobApplication.mockResolvedValue({
     application: applications[0]
   });
@@ -369,6 +394,11 @@ function configureApi(overrides: { context?: Record<string, unknown> } = {}) {
     settings: { lookingForOpportunities: false, revision: 5 }
   });
   workApiMocks.recordWorkCheckIn.mockResolvedValue({ replayed: false });
+  workApiMocks.replaceWorkRelationships.mockResolvedValue({
+    links: [],
+    related: []
+  });
+  apiMocks.searchLocalRecords.mockResolvedValue({ results: [] });
 }
 
 function renderWork(route = "/work?tab=overview") {
@@ -389,6 +419,19 @@ function renderWork(route = "/work?tab=overview") {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn()
+    }))
+  });
   shellState.selectedUserIds = ["user_operator"];
   configureApi();
 });
@@ -440,7 +483,7 @@ describe("permanent Work experience", () => {
       "1"
     );
     expect(
-      screen.getByRole("switch", { name: /Looking for opportunities/i })
+      screen.getByRole("switch", { name: /Looking for work/i })
     ).toHaveAttribute("aria-checked", "true");
     expect(
       screen.getAllByText("Machine-learning research roles").length
@@ -452,6 +495,15 @@ describe("permanent Work experience", () => {
 
   it("keeps Work useful with no current job and preserves paused search history when opportunity mode is off", async () => {
     workApiMocks.listWorkEngagements.mockResolvedValue(list([]));
+    workApiMocks.getWorkSettings.mockResolvedValue({
+      settings: [
+        {
+          ownerUserId: "user_operator",
+          lookingForOpportunities: false,
+          revision: 5
+        }
+      ]
+    });
     workApiMocks.getWorkContext.mockResolvedValue(
       context({
         settings: [
@@ -480,15 +532,15 @@ describe("permanent Work experience", () => {
       await screen.findByText("No current job or engagement recorded")
     ).toBeInTheDocument();
     const switchControl = screen.getByRole("switch", {
-      name: /Looking for opportunities/i
+      name: /Looking for work/i
     });
     expect(switchControl).toHaveAttribute("aria-checked", "false");
-    expect(switchControl).toHaveTextContent("Search history remains available");
+    expect(switchControl).toHaveTextContent("search history remains available");
 
     fireEvent.click(screen.getByRole("link", { name: "Job searches" }));
     expect(
       await screen.findByRole("heading", {
-        name: "Concurrent Opportunity Campaigns"
+        name: "Run more than one job search clearly"
       })
     ).toBeInTheDocument();
     expect(
@@ -498,14 +550,54 @@ describe("permanent Work experience", () => {
       screen.getAllByText("Part-time hospitality shifts").length
     ).toBeGreaterThan(0);
     expect(
-      screen.getByRole("button", { name: "campaigns" }).className
-    ).toContain("min-h-11");
+      screen.getByRole("button", {
+        name: "Searches Goals and criteria"
+      })
+    ).toHaveAttribute("aria-current", "page");
+    expect(
+      screen.getByRole("combobox", { name: "Job search views" })
+    ).toHaveValue("searches");
+  });
+
+  it("opens a focused role-review view from its URL without loading target or document data", async () => {
+    renderWork("/work?tab=searches&view=roles");
+
+    expect(await screen.findByText("Filter roles")).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Job search views" })
+    ).toHaveValue("roles");
+    expect(workApiMocks.listJobOpportunities).toHaveBeenCalledWith(
+      ["user_operator"],
+      expect.objectContaining({ limit: 50, sort: "deadline_asc" })
+    );
+    expect(workApiMocks.listWorkOrganizations).not.toHaveBeenCalled();
+    expect(workApiMocks.listWorkSupportingRecords).not.toHaveBeenCalled();
+    expect(screen.queryByText("Role targets")).not.toBeInTheDocument();
+  });
+
+  it("opens only the requested document library and leaves the other libraries unloaded", async () => {
+    renderWork("/work?tab=documents&view=answers");
+
+    expect(
+      await screen.findByRole("heading", { name: "Reusable answers" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Document views" })
+    ).toHaveValue("answers");
+    expect(workApiMocks.listWorkSupportingRecords).toHaveBeenCalledTimes(1);
+    expect(workApiMocks.listWorkSupportingRecords).toHaveBeenCalledWith(
+      ["user_operator"],
+      "reusableResponse",
+      { limit: 50 }
+    );
+    expect(screen.queryByText("Positioning profiles")).not.toBeInTheDocument();
+    expect(screen.queryByText("Document sets")).not.toBeInTheDocument();
   });
 
   it("uses the non-destructive opportunity switch with optimistic revision", async () => {
     renderWork();
     const switchControl = await screen.findByRole("switch", {
-      name: /Looking for opportunities/i
+      name: /Looking for work/i
     });
     fireEvent.click(switchControl);
     await waitFor(() => {
@@ -539,9 +631,9 @@ describe("permanent Work experience", () => {
         name: "Which work arrangement are you checking in on?"
       })
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("combobox", { name: "Work engagement" })
-    ).toHaveValue("engagement_research");
+    expect(screen.getByRole("combobox", { name: "Work" })).toHaveValue(
+      "engagement_research"
+    );
     fireEvent.click(screen.getByRole("button", { name: /Continue/i }));
     expect(
       await screen.findByRole("heading", {
@@ -561,10 +653,20 @@ describe("permanent Work experience", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "Truthful application pipeline"
+        name: "Applications"
       })
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Application pipeline")).toBeInTheDocument();
+    expect(screen.getByLabelText("Pipeline stage")).toHaveValue("ready");
+    expect(
+      screen
+        .getByLabelText("Application pipeline")
+        .querySelectorAll(":scope > div > section")
+    ).toHaveLength(1);
+    expect(screen.getByRole("heading", { name: "Ready" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Preparing" })
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Board view" })).toHaveAttribute(
       "aria-pressed",
       "true"
@@ -585,6 +687,106 @@ describe("permanent Work experience", () => {
     expect(
       screen.getByText(/Review the targeted curriculum vitae/)
     ).toBeInTheDocument();
+  });
+
+  it("loads named connections only when the Connections section is opened", async () => {
+    const summary = renderWork(
+      "/work/applications/application_research?section=summary"
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "Application · Senior machine-learning research engineer",
+        level: 1
+      })
+    ).toBeInTheDocument();
+    expect(workApiMocks.getWorkRelationships).not.toHaveBeenCalled();
+    summary.unmount();
+
+    workApiMocks.getWorkRelationships.mockResolvedValue({
+      links: [
+        {
+          sourceEntityType: "job_application",
+          sourceEntityId: "application_research",
+          targetEntityType: "goal",
+          targetEntityId: "goal_publication",
+          relationship: "supports",
+          anchorKey: "career-direction"
+        }
+      ],
+      related: [
+        {
+          entityType: "goal",
+          entityId: "goal_publication",
+          relationship: "supports",
+          anchorKey: "career-direction",
+          direction: "outbound",
+          title: "Publish the research thesis",
+          detail: "Complete the publication-ready thesis submission."
+        }
+      ]
+    });
+
+    renderWork("/work/applications/application_research?section=connections");
+
+    expect(
+      await screen.findByRole("heading", { name: "Connections" })
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("link", { name: "Publish the research thesis" })
+    ).toHaveAttribute("href", "/goals/goal_publication");
+    expect(
+      screen.getByText("Complete the publication-ready thesis submission.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("goal:goal_publication").closest("details")
+    ).toHaveTextContent("Technical details");
+    expect(workApiMocks.getWorkRelationships).toHaveBeenCalledWith(
+      ["user_operator"],
+      "job_application",
+      "application_research"
+    );
+  });
+
+  it("offers smart Forge search instead of an empty connection list", async () => {
+    apiMocks.searchLocalRecords.mockResolvedValue({
+      results: [
+        {
+          entityType: "goal",
+          entityId: "goal_publication",
+          entityKind: null,
+          title: "Publish the research thesis",
+          detail: "Goal",
+          category: "Goals",
+          sourceHref: "/goals/goal_publication",
+          graphHref: null,
+          score: 1,
+          evidence: []
+        }
+      ]
+    });
+    renderWork("/work/applications/application_research?section=connections");
+
+    expect(
+      await screen.findByText("Nothing is connected yet")
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("list")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add connection" }));
+    const search = screen.getByRole("combobox", {
+      name: "Search Forge by name…"
+    });
+    fireEvent.change(search, { target: { value: "publish" } });
+    expect(
+      await screen.findByRole("option", {
+        name: /Publish the research thesis/
+      })
+    ).toBeInTheDocument();
+    expect(apiMocks.searchLocalRecords).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: "publish",
+        userIds: ["user_operator"],
+        limit: 24
+      })
+    );
   });
 
   it("keeps the exact detail opportunity selectable when the bounded list omits it", async () => {
@@ -609,7 +811,7 @@ describe("permanent Work experience", () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Start application" }));
     const opportunitySelect = await screen.findByRole("combobox", {
-      name: "Opportunity"
+      name: "Role"
     });
     expect(opportunitySelect).toHaveValue(outsideOpportunity.id);
     expect(
@@ -649,7 +851,7 @@ describe("permanent Work experience", () => {
     );
     const rendered = renderWork();
     expect(
-      await screen.findByText(/compound Work context was safely bounded/i)
+      await screen.findByText(/showing a shorter summary/i)
     ).toBeInTheDocument();
     rendered.unmount();
 

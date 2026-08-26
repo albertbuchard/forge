@@ -24,6 +24,7 @@ test("typed Work relationships are bidirectional, revisioned, and collision-free
 
     const replaced = await injectJson<{
       links: Array<Record<string, unknown>>;
+      related: Array<Record<string, unknown>>;
     }>(app, cookie, {
       method: "PUT",
       url: `/api/v1/work/relationships/work_engagement/${engagement.id}`,
@@ -42,9 +43,21 @@ test("typed Work relationships are bidirectional, revisioned, and collision-free
     assert.equal(replaced.links.length, 1);
     assert.equal(replaced.links[0]?.sourceEntityType, "work_engagement");
     assert.equal(replaced.links[0]?.targetEntityType, "opportunity_campaign");
+    assert.deepEqual(replaced.related, [
+      {
+        entityType: "opportunity_campaign",
+        entityId: campaign.id,
+        relationship: "motivates",
+        anchorKey: "transition-search",
+        direction: "outbound",
+        title: "Machine-learning research roles",
+        detail: "active"
+      }
+    ]);
 
     const campaignLinks = await injectJson<{
       links: Array<Record<string, unknown>>;
+      related: Array<Record<string, unknown>>;
     }>(app, cookie, {
       method: "GET",
       url: `/api/v1/work/relationships/opportunity_campaign/${campaign.id}`
@@ -57,9 +70,21 @@ test("typed Work relationships are bidirectional, revisioned, and collision-free
           link.relationship === "motivates"
       )
     );
+    assert.deepEqual(campaignLinks.related, [
+      {
+        entityType: "work_engagement",
+        entityId: engagement.id,
+        relationship: "motivates",
+        anchorKey: "transition-search",
+        direction: "inbound",
+        title: "Research appointment",
+        detail: "Research and engineering"
+      }
+    ]);
 
     const replayedReplacement = await injectJson<{
       links: Array<Record<string, unknown>>;
+      related: Array<Record<string, unknown>>;
     }>(app, cookie, {
       method: "PUT",
       url: `/api/v1/work/relationships/work_engagement/${engagement.id}`,
@@ -82,6 +107,11 @@ test("typed Work relationships are bidirectional, revisioned, and collision-free
       }
     });
     assert.equal(replayedReplacement.links.length, 1);
+    assert.equal(replayedReplacement.related.length, 1);
+    assert.equal(
+      replayedReplacement.related[0]?.title,
+      "Machine-learning research roles"
+    );
 
     const forbidden = await app.inject({
       method: "PUT",

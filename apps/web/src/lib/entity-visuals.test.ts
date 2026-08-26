@@ -105,4 +105,12 @@ describe("entity visuals", () => {
       getEntityVisual("goal").colorToken.hex
     );
   });
+
+  it("uses human names for Work and job-search records", () => {
+    expect(getEntityVisual("work_organization").label).toBe("Organization");
+    expect(getEntityVisual("work_engagement").label).toBe("Work");
+    expect(getEntityVisual("opportunity_campaign").label).toBe("Job search");
+    expect(getEntityVisual("job_opportunity").label).toBe("Role");
+    expect(getEntityVisual("job_application").label).toBe("Job application");
+  });
 });

@@ -364,6 +364,7 @@ test("Project and tag restrictions are enforced by durable relationship links", 
 
       const relationships = await injectJson<{
         links: Array<Record<string, unknown>>;
+        related: Array<Record<string, unknown>>;
       }>(app, cookie, {
         method: "PUT",
         url: `/api/v1/work/relationships/work_organization/${organizationId}`,
@@ -375,6 +376,21 @@ test("Project and tag restrictions are enforced by durable relationship links", 
           .length,
         2,
         "The generic relationship editor must preserve authorization links."
+      );
+      assert.deepEqual(
+        relationships.related
+          .map((item) => String(item.entityId))
+          .sort((left, right) => left.localeCompare(right)),
+        [project.id, tag.id].sort((left, right) => left.localeCompare(right)),
+        "Human-readable relationship summaries must remain limited to the same authorized scope."
+      );
+      assert.ok(
+        relationships.related.every(
+          (item) =>
+            typeof item.title === "string" &&
+            item.title.length > 0 &&
+            ["project", "tag"].includes(String(item.entityType))
+        )
       );
 
       getDatabase()

@@ -201,6 +201,47 @@ test("Work OpenAPI binds mutations to strict typed request contracts", () => {
   }
 });
 
+test("Work OpenAPI requires human-readable summaries beside relationship identifiers", () => {
+  const spec = document();
+  const envelope = compile(spec, "WorkRelationshipEnvelope");
+  const valid = {
+    links: [
+      {
+        sourceEntityType: "job_application",
+        sourceEntityId: "application_1",
+        targetEntityType: "goal",
+        targetEntityId: "goal_1",
+        relationship: "supports",
+        anchorKey: "career-direction"
+      }
+    ],
+    related: [
+      {
+        entityType: "goal",
+        entityId: "goal_1",
+        relationship: "supports",
+        anchorKey: "career-direction",
+        direction: "outbound",
+        title: "Publish the research thesis",
+        detail: "Complete the publication-ready thesis submission."
+      }
+    ]
+  };
+  assert.equal(
+    envelope.validate(valid),
+    true,
+    envelope.ajv.errorsText(envelope.validate.errors)
+  );
+  assert.equal(envelope.validate({ links: valid.links }), false);
+  assert.equal(
+    envelope.validate({
+      ...valid,
+      related: [{ ...valid.related[0], title: undefined }]
+    }),
+    false
+  );
+});
+
 test("Work OpenAPI validators accept representative inputs and reject malformed or underspecified mutations", () => {
   const spec = document();
 
