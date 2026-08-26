@@ -745,6 +745,12 @@ export function listAuthorizedWorkLinks(
   });
 }
 
+function humanReadableWorkSummaryValue(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return "";
+  const words = value.trim().replace(/[_-]+/gu, " ").replace(/\s+/gu, " ");
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+}
+
 export function summarizeAuthorizedWorkLinks(
   entityType: string,
   entityId: string,
@@ -773,16 +779,24 @@ export function summarizeAuthorizedWorkLinks(
       if (!row) return [];
       const record = rowToWorkRecord(row, access);
       if (record.deletedAt) return [];
-      const title = [
+      const explicitTitle = [
         record.title,
         record.name,
         record.displayName,
         record.label,
         record.roleFunction,
-        record.canonicalKey,
-        record.eventType,
-        record.status
+        record.proposal,
+        record.exactQuestion
       ].find((value) => typeof value === "string" && value.trim());
+      const codedTitle = [
+        record.stage,
+        record.eventType,
+        record.status,
+        record.canonicalKey
+      ].find((value) => typeof value === "string" && value.trim());
+      const title =
+        explicitTitle ??
+        (humanReadableWorkSummaryValue(codedTitle) || relatedEntityId);
       const detail = [
         record.description,
         record.domain,
@@ -796,7 +810,7 @@ export function summarizeAuthorizedWorkLinks(
           relationship: link.relationship,
           anchorKey: link.anchorKey,
           direction: outbound ? "outbound" : "inbound",
-          title: title ?? relatedEntityId,
+          title,
           detail: detail ?? ""
         }
       ];

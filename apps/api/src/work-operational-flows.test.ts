@@ -566,5 +566,19 @@ test("application workspaces connect reviewed reusable answers and interview pre
         (entry) => entry.id === interview.record.id
       )
     );
+
+    const relationships = await injectJson<{
+      related: Array<Record<string, unknown>>;
+    }>(app, cookie, {
+      method: "GET",
+      url: `/api/v1/work/relationships/job_application/${created.application.id}`
+    });
+    assert.equal(
+      relationships.related.find(
+        (entry) => entry.entityId === interview.record.id
+      )?.title,
+      "Technical interview",
+      "Connections must show a human interview name instead of its technical identifier."
+    );
   });
 });
