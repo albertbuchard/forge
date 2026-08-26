@@ -16,6 +16,7 @@ The current shipped surfaces focus on:
 - HealthKit permission onboarding
 - Sleep import
 - Workout and recovery import
+- Interruption-safe HealthKit chunk sync with bounded foreground and background transfer recovery
 - Manual sync + background refresh hooks
 - Native Agent Messages inbox, outbox, detail, default-agent selection, and immediate voice/text composer
 - AES-GCM encrypted offline Agent Messages queue with stable retry identities, Wi-Fi/cellular policy, and truthful iOS-scheduled delivery states
@@ -99,6 +100,13 @@ Tailscale, or debugging behavior:
 ```bash
 npx forge-memory pair-ios --manual-http
 ```
+
+Large HealthKit transfers are resumable. Direct HTTPS uploads use a bounded
+3-request window, background uploads remain serial, and one session-status refresh
+reconciles an ambiguous timeout or temporary server failure before the app retries
+only missing chunks. The embedded Forge view also waits for a committed React render;
+it attempts one cache-bypassing reload when startup stalls and then presents a clear
+native error instead of looping.
 
 Watch actions use a direct-first contract. If the watch has a secure non-loopback
 `https://` route, such as a Tailscale MagicDNS URL, it submits idempotent commands to

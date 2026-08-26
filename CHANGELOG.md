@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.77
+
+- Made large Companion HealthKit transfers tolerant of normal network delay
+  without leaving ordinary Forge requests unbounded. The chunk route now uses
+  a 30-second inactivity deadline and a 150-second hard limit, while all other
+  request bodies retain the existing 15-second absolute deadline.
+- Made interrupted HealthKit uploads converge on the server's accepted chunk
+  records. Duplicate and concurrent deliveries now repair session progress
+  from durable rows, and the iPhone performs one bounded status refresh before
+  replaying only missing, byte-identical chunks after an ambiguous network
+  failure.
+- Reduced direct iPhone upload pressure from 12 simultaneous requests to 3,
+  kept background transfers serial even when the app becomes active, and gave
+  direct chunks the full 120-second request budget. Intentional background
+  cancellation and successful abort responses no longer produce misleading
+  waiter or response-decoding failures.
+- Made the embedded Forge view wait for a committed React render instead of
+  treating HTML navigation as application readiness. A stalled start receives
+  one cache-bypassing recovery load and then shows a clear native error instead
+  of remaining indefinitely on “Forge is starting” or an empty page.
+
 ## 0.3.76
 
 - Fixed Forge pages that could remain on “Forge is starting” after a fresh web

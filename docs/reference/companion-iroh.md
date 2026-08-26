@@ -175,6 +175,39 @@ The Rust host forwards that request into the local Fastify runtime and returns:
 That lets Forge keep the same backend routes while replacing the phone-to-desktop
 wire transport.
 
+## Interrupted HealthKit uploads
+
+HealthKit history can contain hundreds of kilobytes of summaries, samples, and
+routes. Forge therefore gives the mobile chunk endpoint a progress-aware receive
+window. The connection may remain open while bytes keep arriving, but it fails after
+30 seconds without a new body byte and can never exceed 150 seconds. Ordinary Forge
+request bodies keep their 15-second absolute deadline.
+
+The server treats its accepted chunk rows as the source of truth. Duplicate and
+concurrent requests recompute the session's received counts and byte totals from
+those rows, so a retry cannot inflate progress or leave a stale counter. A duplicate
+chunk id with different bytes is still rejected.
+
+The iPhone uses at most 3 concurrent direct HealthKit uploads and one background
+upload. A direct request has the same 120-second budget as other HealthKit chunks.
+If a timeout, connection loss, or temporary 408, 500, 502, 503, or 504 response makes
+the result uncertain, the app refreshes the session once and retries only chunks that
+the server has not accepted. Chunk ids remain content-addressed, so that replay is
+byte-stable. Authentication failures, invalid input, conflicts, and cancellation do
+not enter this reconciliation cycle.
+
+A successful session-abort response is accepted from its HTTP status and does not
+depend on an optional response body. Intentional cancellation of an iOS background
+upload also remains registered until the system completion callback arrives, which
+prevents an expected cancellation from being reported as a lost waiter.
+
+The embedded Forge view uses a separate readiness boundary. The web app marks the
+document only after React commits its first render. If the HTML entrypoint loads but
+the application remains on its startup placeholder or an empty root, the companion
+checks once after navigation and up to 4 more times, performs one same-origin
+cache-bypassing reload, and then shows a native recovery error. It never reloads
+indefinitely.
+
 ## How The Host Is Delivered
 
 The published npm runtime ships Forge's Rust source and lockfile for the companion

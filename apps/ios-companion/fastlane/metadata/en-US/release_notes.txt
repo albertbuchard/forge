@@ -1,9 +1,7 @@
-Forge Companion 1.0.177 adds Forge's permanent Work area and improves remote device pairing, aligned with Forge 0.3.70.
+Forge Companion 1.0.178 improves HealthKit sync and embedded Forge startup reliability.
 
-Work brings current jobs, appointments, contracts, freelance work, goals, check-ins, opportunity searches, applications, people, and documents into one connected view. You can track several overlapping roles and several concurrent searches without losing paused or completed history.
+Large HealthKit uploads now use a smaller direct-transfer window and enough time for normal phone-to-Mac network delay. Background uploads remain serial. If a temporary failure leaves the result uncertain, the app checks what Forge already accepted and retries only the missing chunks once, without changing their identities.
 
-Opportunity campaigns keep their own criteria, targets, evaluations, applications, interviews, offers, search runs, and next actions. Agents can retrieve one bounded Work context, preserve source evidence, and prepare an application without claiming it was submitted. External transmission still requires an exact preview, approval, and direct completion evidence.
+Successful sync cancellation no longer depends on decoding an optional response body. Expected iOS background-task cancellation also no longer appears as a missing upload waiter.
 
-Remote pairing no longer blocks ordinary pairing while a device passkey check is waiting. Automatic restoration now stops after a bounded wait, while the normal pairing and optional master-password paths remain available.
-
-This build also corrects TestFlight distribution so the configured Beta external group receives the processed build, rather than limiting distribution to internal testers.
+The embedded Forge interface now reports ready only after React finishes its first render. If startup remains on the loading placeholder or an empty page, the app performs one fresh recovery load and then shows a clear native error instead of looping indefinitely.
