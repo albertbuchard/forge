@@ -52,6 +52,7 @@ import {
   updateWorkOrganization,
   upsertJobOpportunity
 } from "./repository.js";
+import { summarizeAuthorizedWorkLinks } from "./repository-helpers.js";
 import {
   acceptOfferAsPlannedEngagement,
   createSupportingRecord,
@@ -787,7 +788,12 @@ function registerWorkOperationsRoutes(
     const { access } = requireRead(deps, request);
     const params = sourceParamsSchema.parse(request.params);
     return {
-      links: listAuthorizedWorkLinks(params.entityType, params.id, access)
+      links: listAuthorizedWorkLinks(params.entityType, params.id, access),
+      related: summarizeAuthorizedWorkLinks(
+        params.entityType,
+        params.id,
+        access
+      )
     };
   });
 
@@ -795,14 +801,20 @@ function registerWorkOperationsRoutes(
     const { access } = requireWrite(deps, request);
     const params = sourceParamsSchema.parse(request.params);
     const body = replaceWorkLinksSchema.parse(request.body ?? {});
+    const links = replaceAuthorizedWorkLinks({
+      sourceEntityType: params.entityType,
+      sourceEntityId: params.id,
+      access,
+      expectedRevision: body.expectedRevision,
+      links: body.links
+    });
     return {
-      links: replaceAuthorizedWorkLinks({
-        sourceEntityType: params.entityType,
-        sourceEntityId: params.id,
-        access,
-        expectedRevision: body.expectedRevision,
-        links: body.links
-      })
+      links,
+      related: summarizeAuthorizedWorkLinks(
+        params.entityType,
+        params.id,
+        access
+      )
     };
   });
 

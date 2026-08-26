@@ -1,5 +1,5 @@
-import { useMemo, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowRight,
@@ -42,35 +42,147 @@ export const WORK_TABS = [
 export type WorkTabId = (typeof WORK_TABS)[number]["id"];
 
 export function WorkTabBar({ active }: { active: WorkTabId }) {
+  const navigate = useNavigate();
   return (
-    <nav
-      aria-label="Work sections"
-      className="overflow-x-auto border-b border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] [scrollbar-width:none]"
-    >
-      <div className="flex min-w-max gap-1 px-4 py-2 sm:px-6">
-        {WORK_TABS.map((tab) => (
-          <Link
-            key={tab.id}
-            to={`/work?tab=${tab.id}`}
-            aria-current={active === tab.id ? "page" : undefined}
-            className={cn(
-              "inline-flex min-h-11 items-center rounded-full px-4 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--primary)_45%,transparent)]",
-              active === tab.id
-                ? "bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)] shadow-[var(--ui-shadow-soft)]"
-                : "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
-            )}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </div>
-    </nav>
+    <div className="border-b border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 sm:px-6">
+      <label className="grid gap-1 text-xs font-medium text-[var(--ui-ink-soft)] md:hidden">
+        Work section
+        <select
+          value={active}
+          onChange={(event) => navigate(`/work?tab=${event.target.value}`)}
+          className="min-h-11 w-full rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm font-medium text-[var(--ui-ink-strong)]"
+        >
+          {WORK_TABS.map((tab) => (
+            <option key={tab.id} value={tab.id}>
+              {tab.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <nav aria-label="Work sections" className="hidden md:block">
+        <div className="flex flex-wrap gap-1">
+          {WORK_TABS.map((tab) => (
+            <Link
+              key={tab.id}
+              to={`/work?tab=${tab.id}`}
+              aria-current={active === tab.id ? "page" : undefined}
+              className={cn(
+                "inline-flex min-h-11 items-center rounded-full px-4 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--primary)_45%,transparent)]",
+                active === tab.id
+                  ? "bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)] shadow-[var(--ui-shadow-soft)]"
+                  : "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+              )}
+            >
+              {tab.label}
+            </Link>
+          ))}
+        </div>
+      </nav>
+    </div>
   );
 }
 
+export type WorkSectionOption<T extends string = string> = {
+  id: T;
+  label: string;
+  description?: string;
+};
+
+export function WorkSectionNav<T extends string>({
+  label,
+  active,
+  options,
+  onChange
+}: {
+  label: string;
+  active: T;
+  options: Array<WorkSectionOption<T>>;
+  onChange: (id: T) => void;
+}) {
+  return (
+    <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-2">
+      <label className="grid gap-1 px-1 text-xs font-medium text-[var(--ui-ink-soft)] lg:hidden">
+        {label}
+        <select
+          value={active}
+          onChange={(event) => onChange(event.target.value as T)}
+          className="min-h-11 w-full rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm font-medium text-[var(--ui-ink-strong)]"
+        >
+          {options.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div
+        className="hidden gap-1 lg:grid"
+        style={{
+          gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))`
+        }}
+        role="navigation"
+        aria-label={label}
+      >
+        {options.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            aria-current={active === option.id ? "page" : undefined}
+            onClick={() => onChange(option.id)}
+            className={cn(
+              "min-w-0 rounded-[14px] px-3 py-2 text-left transition",
+              active === option.id
+                ? "bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
+                : "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)]"
+            )}
+          >
+            <span className="block truncate text-sm font-semibold">
+              {option.label}
+            </span>
+            {option.description ? (
+              <span className="mt-0.5 block truncate text-xs opacity-75">
+                {option.description}
+              </span>
+            ) : null}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const HUMAN_LABELS: Record<string, string> = {
+  acknowledged: "Acknowledged",
+  blocked_on_user_input: "Waiting for you",
+  declined_by_candidate: "Declined",
+  discovered: "New",
+  fail: "Does not meet requirements",
+  full_time_employment: "Full-time work",
+  hard: "Required",
+  information_request: "Information requested",
+  needs_review: "Needs review",
+  on_site: "On-site",
+  pass: "Meets requirements",
+  ready_for_review: "Ready for review",
+  ready_to_submit: "Ready to send",
+  rejected_by_user: "Not for me",
+  soft: "Preference",
+  verified_submission: "Verified submission"
+};
+
 export function readable(value: unknown, fallback = "Not set") {
-  if (typeof value === "string" && value.trim())
-    return value.replaceAll("_", " ");
+  if (typeof value === "string" && value.trim()) {
+    const original = value.trim();
+    const words = original
+      .replaceAll(/([a-z0-9])([A-Z])/gu, "$1 $2")
+      .replaceAll(/[_-]+/gu, " ")
+      .replaceAll(/\s+/gu, " ");
+    const key = words.toLowerCase().replaceAll(" ", "_");
+    if (HUMAN_LABELS[key]) return HUMAN_LABELS[key];
+    if (words !== original || original === original.toLowerCase())
+      return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+    return original;
+  }
   if (typeof value === "number") return String(value);
   return fallback;
 }
@@ -88,6 +200,10 @@ export function formatDate(value: unknown, fallback = "No date") {
 
 export function WorkStatusBadge({ status }: { status: unknown }) {
   const value = readable(status, "unknown");
+  const statusKey =
+    typeof status === "string"
+      ? status.trim().toLowerCase().replaceAll(" ", "_")
+      : "unknown";
   const signal = [
     "current",
     "active",
@@ -96,8 +212,8 @@ export function WorkStatusBadge({ status }: { status: unknown }) {
     "shortlisted",
     "offer",
     "accepted",
-    "ready to submit"
-  ].includes(value);
+    "ready_to_submit"
+  ].includes(statusKey);
   const warning = [
     "blocked",
     "attention",
@@ -105,7 +221,7 @@ export function WorkStatusBadge({ status }: { status: unknown }) {
     "rejected",
     "closed",
     "abandoned"
-  ].includes(value);
+  ].includes(statusKey);
   return (
     <Badge
       tone={signal ? "signal" : "meta"}
@@ -126,7 +242,7 @@ export function StatStrip({
   items: Array<{ label: string; value: string | number; detail?: string }>;
 }) {
   return (
-    <dl className="grid gap-px overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-border-subtle)] sm:grid-cols-2 lg:grid-cols-4">
+    <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-border-subtle)] lg:grid-cols-4">
       {items.map((item) => (
         <div
           key={item.label}
@@ -260,7 +376,7 @@ export function CampaignCard({ campaign }: { campaign: OpportunityCampaign }) {
             <p className="mt-1 text-sm leading-5 text-[var(--ui-ink-soft)]">
               {campaign.purpose ||
                 campaign.description ||
-                "No campaign purpose recorded."}
+                "No job-search purpose recorded."}
             </p>
           </div>
           <ChevronRight className="mt-1 size-5 shrink-0 text-[var(--ui-ink-faint)] transition group-hover:translate-x-0.5 group-hover:text-[var(--ui-ink-strong)]" />
@@ -534,9 +650,9 @@ export function OpportunityInbox({
   if (opportunities.length === 0)
     return (
       <EmptyState
-        eyebrow="Discovery inbox"
-        title="No opportunities yet"
-        description="Add a sourced role or let an authorized agent record one with provenance. The same role can later be evaluated against several campaigns."
+        eyebrow="Roles to review"
+        title="No roles yet"
+        description="Add a role from a reliable source, or let an agent with permission add one. A role can be evaluated against more than one job search."
       />
     );
   return (
@@ -686,11 +802,6 @@ export function OpportunityComparison({
           : `${Math.round(Number(latestEvaluation(item)?.confidence) * 100)}%`
     ],
     [
-      "Criteria version",
-      (item) =>
-        readable(latestEvaluation(item)?.criteriaVersionId, "Not evaluated")
-    ],
-    [
       "Evaluation gaps",
       (item) =>
         Array.isArray(latestEvaluation(item)?.gaps)
@@ -713,7 +824,7 @@ export function OpportunityComparison({
       <div className="flex items-center justify-between gap-3 border-b border-[var(--ui-border-subtle)] px-4 py-3">
         <div>
           <h3 className="font-semibold text-[var(--ui-ink-strong)]">
-            Compare opportunities
+            Compare roles
           </h3>
           <p className="text-xs text-[var(--ui-ink-soft)]">
             Facts and explicit unknowns only; no missing value is treated as
@@ -806,6 +917,30 @@ export function ApplicationPipeline({
   applications: JobApplication[];
   opportunities: JobOpportunity[];
 }) {
+  const [selectedColumn, setSelectedColumn] = useState(
+    PIPELINE_COLUMNS.find((column) =>
+      applications.some((application) =>
+        (column.statuses as readonly string[]).includes(application.status)
+      )
+    )?.id ?? PIPELINE_COLUMNS[0].id
+  );
+  const [wide, setWide] = useState(() =>
+    typeof window === "undefined" || typeof window.matchMedia !== "function"
+      ? false
+      : window.matchMedia("(min-width: 1280px)").matches
+  );
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    )
+      return;
+    const media = window.matchMedia("(min-width: 1280px)");
+    const update = () => setWide(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
   const opportunityById = useMemo(
     () =>
       new Map(
@@ -813,68 +948,93 @@ export function ApplicationPipeline({
       ),
     [opportunities]
   );
+  const visibleColumns = wide
+    ? PIPELINE_COLUMNS
+    : PIPELINE_COLUMNS.filter((column) => column.id === selectedColumn);
   return (
-    <div
-      className="grid min-w-0 gap-3 md:grid-cols-5"
-      aria-label="Application pipeline"
-    >
-      {PIPELINE_COLUMNS.map((column) => {
-        const items = applications.filter((application) =>
-          (column.statuses as readonly string[]).includes(application.status)
-        );
-        return (
-          <section
-            key={column.id}
-            className="min-w-0 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3"
-            aria-labelledby={`pipeline-${column.id}`}
+    <div className="grid min-w-0 gap-3" aria-label="Application pipeline">
+      {!wide ? (
+        <label className="grid gap-1 text-xs font-medium text-[var(--ui-ink-soft)]">
+          Pipeline stage
+          <select
+            value={selectedColumn}
+            onChange={(event) => setSelectedColumn(event.target.value)}
+            className="min-h-11 w-full rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm font-medium text-[var(--ui-ink-strong)]"
           >
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h3
-                id={`pipeline-${column.id}`}
-                className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-soft)]"
-              >
-                {column.label}
-              </h3>
-              <Badge size="xs" tone="meta">
-                {items.length}
-              </Badge>
-            </div>
-            <div className="grid gap-2">
-              {items.map((application) => {
-                const opportunity = opportunityById.get(
-                  application.opportunityId
-                );
-                return (
-                  <Link
-                    key={application.id}
-                    to={`/work/applications/${encodeURIComponent(application.id)}`}
-                    className="rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3 transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
-                  >
-                    <div className="line-clamp-2 text-sm font-medium text-[var(--ui-ink-strong)]">
-                      {opportunity?.title ?? "Application"}
-                    </div>
-                    <div className="mt-1 truncate text-xs text-[var(--ui-ink-soft)]">
-                      {opportunity?.employerName ||
-                        readable(application.status)}
-                    </div>
-                    {application.nextFollowUpAt ? (
-                      <div className="mt-2 flex items-center gap-1 text-[10px] text-[var(--ui-ink-faint)]">
-                        <CalendarClock className="size-3" />
-                        {formatDate(application.nextFollowUpAt)}
+            {PIPELINE_COLUMNS.map((column) => {
+              const count = applications.filter((application) =>
+                (column.statuses as readonly string[]).includes(
+                  application.status
+                )
+              ).length;
+              return (
+                <option key={column.id} value={column.id}>
+                  {column.label} ({count})
+                </option>
+              );
+            })}
+          </select>
+        </label>
+      ) : null}
+      <div className={cn("grid min-w-0 gap-3", wide && "grid-cols-5")}>
+        {visibleColumns.map((column) => {
+          const items = applications.filter((application) =>
+            (column.statuses as readonly string[]).includes(application.status)
+          );
+          return (
+            <section
+              key={column.id}
+              className="min-w-0 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3"
+              aria-labelledby={`pipeline-${column.id}`}
+            >
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h3
+                  id={`pipeline-${column.id}`}
+                  className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-soft)]"
+                >
+                  {column.label}
+                </h3>
+                <Badge size="xs" tone="meta">
+                  {items.length}
+                </Badge>
+              </div>
+              <div className="grid gap-2">
+                {items.map((application) => {
+                  const opportunity = opportunityById.get(
+                    application.opportunityId
+                  );
+                  return (
+                    <Link
+                      key={application.id}
+                      to={`/work/applications/${encodeURIComponent(application.id)}`}
+                      className="rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3 transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
+                    >
+                      <div className="line-clamp-2 text-sm font-medium text-[var(--ui-ink-strong)]">
+                        {opportunity?.title ?? "Application"}
                       </div>
-                    ) : null}
-                  </Link>
-                );
-              })}
-              {items.length === 0 ? (
-                <div className="rounded-[14px] border border-dashed border-[var(--ui-border-subtle)] px-2 py-5 text-center text-xs text-[var(--ui-ink-faint)]">
-                  No applications
-                </div>
-              ) : null}
-            </div>
-          </section>
-        );
-      })}
+                      <div className="mt-1 truncate text-xs text-[var(--ui-ink-soft)]">
+                        {opportunity?.employerName ||
+                          readable(application.status)}
+                      </div>
+                      {application.nextFollowUpAt ? (
+                        <div className="mt-2 flex items-center gap-1 text-[10px] text-[var(--ui-ink-faint)]">
+                          <CalendarClock className="size-3" />
+                          {formatDate(application.nextFollowUpAt)}
+                        </div>
+                      ) : null}
+                    </Link>
+                  );
+                })}
+                {items.length === 0 ? (
+                  <div className="rounded-[14px] border border-dashed border-[var(--ui-border-subtle)] px-2 py-5 text-center text-xs text-[var(--ui-ink-faint)]">
+                    No applications
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -942,12 +1102,12 @@ export function NextActions({
         String(right.urgency ?? "9999")
       )
     )
-    .slice(0, 8);
+    .slice(0, 5);
   if (actions.length === 0)
     return (
       <EmptyState
         title="No next actions recorded"
-        description="Add a next action to a role, campaign, or application so Work can show what deserves attention."
+        description="Add a next action to a role, job search, or application so Work can show what deserves attention."
       />
     );
   return (

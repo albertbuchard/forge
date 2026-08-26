@@ -18,6 +18,16 @@ export type WorkLink = {
   anchorKey?: string;
 };
 
+export type WorkRelatedSummary = {
+  entityType: string;
+  entityId: string;
+  relationship: string;
+  anchorKey?: string;
+  direction: "outbound" | "inbound";
+  title: string;
+  detail: string;
+};
+
 export type WorkTrendPoint = {
   observedAt: string;
   numericValue: number | null;
@@ -431,6 +441,12 @@ export function getWorkOrganization(userIds: string[], id: string) {
   );
 }
 
+export function getWorkSettings(userIds: string[]) {
+  return json<{ settings: WorkContext["settings"] }>(
+    `/api/v1/work/settings${userQuery(userIds)}`
+  );
+}
+
 export function updateOpportunitySearchSetting(
   userIds: string[],
   body: { lookingForOpportunities: boolean; expectedRevision: number }
@@ -734,9 +750,19 @@ export function replaceWorkRelationships(
     }>;
   }
 ) {
-  return json<{ links: WorkLink[] }>(
+  return json<{ links: WorkLink[]; related: WorkRelatedSummary[] }>(
     `/api/v1/work/relationships/${encodeURIComponent(entityType)}/${encodeURIComponent(id)}${userQuery(userIds)}`,
     mutationInit("PUT", body)
+  );
+}
+
+export function getWorkRelationships(
+  userIds: string[],
+  entityType: string,
+  id: string
+) {
+  return json<{ links: WorkLink[]; related: WorkRelatedSummary[] }>(
+    `/api/v1/work/relationships/${encodeURIComponent(entityType)}/${encodeURIComponent(id)}${userQuery(userIds)}`
   );
 }
 

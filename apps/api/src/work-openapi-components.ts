@@ -192,11 +192,35 @@ export function buildWorkOpenApiComponents(): Record<string, JsonSchema> {
     WorkRelationshipEnvelope: {
       type: "object",
       additionalProperties: false,
-      required: ["links"],
+      required: ["links", "related"],
       properties: {
         links: {
           type: "array",
           items: { $ref: "#/components/schemas/WorkRelationship" }
+        },
+        related: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: [
+              "entityType",
+              "entityId",
+              "relationship",
+              "direction",
+              "title",
+              "detail"
+            ],
+            properties: {
+              entityType: { type: "string" },
+              entityId: { type: "string" },
+              relationship: { type: "string" },
+              anchorKey: { type: "string" },
+              direction: { enum: ["outbound", "inbound"] },
+              title: { type: "string" },
+              detail: { type: "string" }
+            }
+          }
         }
       }
     },

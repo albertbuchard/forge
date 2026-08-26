@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/page-state";
 import { readable } from "@/components/work/work-components";
@@ -84,7 +85,7 @@ export function PlansTab({
       types: ["note", "wiki_page", "insight", "artifact", "tag"]
     },
     {
-      title: "Events, place, and permitted health context",
+      title: "Events, places, and health context",
       types: [
         "calendar_event",
         "life_event",
@@ -95,7 +96,7 @@ export function PlansTab({
       ]
     },
     {
-      title: "Work and opportunity records",
+      title: "Work and job search records",
       types: [
         "work_engagement",
         "opportunity_campaign",
@@ -107,19 +108,30 @@ export function PlansTab({
       ]
     }
   ];
+  const populatedGroups = groups
+    .map((group) => ({
+      ...group,
+      items: related.filter((item) =>
+        group.types.includes(String(item.entityType))
+      )
+    }))
+    .filter((group) => group.items.length > 0);
+  const connectionHref = engagements[0]
+    ? `/work/engagements/${engagements[0].id}?section=connections`
+    : campaigns[0]
+      ? `/work/campaigns/${campaigns[0].id}?section=connections`
+      : "/work?tab=current";
   return (
     <div className="grid gap-7">
       <SectionHeading
         eyebrow="Direction and context"
-        title="Goals, plans, people, projects, and triggers"
-        description="Work participates in Forge’s shared ontology. Relationships stay typed, permissioned, and navigable instead of becoming copied notes."
+        title="What supports your work"
+        description="See the goals, people, projects, evidence, and other records that you have connected to work and job searches."
       />
       {related.length ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {groups.map((group) => {
-            const items = related.filter((item) =>
-              group.types.includes(String(item.entityType))
-            );
+          {populatedGroups.map((group) => {
+            const { items } = group;
             return (
               <Card key={group.title}>
                 <div className="flex items-center justify-between gap-3">
@@ -167,11 +179,6 @@ export function PlansTab({
                       </div>
                     );
                   })}
-                  {!items.length ? (
-                    <p className="text-sm text-[var(--ui-ink-faint)]">
-                      No links in this group.
-                    </p>
-                  ) : null}
                 </div>
               </Card>
             );
@@ -180,7 +187,12 @@ export function PlansTab({
       ) : (
         <EmptyState
           title="No connected Work context yet"
-          description="Open a work engagement or Opportunity Campaign to link goals, strategies, people, projects, tasks, triggers, knowledge, events, or Artifacts."
+          description="Open a role or job search, choose Connections, and use smart search to add goals, people, projects, tasks, evidence, or other Forge records."
+          action={
+            <Link to={connectionHref}>
+              <Button>Open connections</Button>
+            </Link>
+          }
         />
       )}
     </div>

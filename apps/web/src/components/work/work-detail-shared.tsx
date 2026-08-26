@@ -1,18 +1,30 @@
-import { useEffect, useMemo, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
-import { Clock3, Link2, Plus, Save } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode
+} from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Link, useSearchParams } from "react-router-dom";
+import { Clock3, Link2, Save } from "lucide-react";
+import {
+  EntityLinkMultiSelect,
+  type EntityLinkOption
+} from "@/components/psyche/entity-link-multiselect";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import {
+  WorkSectionNav,
   WorkStatusBadge,
   formatDate,
   readable
 } from "@/components/work/work-components";
-import { replaceWorkRelationships } from "@/lib/work-api";
-import type { WorkRecord } from "@/lib/work-api";
+import { searchLocalRecords } from "@/lib/api";
+import { getWorkRelationships, replaceWorkRelationships } from "@/lib/work-api";
+import type { WorkLink, WorkRecord, WorkRelatedSummary } from "@/lib/work-api";
+import type { LocalSearchEntityType, LocalSearchResult } from "@/lib/types";
 export type WorkDetailKind =
   | "engagements"
   | "organizations"
@@ -22,6 +34,37 @@ export type WorkDetailKind =
   | "interviews"
   | "offers"
   | "outreach";
+
+export function WorkDetailSections<T extends string>({
+  options,
+  defaultSection,
+  children
+}: {
+  options: Array<{ id: T; label: string; description?: string }>;
+  defaultSection: T;
+  children: (active: T) => ReactNode;
+}) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requested = searchParams.get("section");
+  const active =
+    options.find((option) => option.id === requested)?.id ?? defaultSection;
+  const changeSection = (section: T) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("section", section);
+    setSearchParams(next, { replace: true });
+  };
+  return (
+    <div className="grid gap-5">
+      <WorkSectionNav
+        label="Record sections"
+        active={active}
+        options={options}
+        onChange={changeSection}
+      />
+      {children(active)}
+    </div>
+  );
+}
 
 export const workDays = [
   ["monday", "Mon"],
@@ -56,17 +99,14 @@ export function details(value: unknown) {
     );
 }
 
-const RELATIONSHIP_TARGET_TYPES = [
+const RELATIONSHIP_SEARCH_TYPES = [
   "goal",
   "strategy",
   "project",
-  "issue",
   "task",
-  "subtask",
   "person",
   "artifact",
   "note",
-  "wiki_page",
   "calendar_event",
   "life_event",
   "insight",
@@ -75,7 +115,6 @@ const RELATIONSHIP_TARGET_TYPES = [
   "workout_session",
   "trigger_report",
   "habit",
-  "movement_place",
   "tag",
   "work_organization",
   "work_engagement",
@@ -85,7 +124,34 @@ const RELATIONSHIP_TARGET_TYPES = [
   "job_interview",
   "job_offer",
   "work_outreach"
+] satisfies LocalSearchEntityType[];
+
+const RELATIONSHIP_CHOICES = [
+  ["related", "Related to"],
+  ["supports", "Supports"],
+  ["advances", "Advances"],
+  ["depends_on", "Depends on"],
+  ["involves", "Involves"]
 ] as const;
+
+function resultTargetType(result: LocalSearchResult) {
+  if (["issue", "subtask", "wiki_page"].includes(result.entityKind ?? ""))
+    return String(result.entityKind);
+  return result.entityType;
+}
+
+function relationshipValue(entityType: string, entityId: string) {
+  return `${entityType}:${encodeURIComponent(entityId)}`;
+}
+
+function parseRelationshipValue(value: string) {
+  const separator = value.indexOf(":");
+  if (separator < 1) return null;
+  return {
+    targetEntityType: value.slice(0, separator),
+    targetEntityId: decodeURIComponent(value.slice(separator + 1))
+  };
+}
 
 function relationshipHref(entityType: string, entityId: string) {
   const id = encodeURIComponent(entityId);
@@ -153,10 +219,31 @@ export function RelationshipEditor({
   userIds: string[];
   onRefresh: () => Promise<void>;
 }) {
+  const scopeKey = userIds.join(",");
+  const relationshipQuery = useQuery({
+    queryKey: ["work", "relationships", entityType, entityId, scopeKey],
+    queryFn: () => getWorkRelationships(userIds, entityType, entityId),
+    enabled: userIds.length > 0
+  });
   const records = useMemo(
     () =>
-      Array.isArray(links) ? (links as Array<Record<string, unknown>>) : [],
-    [links]
+      relationshipQuery.data?.links ??
+      (Array.isArray(links) ? (links as WorkLink[]) : []),
+    [links, relationshipQuery.data?.links]
+  );
+  const related = useMemo<WorkRelatedSummary[]>(
+    () => relationshipQuery.data?.related ?? [],
+    [relationshipQuery.data?.related]
+  );
+  const summaryByTarget = useMemo(
+    () =>
+      new Map(
+        related.map((item) => [
+          relationshipValue(item.entityType, item.entityId),
+          item
+        ])
+      ),
+    [related]
   );
   const outgoing = useMemo(
     () =>
@@ -176,13 +263,63 @@ export function RelationshipEditor({
   );
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(outgoing);
-  const [targetType, setTargetType] = useState<string>("goal");
-  const [targetId, setTargetId] = useState("");
-  const [relationship, setRelationship] = useState("related");
-  const [anchorKey, setAnchorKey] = useState("");
+  const [foundOptions, setFoundOptions] = useState<EntityLinkOption[]>([]);
   useEffect(() => {
     if (!editing) setDraft(outgoing);
   }, [editing, outgoing]);
+  const existingOptions = useMemo<EntityLinkOption[]>(
+    () =>
+      outgoing.map((link) => {
+        const value = relationshipValue(
+          link.targetEntityType,
+          link.targetEntityId
+        );
+        const summary = summaryByTarget.get(value);
+        return {
+          value,
+          label: summary?.title || `Linked ${readable(link.targetEntityType)}`,
+          description: summary?.detail || readable(link.targetEntityType)
+        };
+      }),
+    [outgoing, summaryByTarget]
+  );
+  const allOptions = useMemo(() => {
+    const options = new Map<string, EntityLinkOption>();
+    [...foundOptions, ...existingOptions].forEach((option) =>
+      options.set(option.value, option)
+    );
+    return [...options.values()];
+  }, [existingOptions, foundOptions]);
+  const searchOptions = useCallback(
+    async (query: string): Promise<EntityLinkOption[]> => {
+      const response = await searchLocalRecords({
+        query,
+        entityTypes: RELATIONSHIP_SEARCH_TYPES,
+        userIds,
+        limit: 24
+      });
+      const options = response.results
+        .map((result) => ({ result, targetType: resultTargetType(result) }))
+        .filter(
+          ({ result, targetType }) =>
+            targetType !== entityType || result.entityId !== entityId
+        )
+        .map(({ result, targetType }) => ({
+          value: relationshipValue(targetType, result.entityId),
+          label: result.title,
+          description: result.detail || readable(targetType),
+          searchText: `${result.title} ${result.detail} ${result.category}`
+        }));
+      setFoundOptions((current) => {
+        const merged = new Map(
+          [...current, ...options].map((option) => [option.value, option])
+        );
+        return [...merged.values()];
+      });
+      return options;
+    },
+    [entityId, entityType, userIds]
+  );
   const save = useMutation({
     mutationFn: () =>
       replaceWorkRelationships(userIds, entityType, entityId, {
@@ -191,28 +328,30 @@ export function RelationshipEditor({
       }),
     onSuccess: async () => {
       setEditing(false);
+      await relationshipQuery.refetch();
       await onRefresh();
     }
   });
-  const add = () => {
-    if (!targetId.trim() || !relationship.trim()) return;
-    setDraft((current) => [
-      ...current.filter(
-        (link) =>
-          !(
-            link.targetEntityType === targetType &&
-            link.targetEntityId === targetId.trim()
-          )
-      ),
-      {
-        targetEntityType: targetType,
-        targetEntityId: targetId.trim(),
-        relationship: relationship.trim(),
-        anchorKey: anchorKey.trim()
-      }
-    ]);
-    setTargetId("");
-    setAnchorKey("");
+  const updateSelection = (values: string[]) => {
+    setDraft((current) => {
+      const currentByValue = new Map(
+        current.map((link) => [
+          relationshipValue(link.targetEntityType, link.targetEntityId),
+          link
+        ])
+      );
+      return values.flatMap((value) => {
+        const parsed = parseRelationshipValue(value);
+        if (!parsed) return [];
+        return [
+          currentByValue.get(value) ?? {
+            ...parsed,
+            relationship: "related",
+            anchorKey: ""
+          }
+        ];
+      });
+    });
   };
   return (
     <Card className="p-0">
@@ -220,7 +359,7 @@ export function RelationshipEditor({
         <div className="flex items-center gap-2">
           <Link2 className="size-4 text-[var(--primary)]" />
           <h2 className="font-semibold text-[var(--ui-ink-strong)]">
-            Connected Forge context
+            Connections
           </h2>
         </div>
         <Button
@@ -228,10 +367,22 @@ export function RelationshipEditor({
           variant="ghost"
           onClick={() => setEditing((current) => !current)}
         >
-          {editing ? "Cancel" : "Edit links"}
+          {editing
+            ? "Cancel"
+            : records.length
+              ? "Edit connections"
+              : "Add connection"}
         </Button>
       </div>
-      {records.length ? (
+      {relationshipQuery.isLoading ? (
+        <p className="px-4 py-6 text-sm text-[var(--ui-ink-soft)]">
+          Loading connections…
+        </p>
+      ) : relationshipQuery.error ? (
+        <p className="px-4 py-6 text-sm text-[var(--danger)]">
+          {relationshipQuery.error.message}
+        </p>
+      ) : records.length ? (
         <ul className="divide-y divide-[var(--ui-border-subtle)]">
           {records.map((link, index) => {
             const isOutgoing =
@@ -243,121 +394,130 @@ export function RelationshipEditor({
             const otherId = String(
               isOutgoing ? link.targetEntityId : link.sourceEntityId
             );
+            const summary = summaryByTarget.get(
+              relationshipValue(otherType, otherId)
+            );
             const href = relationshipHref(otherType, otherId);
+            const title = summary?.title || `Linked ${readable(otherType)}`;
             return (
               <li
-                key={`${String(link.sourceEntityType)}-${String(link.sourceEntityId)}-${String(link.targetEntityType)}-${String(link.targetEntityId)}-${index}`}
+                key={`${link.sourceEntityType}-${link.sourceEntityId}-${link.targetEntityType}-${link.targetEntityId}-${index}`}
                 className="px-4 py-3"
               >
-                <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
-                  {readable(link.relationship, "Related")}{" "}
-                  <span className="text-xs font-normal text-[var(--ui-ink-faint)]">
-                    · {isOutgoing ? "outgoing" : "incoming"}
-                  </span>
+                <div className="text-xs font-medium text-[var(--ui-ink-soft)]">
+                  {readable(link.relationship, "Related")} ·{" "}
+                  {isOutgoing ? "added here" : "linked from another record"}
                 </div>
                 {href ? (
                   <Link
                     to={href}
-                    className="mt-1 block truncate text-xs text-[var(--primary)]"
+                    className="mt-1 block truncate text-sm font-medium text-[var(--primary)]"
                   >
-                    {otherType}:{otherId}
+                    {title}
                   </Link>
                 ) : (
-                  <div className="mt-1 truncate text-xs text-[var(--ui-ink-faint)]">
-                    {otherType}:{otherId}
+                  <div className="mt-1 truncate text-sm font-medium text-[var(--ui-ink-strong)]">
+                    {title}
                   </div>
                 )}
+                {summary?.detail ? (
+                  <p className="mt-1 line-clamp-2 text-xs text-[var(--ui-ink-soft)]">
+                    {summary.detail}
+                  </p>
+                ) : null}
+                <details className="mt-2 text-[10px] text-[var(--ui-ink-faint)]">
+                  <summary className="cursor-pointer">
+                    Technical details
+                  </summary>
+                  <div className="mt-1 break-all font-mono">
+                    {otherType}:{otherId}
+                  </div>
+                </details>
               </li>
             );
           })}
         </ul>
       ) : (
-        <p className="px-4 py-6 text-sm text-[var(--ui-ink-soft)]">
-          No linked goals, strategies, people, projects, tasks, triggers, or
-          Artifacts yet.
-        </p>
+        <div className="px-4 py-6">
+          <p className="text-sm font-medium text-[var(--ui-ink-strong)]">
+            Nothing is connected yet
+          </p>
+          <p className="mt-1 text-sm text-[var(--ui-ink-soft)]">
+            Add only the goals, people, projects, evidence, or other records
+            that help explain this work.
+          </p>
+        </div>
       )}
       {editing ? (
         <div className="grid gap-3 border-t border-[var(--ui-border-subtle)] p-4">
-          <p className="text-xs leading-5 text-[var(--ui-ink-soft)]">
-            Incoming links remain owned by their source. This editor replaces
-            only this record’s outgoing links with optimistic concurrency.
-          </p>
-          {draft.map((link, index) => (
-            <div
-              key={`${link.targetEntityType}-${link.targetEntityId}-${index}`}
-              className="flex items-center justify-between gap-3 rounded-[14px] bg-[var(--ui-surface-2)] p-3"
-            >
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium text-[var(--ui-ink-strong)]">
-                  {readable(link.relationship)}
-                </div>
-                <div className="truncate text-xs text-[var(--ui-ink-faint)]">
-                  {link.targetEntityType}:{link.targetEntityId}
-                </div>
-              </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() =>
-                  setDraft((current) =>
-                    current.filter((_, candidate) => candidate !== index)
-                  )
-                }
+          <EntityLinkMultiSelect
+            options={allOptions}
+            selectedValues={draft.map((link) =>
+              relationshipValue(link.targetEntityType, link.targetEntityId)
+            )}
+            onChange={updateSelection}
+            onSearch={searchOptions}
+            placeholder="Search Forge by name…"
+            emptyMessage="No matching Forge record was found."
+          />
+          {draft.map((link) => {
+            const value = relationshipValue(
+              link.targetEntityType,
+              link.targetEntityId
+            );
+            const title =
+              allOptions.find((option) => option.value === value)?.label ||
+              `Linked ${readable(link.targetEntityType)}`;
+            const knownRelationship = RELATIONSHIP_CHOICES.some(
+              ([id]) => id === link.relationship
+            );
+            return (
+              <label
+                key={value}
+                className="grid gap-1 rounded-[14px] bg-[var(--ui-surface-2)] p-3 text-xs font-medium text-[var(--ui-ink-soft)] sm:grid-cols-[minmax(0,1fr)_12rem] sm:items-center"
               >
-                Remove
-              </Button>
-            </div>
-          ))}
-          <div className="grid gap-2">
-            <select
-              aria-label="Linked entity type"
-              value={targetType}
-              onChange={(event) => setTargetType(event.target.value)}
-              className="min-h-11 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
-            >
-              {RELATIONSHIP_TARGET_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {readable(type)}
-                </option>
-              ))}
-            </select>
-            <Input
-              aria-label="Linked entity identifier"
-              placeholder="Existing Forge entity ID"
-              value={targetId}
-              onChange={(event) => setTargetId(event.target.value)}
-            />
-            <Input
-              aria-label="Relationship"
-              placeholder="supports, belongs_to, motivated_by…"
-              value={relationship}
-              onChange={(event) => setRelationship(event.target.value)}
-            />
-            <Input
-              aria-label="Anchor key"
-              placeholder="Optional anchor"
-              value={anchorKey}
-              onChange={(event) => setAnchorKey(event.target.value)}
-            />
-            <Button
-              variant="secondary"
-              disabled={!targetId.trim() || !relationship.trim()}
-              onClick={add}
-            >
-              <Plus className="size-4" />
-              Add outgoing link
-            </Button>
-            <Button pending={save.isPending} onClick={() => save.mutate()}>
-              <Save className="size-4" />
-              Save all outgoing links
-            </Button>
-            {save.error ? (
-              <p className="text-sm text-[var(--danger)]">
-                {save.error.message}
-              </p>
-            ) : null}
-          </div>
+                <span className="truncate text-sm text-[var(--ui-ink-strong)]">
+                  {title}
+                </span>
+                <select
+                  aria-label={`How ${title} is connected`}
+                  value={link.relationship}
+                  onChange={(event) =>
+                    setDraft((current) =>
+                      current.map((candidate) =>
+                        candidate.targetEntityType === link.targetEntityType &&
+                        candidate.targetEntityId === link.targetEntityId
+                          ? {
+                              ...candidate,
+                              relationship: event.target.value
+                            }
+                          : candidate
+                      )
+                    )
+                  }
+                  className="min-h-11 rounded-[12px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 text-sm text-[var(--ui-ink-strong)]"
+                >
+                  {!knownRelationship ? (
+                    <option value={link.relationship}>
+                      {readable(link.relationship)}
+                    </option>
+                  ) : null}
+                  {RELATIONSHIP_CHOICES.map(([id, label]) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            );
+          })}
+          <Button pending={save.isPending} onClick={() => save.mutate()}>
+            <Save className="size-4" />
+            Save connections
+          </Button>
+          {save.error ? (
+            <p className="text-sm text-[var(--danger)]">{save.error.message}</p>
+          ) : null}
         </div>
       ) : null}
     </Card>
@@ -430,15 +590,16 @@ export function SupportingRevisionHistory({
         Boolean(revision && typeof revision === "object")
       )
     : [];
+  if (records.length === 0) return null;
   return (
     <Card className="p-0">
-      <div className="flex items-center gap-2 border-b border-[var(--ui-border-subtle)] px-4 py-3">
-        <Clock3 className="size-4 text-[var(--primary)]" />
-        <h2 className="font-semibold text-[var(--ui-ink-strong)]">
-          Immutable revisions
-        </h2>
-      </div>
-      {records.length ? (
+      <details>
+        <summary className="flex cursor-pointer items-center gap-2 px-4 py-3">
+          <Clock3 className="size-4 text-[var(--primary)]" />
+          <span className="font-semibold text-[var(--ui-ink-strong)]">
+            Previous versions ({records.length})
+          </span>
+        </summary>
         <ol className="divide-y divide-[var(--ui-border-subtle)]">
           {records.map((revision, index) => {
             const actor = record(revision.actor);
@@ -472,11 +633,7 @@ export function SupportingRevisionHistory({
             );
           })}
         </ol>
-      ) : (
-        <p className="px-4 py-6 text-sm text-[var(--ui-ink-faint)]">
-          No prior revision is available.
-        </p>
-      )}
+      </details>
     </Card>
   );
 }
@@ -501,7 +658,7 @@ export function FactsGrid({
             fact.value === undefined ||
             fact.value === ""
               ? "Unknown"
-              : String(fact.value).replaceAll("_", " ")}
+              : readable(fact.value)}
           </dd>
         </div>
       ))}
@@ -532,10 +689,9 @@ export function OpportunitySourceEvidence({
           Source evidence
         </h2>
         <p className="mt-1 text-xs leading-5 text-[var(--ui-ink-soft)]">
-          Each material sourced fact retains its evidence fingerprint,
-          observation time, confidence, and provenance. Restricted compensation
-          or application details remain redacted without the matching
-          permission.
+          See where important role facts came from, when they were checked, and
+          how confident the source was. Private details stay hidden unless you
+          have access.
         </p>
       </div>
       {sources.length ? (
@@ -639,13 +795,18 @@ export function OpportunitySourceEvidence({
                                   )}
                                 </span>
                                 {claim.valueFingerprint ? (
-                                  <span className="font-mono">
-                                    value{" "}
-                                    {String(claim.valueFingerprint).slice(
-                                      0,
-                                      12
-                                    )}
-                                  </span>
+                                  <details>
+                                    <summary className="cursor-pointer">
+                                      Technical details
+                                    </summary>
+                                    <span className="font-mono">
+                                      Stored value reference{" "}
+                                      {String(claim.valueFingerprint).slice(
+                                        0,
+                                        12
+                                      )}
+                                    </span>
+                                  </details>
                                 ) : null}
                               </div>
                             </>
@@ -666,7 +827,7 @@ export function OpportunitySourceEvidence({
         </div>
       ) : (
         <p className="px-4 py-6 text-sm text-[var(--ui-ink-faint)]">
-          No source evidence has been recorded for this opportunity.
+          No source evidence has been recorded for this role.
         </p>
       )}
     </Card>
