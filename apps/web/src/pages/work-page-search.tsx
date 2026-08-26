@@ -218,7 +218,7 @@ function OpportunityFilterBar({
           </Button>
         ) : null}
       </div>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 [&>*]:min-w-0">
         <Input
           aria-label="Search roles"
           placeholder="Title, employer, source…"
@@ -356,7 +356,7 @@ export function ApplicationFilterBar({
           </Button>
         ) : null}
       </div>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 [&>*]:min-w-0">
         <Input
           aria-label="Search applications"
           placeholder="Role or next action…"
@@ -556,7 +556,7 @@ export function SearchTab({
         "Unknown organization"
     );
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 grid-cols-1 gap-6 [&>*]:min-w-0">
       <SectionHeading
         eyebrow="Job searches"
         title="Run more than one job search clearly"
@@ -599,7 +599,7 @@ export function SearchTab({
           </div>
         </Card>
       ) : null}
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+      <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end [&>*]:min-w-0">
         <WorkSectionNav
           label="Job search views"
           active={view}
@@ -645,7 +645,7 @@ export function SearchTab({
         ) : null}
       </div>
       {view === "searches" ? (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:min-w-0">
           {campaigns.map((campaign) => (
             <CampaignCard key={campaign.id} campaign={campaign} />
           ))}
@@ -661,7 +661,7 @@ export function SearchTab({
         </div>
       ) : null}
       {view === "roles" ? (
-        <div className="grid gap-4">
+        <div className="grid min-w-0 grid-cols-1 gap-4 [&>*]:min-w-0">
           <OpportunityFilterBar
             value={filters}
             campaignSelected={Boolean(selectedCampaign)}
@@ -694,7 +694,7 @@ export function SearchTab({
       ) : null}
       {view === "targets" ? (
         selectedCampaign ? (
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:min-w-0">
             <Card>
               <h3 className="font-semibold text-[var(--ui-ink-strong)]">
                 Role targets
@@ -817,7 +817,7 @@ export function SearchTab({
       ) : null}
       {view === "activity" ? (
         selectedCampaign ? (
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:min-w-0">
             <Card>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">

@@ -99,7 +99,7 @@ export function CheckInsTab({
     )?.displayName ?? readable(comparisonMetricKey)
   );
   return (
-    <div className="grid gap-7">
+    <div className="grid min-w-0 grid-cols-1 gap-7 [&>*]:min-w-0">
       <SectionHeading
         eyebrow="Longitudinal experience"
         title="How is each role going over time?"
@@ -140,7 +140,7 @@ export function CheckInsTab({
         }
       />
       {current.length ? (
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 [&>*]:min-w-0">
           {current.map((engagement) => {
             const latest = trends
               .filter((series) => series.engagementId === engagement.id)
@@ -200,7 +200,7 @@ export function CheckInsTab({
         />
       )}
       {current.length > 1 ? (
-        <section className="grid gap-3">
+        <section className="grid min-w-0 grid-cols-1 gap-3 [&>*]:min-w-0">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h3 className="font-semibold text-[var(--ui-ink-strong)]">
@@ -233,7 +233,7 @@ export function CheckInsTab({
               </select>
             </label>
           </div>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 [&>*]:min-w-0">
             {current.map((engagement) => {
               const series = trends.find(
                 (candidate) =>
@@ -265,7 +265,7 @@ export function CheckInsTab({
           </div>
         </section>
       ) : null}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 [&>*]:min-w-0">
         {trends.map((series) => (
           <WorkTrendChart
             key={`${series.engagementId}-${series.metricKey}`}
@@ -286,7 +286,7 @@ export function CheckInsTab({
           </Card>
         ) : null}
       </div>
-      <section className="grid gap-3">
+      <section className="grid min-w-0 grid-cols-1 gap-3 [&>*]:min-w-0">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h3 className="font-semibold text-[var(--ui-ink-strong)]">
@@ -309,7 +309,7 @@ export function CheckInsTab({
             Custom metric
           </Button>
         </div>
-        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3 [&>*]:min-w-0">
           {definitions.map((definition) => (
             <button
               type="button"

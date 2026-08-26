@@ -122,14 +122,14 @@ export function PlansTab({
       ? `/work/campaigns/${campaigns[0].id}?section=connections`
       : "/work?tab=current";
   return (
-    <div className="grid gap-7">
+    <div className="grid min-w-0 grid-cols-1 gap-7 [&>*]:min-w-0">
       <SectionHeading
         eyebrow="Direction and context"
         title="What supports your work"
         description="See the goals, people, projects, evidence, and other records that you have connected to work and job searches."
       />
       {related.length ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 [&>*]:min-w-0">
           {populatedGroups.map((group) => {
             const { items } = group;
             return (

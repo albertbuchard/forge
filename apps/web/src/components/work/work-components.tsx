@@ -1298,10 +1298,10 @@ export function NextActions({
                 <ArrowRight className="size-4" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-[var(--ui-ink-strong)]">
+                <span className="line-clamp-2 break-words text-sm font-medium text-[var(--ui-ink-strong)]">
                   {action.label}
                 </span>
-                <span className="block truncate text-xs text-[var(--ui-ink-soft)]">
+                <span className="line-clamp-1 break-words text-xs text-[var(--ui-ink-soft)]">
                   {action.context}
                 </span>
               </span>

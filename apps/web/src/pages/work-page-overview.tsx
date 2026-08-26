@@ -186,7 +186,7 @@ export function OverviewTab({
       ].includes(application.status)
   );
   return (
-    <div className="grid gap-7">
+    <div className="grid min-w-0 grid-cols-1 gap-7 [&>*]:min-w-0">
       <StatStrip
         items={[
           {
@@ -217,7 +217,7 @@ export function OverviewTab({
           }
         ]}
       />
-      <section className="grid gap-4">
+      <section className="grid min-w-0 grid-cols-1 gap-4 [&>*]:min-w-0">
         <SectionHeading
           eyebrow="Current work"
           title="What work are you doing now?"
@@ -240,7 +240,7 @@ export function OverviewTab({
           }
         />
         {current.length ? (
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:min-w-0">
             {current.slice(0, 3).map((engagement) => (
               <EngagementCard
                 key={engagement.id}
@@ -263,13 +263,13 @@ export function OverviewTab({
           />
         )}
       </section>
-      <section className="grid gap-4">
+      <section className="grid min-w-0 grid-cols-1 gap-4 [&>*]:min-w-0">
         <SectionHeading
           eyebrow="Job search"
           title="Current work and future options, together"
           description="Pausing job searching never deletes or changes your previous searches, roles, applications, or outcomes."
         />
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+        <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] [&>*]:min-w-0">
           <Card>
             <LookingControl
               looking={looking}
@@ -289,7 +289,7 @@ export function OverviewTab({
               </Button>
             ) : null}
           </Card>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 [&>*]:min-w-0">
             {(looking
               ? activeCampaigns.slice(0, 2)
               : campaigns.slice(0, 2)
@@ -356,7 +356,7 @@ export function CurrentWorkTab({
     }))
     .filter((group) => group.items.length > 0);
   return (
-    <div className="grid gap-7">
+    <div className="grid min-w-0 grid-cols-1 gap-7 [&>*]:min-w-0">
       <SectionHeading
         eyebrow="Current work"
         title="All work arrangements"
@@ -381,14 +381,17 @@ export function CurrentWorkTab({
       {populatedGroups.map((group) => {
         const { items } = group;
         return (
-          <section key={group.id} className="grid gap-3">
+          <section
+            key={group.id}
+            className="grid min-w-0 grid-cols-1 gap-3 [&>*]:min-w-0"
+          >
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-soft)]">
                 {group.title}
               </h3>
               <Badge tone="meta">{items.length}</Badge>
             </div>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:min-w-0">
               {items.map((engagement) => (
                 <EngagementCard
                   key={engagement.id}
@@ -413,11 +416,11 @@ export function CurrentWorkTab({
         />
       ) : null}
       {organizations.length ? (
-        <section className="grid gap-3">
+        <section className="grid min-w-0 grid-cols-1 gap-3 [&>*]:min-w-0">
           <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-soft)]">
             Organizations
           </h3>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 [&>*]:min-w-0">
             {organizations.map((organization) => (
               <Link
                 key={organization.id}

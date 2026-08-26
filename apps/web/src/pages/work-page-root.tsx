@@ -638,7 +638,7 @@ export function WorkPage() {
           search to see all of its details.
         </div>
       ) : null}
-      <main className="grid min-w-0 gap-6 px-4 py-6 sm:px-6 lg:py-7">
+      <main className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 px-4 py-6 sm:px-6 lg:py-7 [&>*]:min-w-0">
         {content}
       </main>
       <WorkOrganizationDialog

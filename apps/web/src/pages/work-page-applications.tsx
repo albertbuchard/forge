@@ -130,7 +130,7 @@ export function ApplicationsTab({
       </Card>
     );
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 grid-cols-1 gap-6 [&>*]:min-w-0">
       <SectionHeading
         eyebrow="Applications"
         title="Applications"
@@ -177,7 +177,7 @@ export function ApplicationsTab({
       />
       {applicationList}
       {upcomingInterviews.length ? (
-        <section className="grid gap-3">
+        <section className="grid min-w-0 grid-cols-1 gap-3 [&>*]:min-w-0">
           <div>
             <h3 className="font-semibold text-[var(--ui-ink-strong)]">
               Upcoming interviews
@@ -187,7 +187,7 @@ export function ApplicationsTab({
               application.
             </p>
           </div>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 [&>*]:min-w-0">
             {upcomingInterviews.map((interview) => {
               const application = applicationById.get(
                 String(interview.applicationId)
@@ -222,7 +222,7 @@ export function ApplicationsTab({
         </section>
       ) : null}
       {offers.length ? (
-        <section className="grid gap-3">
+        <section className="grid min-w-0 grid-cols-1 gap-3 [&>*]:min-w-0">
           <div>
             <h3 className="font-semibold text-[var(--ui-ink-strong)]">
               Compare offers
@@ -232,7 +232,7 @@ export function ApplicationsTab({
               criteria used for each review.
             </p>
           </div>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 [&>*]:min-w-0">
             {offers.map((offer) => {
               const application = applicationById.get(
                 String(offer.applicationId)

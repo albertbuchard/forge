@@ -57,7 +57,7 @@ export function DocumentsOperationalTab({
     WorkRecord | undefined
   >();
   return (
-    <div className="grid gap-7">
+    <div className="grid min-w-0 grid-cols-1 gap-7 [&>*]:min-w-0">
       <SectionHeading
         eyebrow="Documents"
         title="Prepare trustworthy application materials"
@@ -94,7 +94,7 @@ export function DocumentsOperationalTab({
         ]}
       />
       {view === "positioning" ? (
-        <section className="grid gap-3">
+        <section className="grid min-w-0 grid-cols-1 gap-3 [&>*]:min-w-0">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h3 className="font-semibold text-[var(--ui-ink-strong)]">
@@ -116,7 +116,7 @@ export function DocumentsOperationalTab({
               Profile
             </Button>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 [&>*]:min-w-0">
             {profiles.map((profile) => (
               <button
                 key={profile.id}
@@ -156,7 +156,7 @@ export function DocumentsOperationalTab({
         </section>
       ) : null}
       {view === "documents" ? (
-        <section className="grid gap-3">
+        <section className="grid min-w-0 grid-cols-1 gap-3 [&>*]:min-w-0">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h3 className="font-semibold text-[var(--ui-ink-strong)]">
@@ -178,7 +178,7 @@ export function DocumentsOperationalTab({
               Document set
             </Button>
           </div>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:min-w-0">
             {documentSets.map((set) => (
               <Card key={set.id}>
                 <div className="flex items-start justify-between gap-3">
@@ -245,7 +245,7 @@ export function DocumentsOperationalTab({
         </section>
       ) : null}
       {view === "answers" ? (
-        <section className="grid gap-3">
+        <section className="grid min-w-0 grid-cols-1 gap-3 [&>*]:min-w-0">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h3 className="font-semibold text-[var(--ui-ink-strong)]">
@@ -267,7 +267,7 @@ export function DocumentsOperationalTab({
               Answer
             </Button>
           </div>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 [&>*]:min-w-0">
             {responses.map((response) => (
               <button
                 key={response.id}
