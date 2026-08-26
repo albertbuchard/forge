@@ -91,6 +91,19 @@ function WorkMobileSectionPicker<T extends string>({
   const activeOption =
     options.find((option) => option.id === active) ?? options[0];
   const desktopHidden = desktopBreakpoint === "md" ? "md:hidden" : "lg:hidden";
+  const desktopQuery =
+    desktopBreakpoint === "md" ? "(min-width: 768px)" : "(min-width: 1024px)";
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia(desktopQuery);
+    const closeAtDesktop = (event: MediaQueryListEvent) => {
+      if (event.matches) setOpen(false);
+    };
+    if (media.matches) setOpen(false);
+    media.addEventListener("change", closeAtDesktop);
+    return () => media.removeEventListener("change", closeAtDesktop);
+  }, [desktopQuery]);
 
   if (!activeOption) return null;
 
