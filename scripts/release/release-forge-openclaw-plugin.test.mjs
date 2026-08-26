@@ -107,6 +107,8 @@ test("release rollback does not pass the aliased plugin manifest twice to git re
   assert.equal(cleanup.includes("${PLUGIN_MANIFEST}"), false);
   assert.match(cleanup, /ls-files --error-unmatch/u);
   assert.match(cleanup, /tracked_paths/u);
+  assert.match(cleanup, /local tracked_count=0/u);
+  assert.match(cleanup, /if \[\[ \$\{tracked_count\} -gt 0 \]\]; then/u);
 });
 
 test("prepare mode fixes a local candidate without pushing it", async () => {
@@ -118,8 +120,14 @@ test("prepare mode fixes a local candidate without pushing it", async () => {
 
   for (const source of scripts) {
     const createAndPublishBlock = source.slice(
-      source.indexOf("if ! is_publish_from_tag_mode; then", source.indexOf("main() {")),
-      source.indexOf('if [[ "${SKIP_UPLOAD}" == "1" ]]', source.indexOf("main() {"))
+      source.indexOf(
+        "if ! is_publish_from_tag_mode; then",
+        source.indexOf("main() {")
+      ),
+      source.indexOf(
+        'if [[ "${SKIP_UPLOAD}" == "1" ]]',
+        source.indexOf("main() {")
+      )
     );
     const prepareBlock = source.slice(
       source.indexOf("if is_prepare_mode; then", source.indexOf("main() {")),
@@ -131,10 +139,12 @@ test("prepare mode fixes a local candidate without pushing it", async () => {
       /if is_full_mode; then[\s\S]*push_release "\$\{next_version\}"[\s\S]*fi/u
     );
     assert.equal(
-      createAndPublishBlock.replace(
-        /if is_full_mode; then[\s\S]*push_release "\$\{next_version\}"[\s\S]*fi/u,
-        ""
-      ).includes('push_release "${next_version}"'),
+      createAndPublishBlock
+        .replace(
+          /if is_full_mode; then[\s\S]*push_release "\$\{next_version\}"[\s\S]*fi/u,
+          ""
+        )
+        .includes('push_release "${next_version}"'),
       false
     );
     assert.match(prepareBlock, /Release prepared locally\./u);

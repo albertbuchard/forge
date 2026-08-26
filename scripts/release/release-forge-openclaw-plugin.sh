@@ -97,6 +97,7 @@ cleanup_release_workspace() {
 
   local candidate relative existing
   local tracked_paths=()
+  local tracked_count=0
   for candidate in \
     "${ROOT_MANIFEST}" \
     "${PLUGIN_PACKAGE_JSON}" \
@@ -115,12 +116,15 @@ cleanup_release_workspace() {
     relative="${candidate#"${FORGE_DIR}/"}"
     git -C "${FORGE_DIR}" ls-files --error-unmatch -- "${relative}" >/dev/null 2>&1 \
       || continue
-    for existing in "${tracked_paths[@]}"; do
-      [[ "${existing}" == "${relative}" ]] && continue 2
-    done
+    if [[ ${tracked_count} -gt 0 ]]; then
+      for existing in "${tracked_paths[@]}"; do
+        [[ "${existing}" == "${relative}" ]] && continue 2
+      done
+    fi
     tracked_paths+=("${relative}")
+    tracked_count=$((tracked_count + 1))
   done
-  if [[ ${#tracked_paths[@]} -gt 0 ]]; then
+  if [[ ${tracked_count} -gt 0 ]]; then
     git -C "${FORGE_DIR}" restore --source=HEAD --staged --worktree -- \
       "${tracked_paths[@]}" >/dev/null 2>&1 || true
   fi

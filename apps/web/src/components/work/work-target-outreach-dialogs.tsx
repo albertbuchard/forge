@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FlowField,
   QuestionFlowDialog
@@ -95,19 +95,22 @@ export function OutreachDialog({
   const postSend = ["sent", "replied", "follow_up", "closed"].includes(
     draft.status
   );
-  const searchPeople = async (query: string): Promise<EntityLinkOption[]> => {
-    const response = await searchLocalRecords({
-      query,
-      entityTypes: ["person"],
-      userIds,
-      limit: 20
-    });
-    return response.results.map((person) => ({
-      value: `person:${person.entityId}`,
-      label: person.title,
-      description: person.detail || "Person"
-    }));
-  };
+  const searchPeople = useCallback(
+    async (query: string): Promise<EntityLinkOption[]> => {
+      const response = await searchLocalRecords({
+        query,
+        entityTypes: ["person"],
+        userIds,
+        limit: 20
+      });
+      return response.results.map((person) => ({
+        value: `person:${person.entityId}`,
+        label: person.title,
+        description: person.detail || "Person"
+      }));
+    },
+    [userIds]
+  );
   const steps = useMemo<Array<QuestionFlowStep<OutreachDraft>>>(
     () => [
       {
@@ -250,7 +253,7 @@ export function OutreachDialog({
         )
       }
     ],
-    [campaigns, organizations, outreach, userIds]
+    [campaigns, organizations, outreach, searchPeople]
   );
   return (
     <QuestionFlowDialog
