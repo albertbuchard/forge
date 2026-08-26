@@ -355,6 +355,16 @@ export function CurrentWorkTab({
       )
     }))
     .filter((group) => group.items.length > 0);
+  const linkedOrganizationIds = new Set(
+    engagements
+      .map((engagement) => engagement.organizationId)
+      .filter((organizationId): organizationId is string =>
+        Boolean(organizationId)
+      )
+  );
+  const linkedOrganizations = organizations.filter((organization) =>
+    linkedOrganizationIds.has(organization.id)
+  );
   return (
     <div className="grid min-w-0 grid-cols-1 gap-7 [&>*]:min-w-0">
       <SectionHeading
@@ -415,13 +425,13 @@ export function CurrentWorkTab({
           }
         />
       ) : null}
-      {organizations.length ? (
+      {linkedOrganizations.length ? (
         <section className="grid min-w-0 grid-cols-1 gap-3 [&>*]:min-w-0">
           <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-soft)]">
-            Organizations
+            Organizations connected to your work
           </h3>
           <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 [&>*]:min-w-0">
-            {organizations.map((organization) => (
+            {linkedOrganizations.map((organization) => (
               <Link
                 key={organization.id}
                 to={`/work/organizations/${organization.id}`}
