@@ -589,6 +589,30 @@ Agents read a bounded compound context before mutating. Compensation requires
 answers, and artifact versions, followed by central approval bound to the same sender and
 direct completion evidence. Prepared material alone never proves submission.
 
+The Work web interface is progressive rather than exhaustive. Its permanent navigation uses
+the human labels Overview, Current work, Check-ins, Goals and plans, Job searches,
+Applications, and Documents. Job searches then exposes separate focused views for searches,
+roles to review, targets and outreach, and search activity. Documents similarly separates
+positioning, documents, and saved answers. A detail route mounts only the selected summary,
+materials, process, activity, connections, or other record-specific section. Inactive
+collections do not contribute loading or failure state to the visible screen, and supporting
+application libraries load only when the user opens the action that needs them.
+
+The interface must not expose schema names, machine values, or bare identifiers as ordinary
+content. It uses readable entity, status, relationship, file, and participant labels; an exact
+identifier may appear only inside a closed **Technical details** disclosure when it is useful
+for diagnosis or audit. Empty relationship groups are omitted. When the user may change a
+record's relationships, **Edit connections** provides one bounded multi-entity search over
+authorized Forge records, shows a visible record-type badge for every result, supports
+several selected connections, and preserves relationship meaning. A missing optional
+relationship must not create a blank list merely to expose the data model.
+
+Overview cards, search results, pipelines, filters, detail navigation, dialogs, and smart
+search results must adapt together across phone, tablet, and desktop. The application pipeline
+shows one selected stage on compact and medium widths and five stages when desktop space can
+support them. Controls remain keyboard accessible and touch usable, content has no horizontal
+overflow, and secondary or technical information is revealed on demand without removing it.
+
 Private migration is a normal insert-only Work import with source and manifest digests,
 typed references, deduplication, exact rollback inventory, conflict detection, dry-run
 counts, and atomic apply or rollback. Public source, fixtures, documentation, packages,

@@ -140,14 +140,14 @@ test("summary metrics apply fast filters with mouse and keyboard", async (contex
   await page.locator('[data-metric-scope="current"]').click();
   assert.equal(
     await page.locator("[data-story-id]:not([hidden])").count(),
-    221
+    222
   );
   assert.equal(new URL(page.url()).search, "?scope=current");
   assert.equal(new URL(page.url()).hash, "");
   await page.reload({ waitUntil: "domcontentloaded" });
   assert.equal(
     await page.locator("[data-story-id]:not([hidden])").count(),
-    221
+    222
   );
   assert.equal(new URL(page.url()).search, "?scope=current");
   assert.equal(new URL(page.url()).hash, "");
@@ -172,7 +172,7 @@ test("summary metrics apply fast filters with mouse and keyboard", async (contex
   await page.locator('[data-metric-scope="all"]').click();
   assert.equal(
     await page.locator("[data-story-id]:not([hidden])").count(),
-    221
+    222
   );
   assert.equal(new URL(page.url()).search, "");
 

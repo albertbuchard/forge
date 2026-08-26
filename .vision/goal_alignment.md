@@ -42,7 +42,10 @@ opportunities” control is non-destructive. External application transmission r
 exact digest-bound preview, central approval, sender binding, and direct completion
 evidence. A private import path may ingest authoritative personal records only through a
 reviewed dry run and must never place personal data in public source or invent subjective
-metrics.
+metrics. The Work interface must remain understandable on a phone and a desktop: it uses
+human product names, shows one focused record section or job-search view at a time, defers
+supporting data until it is needed, hides empty relationship groups, and lets the user add
+authorized connections through one typed smart search without exposing internal identifiers.
 
 Forge should stay modern and production-grade:
 
@@ -99,6 +102,7 @@ Forge already has strong foundations:
 - an actor-scoped Attention queue with bounded pagination, reversible snooze/dismiss/restore state, source-change reactivation, a responsive web view, agent route contracts, and compact iPhone/watch Inbox summaries
 - a modular Course package contract, immutable course releases and activity revisions, first-class Concept records, course and concept libraries, an immersive full-page lesson workspace, progressive model-reviewed checkpoints, cross-course mastery and recall scheduling, course grades and points, and safe rubric-based written assessment through the existing Forge model provider
 - Agent Messages with responsive web and native SwiftUI composers, text and first-class sensitive voice Artifacts, owner-scoped default routing, inbox/outbox/detail history, atomic claim leases, idempotent progress and terminal receipts, explicit reassignment/forwarding, reference-aware retention, scoped OpenClaw/Codex/Hermes tools, and an AES-GCM encrypted iPhone outbox with truthful Apple scheduling states
+- a responsive Work area whose seven human-named sections, focused Job search views, single-section record details, compact application pipeline, and typed connection search preserve complete Work evidence without putting every entity on one screen
 - canonical shared or user-owned entity pins plus actor-scoped recent-view history, exposed through the existing Action Bar, a compact iPhone/watch snapshot, and agent-safe list/touch routes while human operators alone control pin state
 - Psyche flashcards as batch CRUD records for therapeutic reminder cards that can be retrieved by tags, trigger wording, title, or linked Psyche context during urge and trigger support
 - one active responsive web route tree at a time, a measured monotonic shell grow/close animation that fully reopens at the top on desktop and mobile, semantic theme tokens across shared and domain surfaces, prefetched route handoffs without an artificial loading delay, a compact visible Forge Smith and real trophy art on Overview, and bounded responsive Trophy Hall previews with complete search results

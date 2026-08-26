@@ -73,7 +73,15 @@ compensation privacy, and longitudinal user-confirmed check-ins. Job search live
 this Work area through separate Opportunity Campaigns, sourced opportunities, criteria-
 versioned evaluations, applications, interviews, offers, outreach, and exact document use.
 Turning “Looking for opportunities” off changes the current foreground state but never
-deletes or rewrites search history.
+deletes or rewrites search history. The interface should stay summary-first and progressive:
+seven stable Work sections use ordinary human names, Job searches split searches, role
+review, targets and outreach, and activity into focused views, and a record detail mounts one
+selected section instead of showing its entire data model at once. Supporting collections
+load only when their visible view or action needs them. Empty relationship groups stay out of
+the way, while one typed smart search can add authorized connections and clearly names the
+kind of record returned. Exact identifiers belong under a closed Technical details disclosure.
+The same information hierarchy, actions, and readable visual quality must work on phone,
+tablet, and desktop without horizontal overflow or desktop-only controls.
 
 Authorized agents use one compound Work context for current roles, confirmed trends,
 linked goals and strategies, blockers, campaigns, and next actions. They may research,

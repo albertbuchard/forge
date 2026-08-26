@@ -42,12 +42,34 @@ The global Work destination has seven stable sections:
 4. **Goals and plans** exposes linked objectives, strategies, people, projects,
    triggers, and next actions.
 5. **Job searches** switches among concurrent Opportunity Campaigns and their
-   discovery inboxes, target organizations, saved queries, automation policies,
-   and search-run evidence.
+   focused **Searches**, **Roles to review**, **Targets and outreach**, and
+   **Search activity** views.
 6. **Applications** provides list and board views, stable stage counts, filters,
    deadlines, blockers, and exact application workspaces.
-7. **Documents** organizes positioning profiles, document sets, reusable
-   responses, approval state, versions, and submitted-use history.
+7. **Documents** separates **Positioning**, **Documents**, and **Saved answers**
+   while preserving approval state, versions, and submitted-use history.
+
+The interface presents one useful layer at a time. Overview uses bounded summary
+cards and direct next actions. A record detail shows one selected section, such
+as Summary, Materials, Process, Activity, or Connections, instead of mounting
+the complete stored record on one long page. Supporting collections load only
+when the visible view or an opened action needs them, so a hidden request cannot
+hold the current screen in a loading or error state. On compact and medium
+screens, the application pipeline shows the selected stage; a wide desktop can
+show all five stage groups together.
+
+Forge uses ordinary product language in these views: **Organization**, **Work**,
+**Job search**, **Role**, and readable status or relationship labels. An
+unlabelled file or participant receives a human fallback such as **Application
+file** or **Interview participant**. Exact record identifiers and checksums stay
+available under a closed **Technical details** disclosure instead of appearing
+as primary content.
+
+Empty relationship groups are not shown. **Edit connections** opens the shared
+smart multi-search, searches authorized Forge records by name, labels every
+result with its record type, and lets the user add several meaningful links.
+This keeps a record concise when it has no connections without making the path
+to add one harder to find.
 
 The visible **Looking for opportunities** control changes the current Work
 foreground. Turning it off does not delete, archive, or rewrite any campaign,
@@ -56,7 +78,7 @@ remain available.
 
 Every section has bounded loading, empty, error, unavailable, permission, and
 conflict states. The primary flows use the same keyboard-accessible and
-touch-usable controls on desktop and mobile.
+touch-usable controls on desktop and mobile, with no horizontal page overflow.
 
 ## Work Engagements
 

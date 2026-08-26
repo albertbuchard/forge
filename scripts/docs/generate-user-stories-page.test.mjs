@@ -50,11 +50,11 @@ test("the authoritative contract has the expected current and planned inventory"
   const count = (field, value) =>
     stories.filter((story) => story[field] === value).length;
 
-  assert.equal(stories.length, 221);
-  assert.equal(new Set(stories.map((story) => story.id)).size, 221);
-  assert.equal(count("lifecycle", "current"), 221);
+  assert.equal(stories.length, 222);
+  assert.equal(new Set(stories.map((story) => story.id)).size, 222);
+  assert.equal(count("lifecycle", "current"), 222);
   assert.equal(count("lifecycle", "planned"), 0);
-  assert.equal(count("readiness", "Verified"), 25);
+  assert.equal(count("readiness", "Verified"), 26);
   assert.equal(count("readiness", "In review"), 180);
   assert.equal(count("readiness", "Needs audit"), 13);
   assert.equal(count("readiness", "Limited"), 0);
@@ -85,7 +85,7 @@ test("the generated page is deterministic and contains every story exactly once"
   const second = renderUserStoriesPage(stories);
 
   assert.equal(first, second);
-  assert.equal(first.match(/class="story-card"/g)?.length, 221);
+  assert.equal(first.match(/class="story-card"/g)?.length, 222);
   assert.equal(first.match(/class="story-family"/g)?.length, 24);
   assert.doesNotMatch(first, /class="story-family"[^>]* open/);
   assert.doesNotMatch(first, /class="story-card"[^>]* open/);
@@ -203,7 +203,7 @@ test("the client restores filters, canonicalizes contradictory URLs, and keeps m
   readiness.value = "Verified";
   readiness.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
 
-  assert.equal(visibleStories(document).length, 25);
+  assert.equal(visibleStories(document).length, 26);
   assert.equal(
     visibleStories(document).every(
       (story) => story.dataset.readiness === "Verified"
@@ -251,7 +251,7 @@ test("the client supports search, empty recovery, reset focus, and safe anchors"
   assert.equal(inReviewMetric.getAttribute("aria-current"), "true");
   assert.equal(defaultDom.window.location.search, "?readiness=In+review");
   defaultDom.window.document.querySelector('[data-metric-scope="all"]').click();
-  assert.equal(visibleStories(defaultDom.window.document).length, 221);
+  assert.equal(visibleStories(defaultDom.window.document).length, 222);
   assert.equal(defaultDom.window.location.search, "");
   defaultDom.window.document
     .querySelector("[data-metric-family-picker]")
@@ -311,7 +311,7 @@ test("the client supports search, empty recovery, reset focus, and safe anchors"
   assert.equal(dom.window.location.search, "");
   document.querySelector('[data-metric-scope="current"]').click();
   assert.equal(dom.window.location.hash, "");
-  assert.equal(visibleStories(document).length, 221);
+  assert.equal(visibleStories(document).length, 222);
 
   const search = document.querySelector("#story-search");
   search.focus();
@@ -337,7 +337,7 @@ test("the client supports search, empty recovery, reset focus, and safe anchors"
   assert.equal(document.querySelector("[data-empty-results]").hidden, true);
 
   document.querySelector("[data-reset-filters]").click();
-  assert.equal(visibleStories(document).length, 221);
+  assert.equal(visibleStories(document).length, 222);
   assert.equal(
     document.activeElement,
     document.querySelector("[data-filter-panel] > summary")

@@ -2,6 +2,17 @@
 
 ## 0.3.74
 
+- Reworked Work and Job searches around focused, human-readable views. The
+  seven Work sections now adapt across phone, tablet, and desktop; Job searches
+  separates searches, roles, targets and outreach, and activity; Documents
+  separates positioning, files, and saved answers; and application pipelines
+  show one selected stage on smaller screens instead of squeezing a desktop
+  board into the viewport.
+- Split Work record details into clear sections, moved exact identifiers under
+  Technical details, removed machine-like fallback names, hid empty connection
+  groups, and added the shared smart multi-search with visible record types for
+  adding relationships. Supporting data now loads only for the visible view or
+  opened action, so hidden failures cannot blank an unrelated Work screen.
 - Kept opportunity and application detail actions attached to the exact record
   being viewed, even when that record falls outside a bounded overview page.
   Starting an application now includes the current opportunity, and an

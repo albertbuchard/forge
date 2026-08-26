@@ -43,10 +43,10 @@
         </section>
 
         <section class="story-metrics" aria-label="Story totals">
-          <a class="story-metric metric-all" href="./user-stories.html" data-metric-scope="all"><strong>221</strong><span>All stories</span></a>
-          <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>221</strong><span>Current product</span></a>
+          <a class="story-metric metric-all" href="./user-stories.html" data-metric-scope="all"><strong>222</strong><span>All stories</span></a>
+          <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>222</strong><span>Current product</span></a>
           <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>0</strong><span>Planned</span></a>
-          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>25</strong><span>Verified</span></a>
+          <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>26</strong><span>Verified</span></a>
           <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>180</strong><span>In review</span></a>
           <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>13</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>24</strong><span>Story families</span></a>
@@ -116,7 +116,7 @@
           </div>
 
           <div class="result-bar">
-            <p data-result-count aria-live="polite">Showing all 221 stories.</p>
+            <p data-result-count aria-live="polite">Showing all 222 stories.</p>
             <button type="button" class="reset-button" data-reset-filters hidden>Clear filters</button>
           </div>
           <noscript><p class="noscript-note">Filtering needs JavaScript. The complete story contract remains available below; open any family to read its stories.</p></noscript>
@@ -2378,7 +2378,7 @@
             <details class="story-family" data-family-group="WORK">
               <summary>
                 <span class="family-title"><span class="family-code">WORK</span>Work and opportunity management</span>
-                <span class="family-counts"><span data-family-visible>15</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 15 current</span></span>
+                <span class="family-counts"><span data-family-visible>16</span><span class="family-count-word"> shown</span><span class="family-count-breakdown"> · 16 current</span></span>
               </summary>
               <div class="story-list">
 
@@ -2603,6 +2603,21 @@
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>Operator-only Work import routes and migration 138 receipts.</dd></div>
                       <div><dt>Current evidence and next check</dt><dd>digest-bound insert-only preview/apply, typed references, Artifact checksums, dedupe, rollback inventory, dependency conflicts, tombstones, and subjective-metric/secret rejection are implemented and pass isolated rollback coverage. Complete the reviewed authoritative dry run, canonical apply/readback, and exact rollback preview outside public source.</dd></div>
+                    </dl>
+                  </div>
+                </details>
+
+                <details class="story-card" id="story-work-16" data-story-id="WORK-16" data-lifecycle="current" data-readiness="Verified" data-family="WORK">
+                  <summary class="story-summary">
+                    <span class="story-id">WORK-16</span>
+                    <span class="story-summary-outcome">As a user, I can understand and use Work and Job searches on a phone or desktop without seeing internal names, every stored field at once, false empty relationships, or hidden-screen loading failures.</span>
+                    <span class="story-state state-verified">Verified</span>
+                  </summary>
+                  <div class="story-expanded">
+                    <p class="story-expanded-outcome">As a user, I can understand and use Work and Job searches on a phone or desktop without seeing internal names, every stored field at once, false empty relationships, or hidden-screen loading failures.</p>
+                    <dl class="story-details">
+                      <div><dt>Where it lives</dt><dd>Responsive Work navigation and subviews, focused detail sections, pipeline, connection editor.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>the seven Work sections, four Job search views, three Documents views, all supported detail sections, and compact/desktop pipeline states use human labels and progressive disclosure. Empty connection groups are omitted, smart search shows named records with type badges, and exact identifiers stay under Technical details. Eighteen focused web tests, web and server type checks, three focused server flow tests, the production build, a bounded live responsive route matrix, and an independent findings-only review passed with no overflow, stuck loading, visible internal fallback, or browser error.</dd></div>
                     </dl>
                   </div>
                 </details>
