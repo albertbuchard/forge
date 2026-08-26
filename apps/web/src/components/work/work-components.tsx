@@ -958,7 +958,11 @@ export function ApplicationPipeline({
           Pipeline stage
           <select
             value={selectedColumn}
-            onChange={(event) => setSelectedColumn(event.target.value)}
+            onChange={(event) =>
+              setSelectedColumn(
+                event.target.value as (typeof PIPELINE_COLUMNS)[number]["id"]
+              )
+            }
             className="min-h-11 w-full rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm font-medium text-[var(--ui-ink-strong)]"
           >
             {PIPELINE_COLUMNS.map((column) => {
