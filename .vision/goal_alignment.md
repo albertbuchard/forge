@@ -46,6 +46,10 @@ metrics. The Work interface must remain understandable on a phone and a desktop:
 human product names, shows one focused record section or job-search view at a time, defers
 supporting data until it is needed, hides empty relationship groups, and lets the user add
 authorized connections through one typed smart search without exposing internal identifiers.
+On a phone, each navigation level shows one large current-section control that opens a
+labelled bottom-sheet menu; desktop tab rails are never squeezed, clipped, or made horizontally
+scrollable. Compact grids and their children must shrink to the viewport rather than retaining
+desktop minimum widths.
 
 Forge should stay modern and production-grade:
 

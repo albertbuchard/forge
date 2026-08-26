@@ -610,8 +610,13 @@ relationship must not create a blank list merely to expose the data model.
 Overview cards, search results, pipelines, filters, detail navigation, dialogs, and smart
 search results must adapt together across phone, tablet, and desktop. The application pipeline
 shows one selected stage on compact and medium widths and five stages when desktop space can
-support them. Controls remain keyboard accessible and touch usable, content has no horizontal
-overflow, and secondary or technical information is revealed on demand without removing it.
+support them. At phone width, each Work navigation level exposes one current-section button
+with its purpose and opens a labelled bottom-sheet menu containing every peer destination;
+desktop tab rails must not remain visible, clip, or require horizontal scrolling. One-column
+compact grids and their direct children use shrinkable widths so no hidden desktop column can
+extend beyond the viewport. Controls remain keyboard accessible and touch usable, content has
+no horizontal overflow, and secondary or technical information is revealed on demand without
+removing it.
 
 Private migration is a normal insert-only Work import with source and manifest digests,
 typed references, deduplication, exact rollback inventory, conflict detection, dry-run

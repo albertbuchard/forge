@@ -79,6 +79,12 @@ remain available.
 Every section has bounded loading, empty, error, unavailable, permission, and
 conflict states. The primary flows use the same keyboard-accessible and
 touch-usable controls on desktop and mobile, with no horizontal page overflow.
+On a phone, the current Work section is a large labelled control with a short
+description. It opens a bottom-sheet menu for the seven Work sections. Job
+search, Document, and record-detail subsections use the same pattern, so the
+interface never compresses a desktop tab rail into a clipped or horizontally
+scrolling phone row. Current work also shows only Organizations connected to
+its recorded engagements; unrelated targets stay in Job searches.
 
 ## Work Engagements
 

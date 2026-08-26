@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.75
+
+- Replaced the clipped phone tab rails in Work, Job searches, Documents, and
+  record details with one large current-section control that opens a labelled
+  bottom-sheet menu. Every destination remains available without requiring
+  horizontal scrolling or squeezing desktop navigation into a phone viewport.
+- Prevented Work page grids and their children from retaining desktop minimum
+  widths on compact screens. Summary cards, filters, engagement lists,
+  application workspaces, and detail sections now stay inside the visible phone
+  width while desktop and tablet layouts retain their existing structure.
+- Kept Current work focused on active arrangements and the organizations that
+  are actually connected to them. Unrelated job-search targets no longer appear
+  in that view merely because they exist elsewhere in Work.
+
 ## 0.3.74
 
 - Reworked Work and Job searches around focused, human-readable views. The

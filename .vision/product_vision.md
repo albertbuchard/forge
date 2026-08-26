@@ -80,8 +80,13 @@ selected section instead of showing its entire data model at once. Supporting co
 load only when their visible view or action needs them. Empty relationship groups stay out of
 the way, while one typed smart search can add authorized connections and clearly names the
 kind of record returned. Exact identifiers belong under a closed Technical details disclosure.
-The same information hierarchy, actions, and readable visual quality must work on phone,
-tablet, and desktop without horizontal overflow or desktop-only controls.
+On phones, Work sections, Job search views, Document views, and record sections use one
+large current-section control that opens a labelled bottom-sheet menu. Desktop tab rails remain
+available at their intended breakpoints but are never squeezed into the phone layout. Compact
+grids and every direct child must shrink to the viewport, and Current work lists only
+organizations linked to its recorded engagements rather than unrelated search targets. The
+same information hierarchy, actions, and readable visual quality must work on phone, tablet,
+and desktop without horizontal overflow or desktop-only controls.
 
 Authorized agents use one compound Work context for current roles, confirmed trends,
 linked goals and strategies, blockers, campaigns, and next actions. They may research,
