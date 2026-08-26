@@ -286,11 +286,17 @@ What it does:
 - verifies the Forge repo is clean
 - bumps aligned OpenClaw release versions
 - runs the verification suite
-- commits the release
-- pushes `main`
-- pushes tag `v<version>`
+- creates the release commit locally
+- creates tag `v<version>` locally
+- keeps the tested build artifacts local
 
-What happens next:
+The prepare command does not push or publish anything. Before any remote change,
+complete the candidate-bound database and configuration inventory, verified recovery
+image, additive migration and import readback, exact rollback preview, source-runtime
+smoke checks, and outgoing privacy scan. Only after those release gates pass, push the
+already-reviewed `main` commit and exact `v<version>` tag.
+
+What happens after the separately authorized push:
 
 - GitHub Actions publishes `forge-openclaw-plugin` to npm from that tag
 
@@ -316,11 +322,16 @@ What it does:
 - builds wheel and sdist
 - runs Forge plus Hermes verification
 - smoke-installs the wheel in a temporary virtualenv
-- commits the release
-- pushes `main`
-- pushes tag `hermes-v<version>`
+- creates the release commit locally
+- creates tag `hermes-v<version>` locally
+- keeps the wheel and sdist local
 
-What happens next:
+The prepare command does not push or publish anything. Complete the same
+candidate-bound recovery, migration/import readback, rollback-preview,
+source-runtime, and outgoing-privacy gates before pushing the reviewed commit and
+exact tag.
+
+What happens after the separately authorized push:
 
 - GitHub Actions publishes `forge-hermes-plugin` to PyPI from that tag
 

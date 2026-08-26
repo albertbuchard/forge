@@ -163,9 +163,13 @@ FORGE_RELEASE_MODE=prepare ./scripts/release/release-forge-hermes-plugin.sh patc
 That script bumps the Hermes plugin version in `plugin.yaml` and
 `forge_hermes/version.py`, bundles the runtime payload, builds a wheel and sdist, runs
 the Forge + Hermes verification suite, smoke-installs the wheel into a temporary
-virtualenv, commits the nested Forge repo, and pushes a Hermes-specific git tag such as
-`hermes-v0.2.19`. The `.github/workflows/release-hermes-plugin.yml` workflow then
-builds the release artifacts from that tag and publishes them to PyPI through Trusted
+virtualenv, creates the nested Forge release commit locally, and creates a local
+Hermes-specific git tag such as `hermes-v0.2.19`. It does not push or publish. Before
+any remote change, verify the candidate-bound recovery image, additive migration and
+import readback, exact rollback preview, source-runtime behavior, and outgoing privacy
+scan. Only after those gates pass should the already-reviewed commit and exact tag be
+pushed. The `.github/workflows/release-hermes-plugin.yml` workflow then builds the
+release artifacts from that pushed tag and publishes them to PyPI through Trusted
 Publishing.
 
 One-time PyPI setup for CI:

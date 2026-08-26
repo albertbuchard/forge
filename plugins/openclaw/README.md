@@ -562,15 +562,19 @@ prep flow from a clean checkout on `main` is:
 FORGE_RELEASE_MODE=prepare ./scripts/release/release-forge-openclaw-plugin.sh patch
 ```
 
-That command bumps the aligned plugin versions, runs the verification suite, commits
-the release, and pushes `main` plus a matching tag like `v0.2.27`. The
-`.github/workflows/release-plugins/openclaw.yml` workflow then publishes the package
-from that tag.
+That command bumps the aligned plugin versions, runs the verification suite, creates
+the release commit and a matching tag such as `v0.2.27` locally, and retains the
+tested build artifacts. It does not push or publish. Before any remote change, verify
+the candidate-bound recovery image, additive migration and import readback, exact
+rollback preview, source-runtime behavior, and outgoing privacy scan. Only after
+those gates pass should the already-reviewed commit and exact tag be pushed. The
+`.github/workflows/release-openclaw-plugin.yml` workflow then publishes the package
+from the pushed tag.
 
 One-time npm setup for CI:
 
 - configure npm Trusted Publishing for this GitHub repository and the
-  `release-plugins/openclaw.yml` workflow
+  `.github/workflows/release-openclaw-plugin.yml` workflow
 - keep using GitHub-hosted runners for the publish job, because npm Trusted Publishing
   does not support self-hosted runners yet
 
