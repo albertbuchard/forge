@@ -17,6 +17,8 @@ import {
 import { resolveRouteSecurityContract } from "./route-contract.js";
 
 const DEFAULT_PAYLOAD_RECEIVE_TIMEOUT_MS = 15_000;
+const MOBILE_HEALTH_CHUNK_INACTIVITY_TIMEOUT_MS = 30_000;
+const MOBILE_HEALTH_CHUNK_HARD_TIMEOUT_MS = 150_000;
 const SECURITY_POLICY_VERSION = "forge-access-gateway/1";
 
 type GatewayAuthenticationMode =
@@ -99,6 +101,8 @@ export type InstallAccessGatewayOptions = {
   audit?: GatewayAuditSink;
   rateLimiter?: SecurityRateLimiter;
   payloadReceiveTimeoutMilliseconds?: number;
+  mobileHealthChunkInactivityTimeoutMilliseconds?: number;
+  mobileHealthChunkHardTimeoutMilliseconds?: number;
 };
 
 type RouteContractConfig = Record<string, RouteSecurityContract>;
@@ -257,15 +261,33 @@ export const defaultGatewayAuthorization: GatewayAuthorizationPolicy = {
 class BoundedPayloadStream extends Transform {
   receivedEncodedLength = 0;
   private readonly digest = createHash("sha256");
-  private readonly timeout: NodeJS.Timeout;
+  private inactivityTimeout: NodeJS.Timeout | null = null;
+  private hardTimeout: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly maximumBytes: number,
-    timeoutMilliseconds: number,
+    private readonly receivePolicy:
+      | { kind: "absolute"; timeoutMilliseconds: number }
+      | {
+          kind: "progress_aware";
+          inactivityTimeoutMilliseconds: number;
+          hardTimeoutMilliseconds: number;
+        },
     private readonly onDigest: (sha256: string) => void
   ) {
     super();
-    this.timeout = setTimeout(() => {
+    if (receivePolicy.kind === "absolute") {
+      this.hardTimeout = this.createTimeout(receivePolicy.timeoutMilliseconds);
+    } else {
+      this.resetInactivityTimeout();
+      this.hardTimeout = this.createTimeout(
+        receivePolicy.hardTimeoutMilliseconds
+      );
+    }
+  }
+
+  private createTimeout(timeoutMilliseconds: number) {
+    const timeout = setTimeout(() => {
       this.destroy(
         new HttpError(
           408,
@@ -274,7 +296,29 @@ class BoundedPayloadStream extends Transform {
         )
       );
     }, timeoutMilliseconds);
-    this.timeout.unref();
+    timeout.unref();
+    return timeout;
+  }
+
+  private resetInactivityTimeout() {
+    if (this.receivePolicy.kind !== "progress_aware") return;
+    if (this.inactivityTimeout) {
+      clearTimeout(this.inactivityTimeout);
+    }
+    this.inactivityTimeout = this.createTimeout(
+      this.receivePolicy.inactivityTimeoutMilliseconds
+    );
+  }
+
+  private clearTimeouts() {
+    if (this.inactivityTimeout) {
+      clearTimeout(this.inactivityTimeout);
+      this.inactivityTimeout = null;
+    }
+    if (this.hardTimeout) {
+      clearTimeout(this.hardTimeout);
+      this.hardTimeout = null;
+    }
   }
 
   override _transform(
@@ -285,6 +329,9 @@ class BoundedPayloadStream extends Transform {
     const bytes = Buffer.isBuffer(chunk)
       ? chunk.byteLength
       : Buffer.byteLength(chunk, encoding);
+    if (bytes > 0) {
+      this.resetInactivityTimeout();
+    }
     this.receivedEncodedLength += bytes;
     if (this.receivedEncodedLength > this.maximumBytes) {
       callback(
@@ -306,7 +353,7 @@ class BoundedPayloadStream extends Transform {
   }
 
   override _flush(callback: TransformCallback) {
-    clearTimeout(this.timeout);
+    this.clearTimeouts();
     this.onDigest(this.digest.digest("hex"));
     callback();
   }
@@ -315,9 +362,17 @@ class BoundedPayloadStream extends Transform {
     error: Error | null,
     callback: (error?: Error | null) => void
   ) {
-    clearTimeout(this.timeout);
+    this.clearTimeouts();
     callback(error);
   }
+}
+
+function isMobileHealthChunkContract(contract: RouteSecurityContract) {
+  return (
+    contract.method === "POST" &&
+    contract.routePath ===
+      "/api/v1/mobile/healthkit/sync-sessions/:id/chunks"
+  );
 }
 
 function normalizeMethods(method: RouteOptions["method"]) {
@@ -476,6 +531,8 @@ export class AccessGatewayController {
       Pick<
         InstallAccessGatewayOptions,
         "credentials" | "authorization" | "payloadReceiveTimeoutMilliseconds"
+          | "mobileHealthChunkInactivityTimeoutMilliseconds"
+          | "mobileHealthChunkHardTimeoutMilliseconds"
       >
     > &
       Pick<InstallAccessGatewayOptions, "audit"> &
@@ -756,7 +813,19 @@ export class AccessGatewayController {
     }
     const bounded = new BoundedPayloadStream(
       context.contract.maximumBodyBytes,
-      this.options.payloadReceiveTimeoutMilliseconds,
+      isMobileHealthChunkContract(context.contract)
+        ? {
+            kind: "progress_aware",
+            inactivityTimeoutMilliseconds:
+              this.options.mobileHealthChunkInactivityTimeoutMilliseconds,
+            hardTimeoutMilliseconds:
+              this.options.mobileHealthChunkHardTimeoutMilliseconds
+          }
+        : {
+            kind: "absolute",
+            timeoutMilliseconds:
+              this.options.payloadReceiveTimeoutMilliseconds
+          },
       (sha256) => {
         context.receivedBodySha256 = sha256;
       }
@@ -809,7 +878,13 @@ export function installAccessGateway(
     rateLimiter: options.rateLimiter,
     payloadReceiveTimeoutMilliseconds:
       options.payloadReceiveTimeoutMilliseconds ??
-      DEFAULT_PAYLOAD_RECEIVE_TIMEOUT_MS
+      DEFAULT_PAYLOAD_RECEIVE_TIMEOUT_MS,
+    mobileHealthChunkInactivityTimeoutMilliseconds:
+      options.mobileHealthChunkInactivityTimeoutMilliseconds ??
+      MOBILE_HEALTH_CHUNK_INACTIVITY_TIMEOUT_MS,
+    mobileHealthChunkHardTimeoutMilliseconds:
+      options.mobileHealthChunkHardTimeoutMilliseconds ??
+      MOBILE_HEALTH_CHUNK_HARD_TIMEOUT_MS
   });
   app.decorateRequest("forgeSecurity", null);
   app.addHook("onRoute", (routeOptions) => {

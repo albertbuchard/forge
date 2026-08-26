@@ -270,6 +270,7 @@ final class ForgeBackgroundUploadCoordinator: NSObject, URLSessionDataDelegate {
 
     private let lock = NSLock()
     private var pendingUploads: [Int: PendingUpload] = [:]
+    private var intentionallyCancelledTaskIdentifiers: Set<Int> = []
     private var backgroundCompletionHandlers: [String: () -> Void] = [:]
 
     private lazy var session: URLSession = {
@@ -318,6 +319,9 @@ final class ForgeBackgroundUploadCoordinator: NSObject, URLSessionDataDelegate {
     private func cancelPendingUpload(taskIdentifier: Int) {
         lock.lock()
         let pending = pendingUploads.removeValue(forKey: taskIdentifier)
+        if pending != nil {
+            intentionallyCancelledTaskIdentifiers.insert(taskIdentifier)
+        }
         lock.unlock()
         guard let pending else {
             return
@@ -371,12 +375,21 @@ final class ForgeBackgroundUploadCoordinator: NSObject, URLSessionDataDelegate {
     ) {
         lock.lock()
         let pending = pendingUploads.removeValue(forKey: task.taskIdentifier)
+        let wasIntentionallyCancelled = pending == nil &&
+            intentionallyCancelledTaskIdentifiers.remove(task.taskIdentifier) != nil
         lock.unlock()
         guard let pending else {
-            companionDebugLog(
-                "ForgeSyncClient",
-                "background upload completed without active waiter task=\(task.taskIdentifier) error=\(error?.localizedDescription ?? "nil"); backend session status refresh will reconcile accepted chunks"
-            )
+            if wasIntentionallyCancelled {
+                companionDebugLog(
+                    "ForgeSyncClient",
+                    "background upload completed after intentional cancellation task=\(task.taskIdentifier)"
+                )
+            } else {
+                companionDebugLog(
+                    "ForgeSyncClient",
+                    "background upload completed without active waiter task=\(task.taskIdentifier) error=\(error?.localizedDescription ?? "nil"); backend session status refresh will reconcile accepted chunks"
+                )
+            }
             return
         }
         try? FileManager.default.removeItem(at: pending.fileURL)
@@ -424,10 +437,10 @@ struct ForgeSyncClient {
     static let backgroundHTTPHealthSyncChunkTargetBytes = 500_000
     static let foregroundHTTPHealthSyncChunkTargetBytes = 2_500_000
     static let foregroundIrohHealthSyncChunkUploadConcurrency = 8
-    static let foregroundHealthSyncChunkUploadConcurrency = 12
+    static let foregroundHealthSyncChunkUploadConcurrency = 3
     static let foregroundHealthSyncPreparedChunkPrefetchWindows = 3
-    static let foregroundHTTPMaximumConnectionsPerHost = 12
-    static let foregroundDirectBulkHealthSyncChunkTimeout: TimeInterval = 12
+    static let foregroundHTTPMaximumConnectionsPerHost = 3
+    static let foregroundDirectBulkHealthSyncChunkTimeout: TimeInterval = 120
     static let standardHealthSyncChunkTimeout: TimeInterval = 120
     private static let workoutTimeSeriesEstimatedBytesPerRecord = 640
     private static let workoutRouteEstimatedBytesPerRecord = 520
@@ -474,11 +487,7 @@ struct ForgeSyncClient {
         useBackgroundUpload: Bool,
         appIsForegroundActive: Bool = true
     ) -> Int {
-        let effectiveUseBackgroundUpload = effectiveUseBackgroundUploadForHealthSyncChunk(
-            requestedBackgroundUpload: useBackgroundUpload,
-            appIsForegroundActive: appIsForegroundActive
-        )
-        if effectiveUseBackgroundUpload {
+        if useBackgroundUpload {
             return 1
         }
         if pairing.usesIrohTransportForActiveApiUrl {
@@ -1099,8 +1108,6 @@ struct ForgeSyncClient {
     private struct HealthSyncSessionStartEnvelope: Decodable {
         let upload: HealthSyncUploadSession
     }
-
-    private struct EmptyDecodableEnvelope: Decodable {}
 
     private struct HealthSyncChunkEnvelope: Decodable {
         let chunk: HealthSyncChunkReceipt
@@ -2279,6 +2286,86 @@ struct ForgeSyncClient {
         return refreshedUpload
     }
 
+    static func shouldReconcileHealthSyncUploadError(_ error: Error) -> Bool {
+        if error is CancellationError || Task.isCancelled {
+            return false
+        }
+        let nsError = error as NSError
+        if [408, 500, 502, 503, 504].contains(nsError.code) {
+            return true
+        }
+        guard nsError.domain == NSURLErrorDomain else {
+            return false
+        }
+        let code = URLError.Code(rawValue: nsError.code)
+        return [
+            .timedOut,
+            .networkConnectionLost,
+            .notConnectedToInternet,
+            .cannotConnectToHost,
+            .cannotFindHost,
+            .dnsLookupFailed,
+            .secureConnectionFailed,
+            .resourceUnavailable
+        ].contains(code)
+    }
+
+    private func reconcilePreparedHealthSyncChunks(
+        _ chunks: [PreparedHealthSyncChunkUpload],
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload,
+        useBackgroundUpload: Bool,
+        onChunkUploaded: HealthSyncChunkUploadHandler?
+    ) async throws {
+        try Task.checkCancellation()
+        let refreshedSession = try await refreshHealthSyncSessionStatus(
+            uploadSession: uploadSession,
+            pairing: pairing,
+            includeReceivedChunkIds: true,
+            includeWorkoutImportExternalUids: false,
+            includeWorkoutImportState: false
+        )
+        guard refreshedSession.status == nil || refreshedSession.status == "running" else {
+            throw NSError(
+                domain: "ForgeSyncClient",
+                code: 409,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Forge closed the HealthKit sync session before interrupted chunks could be reconciled.",
+                    NSLocalizedFailureReasonErrorKey: "Health sync session status: \(refreshedSession.status ?? "unknown")"
+                ]
+            )
+        }
+        companionDebugLog(
+            "ForgeSyncClient",
+            "reconcilePreparedHealthSyncChunks start prepared=\(chunks.count) accepted=\(refreshedSession.receivedChunkIds.count) uploadSession=\(refreshedSession.syncSessionId)"
+        )
+        for chunk in chunks {
+            try Task.checkCancellation()
+            let checksum = Self.sha256Hex(chunk.payloadData)
+            let chunkId = chunk.chunkId ?? Self.healthSyncContentAddressedChunkId(
+                uploadSession: refreshedSession,
+                sequence: chunk.sequence,
+                family: chunk.family,
+                checksumSha256: checksum
+            )
+            _ = try await uploadHealthSyncChunk(
+                uploadSession: refreshedSession,
+                pairing: pairing,
+                sequence: chunk.sequence,
+                family: chunk.family,
+                recordCount: chunk.recordCount,
+                payloadData: chunk.payloadData,
+                chunkId: chunkId,
+                useBackgroundUpload: useBackgroundUpload,
+                onChunkUploaded: onChunkUploaded
+            )
+        }
+        companionDebugLog(
+            "ForgeSyncClient",
+            "reconcilePreparedHealthSyncChunks complete prepared=\(chunks.count) uploadSession=\(refreshedSession.syncSessionId)"
+        )
+    }
+
     func uploadWorkoutArchiveHealthSyncChunks(
         workouts: [CompanionSyncPayload.WorkoutSession],
         uploadSession: HealthSyncUploadSession,
@@ -2346,7 +2433,7 @@ struct ForgeSyncClient {
 
     func abortHealthSyncSession(uploadSession: HealthSyncUploadSession, pairing: PairingPayload) async {
         do {
-            let _: EmptyDecodableEnvelope = try await sendRequest(
+            try await sendRequestWithoutResponse(
                 path: "/mobile/healthkit/sync-sessions/\(uploadSession.syncSessionId)",
                 apiBaseUrl: pairing.apiBaseUrl,
                 method: "DELETE",
@@ -2564,24 +2651,43 @@ struct ForgeSyncClient {
             "uploadPreparedHealthSyncChunks start count=\(chunks.count) window=\(concurrency()) firstSequence=\(startingSequence) transport=\(Self.activeHealthSyncTransportName(for: pairing)) requestedBackgroundUpload=\(useBackgroundUpload)"
         )
         var iterator = chunks.makeIterator()
-        let metrics = try await Self.runPreparedHealthSyncChunkScheduler(
-            currentConcurrency: concurrency,
-            currentPrefetchLimit: { 0 },
-            windowPollIntervalNanoseconds: useBackgroundUpload ? 1_000_000_000 : nil
-        ) {
-            iterator.next()
-        } uploadChunk: { [self] chunk in
-            _ = try await uploadHealthSyncChunk(
+        let metrics: HealthSyncPreparedChunkSchedulerMetrics
+        do {
+            metrics = try await Self.runPreparedHealthSyncChunkScheduler(
+                currentConcurrency: concurrency,
+                currentPrefetchLimit: { 0 },
+                windowPollIntervalNanoseconds: useBackgroundUpload ? 1_000_000_000 : nil
+            ) {
+                iterator.next()
+            } uploadChunk: { [self] chunk in
+                _ = try await uploadHealthSyncChunk(
+                    uploadSession: uploadSession,
+                    pairing: pairing,
+                    sequence: chunk.sequence,
+                    family: chunk.family,
+                    recordCount: chunk.recordCount,
+                    payloadData: chunk.payloadData,
+                    chunkId: chunk.chunkId,
+                    useBackgroundUpload: useBackgroundUpload,
+                    onChunkUploaded: onChunkUploaded
+                )
+            }
+        } catch {
+            guard Self.shouldReconcileHealthSyncUploadError(error) else {
+                throw error
+            }
+            companionDebugLog(
+                "ForgeSyncClient",
+                "uploadPreparedHealthSyncChunks ambiguous failure; starting one authoritative reconciliation uploadSession=\(uploadSession.syncSessionId) error=\(error.localizedDescription)"
+            )
+            try await reconcilePreparedHealthSyncChunks(
+                chunks,
                 uploadSession: uploadSession,
                 pairing: pairing,
-                sequence: chunk.sequence,
-                family: chunk.family,
-                recordCount: chunk.recordCount,
-                payloadData: chunk.payloadData,
-                chunkId: chunk.chunkId,
                 useBackgroundUpload: useBackgroundUpload,
                 onChunkUploaded: onChunkUploaded
             )
+            return startingSequence + chunks.count
         }
         companionDebugLog(
             "ForgeSyncClient",
@@ -2762,23 +2868,68 @@ struct ForgeSyncClient {
             "ForgeSyncClient",
             "uploadGeneratedHealthSyncChunks start window=\(concurrency()) prefetch=\(prefetchLimit()) firstSequence=\(startingSequence) transport=\(Self.activeHealthSyncTransportName(for: pairing)) requestedBackgroundUpload=\(useBackgroundUpload)"
         )
-        let metrics = try await Self.runPreparedHealthSyncChunkScheduler(
-            currentConcurrency: concurrency,
-            currentPrefetchLimit: prefetchLimit,
-            windowPollIntervalNanoseconds: useBackgroundUpload ? 1_000_000_000 : nil,
-            nextChunk: nextChunk
-        ) { [self] chunk in
-            _ = try await uploadHealthSyncChunk(
+        var generatedChunks: [PreparedHealthSyncChunkUpload] = []
+        func nextRecordedChunk() throws -> PreparedHealthSyncChunkUpload? {
+            guard let chunk = try nextChunk() else {
+                return nil
+            }
+            generatedChunks.append(chunk)
+            return chunk
+        }
+        let metrics: HealthSyncPreparedChunkSchedulerMetrics
+        do {
+            metrics = try await Self.runPreparedHealthSyncChunkScheduler(
+                currentConcurrency: concurrency,
+                currentPrefetchLimit: prefetchLimit,
+                windowPollIntervalNanoseconds: useBackgroundUpload ? 1_000_000_000 : nil,
+                nextChunk: nextRecordedChunk
+            ) { [self] chunk in
+                _ = try await uploadHealthSyncChunk(
+                    uploadSession: uploadSession,
+                    pairing: pairing,
+                    sequence: chunk.sequence,
+                    family: chunk.family,
+                    recordCount: chunk.recordCount,
+                    payloadData: chunk.payloadData,
+                    chunkId: chunk.chunkId,
+                    useBackgroundUpload: useBackgroundUpload,
+                    onChunkUploaded: onChunkUploaded
+                )
+            }
+        } catch {
+            guard Self.shouldReconcileHealthSyncUploadError(error) else {
+                throw error
+            }
+            companionDebugLog(
+                "ForgeSyncClient",
+                "uploadGeneratedHealthSyncChunks ambiguous failure; reconciling generated=\(generatedChunks.count) uploadSession=\(uploadSession.syncSessionId) error=\(error.localizedDescription)"
+            )
+            try await reconcilePreparedHealthSyncChunks(
+                generatedChunks,
                 uploadSession: uploadSession,
                 pairing: pairing,
-                sequence: chunk.sequence,
-                family: chunk.family,
-                recordCount: chunk.recordCount,
-                payloadData: chunk.payloadData,
-                chunkId: chunk.chunkId,
                 useBackgroundUpload: useBackgroundUpload,
                 onChunkUploaded: onChunkUploaded
             )
+            let continuationMetrics = try await Self.runPreparedHealthSyncChunkScheduler(
+                currentConcurrency: concurrency,
+                currentPrefetchLimit: prefetchLimit,
+                windowPollIntervalNanoseconds: useBackgroundUpload ? 1_000_000_000 : nil,
+                nextChunk: nextChunk
+            ) { [self] chunk in
+                _ = try await uploadHealthSyncChunk(
+                    uploadSession: uploadSession,
+                    pairing: pairing,
+                    sequence: chunk.sequence,
+                    family: chunk.family,
+                    recordCount: chunk.recordCount,
+                    payloadData: chunk.payloadData,
+                    chunkId: chunk.chunkId,
+                    useBackgroundUpload: useBackgroundUpload,
+                    onChunkUploaded: onChunkUploaded
+                )
+            }
+            return startingSequence + generatedChunks.count + continuationMetrics.scheduledCount
         }
         companionDebugLog(
             "ForgeSyncClient",
@@ -4311,6 +4462,60 @@ struct ForgeSyncClient {
         useBackgroundUpload: Bool = false,
         responseHeaderObserver: ((HTTPURLResponse) -> Void)? = nil
     ) async throws -> Response {
+        let data = try await sendRequestData(
+            path: path,
+            apiBaseUrl: apiBaseUrl,
+            method: method,
+            body: body,
+            session: session,
+            transport: transport,
+            mobilePairing: mobilePairing,
+            timeoutInterval: timeoutInterval,
+            useBackgroundUpload: useBackgroundUpload,
+            responseHeaderObserver: responseHeaderObserver
+        )
+        companionDebugLog(
+            "ForgeSyncClient",
+            "sendRequest decode success path=\(path)"
+        )
+        return try JSONDecoder().decode(Response.self, from: data)
+    }
+
+    private func sendRequestWithoutResponse<Body: Encodable>(
+        path: String,
+        apiBaseUrl: String,
+        method: String,
+        body: Body,
+        transport: PairingTransport? = nil,
+        mobilePairing: PairingPayload? = nil,
+        timeoutInterval: TimeInterval = 20
+    ) async throws {
+        _ = try await sendRequestData(
+            path: path,
+            apiBaseUrl: apiBaseUrl,
+            method: method,
+            body: body,
+            session: nil,
+            transport: transport,
+            mobilePairing: mobilePairing,
+            timeoutInterval: timeoutInterval,
+            useBackgroundUpload: false,
+            responseHeaderObserver: nil
+        )
+    }
+
+    private func sendRequestData<Body: Encodable>(
+        path: String,
+        apiBaseUrl: String,
+        method: String,
+        body: Body,
+        session: URLSession?,
+        transport: PairingTransport?,
+        mobilePairing: PairingPayload?,
+        timeoutInterval: TimeInterval,
+        useBackgroundUpload: Bool,
+        responseHeaderObserver: ((HTTPURLResponse) -> Void)?
+    ) async throws -> Data {
         guard let url = URL(string: "\(apiBaseUrl)\(path)") else {
             companionDebugLog(
                 "ForgeSyncClient",
@@ -4465,8 +4670,7 @@ struct ForgeSyncClient {
             )
         }
 
-        companionDebugLog("ForgeSyncClient", "sendRequest decode success url=\(url.absoluteString)")
-        return try JSONDecoder().decode(Response.self, from: data)
+        return data
     }
 
     private static func mobilePairingMaterial(

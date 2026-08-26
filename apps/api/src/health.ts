@@ -5284,46 +5284,6 @@ function mobileSyncSessionProgressFromStoredSession(
   };
 }
 
-function mobileSyncSessionProgressAfterAcceptedChunk(input: {
-  session: MobileSyncSessionRow;
-  family: MobileHealthSyncFamily;
-  recordCount: number;
-  byteCount: number;
-}) {
-  const currentChunkCount = mobileSyncSessionChunkCount(input.session.id);
-  let receivedCounts = safeJsonParse<Record<string, number>>(
-    input.session.received_counts_json,
-    {}
-  );
-  let byteTotals = safeJsonParse<Record<string, number>>(
-    input.session.byte_totals_json,
-    {}
-  );
-  if (
-    currentChunkCount > 0 &&
-    Object.keys(receivedCounts).length === 0 &&
-    Object.keys(byteTotals).length === 0
-  ) {
-    const currentProgress = mobileSyncSessionProgressFromChunkRows(
-      input.session.id
-    );
-    receivedCounts = currentProgress.receivedCounts;
-    byteTotals = currentProgress.byteTotals;
-  }
-  receivedCounts[input.family] =
-    (receivedCounts[input.family] ?? 0) + input.recordCount;
-  byteTotals[input.family] = (byteTotals[input.family] ?? 0) + input.byteCount;
-  return {
-    receivedCounts,
-    byteTotals,
-    chunkCount: currentChunkCount + 1,
-    receivedBytes: Object.values(byteTotals).reduce(
-      (sum, value) => sum + (Number.isFinite(value) ? value : 0),
-      0
-    )
-  };
-}
-
 function finiteNumberFromUnknown(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -6300,7 +6260,10 @@ export function ingestMobileHealthSyncChunk(
         "A chunk with the same id was already accepted with different content."
       );
     }
-    const progress = mobileSyncSessionProgressFromStoredSession(session);
+    const progress = updateMobileSyncSessionProgress(
+      syncSessionId,
+      mobileSyncSessionProgressFromChunkRows(syncSessionId)
+    );
     return {
       accepted: true,
       duplicate: true,
@@ -6410,12 +6373,6 @@ export function ingestMobileHealthSyncChunk(
   }
   return runInTransaction(() => {
     const now = nowIso();
-    const progress = mobileSyncSessionProgressAfterAcceptedChunk({
-      session,
-      family: parsed.family,
-      recordCount: parsed.recordCount,
-      byteCount: actualByteCount
-    });
     const payloadSummary = {
       ...summarizeChunkPayload(parsed.family, wirePayload.payload),
       clientByteCount: parsed.byteCount,
@@ -6424,14 +6381,15 @@ export function ingestMobileHealthSyncChunk(
       serverChecksum,
       mode: wirePayload.mode
     };
-    getDatabase()
+    const insertion = getDatabase()
       .prepare(
         `INSERT INTO health_mobile_sync_chunks (
            id, sync_session_id, chunk_id, sequence, family, checksum_sha256,
            record_count, byte_count, payload_json, payload_summary_json,
            received_at, applied_at, created_at, updated_at
          )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+         ON CONFLICT(sync_session_id, chunk_id) DO NOTHING`
       )
       .run(
         mobileSyncChunkRecordId(),
@@ -6448,6 +6406,39 @@ export function ingestMobileHealthSyncChunk(
         now,
         now
       );
+    if (insertion.changes === 0) {
+      const accepted = getDatabase()
+        .prepare(
+          `SELECT * FROM health_mobile_sync_chunks
+           WHERE sync_session_id = ? AND chunk_id = ?`
+        )
+        .get(syncSessionId, parsed.chunkId) as MobileSyncChunkRow | undefined;
+      if (!accepted) {
+        throw new HttpError(
+          409,
+          "chunk_acceptance_conflict",
+          "The HealthKit sync chunk could not be reconciled with stored state."
+        );
+      }
+      if (accepted.checksum_sha256 !== serverChecksum) {
+        throw new HttpError(
+          409,
+          "chunk_checksum_mismatch",
+          "A chunk with the same id was already accepted with different content."
+        );
+      }
+      const progress = updateMobileSyncSessionProgress(
+        syncSessionId,
+        mobileSyncSessionProgressFromChunkRows(syncSessionId)
+      );
+      return {
+        accepted: true,
+        duplicate: true,
+        receivedCount: progress.chunkCount,
+        receivedBytes: progress.receivedBytes,
+        progress
+      };
+    }
     const appliedMode = applyMobileHealthSyncChunkImmediately(
       session,
       parsed.family,
@@ -6461,7 +6452,10 @@ export function ingestMobileHealthSyncChunk(
         mode: appliedMode
       });
     }
-    updateMobileSyncSessionProgress(syncSessionId, progress);
+    const progress = updateMobileSyncSessionProgress(
+      syncSessionId,
+      mobileSyncSessionProgressFromChunkRows(syncSessionId)
+    );
     return {
       accepted: true,
       duplicate: false,

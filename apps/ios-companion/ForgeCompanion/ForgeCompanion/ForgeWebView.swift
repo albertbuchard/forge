@@ -63,6 +63,58 @@ struct ForgeWebFailure: Equatable {
         detail: "The embedded web process stopped. Reload to restore the web experience.",
         isOffline: false
     )
+
+    static let startupStalled = ForgeWebFailure(
+        title: "Forge did not finish starting",
+        detail: "Forge reloaded once but the interface still did not start. Try Reload Forge, then check the paired runtime if this continues.",
+        isOffline: false
+    )
+}
+
+enum ForgeWebDocumentReadiness: String, Equatable {
+    case ready
+    case bootPlaceholder
+    case emptyRoot
+    case missingRoot
+    case invalidSnapshot
+
+    static func classify(
+        runtimeMounted: Bool?,
+        rootExists: Bool?,
+        rootChildren: Int?,
+        rootText: String?
+    ) -> ForgeWebDocumentReadiness {
+        guard let runtimeMounted,
+              let rootExists,
+              let rootChildren,
+              let rootText
+        else {
+            return .invalidSnapshot
+        }
+        if runtimeMounted {
+            return .ready
+        }
+        guard rootExists else {
+            return .missingRoot
+        }
+        let normalizedText = rootText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if normalizedText.contains("forge is starting") {
+            return .bootPlaceholder
+        }
+        if rootChildren <= 0 || normalizedText.isEmpty {
+            return .emptyRoot
+        }
+        return .ready
+    }
+}
+
+private struct ForgeWebDocumentSnapshot: Decodable {
+    let runtimeMounted: Bool
+    let rootExists: Bool
+    let rootChildren: Int
+    let rootText: String
 }
 
 struct ForgeWebLayoutMetrics: Equatable {
@@ -351,6 +403,7 @@ struct ForgeWebView: UIViewRepresentable {
 
         if context.coordinator.lastURL != url {
             context.coordinator.lastURL = url
+            context.coordinator.prepareForExplicitNavigation()
             context.coordinator.updateViewState(isLoading: true, failure: nil)
             companionDebugLog("ForgeWebView", "updateUIView load new url=\(url.absoluteString)")
             webView.load(Self.freshRequest(for: url))
@@ -359,6 +412,7 @@ struct ForgeWebView: UIViewRepresentable {
 
         if context.coordinator.lastReloadRequest != reloadRequest {
             context.coordinator.lastReloadRequest = reloadRequest
+            context.coordinator.prepareForExplicitNavigation()
             context.coordinator.updateViewState(isLoading: true, failure: nil)
             switch reloadRequest.kind {
             case .standard:
@@ -401,6 +455,14 @@ struct ForgeWebView: UIViewRepresentable {
         private var pendingDownloadShares: [URL] = []
         private var downloadShareInFlight = false
         private var didBecomeActiveObserver: NSObjectProtocol?
+        private var readinessProbeWorkItem: DispatchWorkItem?
+        private var readinessProbeAttempt = 0
+        private var readinessRecoveryAttempted = false
+        private var automaticRecoveryNavigationPending = false
+
+        private static let readinessFirstProbeDelay: TimeInterval = 0.35
+        private static let readinessProbeInterval: TimeInterval = 1
+        private static let readinessProbeAttemptsBeforeRecovery = 4
 
         init(parent: ForgeWebView) {
             self.parent = parent
@@ -416,6 +478,7 @@ struct ForgeWebView: UIViewRepresentable {
         }
 
         deinit {
+            readinessProbeWorkItem?.cancel()
             if let didBecomeActiveObserver {
                 NotificationCenter.default.removeObserver(didBecomeActiveObserver)
             }
@@ -429,6 +492,14 @@ struct ForgeWebView: UIViewRepresentable {
             let nsError = error as NSError
             return nsError.domain == NSURLErrorDomain &&
                 nsError.code == URLError.cancelled.rawValue
+        }
+
+        func prepareForExplicitNavigation() {
+            readinessProbeWorkItem?.cancel()
+            readinessProbeWorkItem = nil
+            readinessProbeAttempt = 0
+            readinessRecoveryAttempted = false
+            automaticRecoveryNavigationPending = false
         }
 
         func clearWebViewCaches(completion: @escaping () -> Void) {
@@ -525,6 +596,14 @@ struct ForgeWebView: UIViewRepresentable {
                 "ForgeWebView",
                 "didStartProvisionalNavigation url=\(webView.url?.absoluteString ?? "nil")"
             )
+            readinessProbeWorkItem?.cancel()
+            readinessProbeWorkItem = nil
+            readinessProbeAttempt = 0
+            if automaticRecoveryNavigationPending {
+                automaticRecoveryNavigationPending = false
+            } else {
+                readinessRecoveryAttempted = false
+            }
             updateViewState(isLoading: true, failure: nil)
         }
 
@@ -533,13 +612,16 @@ struct ForgeWebView: UIViewRepresentable {
                 "ForgeWebView",
                 "didFinish url=\(webView.url?.absoluteString ?? "nil") title=\(webView.title ?? "nil")"
             )
-            updateViewState(isLoading: false, failure: nil)
+            updateViewState(isLoading: true, failure: nil)
             applyNativeBounds(
                 webView.bounds,
                 safeAreaInsets: webView.safeAreaInsets,
                 to: webView
             )
-            debugInspectDocument(on: webView)
+            scheduleReadinessProbe(
+                on: webView,
+                after: Self.readinessFirstProbeDelay
+            )
         }
 
         func webView(
@@ -558,6 +640,7 @@ struct ForgeWebView: UIViewRepresentable {
                 "ForgeWebView",
                 "didFail url=\(webView.url?.absoluteString ?? "nil") error=\(error.localizedDescription)"
             )
+            readinessProbeWorkItem?.cancel()
             updateViewState(isLoading: false, failure: .from(error))
         }
 
@@ -577,11 +660,13 @@ struct ForgeWebView: UIViewRepresentable {
                 "ForgeWebView",
                 "didFailProvisionalNavigation url=\(webView.url?.absoluteString ?? "nil") error=\(error.localizedDescription)"
             )
+            readinessProbeWorkItem?.cancel()
             updateViewState(isLoading: false, failure: .from(error))
         }
 
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
             companionDebugLog("ForgeWebView", "web content process terminated")
+            readinessProbeWorkItem?.cancel()
             updateViewState(isLoading: false, failure: .webProcessStopped)
         }
 
@@ -760,36 +845,111 @@ struct ForgeWebView: UIViewRepresentable {
             return presenter
         }
 
-        private func debugInspectDocument(on webView: WKWebView) {
+        private func scheduleReadinessProbe(
+            on webView: WKWebView,
+            after delay: TimeInterval
+        ) {
+            readinessProbeWorkItem?.cancel()
+            let workItem = DispatchWorkItem { [weak self, weak webView] in
+                guard let self, let webView else { return }
+                self.probeDocumentReadiness(on: webView)
+            }
+            readinessProbeWorkItem = workItem
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + delay,
+                execute: workItem
+            )
+        }
+
+        private func probeDocumentReadiness(on webView: WKWebView) {
             let script = """
             (() => {
               const root = document.getElementById('root');
-                return JSON.stringify({
-                  href: location.href,
-                  title: document.title,
-                  readyState: document.readyState,
-                  bodyClassName: document.body.className,
-                  theme: document.documentElement.dataset.forgeTheme || '',
-                  rootChildren: root ? root.children.length : -1,
-                  rootTextSample: root ? (root.innerText || '').slice(0, 160) : '',
-                  bodyBackground: getComputedStyle(document.body).backgroundColor,
-                  rootBackground: root ? getComputedStyle(root).backgroundColor : 'none'
-                });
+              return JSON.stringify({
+                runtimeMounted: document.documentElement.dataset.forgeRuntimeMounted === 'true',
+                rootExists: Boolean(root),
+                rootChildren: root ? root.children.length : -1,
+                rootText: root ? (root.innerText || '').slice(0, 240) : ''
+              });
             })();
             """
-            webView.evaluateJavaScript(script) { result, error in
-                if let error {
-                    companionDebugLog(
-                        "ForgeWebView",
-                        "debugInspectDocument failed error=\(error.localizedDescription)"
+            webView.evaluateJavaScript(script) { [weak self, weak webView] result, error in
+                guard let self, let webView else { return }
+                let snapshot: ForgeWebDocumentSnapshot? = {
+                    guard error == nil,
+                          let value = result as? String,
+                          let data = value.data(using: .utf8)
+                    else {
+                        return nil
+                    }
+                    return try? JSONDecoder().decode(
+                        ForgeWebDocumentSnapshot.self,
+                        from: data
+                    )
+                }()
+                let readiness = ForgeWebDocumentReadiness.classify(
+                    runtimeMounted: snapshot?.runtimeMounted,
+                    rootExists: snapshot?.rootExists,
+                    rootChildren: snapshot?.rootChildren,
+                    rootText: snapshot?.rootText
+                )
+                companionDebugLog(
+                    "ForgeWebView",
+                    "document readiness=\(readiness.rawValue) probe=\(self.readinessProbeAttempt) recoveryAttempted=\(self.readinessRecoveryAttempted)"
+                )
+                if readiness == .ready {
+                    self.readinessProbeWorkItem?.cancel()
+                    self.readinessProbeWorkItem = nil
+                    self.updateViewState(isLoading: false, failure: nil)
+                    return
+                }
+                if self.readinessProbeAttempt < Self.readinessProbeAttemptsBeforeRecovery {
+                    self.readinessProbeAttempt += 1
+                    self.scheduleReadinessProbe(
+                        on: webView,
+                        after: Self.readinessProbeInterval
                     )
                     return
                 }
-                companionDebugLog(
-                    "ForgeWebView",
-                    "debugInspectDocument result=\(String(describing: result))"
-                )
+                self.recoverOrFailStalledStartup(on: webView)
             }
+        }
+
+        private func recoverOrFailStalledStartup(on webView: WKWebView) {
+            guard readinessRecoveryAttempted == false else {
+                readinessProbeWorkItem?.cancel()
+                readinessProbeWorkItem = nil
+                updateViewState(isLoading: false, failure: .startupStalled)
+                return
+            }
+            guard let currentURL = webView.url,
+                  ForgeWebNavigationPolicy.disposition(
+                    for: currentURL,
+                    relativeTo: parent.url,
+                    isUserActivated: false,
+                    isPrimaryNavigation: true,
+                    shouldPerformDownload: false
+                  ) == .allow
+            else {
+                updateViewState(isLoading: false, failure: .startupStalled)
+                return
+            }
+            readinessRecoveryAttempted = true
+            automaticRecoveryNavigationPending = true
+            readinessProbeAttempt = 0
+            updateViewState(isLoading: true, failure: nil)
+            companionDebugLog(
+                "ForgeWebView",
+                "performing one cache-bypassing startup recovery"
+            )
+            webView.stopLoading()
+            webView.load(
+                ForgeWebView.freshRequest(
+                    for: currentURL,
+                    cachePolicy: .reloadIgnoringLocalCacheData,
+                    reloadToken: UUID()
+                )
+            )
         }
     }
 }

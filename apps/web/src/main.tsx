@@ -79,6 +79,16 @@ class RootErrorBoundary extends React.Component<
   }
 }
 
+function ForgeRuntimeCommitMarker() {
+  React.useLayoutEffect(() => {
+    document.documentElement.dataset.forgeRuntimeMounted = "true";
+    return () => {
+      delete document.documentElement.dataset.forgeRuntimeMounted;
+    };
+  }, []);
+  return null;
+}
+
 const rootElement = document.getElementById("root");
 if (!rootElement) {
   throw new Error("Forge could not find its root element.");
@@ -90,6 +100,7 @@ const { queryClient, reactRoot } = getOrCreateForgeRuntime(
 
 reactRoot.render(
   <React.StrictMode>
+    <ForgeRuntimeCommitMarker />
     <RootErrorBoundary>
       <Provider store={appStore}>
         <QueryClientProvider client={queryClient}>
