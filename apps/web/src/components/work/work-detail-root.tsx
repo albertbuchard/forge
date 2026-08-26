@@ -33,9 +33,6 @@ export function WorkDetail({
   campaigns,
   opportunities,
   applications,
-  profiles,
-  documentSets,
-  responses,
   trends,
   onRefresh,
   onCheckIn
@@ -47,9 +44,6 @@ export function WorkDetail({
   campaigns: OpportunityCampaign[];
   opportunities: JobOpportunity[];
   applications: JobApplication[];
-  profiles: WorkRecord[];
-  documentSets: WorkRecord[];
-  responses: WorkRecord[];
   trends: WorkTrendSeries[];
   onRefresh: () => Promise<void>;
   onCheckIn: (engagementId: string) => void;
@@ -222,9 +216,6 @@ export function WorkDetail({
         campaign={
           boundedApplicationCampaign ?? applicationCampaignQuery.data?.campaign
         }
-        profiles={profiles}
-        documentSets={documentSets}
-        responses={responses}
         userIds={userIds}
         onRefresh={onRefresh}
       />

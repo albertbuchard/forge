@@ -23,6 +23,7 @@ import {
   WorkCheckInDialog
 } from "@/components/work/work-pipeline-dialogs";
 import {
+  getOpportunityCampaign,
   getWorkContext,
   getWorkSettings,
   listJobApplications,
@@ -77,6 +78,7 @@ export function WorkPage() {
   const tab = resolveTab(searchParams.get("tab"));
   const searchView = resolveSearchView(searchParams.get("view"));
   const documentsView = resolveDocumentsView(searchParams.get("view"));
+  const detailSection = searchParams.get("section") ?? "summary";
   const queryClient = useQueryClient();
   const userIds = selectedOwners(shell);
   const mutationEnabled = userIds.length === 1;
@@ -102,8 +104,8 @@ export function WorkPage() {
   const hasUsers = userIds.length > 0;
   const detailKind = detail?.kind;
   const needsContext =
-    (!detail && ["overview", "check-ins"].includes(tab)) ||
-    detailKind === "engagements";
+    (!detail && ["overview", "check-ins", "plans"].includes(tab)) ||
+    (detailKind === "engagements" && detailSection === "check-ins");
   const needsEngagements =
     (!detail && ["current", "check-ins", "plans"].includes(tab)) ||
     campaignOpen ||
@@ -144,21 +146,30 @@ export function WorkPage() {
     (!detail && tab === "searches" && searchView === "activity") ||
     (!detail &&
       tab === "documents" &&
-      ["positioning", "documents"].includes(documentsView)) ||
-    detailKind === "applications";
+      ["positioning", "documents"].includes(documentsView));
   const needsDocuments =
     (!detail && tab === "searches" && searchView === "activity") ||
-    (!detail && tab === "documents" && documentsView === "documents") ||
-    detailKind === "applications";
+    (!detail && tab === "documents" && documentsView === "documents");
   const needsResponses =
-    (!detail && tab === "documents" && documentsView === "answers") ||
-    detailKind === "applications";
+    !detail && tab === "documents" && documentsView === "answers";
   const needsOutreach =
     !detail && tab === "searches" && searchView === "targets";
   const needsApplicationActivity = !detail && tab === "applications";
   const overviewQuery = useQuery({
-    queryKey: ["work", "overview", scopeKey, trendWindowDays],
-    queryFn: () => getWorkContext(userIds, { trendWindowDays }),
+    queryKey: [
+      "work",
+      "overview",
+      scopeKey,
+      trendWindowDays,
+      detailKind === "engagements" ? detail?.id : ""
+    ],
+    queryFn: () =>
+      getWorkContext(userIds, {
+        trendWindowDays,
+        ...(detailKind === "engagements" && detail?.id
+          ? { engagementId: detail.id }
+          : {})
+      }),
     enabled: hasUsers && needsContext
   });
   const settingsQuery = useQuery({
@@ -188,6 +199,16 @@ export function WorkPage() {
       ?.id ||
     campaignQuery.data?.items[0]?.id ||
     "";
+  const needsSelectedCampaignDetail =
+    !detail &&
+    tab === "searches" &&
+    ["roles", "targets", "activity"].includes(searchView) &&
+    Boolean(selectedCampaignForQuery);
+  const selectedCampaignDetailQuery = useQuery({
+    queryKey: ["work", "campaign-detail", selectedCampaignForQuery, scopeKey],
+    queryFn: () => getOpportunityCampaign(userIds, selectedCampaignForQuery),
+    enabled: hasUsers && needsSelectedCampaignDetail
+  });
   const opportunityListInput =
     detail || tab !== "searches" || searchView !== "roles"
       ? {}
@@ -289,7 +310,10 @@ export function WorkPage() {
   );
   const campaigns = uniqueById<OpportunityCampaign>(
     campaignQuery.data?.items ?? [],
-    context?.campaigns ?? []
+    context?.campaigns ?? [],
+    selectedCampaignDetailQuery.data?.campaign
+      ? [selectedCampaignDetailQuery.data.campaign]
+      : []
   );
   const organizations = organizationQuery.data?.items ?? [];
   const rawOpportunities = opportunityQuery.data?.items ?? [];
@@ -359,9 +383,6 @@ export function WorkPage() {
           campaigns={campaigns}
           opportunities={opportunities}
           applications={applications}
-          profiles={profileQuery.data?.items ?? []}
-          documentSets={documentQuery.data?.items ?? []}
-          responses={responseQuery.data?.items ?? []}
           trends={trends}
           onRefresh={refresh}
           onCheckIn={openCheckIn}
@@ -377,21 +398,86 @@ export function WorkPage() {
         />
       </div>
     );
-  const primaryError =
-    overviewQuery.error ??
-    settingsQuery.error ??
-    engagementQuery.error ??
-    organizationQuery.error ??
-    campaignQuery.error ??
-    opportunityQuery.error ??
-    applicationQuery.error ??
-    metricQuery.error ??
-    profileQuery.error ??
-    documentQuery.error ??
-    responseQuery.error ??
-    outreachQuery.error ??
-    interviewQuery.error ??
-    offerQuery.error;
+  const activeQueryStates = [
+    {
+      active: needsContext,
+      error: overviewQuery.error,
+      loading: overviewQuery.isLoading
+    },
+    {
+      active: !detail,
+      error: settingsQuery.error,
+      loading: settingsQuery.isLoading
+    },
+    {
+      active: needsEngagements,
+      error: engagementQuery.error,
+      loading: engagementQuery.isLoading
+    },
+    {
+      active: needsOrganizations,
+      error: organizationQuery.error,
+      loading: organizationQuery.isLoading
+    },
+    {
+      active: needsCampaigns,
+      error: campaignQuery.error,
+      loading: campaignQuery.isLoading
+    },
+    {
+      active: needsSelectedCampaignDetail,
+      error: selectedCampaignDetailQuery.error,
+      loading: selectedCampaignDetailQuery.isLoading
+    },
+    {
+      active: needsOpportunities,
+      error: opportunityQuery.error,
+      loading: opportunityQuery.isLoading
+    },
+    {
+      active: needsApplications,
+      error: applicationQuery.error,
+      loading: applicationQuery.isLoading
+    },
+    {
+      active: needsMetrics,
+      error: metricQuery.error,
+      loading: metricQuery.isLoading
+    },
+    {
+      active: needsProfiles,
+      error: profileQuery.error,
+      loading: profileQuery.isLoading
+    },
+    {
+      active: needsDocuments,
+      error: documentQuery.error,
+      loading: documentQuery.isLoading
+    },
+    {
+      active: needsResponses,
+      error: responseQuery.error,
+      loading: responseQuery.isLoading
+    },
+    {
+      active: needsOutreach,
+      error: outreachQuery.error,
+      loading: outreachQuery.isLoading
+    },
+    {
+      active: needsApplicationActivity,
+      error: interviewQuery.error,
+      loading: interviewQuery.isLoading
+    },
+    {
+      active: needsApplicationActivity,
+      error: offerQuery.error,
+      loading: offerQuery.isLoading
+    }
+  ];
+  const primaryError = activeQueryStates.find(
+    (query) => query.active && query.error
+  )?.error;
   if (!userIds.length)
     return (
       <div className="p-6">
@@ -401,22 +487,7 @@ export function WorkPage() {
         />
       </div>
     );
-  if (
-    overviewQuery.isLoading ||
-    settingsQuery.isLoading ||
-    engagementQuery.isLoading ||
-    organizationQuery.isLoading ||
-    campaignQuery.isLoading ||
-    opportunityQuery.isLoading ||
-    applicationQuery.isLoading ||
-    metricQuery.isLoading ||
-    profileQuery.isLoading ||
-    documentQuery.isLoading ||
-    responseQuery.isLoading ||
-    outreachQuery.isLoading ||
-    interviewQuery.isLoading ||
-    offerQuery.isLoading
-  )
+  if (activeQueryStates.some((query) => query.active && query.loading))
     return (
       <div className="p-6">
         <LoadingState

@@ -149,7 +149,10 @@ export function PlansTab({
                     const body = (
                       <>
                         <div className="font-medium text-[var(--ui-ink-strong)]">
-                          {String(item.title || item.entityId)}
+                          {String(
+                            item.title ||
+                              readable(item.entityType, "Connected record")
+                          )}
                         </div>
                         <div className="mt-1 text-xs text-[var(--ui-ink-soft)]">
                           {readable(item.relationship)} ·{" "}

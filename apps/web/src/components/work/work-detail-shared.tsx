@@ -278,7 +278,27 @@ export function RelationshipEditor({
         return {
           value,
           label: summary?.title || `Linked ${readable(link.targetEntityType)}`,
-          description: summary?.detail || readable(link.targetEntityType)
+          description: summary?.detail || readable(link.targetEntityType),
+          badge: (
+            <span className="inline-flex min-w-0 items-center gap-2">
+              <span className="truncate">
+                {summary?.title || `Linked ${readable(link.targetEntityType)}`}
+              </span>
+              <Badge size="xs" tone="meta">
+                {readable(link.targetEntityType)}
+              </Badge>
+            </span>
+          ),
+          menuBadge: (
+            <span className="inline-flex min-w-0 items-center gap-2">
+              <span className="truncate">
+                {summary?.title || `Linked ${readable(link.targetEntityType)}`}
+              </span>
+              <Badge size="xs" tone="meta">
+                {readable(link.targetEntityType)}
+              </Badge>
+            </span>
+          )
         };
       }),
     [outgoing, summaryByTarget]
@@ -304,12 +324,24 @@ export function RelationshipEditor({
           ({ result, targetType }) =>
             targetType !== entityType || result.entityId !== entityId
         )
-        .map(({ result, targetType }) => ({
-          value: relationshipValue(targetType, result.entityId),
-          label: result.title,
-          description: result.detail || readable(targetType),
-          searchText: `${result.title} ${result.detail} ${result.category}`
-        }));
+        .map(({ result, targetType }) => {
+          const badge = (
+            <span className="inline-flex min-w-0 items-center gap-2">
+              <span className="truncate">{result.title}</span>
+              <Badge size="xs" tone="meta">
+                {readable(targetType)}
+              </Badge>
+            </span>
+          );
+          return {
+            value: relationshipValue(targetType, result.entityId),
+            label: result.title,
+            description: result.detail || readable(targetType),
+            searchText: `${result.title} ${result.detail} ${result.category}`,
+            badge,
+            menuBadge: badge
+          };
+        });
       setFoundOptions((current) => {
         const merged = new Map(
           [...current, ...options].map((option) => [option.value, option])

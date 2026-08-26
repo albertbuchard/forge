@@ -796,7 +796,9 @@ export function summarizeAuthorizedWorkLinks(
       ].find((value) => typeof value === "string" && value.trim());
       const title =
         explicitTitle ??
-        (humanReadableWorkSummaryValue(codedTitle) || relatedEntityId);
+        (humanReadableWorkSummaryValue(codedTitle) ||
+          humanReadableWorkSummaryValue(relatedEntityType) ||
+          "Related record");
       const detail = [
         record.description,
         record.domain,

@@ -212,7 +212,7 @@ export function DocumentsOperationalTab({
                             className="rounded-[15px] bg-[var(--ui-surface-2)] p-3"
                           >
                             <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
-                              {String(artifact.label ?? artifact.artifactId)}
+                              {String(artifact.label || "Application file")}
                             </div>
                             <details className="mt-2 text-[10px] text-[var(--ui-ink-faint)]">
                               <summary className="cursor-pointer font-medium">

@@ -16,6 +16,7 @@ const workApiMocks = vi.hoisted(() => ({
   getJobApplication: vi.fn(),
   getJobOpportunity: vi.fn(),
   getOpportunityCampaign: vi.fn(),
+  getWorkSupportingRecord: vi.fn(),
   listJobApplications: vi.fn(),
   listJobOpportunities: vi.fn(),
   listOpportunityCampaigns: vi.fn(),
@@ -387,6 +388,9 @@ function configureApi(overrides: { context?: Record<string, unknown> } = {}) {
   workApiMocks.getOpportunityCampaign.mockResolvedValue({
     campaign: campaigns[0]
   });
+  workApiMocks.getWorkSupportingRecord.mockResolvedValue({
+    record: { id: "supporting_record", revision: 1 }
+  });
   workApiMocks.listJobApplications.mockResolvedValue(list(applications));
   workApiMocks.listWorkMetricDefinitions.mockResolvedValue({ definitions });
   workApiMocks.listWorkSupportingRecords.mockResolvedValue(list([]));
@@ -401,13 +405,19 @@ function configureApi(overrides: { context?: Record<string, unknown> } = {}) {
   apiMocks.searchLocalRecords.mockResolvedValue({ results: [] });
 }
 
-function renderWork(route = "/work?tab=overview") {
-  const queryClient = new QueryClient({
+function createWorkQueryClient(gcTime = 0) {
+  return new QueryClient({
     defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
+      queries: { retry: false, gcTime },
       mutations: { retry: false }
     }
   });
+}
+
+function renderWork(
+  route = "/work?tab=overview",
+  queryClient = createWorkQueryClient()
+) {
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[route]}>
@@ -559,7 +569,7 @@ describe("permanent Work experience", () => {
     ).toHaveValue("searches");
   });
 
-  it("opens a focused role-review view from its URL without loading target or document data", async () => {
+  it("opens a focused role-review view from its URL without loading target or document collections", async () => {
     renderWork("/work?tab=searches&view=roles");
 
     expect(await screen.findByText("Filter roles")).toBeInTheDocument();
@@ -572,7 +582,109 @@ describe("permanent Work experience", () => {
     );
     expect(workApiMocks.listWorkOrganizations).not.toHaveBeenCalled();
     expect(workApiMocks.listWorkSupportingRecords).not.toHaveBeenCalled();
+    expect(workApiMocks.getOpportunityCampaign).toHaveBeenCalledWith(
+      ["user_operator"],
+      "campaign_research"
+    );
     expect(screen.queryByText("Role targets")).not.toBeInTheDocument();
+  });
+
+  it("loads bounded relationship context for Goals and plans instead of showing a false empty state", async () => {
+    workApiMocks.getWorkContext.mockResolvedValue(
+      context({
+        engagements: [
+          {
+            ...currentEngagements[0],
+            related: [
+              {
+                entityType: "goal",
+                entityId: "goal_research_impact",
+                relationship: "supports",
+                title: "Deliver dependable clinical research",
+                detail: "Keep each claim tied to reproducible evidence."
+              }
+            ]
+          }
+        ],
+        campaigns: []
+      })
+    );
+
+    renderWork("/work?tab=plans");
+
+    expect(
+      await screen.findByRole("link", {
+        name: /Deliver dependable clinical research/
+      })
+    ).toHaveAttribute("href", "/goals/goal_research_impact");
+    expect(workApiMocks.getWorkContext).toHaveBeenCalledWith(
+      ["user_operator"],
+      expect.objectContaining({ trendWindowDays: 90 })
+    );
+    expect(
+      screen.queryByText("No connected Work context yet")
+    ).not.toBeInTheDocument();
+  });
+
+  it("loads the selected job search detail for role fit, targets, and search activity", async () => {
+    const selectedCampaign = {
+      ...campaigns[0],
+      roleTargets: [
+        {
+          id: "role_target_clinical_ai",
+          titleFamily: "Clinical AI research leadership",
+          seniority: "senior",
+          priority: 95
+        }
+      ],
+      organizationTargets: [
+        {
+          id: "organization_target_lab",
+          organizationId: "organization_lab",
+          targetTier: "primary",
+          status: "researching"
+        }
+      ],
+      searchSources: [
+        {
+          id: "source_research_teams",
+          name: "Research team career pages",
+          sourceType: "career_page",
+          enabled: true
+        }
+      ],
+      savedQueries: [
+        {
+          id: "query_clinical_ai",
+          title: "Clinical AI leadership",
+          queryText: "clinical AI research lead"
+        }
+      ]
+    };
+    const { latestEvaluations: _ignored, ...shallowCampaign } = campaigns[0]!;
+    workApiMocks.listOpportunityCampaigns.mockResolvedValue(
+      list([shallowCampaign, campaigns[1]!])
+    );
+    workApiMocks.getOpportunityCampaign.mockResolvedValue({
+      campaign: selectedCampaign
+    });
+
+    const roles = renderWork("/work?tab=searches&view=roles");
+    expect(await screen.findByText("88 / 100 fit")).toBeInTheDocument();
+    roles.unmount();
+
+    const targets = renderWork("/work?tab=searches&view=targets");
+    expect(
+      await screen.findByText("Clinical AI research leadership")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Research Laboratory")).toBeInTheDocument();
+    targets.unmount();
+
+    renderWork("/work?tab=searches&view=activity");
+    expect(
+      await screen.findByText("Research team career pages")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Clinical AI leadership")).toBeInTheDocument();
   });
 
   it("opens only the requested document library and leaves the other libraries unloaded", async () => {
@@ -592,6 +704,42 @@ describe("permanent Work experience", () => {
     );
     expect(screen.queryByText("Positioning profiles")).not.toBeInTheDocument();
     expect(screen.queryByText("Document sets")).not.toBeInTheDocument();
+  });
+
+  it("uses a human file name when an application Artifact has no optional label", async () => {
+    workApiMocks.listWorkSupportingRecords.mockImplementation(
+      async (_userIds, kind) =>
+        kind === "documentSet"
+          ? list([
+              {
+                id: "document_set_research",
+                title: "Research application files",
+                version: 1,
+                sealed: false,
+                confidentiality: "private",
+                approvalState: "reviewed",
+                artifactVersions: [
+                  {
+                    artifactId: "artifact_internal_123",
+                    label: "",
+                    contentSha256: "a".repeat(64)
+                  }
+                ]
+              }
+            ])
+          : list([])
+    );
+
+    renderWork("/work?tab=documents&view=documents");
+
+    const fileLink = await screen.findByRole("link", {
+      name: /Application file/
+    });
+    expect(fileLink).toHaveAttribute(
+      "href",
+      "/artifacts/artifact_internal_123"
+    );
+    expect(fileLink).not.toHaveTextContent("artifact_internal_123");
   });
 
   it("uses the non-destructive opportunity switch with optimistic revision", async () => {
@@ -747,6 +895,26 @@ describe("permanent Work experience", () => {
     );
   });
 
+  it("keeps application Summary and Connections free of hidden document-library requests", async () => {
+    const summary = renderWork(
+      "/work/applications/application_research?section=summary"
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "Application · Senior machine-learning research engineer",
+        level: 1
+      })
+    ).toBeInTheDocument();
+    expect(workApiMocks.listWorkSupportingRecords).not.toHaveBeenCalled();
+    summary.unmount();
+
+    renderWork("/work/applications/application_research?section=connections");
+    expect(
+      await screen.findByRole("heading", { name: "Connections" })
+    ).toBeInTheDocument();
+    expect(workApiMocks.listWorkSupportingRecords).not.toHaveBeenCalled();
+  });
+
   it("offers smart Forge search instead of an empty connection list", async () => {
     apiMocks.searchLocalRecords.mockResolvedValue({
       results: [
@@ -775,11 +943,11 @@ describe("permanent Work experience", () => {
       name: "Search Forge by name…"
     });
     fireEvent.change(search, { target: { value: "publish" } });
-    expect(
-      await screen.findByRole("option", {
-        name: /Publish the research thesis/
-      })
-    ).toBeInTheDocument();
+    const result = await screen.findByRole("option", {
+      name: /Publish the research thesis/
+    });
+    expect(result).toBeInTheDocument();
+    expect(result).toHaveTextContent("Goal");
     expect(apiMocks.searchLocalRecords).toHaveBeenCalledWith(
       expect.objectContaining({
         query: "publish",
@@ -819,6 +987,36 @@ describe("permanent Work experience", () => {
         name: /Opportunity outside the bounded page/
       })
     ).toHaveValue(outsideOpportunity.id);
+  });
+
+  it("keeps an unlabeled interview participant human-readable and moves the identifier into Technical details", async () => {
+    workApiMocks.getWorkSupportingRecord.mockResolvedValue({
+      record: {
+        id: "interview_research",
+        applicationId: "application_research",
+        stage: "technical_interview",
+        status: "scheduled",
+        participantLinks: [
+          {
+            personId: "person_internal_123",
+            label: "",
+            role: "Research interviewer"
+          }
+        ],
+        focusAreas: [],
+        questionBank: [],
+        revision: 1
+      }
+    });
+
+    renderWork("/work/interviews/interview_research?section=details");
+
+    expect(
+      await screen.findByRole("link", { name: /Interview participant/ })
+    ).toHaveAttribute("href", "/people/person_internal_123");
+    expect(
+      screen.getByText("person_internal_123").closest("details")
+    ).toHaveTextContent("Technical details");
   });
 
   it("loads an application's exact opportunity and campaign when bounded overview lists omit them", async () => {
@@ -862,5 +1060,27 @@ describe("permanent Work experience", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/temporarily unavailable|could not/i);
     expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
+  });
+
+  it("ignores a cached error from a hidden collection after the user moves to another view", async () => {
+    const queryClient = createWorkQueryClient(Number.POSITIVE_INFINITY);
+    await expect(
+      queryClient.fetchQuery({
+        queryKey: ["work", "applications", "user_operator", {}],
+        queryFn: async () => {
+          throw new Error("Old application-list failure");
+        }
+      })
+    ).rejects.toThrow("Old application-list failure");
+
+    renderWork("/work?tab=documents&view=answers", queryClient);
+
+    expect(
+      await screen.findByRole("heading", { name: "Reusable answers" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Old application-list failure")
+    ).not.toBeInTheDocument();
+    expect(workApiMocks.listJobApplications).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -32,7 +32,10 @@ import {
   TransmissionPreviewDialog,
   VerifiedSubmissionDialog
 } from "@/components/work/work-operational-dialogs";
-import { transitionJobApplication } from "@/lib/work-api";
+import {
+  listWorkSupportingRecords,
+  transitionJobApplication
+} from "@/lib/work-api";
 import type {
   JobApplication,
   JobOpportunity,
@@ -52,18 +55,12 @@ export function ApplicationWorkspaceDetail({
   application,
   opportunity,
   campaign,
-  profiles,
-  documentSets,
-  responses,
   userIds,
   onRefresh
 }: {
   application: JobApplication;
   opportunity?: JobOpportunity;
   campaign?: OpportunityCampaign;
-  profiles: WorkRecord[];
-  documentSets: WorkRecord[];
-  responses: WorkRecord[];
   userIds: string[];
   onRefresh: () => Promise<void>;
 }) {
@@ -87,6 +84,25 @@ export function ApplicationWorkspaceDetail({
   const [verifiedOpen, setVerifiedOpen] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
+  const scopeKey = userIds.join(",");
+  const profileQuery = useQuery({
+    queryKey: ["work", "positioning-profiles", scopeKey],
+    queryFn: () =>
+      listWorkSupportingRecords(userIds, "positioningProfile", { limit: 50 }),
+    enabled: workspaceOpen && userIds.length > 0
+  });
+  const documentQuery = useQuery({
+    queryKey: ["work", "document-sets", scopeKey],
+    queryFn: () =>
+      listWorkSupportingRecords(userIds, "documentSet", { limit: 50 }),
+    enabled: workspaceOpen && userIds.length > 0
+  });
+  const responseQuery = useQuery({
+    queryKey: ["work", "responses", scopeKey],
+    queryFn: () =>
+      listWorkSupportingRecords(userIds, "reusableResponse", { limit: 50 }),
+    enabled: questionOpen && userIds.length > 0
+  });
   useEffect(() => {
     setNewStatus((APPLICATION_TRANSITIONS[application.status] ?? [])[0] ?? "");
     setNextAction(application.nextAction ?? "");
@@ -755,7 +771,7 @@ export function ApplicationWorkspaceDetail({
         userIds={userIds}
         applicationId={application.id}
         question={selectedQuestion}
-        responses={responses}
+        responses={responseQuery.data?.items ?? []}
         onSaved={onRefresh}
       />
       <InterviewDialog
@@ -794,8 +810,8 @@ export function ApplicationWorkspaceDetail({
         onOpenChange={setWorkspaceOpen}
         userIds={userIds}
         application={application}
-        profiles={profiles}
-        documentSets={documentSets}
+        profiles={profileQuery.data?.items ?? []}
+        documentSets={documentQuery.data?.items ?? []}
         onSaved={onRefresh}
       />
     </div>

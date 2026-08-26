@@ -392,11 +392,21 @@ export function SupportingOperationalDetail({
                           className="rounded-[15px] bg-[var(--ui-surface-2)] p-3"
                         >
                           <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
-                            {String(participant.label || participant.personId)}
+                            {String(
+                              participant.label || "Interview participant"
+                            )}
                           </div>
                           <div className="mt-1 text-xs text-[var(--ui-ink-soft)]">
                             {String(participant.role || "Participant")}
                           </div>
+                          <details className="mt-2 text-[10px] text-[var(--ui-ink-faint)]">
+                            <summary className="cursor-pointer font-medium">
+                              Technical details
+                            </summary>
+                            <div className="mt-1 break-all">
+                              {String(participant.personId)}
+                            </div>
+                          </details>
                         </Link>
                       ))}
                     </div>
