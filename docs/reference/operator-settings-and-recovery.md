@@ -163,6 +163,16 @@ identity. Updating or reinstalling Forge does not revoke trust by itself when
 the canonical data root, installation identity, paired client authority, exact
 HTTPS relying party, and device passkey are preserved.
 
+Browser sessions are intentionally separate from durable device trust. Forge
+retains an active browser session until its idle or absolute expiry, retains
+retired paired and operator sessions for 30 days for bounded operational
+recovery, and then removes only the expired session credential. Process-bound
+local-tool sessions are single-use and remain for 24 hours before the same
+bounded cleanup. Cleanup never removes the paired client, refresh family,
+trusted-device passkey, master-password verifier, or security audit record, so
+routine maintenance and package updates do not turn session housekeeping into
+another pairing event.
+
 ## Model Health
 
 Model settings distinguish stored credential state from endpoint health. A

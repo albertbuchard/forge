@@ -488,6 +488,20 @@ export async function initializeApplicationSecurityRuntime(input: {
     systemOpaqueSecretSource,
     digester
   );
+  const runBrowserSessionMaintenance = () => {
+    const removed = store.pruneRetiredBrowserSessions();
+    if (removed.total > 0) {
+      console.info(
+        `[forge-security] retired ${removed.total} expired browser-session records (${removed.localServiceSessions} local-service, ${removed.browserSessions} browser)`
+      );
+    }
+  };
+  runBrowserSessionMaintenance();
+  const browserSessionMaintenanceTimer = setInterval(
+    runBrowserSessionMaintenance,
+    15 * 60 * 1_000
+  );
+  browserSessionMaintenanceTimer.unref();
   const installationId = store.ensureInstallation();
   const ownerSecurityEpoch = store.ensureOwner(input.ownerId);
   if (ownerSecurityEpoch === null) {

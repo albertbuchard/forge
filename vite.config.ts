@@ -2,7 +2,10 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react-swc";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
-import { buildForgeHmrConfig } from "./apps/web/src/lib/vite-hmr";
+import {
+  buildForgeHmrConfig,
+  forgeViteClientOriginPlugin
+} from "./apps/web/src/lib/vite-hmr";
 import { forgeViteSecurityGateway } from "./apps/web/vite-security-gateway";
 
 const testWorkerExecArgv = process.allowedNodeEnvironmentFlags.has(
@@ -31,7 +34,12 @@ export default defineConfig(({ command }) => {
   return {
     root: path.resolve(__dirname, "apps/web"),
     base,
-    plugins: [forgeViteSecurityGateway({ apiTarget }), react(), tailwindcss()],
+    plugins: [
+      forgeViteSecurityGateway({ apiTarget }),
+      forgeViteClientOriginPlugin(),
+      react(),
+      tailwindcss()
+    ],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./apps/web/src")

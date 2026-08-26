@@ -1,10 +1,14 @@
+import type { Plugin } from "vite";
+
 function normalizeBasePath(value: string) {
   if (!value || value === "/") {
     return "/";
   }
 
   const withLeadingSlash = value.startsWith("/") ? value : `/${value}`;
-  return withLeadingSlash.endsWith("/") ? withLeadingSlash : `${withLeadingSlash}/`;
+  return withLeadingSlash.endsWith("/")
+    ? withLeadingSlash
+    : `${withLeadingSlash}/`;
 }
 
 function parseOptionalPort(value: string | undefined) {
@@ -26,10 +30,7 @@ export function buildForgeHmrPath(basePath: string) {
   return "__vite_hmr";
 }
 
-export function buildForgeHmrConfig(
-  basePath: string,
-  env: NodeJS.ProcessEnv
-) {
+export function buildForgeHmrConfig(basePath: string, env: NodeJS.ProcessEnv) {
   const hmr = {
     path: buildForgeHmrPath(basePath)
   } as {
@@ -61,4 +62,38 @@ export function buildForgeHmrConfig(
   }
 
   return hmr;
+}
+
+const VITE_SOCKET_HOST_EXPRESSION =
+  /const socketHost = `\$\{(.+?)\}:\$\{hmrPort \|\| importMetaUrl\.port\}\$\{(.+?)\}`;/;
+
+export function patchForgeViteClientSocketHost(code: string) {
+  return code.replace(
+    VITE_SOCKET_HOST_EXPRESSION,
+    (_match, hostnameExpression: string, baseExpression: string) =>
+      [
+        "const forgeSocketPort = hmrPort || importMetaUrl.port;",
+        `const socketHost = \`\${${hostnameExpression}}\${forgeSocketPort ? \`:\${forgeSocketPort}\` : ""}\${${baseExpression}}\`;`
+      ].join("\n")
+  );
+}
+
+export function forgeViteClientOriginPlugin(): Plugin {
+  return {
+    name: "forge-vite-client-origin",
+    enforce: "post",
+    transform(code, id) {
+      const normalizedId = id.replaceAll("\\", "/");
+      if (!normalizedId.endsWith("/vite/dist/client/client.mjs")) {
+        return null;
+      }
+      const patched = patchForgeViteClientSocketHost(code);
+      if (patched === code) {
+        throw new Error(
+          "Forge could not apply the default-port HMR client compatibility patch."
+        );
+      }
+      return { code: patched, map: null };
+    }
+  };
 }

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.78
+
+- Fixed the development client WebSocket address when Forge is served through
+  default-port HTTPS. The HMR client now omits an empty port separator, so a
+  Tailscale page resolves `/forge/__vite_hmr` on its own origin while direct
+  local development continues to retain explicit ports such as `:3027`.
+- Added bounded retention for expired browser-session credentials. One-use
+  local-service sessions remain available for 24 hours, paired and operator
+  browser sessions remain available for 30 days after retirement, active
+  sessions are never selected, and each maintenance pass removes at most
+  25,000 rows. The separate security audit log and durable trusted-device,
+  refresh, client, passkey, and master-password records are unchanged.
+
 ## 0.3.77
 
 - Made large Companion HealthKit transfers tolerant of normal network delay

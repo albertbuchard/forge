@@ -40,6 +40,10 @@ import {
 } from "./security-runtime.js";
 import { SECURITY_TRUSTED_BROWSER_SCHEMA_SQL } from "./trusted-browser-schema.js";
 
+const LOCAL_SERVICE_SESSION_RETENTION_SECONDS = 24 * 60 * 60;
+const BROWSER_SESSION_RETENTION_SECONDS = 30 * 24 * 60 * 60;
+const BROWSER_SESSION_MAINTENANCE_LIMIT = 25_000;
+
 export const SECURITY_CREDENTIAL_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS security_owners (
   owner_id TEXT PRIMARY KEY,
@@ -1489,6 +1493,71 @@ export class SqliteSecurityStore
         )
         .run(revokedAt, id).changes === 1
     );
+  }
+
+  pruneRetiredBrowserSessions(maxRows = BROWSER_SESSION_MAINTENANCE_LIMIT) {
+    if (!Number.isSafeInteger(maxRows) || maxRows <= 0 || maxRows > 100_000) {
+      throw new Error("Forge browser-session maintenance limit is invalid.");
+    }
+    const now = this.clock.now().getTime();
+    const localServiceCutoff = new Date(
+      now - LOCAL_SERVICE_SESSION_RETENTION_SECONDS * 1_000
+    ).toISOString();
+    const browserCutoff = new Date(
+      now - BROWSER_SESSION_RETENTION_SECONDS * 1_000
+    ).toISOString();
+    const remove = this.database.prepare(
+      `DELETE FROM security_browser_sessions
+       WHERE id IN (
+         SELECT id
+         FROM security_browser_sessions
+         WHERE json_extract(principal_json, '$.kind') = ?
+           AND COALESCE(
+             revoked_at,
+             MIN(idle_expires_at, absolute_expires_at)
+           ) <= ?
+         ORDER BY COALESCE(
+           revoked_at,
+           MIN(idle_expires_at, absolute_expires_at)
+         ), id
+         LIMIT ?
+       )`
+    );
+    const localServiceSessions = Number(
+      remove.run("local_service", localServiceCutoff, maxRows).changes
+    );
+    const remaining = maxRows - localServiceSessions;
+    const browserSessions =
+      remaining > 0
+        ? Number(
+            this.database
+              .prepare(
+                `DELETE FROM security_browser_sessions
+               WHERE id IN (
+                 SELECT id
+                 FROM security_browser_sessions
+                 WHERE json_extract(principal_json, '$.kind') IN (
+                   'operator_session', 'paired_client'
+                 )
+                   AND COALESCE(
+                     revoked_at,
+                     MIN(idle_expires_at, absolute_expires_at)
+                   ) <= ?
+                 ORDER BY COALESCE(
+                   revoked_at,
+                   MIN(idle_expires_at, absolute_expires_at)
+                 ), id
+                 LIMIT ?
+               )`
+              )
+              .run(browserCutoff, remaining).changes
+          )
+        : 0;
+    return {
+      localServiceSessions,
+      browserSessions,
+      total: localServiceSessions + browserSessions
+    };
   }
 
   issueRefreshFamily(input: {
