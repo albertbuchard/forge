@@ -68852,7 +68852,7 @@
       },
       "put": {
         "summary": "Set or replace the optional remote-pairing master password",
-        "description": "Direct-loopback local-owner operation. No password exists by default. Forge requires at least 15 characters, rejects common and context-derived values, and stores only a peppered Argon2id verifier. Replacing an existing password requires the current password.",
+        "description": "Direct-loopback local-owner operation. No password exists by default. Forge accepts any matching 15-to-128-character value; password-strength guidance is advisory and never adds composition or predictability rules. Forge stores only a peppered Argon2id verifier. Replacing an existing password requires the current password.",
         "security": [
           {
             "operatorSession": []

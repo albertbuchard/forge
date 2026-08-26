@@ -107,3 +107,18 @@ test("trusted-device OpenAPI is non-enumerating and never promises operator rest
     /"(?:publicKeyBase64|counter|challengeKeyedHash|refreshToken)"\s*:/
   );
 });
+
+test("master-password OpenAPI matches the non-blocking strength policy", () => {
+  const document = buildOpenApiDocument() as {
+    paths: Record<string, Record<string, { description?: string }>>;
+  };
+  const update = document.paths["/api/v1/auth/master-password"]?.put;
+
+  assert.ok(update);
+  assert.match(update.description ?? "", /15-to-128-character/);
+  assert.match(update.description ?? "", /guidance is advisory/);
+  assert.doesNotMatch(
+    update.description ?? "",
+    /rejects common|context-derived|composition rules|predictability rules?\s+are required/i
+  );
+});
