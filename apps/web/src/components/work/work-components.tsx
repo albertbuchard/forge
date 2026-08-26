@@ -1,3 +1,4 @@
+import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -5,6 +6,7 @@ import {
   ArrowRight,
   CalendarClock,
   Check,
+  ChevronDown,
   ChevronRight,
   CircleDot,
   Clock3,
@@ -13,7 +15,8 @@ import {
   ShieldCheck,
   Sparkles,
   TrendingDown,
-  TrendingUp
+  TrendingUp,
+  X
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,35 +33,205 @@ import type {
 import { cn } from "@/lib/utils";
 
 export const WORK_TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "current", label: "Current work" },
-  { id: "check-ins", label: "Check-ins" },
-  { id: "plans", label: "Goals and plans" },
-  { id: "searches", label: "Job searches" },
-  { id: "applications", label: "Applications" },
-  { id: "documents", label: "Documents" }
+  {
+    id: "overview",
+    label: "Overview",
+    description: "Your work and search status at a glance"
+  },
+  {
+    id: "current",
+    label: "Current work",
+    description: "Jobs, contracts, and other active roles"
+  },
+  {
+    id: "check-ins",
+    label: "Check-ins",
+    description: "How each role is changing over time"
+  },
+  {
+    id: "plans",
+    label: "Goals and plans",
+    description: "Career direction and next steps"
+  },
+  {
+    id: "searches",
+    label: "Job searches",
+    description: "Separate searches, roles, and targets"
+  },
+  {
+    id: "applications",
+    label: "Applications",
+    description: "Applications, interviews, and outcomes"
+  },
+  {
+    id: "documents",
+    label: "Documents",
+    description: "CVs, letters, and saved answers"
+  }
 ] as const;
 
 export type WorkTabId = (typeof WORK_TABS)[number]["id"];
+
+type WorkMobileSectionPickerProps<T extends string> = {
+  label: string;
+  active: T;
+  options: Array<WorkSectionOption<T>> | ReadonlyArray<WorkSectionOption<T>>;
+  onChange: (id: T) => void;
+  desktopBreakpoint: "md" | "lg";
+};
+
+function WorkMobileSectionPicker<T extends string>({
+  label,
+  active,
+  options,
+  onChange,
+  desktopBreakpoint
+}: WorkMobileSectionPickerProps<T>) {
+  const [open, setOpen] = useState(false);
+  const activeOption =
+    options.find((option) => option.id === active) ?? options[0];
+  const desktopHidden = desktopBreakpoint === "md" ? "md:hidden" : "lg:hidden";
+
+  if (!activeOption) return null;
+
+  return (
+    <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Trigger asChild>
+        <button
+          type="button"
+          aria-label={`${label}: ${activeOption.label}`}
+          className={cn(
+            "flex min-h-14 w-full min-w-0 items-center justify-between gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3.5 py-2.5 text-left shadow-[var(--ui-shadow-soft)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]",
+            desktopHidden
+          )}
+          data-work-mobile-section-trigger={label}
+        >
+          <span className="min-w-0">
+            <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+              {label}
+            </span>
+            <span className="mt-0.5 block truncate text-sm font-semibold text-[var(--ui-ink-strong)]">
+              {activeOption.label}
+            </span>
+            {activeOption.description ? (
+              <span className="mt-0.5 block truncate text-xs text-[var(--ui-ink-soft)]">
+                {activeOption.description}
+              </span>
+            ) : null}
+          </span>
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]">
+            <ChevronDown className="size-4" />
+          </span>
+        </button>
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay
+          className={cn(
+            "fixed inset-0 z-[70] bg-[var(--overlay)] backdrop-blur-xl",
+            desktopHidden
+          )}
+        />
+        <div
+          className={cn(
+            "pointer-events-none fixed inset-0 z-[71] flex items-end justify-center",
+            desktopHidden
+          )}
+          style={{
+            paddingLeft:
+              "max(0.75rem, calc(var(--forge-safe-area-left) + 0.75rem))",
+            paddingRight:
+              "max(0.75rem, calc(var(--forge-safe-area-right) + 0.75rem))",
+            paddingTop:
+              "max(0.75rem, calc(env(safe-area-inset-top) + 0.75rem))",
+            paddingBottom:
+              "calc(var(--forge-mobile-nav-clearance) - 0.25rem)"
+          }}
+        >
+          <Dialog.Content className="surface-modal-panel pointer-events-auto flex max-h-[min(38rem,calc(100dvh-var(--forge-mobile-nav-clearance)-1rem))] w-full max-w-xl min-h-0 flex-col overflow-hidden rounded-[30px] border border-[var(--ui-border-subtle)] shadow-[var(--ui-shadow-floating)]">
+            <div className="shrink-0 border-b border-[var(--ui-border-subtle)] px-4 pb-3 pt-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Dialog.Title className="text-lg font-semibold text-[var(--ui-ink-strong)]">
+                    Choose {label.toLowerCase()}
+                  </Dialog.Title>
+                  <Dialog.Description className="mt-1 text-sm leading-5 text-[var(--ui-ink-soft)]">
+                    Open one focused view. Your other Work information stays
+                    available here.
+                  </Dialog.Description>
+                </div>
+                <Dialog.Close asChild>
+                  <button
+                    type="button"
+                    aria-label={`Close ${label.toLowerCase()}`}
+                    className="flex size-10 shrink-0 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </Dialog.Close>
+              </div>
+            </div>
+            <nav
+              aria-label={label}
+              className="min-h-0 overflow-y-auto overscroll-contain p-3"
+            >
+              <div className="grid gap-2">
+                {options.map((option) => {
+                  const selected = option.id === active;
+                  return (
+                    <Dialog.Close asChild key={option.id}>
+                      <button
+                        type="button"
+                        aria-current={selected ? "page" : undefined}
+                        onClick={() => onChange(option.id)}
+                        className={cn(
+                          "flex min-h-14 w-full min-w-0 items-center justify-between gap-3 rounded-[20px] border px-3.5 py-3 text-left transition",
+                          selected
+                            ? "border-[color-mix(in_srgb,var(--primary)_30%,var(--ui-border-subtle))] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
+                            : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
+                        )}
+                        data-work-mobile-section-option={option.id}
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold">
+                            {option.label}
+                          </span>
+                          {option.description ? (
+                            <span className="mt-0.5 block text-xs leading-5 text-[var(--ui-ink-soft)]">
+                              {option.description}
+                            </span>
+                          ) : null}
+                        </span>
+                        {selected ? (
+                          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--ui-surface-1)] text-[var(--primary)]">
+                            <Check className="size-4" />
+                          </span>
+                        ) : (
+                          <ChevronRight className="size-4 shrink-0 text-[var(--ui-ink-faint)]" />
+                        )}
+                      </button>
+                    </Dialog.Close>
+                  );
+                })}
+              </div>
+            </nav>
+          </Dialog.Content>
+        </div>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
 
 export function WorkTabBar({ active }: { active: WorkTabId }) {
   const navigate = useNavigate();
   return (
     <div className="border-b border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 sm:px-6">
-      <label className="grid gap-1 text-xs font-medium text-[var(--ui-ink-soft)] md:hidden">
-        Work section
-        <select
-          value={active}
-          onChange={(event) => navigate(`/work?tab=${event.target.value}`)}
-          className="min-h-11 w-full rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm font-medium text-[var(--ui-ink-strong)]"
-        >
-          {WORK_TABS.map((tab) => (
-            <option key={tab.id} value={tab.id}>
-              {tab.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <WorkMobileSectionPicker
+        label="Work sections"
+        active={active}
+        options={WORK_TABS}
+        onChange={(tab) => navigate(`/work?tab=${tab}`)}
+        desktopBreakpoint="md"
+      />
       <nav aria-label="Work sections" className="hidden md:block">
         <div className="flex flex-wrap gap-1">
           {WORK_TABS.map((tab) => (
@@ -101,20 +274,13 @@ export function WorkSectionNav<T extends string>({
 }) {
   return (
     <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-2">
-      <label className="grid gap-1 px-1 text-xs font-medium text-[var(--ui-ink-soft)] lg:hidden">
-        {label}
-        <select
-          value={active}
-          onChange={(event) => onChange(event.target.value as T)}
-          className="min-h-11 w-full rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm font-medium text-[var(--ui-ink-strong)]"
-        >
-          {options.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <WorkMobileSectionPicker
+        label={label}
+        active={active}
+        options={options}
+        onChange={onChange}
+        desktopBreakpoint="lg"
+      />
       <div
         className="hidden gap-1 lg:grid"
         style={{
