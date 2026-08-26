@@ -88,44 +88,54 @@ export function MetricDefinitionDialog({
       {
         id: "definition",
         eyebrow: isBuiltIn ? "Built-in Work metric" : "Custom Work metric",
-        title: definition
-          ? "Create a new metric version"
-          : "Add a structured metric",
+        title: definition ? "Edit check-in metric" : "Add a check-in metric",
         description: isBuiltIn
-          ? "You can rename this metric for display, change its cadence, thresholds, or enabled state. Its canonical meaning and 1–5 anchors remain stable for analysis."
-          : "Define one clear construct and an answer scale. Later changes create a new version so earlier observations keep their original meaning.",
+          ? "You can rename this metric, change when it is reviewed, adjust warnings, or hide it. Its 1–5 meaning stays consistent over time."
+          : "Define one clear question and answer scale. Earlier check-ins keep the meaning they had when recorded.",
         render: (value, setValue) => (
           <div className="grid gap-4 md:grid-cols-2">
-            <FlowField
-              label="Canonical key"
-              hint={
-                isBuiltIn
-                  ? "Locked to preserve its analytic meaning."
-                  : "Lowercase letters, numbers, and underscores."
-              }
-            >
-              <Input
-                value={value.canonicalKey}
-                disabled={Boolean(definition)}
-                onChange={(event) =>
-                  setValue({
-                    canonicalKey: event.target.value
-                      .toLowerCase()
-                      .replaceAll(/[^a-z0-9_]/gu, "_")
-                  })
-                }
-                autoFocus={!definition}
-              />
-            </FlowField>
-            <FlowField label="Display name">
+            <FlowField label="Name" className="md:col-span-2">
               <Input
                 value={value.displayName}
-                onChange={(event) =>
-                  setValue({ displayName: event.target.value })
-                }
-                autoFocus={Boolean(definition)}
+                onChange={(event) => {
+                  const displayName = event.target.value;
+                  setValue({
+                    displayName,
+                    ...(!definition
+                      ? {
+                          canonicalKey: displayName
+                            .toLowerCase()
+                            .trim()
+                            .replaceAll(/[^a-z0-9]+/gu, "_")
+                            .replaceAll(/^_+|_+$/gu, "")
+                        }
+                      : {})
+                  });
+                }}
+                autoFocus
               />
             </FlowField>
+            <details className="rounded-[16px] border border-[var(--ui-border-subtle)] p-3 md:col-span-2">
+              <summary className="cursor-pointer text-sm font-medium text-[var(--ui-ink-medium)]">
+                Technical details
+              </summary>
+              <FlowField
+                label="Stable metric key"
+                hint="Used to keep the same measurement connected over time."
+              >
+                <Input
+                  value={value.canonicalKey}
+                  disabled={Boolean(definition)}
+                  onChange={(event) =>
+                    setValue({
+                      canonicalKey: event.target.value
+                        .toLowerCase()
+                        .replaceAll(/[^a-z0-9_]/gu, "_")
+                    })
+                  }
+                />
+              </FlowField>
+            </details>
             <FlowField label="Description" className="md:col-span-2">
               <Textarea
                 rows={3}
@@ -259,17 +269,17 @@ export function MetricDefinitionDialog({
       onOpenChange={onOpenChange}
       eyebrow="Work · Check-ins"
       title={definition ? "Edit metric" : "Add custom metric"}
-      description="Metric definitions are versioned; observations always retain the exact definition used."
+      description="Earlier check-ins keep the question and scale that were used when you recorded them."
       value={draft}
       onChange={setDraft}
       steps={steps}
-      submitLabel={definition ? "Save new metric version" : "Add metric"}
+      submitLabel={definition ? "Save metric" : "Add metric"}
       pending={pending}
       error={error}
       draftPersistenceKey={`work-metric-${definition?.id ?? "new"}`}
       resolveContinueBlocker={() =>
         !draft.canonicalKey.match(/^[a-z][a-z0-9_]{1,119}$/u)
-          ? "Enter a canonical key with at least two lowercase letters, numbers, or underscores."
+          ? "Enter a name with at least two letters or numbers."
           : !draft.displayName.trim()
             ? "Enter a display name."
             : draft.valueKind === "categorical" &&

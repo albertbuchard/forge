@@ -6,6 +6,7 @@ import {
 import type { QuestionFlowStep } from "@/components/flows/question-flow-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { readable } from "@/components/work/work-components";
 import {
   createWorkSupportingRecord,
   updateWorkSupportingRecord
@@ -240,15 +241,15 @@ export function SearchAutomationDialog({
       ? "search source"
       : kind === "savedQuery"
         ? "saved query"
-        : "automation policy";
+        : "agent permissions";
   const steps = useMemo<Array<QuestionFlowStep<AutomationDraft>>>(
     () => [
       {
         id: "details",
-        eyebrow: "Campaign automation",
+        eyebrow: "Job search settings",
         title: `${record ? "Update" : "Add"} ${label}`,
         description:
-          "Research, preparation, source limits, and review gates are independently bounded. External submission always requires review.",
+          "Choose what an agent may do for this job search. Sending an application always requires your review.",
         render: (value, setValue) => {
           if (kind === "searchSource") {
             return (
@@ -276,10 +277,12 @@ export function SearchAutomationDialog({
                     "manual",
                     "other"
                   ].map((option) => (
-                    <option key={option}>{option}</option>
+                    <option key={option} value={option}>
+                      {readable(option)}
+                    </option>
                   ))}
                 </Select>
-                <FlowField label="Canonical URL" className="md:col-span-2">
+                <FlowField label="Source URL" className="md:col-span-2">
                   <Input
                     type="url"
                     value={value.canonicalUrl}
@@ -315,7 +318,9 @@ export function SearchAutomationDialog({
                     "per_result",
                     "other"
                   ].map((option) => (
-                    <option key={option}>{option}</option>
+                    <option key={option} value={option}>
+                      {readable(option)}
+                    </option>
                   ))}
                 </Select>
                 <FlowField label="Maximum cost per run">
@@ -406,7 +411,7 @@ export function SearchAutomationDialog({
                   value={value.sourceId}
                   onChange={(sourceId) => setValue({ sourceId })}
                 >
-                  <option value="">Any campaign source</option>
+                  <option value="">Any source in this job search</option>
                   {sources.map((source) => (
                     <option key={source.id} value={source.id}>
                       {String(source.name ?? source.id)}
@@ -474,45 +479,45 @@ export function SearchAutomationDialog({
           return (
             <div className="grid gap-4 md:grid-cols-2">
               <Select
-                label="Research authority"
+                label="Finding roles"
                 value={value.researchAuthority}
                 onChange={(researchAuthority) =>
                   setValue({ researchAuthority })
                 }
               >
-                {["disabled", "allowed", "review_required"].map((option) => (
-                  <option key={option}>{option}</option>
-                ))}
+                <option value="disabled">Not allowed</option>
+                <option value="allowed">Allowed</option>
+                <option value="review_required">Ask first</option>
               </Select>
               <Select
-                label="Preparation authority"
+                label="Preparing materials"
                 value={value.preparationAuthority}
                 onChange={(preparationAuthority) =>
                   setValue({ preparationAuthority })
                 }
               >
-                {["disabled", "allowed", "review_required"].map((option) => (
-                  <option key={option}>{option}</option>
-                ))}
+                <option value="disabled">Not allowed</option>
+                <option value="allowed">Allowed</option>
+                <option value="review_required">Ask first</option>
               </Select>
               <Select
-                label="Upload authority"
+                label="Uploading files"
                 value={value.uploadAuthority}
                 onChange={(uploadAuthority) => setValue({ uploadAuthority })}
               >
-                {["disabled", "allowed", "review_required"].map((option) => (
-                  <option key={option}>{option}</option>
-                ))}
+                <option value="disabled">Not allowed</option>
+                <option value="allowed">Allowed</option>
+                <option value="review_required">Ask first</option>
               </Select>
               <Select
-                label="Submission authority"
+                label="Sending applications"
                 value={value.submissionAuthority}
                 onChange={(submissionAuthority) =>
                   setValue({ submissionAuthority })
                 }
               >
-                <option value="disabled">disabled</option>
-                <option value="review_required">review required</option>
+                <option value="disabled">Not allowed</option>
+                <option value="review_required">Always ask first</option>
               </Select>
               <Select
                 label="Default positioning profile"
@@ -683,7 +688,7 @@ export function SearchAutomationDialog({
       onOpenChange={onOpenChange}
       eyebrow="Work · Job searches"
       title={`${record ? "Edit" : "Add"} ${label}`}
-      description="Configure one campaign's bounded automation."
+      description="Set sources, saved searches, or agent permissions for this job search."
       value={draft}
       onChange={setDraft}
       steps={steps}

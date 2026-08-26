@@ -90,46 +90,48 @@ export function TransmissionPreviewDialog({
         id: "preview",
         eyebrow: "External transmission",
         title: created
-          ? "Review the immutable preview"
-          : "Build one exact transmission preview",
+          ? "Review the locked preview"
+          : "Build a submission preview",
         description:
-          "Approval authorizes one digest only. It does not claim that the application was sent.",
+          "Approval applies only to this exact destination, set of files, and answers. It does not mean the application was sent.",
         render: (value, setValue) =>
           created ? (
             <div className="grid gap-4">
               <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
-                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
-                  Preview digest
-                </div>
-                <div className="mt-2 break-all font-mono text-sm text-[var(--ui-ink-strong)]">
-                  {String(created.previewDigest)}
-                </div>
                 <div className="mt-3 text-sm text-[var(--ui-ink-soft)]">
                   {String(
                     recordValue(created.destination).name ?? "Destination"
                   )}{" "}
-                  · {exactArtifacts.length} exact Artifact version
+                  · {exactArtifacts.length} exact file version
                   {exactArtifacts.length === 1 ? "" : "s"} ·{" "}
                   {approvedAnswers.length} approved answer
                   {approvedAnswers.length === 1 ? "" : "s"}
                 </div>
+                <details className="mt-3 text-xs text-[var(--ui-ink-faint)]">
+                  <summary className="cursor-pointer">
+                    Technical details
+                  </summary>
+                  <div className="mt-2 break-all font-mono">
+                    Preview digest {String(created.previewDigest)}
+                  </div>
+                </details>
               </div>
               {Array.isArray(created.unresolvedGates) &&
               created.unresolvedGates.length ? (
                 <div className="rounded-[18px] border border-[color-mix(in_srgb,var(--warning)_35%,var(--ui-border-subtle))] p-4 text-sm text-[var(--ui-ink-medium)]">
-                  Resolve all listed gates before requesting approval:{" "}
+                  Resolve everything listed before requesting approval:{" "}
                   {created.unresolvedGates
                     .map((gate) =>
-                      String(recordValue(gate).label ?? "Unresolved gate")
+                      String(recordValue(gate).label ?? "Unresolved item")
                     )
                     .join(", ")}
                   .
                 </div>
               ) : (
                 <p className="text-sm leading-6 text-[var(--ui-ink-soft)]">
-                  Requesting approval creates a central high-risk review. The
-                  exact destination, fields, answers, representations, and
-                  checksums cannot change under this digest.
+                  Requesting approval starts a final safety review. The
+                  destination, files, answers, and statements cannot change
+                  after approval.
                 </p>
               )}
             </div>
@@ -338,7 +340,7 @@ export function VerifiedSubmissionDialog({
         eyebrow: "Direct submission evidence",
         title: "Record a verified submission",
         description:
-          "Only the exact authorized principal can consume this authorization. A receipt, tracking identifier, or evidence Artifact is mandatory.",
+          "Record direct proof such as a receipt, tracking reference, or evidence file. At least one is required.",
         render: (value, setValue) => (
           <div className="grid gap-4">
             <Select
@@ -349,8 +351,7 @@ export function VerifiedSubmissionDialog({
               <option value="">Choose an authorization</option>
               {authorized.map((preview) => (
                 <option key={preview.id} value={preview.id}>
-                  {String(preview.previewDigest).slice(0, 14)} · authorized{" "}
-                  {String(preview.authorizedAt ?? "")}
+                  Approved {String(preview.authorizedAt ?? "")}
                 </option>
               ))}
             </Select>
@@ -371,14 +372,19 @@ export function VerifiedSubmissionDialog({
                   }
                 />
               </FlowField>
-              <FlowField label="Evidence Artifact ID">
-                <Input
-                  value={value.evidenceArtifactId}
-                  onChange={(event) =>
-                    setValue({ evidenceArtifactId: event.target.value })
-                  }
-                />
-              </FlowField>
+              <details className="rounded-[16px] border border-[var(--ui-border-subtle)] p-3">
+                <summary className="cursor-pointer text-sm font-medium text-[var(--ui-ink-medium)]">
+                  Technical details
+                </summary>
+                <FlowField label="Evidence file ID">
+                  <Input
+                    value={value.evidenceArtifactId}
+                    onChange={(event) =>
+                      setValue({ evidenceArtifactId: event.target.value })
+                    }
+                  />
+                </FlowField>
+              </details>
               <FlowField label="Occurred at">
                 <Input
                   type="datetime-local"

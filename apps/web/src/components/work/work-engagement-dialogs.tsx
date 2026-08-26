@@ -103,7 +103,7 @@ export function WorkOrganizationDialog({
         eyebrow: "Context",
         title: "What should Forge remember?",
         description:
-          "Keep factual context here. Personal contacts, compensation, and documents belong on their permissioned records.",
+          "Keep factual context here. Personal contacts, compensation, and documents stay in their protected sections.",
         render: (value, setValue) => (
           <div className="grid gap-4">
             <FlowChoiceGrid

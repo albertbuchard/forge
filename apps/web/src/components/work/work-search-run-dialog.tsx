@@ -6,6 +6,7 @@ import {
 import type { QuestionFlowStep } from "@/components/flows/question-flow-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { readable } from "@/components/work/work-components";
 import { recordWorkSearchRun } from "@/lib/work-api";
 import type { OpportunityCampaign } from "@/lib/work-api";
 import {
@@ -104,10 +105,10 @@ export function SearchRunDialog({
     () => [
       {
         id: "evidence",
-        eyebrow: "Durable search evidence",
+        eyebrow: "Search activity",
         title: "Record a search run",
         description:
-          "Preserve the exact criteria version, sources, queries, per-opportunity outcomes, cost, failures, and timing. This does not invent opportunities that were not sourced.",
+          "Record which sources and searches were used, what they found, any cost, and what failed. Only record roles that a source actually returned.",
         render: (value, setValue) => (
           <div className="grid gap-4 md:grid-cols-2">
             <Select
@@ -122,13 +123,20 @@ export function SearchRunDialog({
             >
               {["running", "completed", "partial", "failed", "cancelled"].map(
                 (option) => (
-                  <option key={option}>{option}</option>
+                  <option key={option} value={option}>
+                    {readable(option)}
+                  </option>
                 )
               )}
             </Select>
-            <FlowField label="Criteria version">
-              <Input value={criteriaVersionId} disabled />
-            </FlowField>
+            <details className="rounded-[16px] border border-[var(--ui-border-subtle)] p-3">
+              <summary className="cursor-pointer text-sm font-medium text-[var(--ui-ink-medium)]">
+                Technical details
+              </summary>
+              <FlowField label="Criteria version ID">
+                <Input value={criteriaVersionId} disabled />
+              </FlowField>
+            </details>
             <FlowField label="Started">
               <Input
                 type="datetime-local"
@@ -142,7 +150,7 @@ export function SearchRunDialog({
               label="Ended"
               hint={
                 value.status === "running"
-                  ? "A running Search Run has no end time."
+                  ? "A search that is still running has no end time."
                   : undefined
               }
             >
@@ -195,8 +203,8 @@ export function SearchRunDialog({
               ))}
             </div>
             <FlowField
-              label="Per-opportunity results"
-              hint="Opportunity ID | new, changed, duplicate, stale, closed, or failed | factual evidence"
+              label="Per-role results"
+              hint="Role reference | new, changed, duplicate, stale, closed, or failed | factual evidence"
               className="md:col-span-2"
             >
               <Textarea
@@ -277,7 +285,7 @@ export function SearchRunDialog({
       onOpenChange={onOpenChange}
       eyebrow="Work · Search run"
       title="Record search run"
-      description="Keep durable source and query evidence."
+      description="Keep a clear record of what was searched and what happened."
       value={draft}
       onChange={setDraft}
       steps={steps}

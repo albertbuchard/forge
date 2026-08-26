@@ -2,6 +2,7 @@ import { FlowField } from "@/components/flows/question-flow-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { NativeSelect } from "@/components/work/work-dialog-helpers";
+import { readable } from "@/components/work/work-components";
 import type { CriteriaDraft } from "@/components/work/work-campaign-criteria-model";
 
 export function CriteriaFields({
@@ -288,7 +289,9 @@ export function AdvancedCriteriaFields({
           }
         >
           {["any", "preferred", "required", "excluded"].map((option) => (
-            <option key={option}>{option}</option>
+            <option key={option} value={option}>
+              {readable(option)}
+            </option>
           ))}
         </NativeSelect>
         <NativeSelect
@@ -302,7 +305,9 @@ export function AdvancedCriteriaFields({
           }
         >
           {["any", "preferred", "required"].map((option) => (
-            <option key={option}>{option}</option>
+            <option key={option} value={option}>
+              {readable(option)}
+            </option>
           ))}
         </NativeSelect>
         <NativeSelect
@@ -316,7 +321,9 @@ export function AdvancedCriteriaFields({
           }
         >
           {["any", "preferred", "required"].map((option) => (
-            <option key={option}>{option}</option>
+            <option key={option} value={option}>
+              {readable(option)}
+            </option>
           ))}
         </NativeSelect>
         <FlowField label="Minimum protected research time (%)">
@@ -393,7 +400,7 @@ export function AdvancedCriteriaFields({
             "required_support"
           ].map((option) => (
             <option key={option} value={option}>
-              {option.replaceAll("_", " ")}
+              {readable(option)}
             </option>
           ))}
         </NativeSelect>
@@ -414,7 +421,7 @@ export function AdvancedCriteriaFields({
             "unacceptable"
           ].map((option) => (
             <option key={option} value={option}>
-              {option.replaceAll("_", " ")}
+              {readable(option)}
             </option>
           ))}
         </NativeSelect>
@@ -454,7 +461,7 @@ export function AdvancedCriteriaFields({
         >
           {["unknown", "not_needed", "preferred", "required"].map((option) => (
             <option key={option} value={option}>
-              {option.replaceAll("_", " ")}
+              {readable(option)}
             </option>
           ))}
         </NativeSelect>
@@ -488,7 +495,9 @@ export function AdvancedCriteriaFields({
             }
           >
             {["days", "weeks", "months"].map((option) => (
-              <option key={option}>{option}</option>
+              <option key={option} value={option}>
+                {readable(option)}
+              </option>
             ))}
           </NativeSelect>
         </div>
@@ -560,7 +569,9 @@ export function AdvancedCriteriaFields({
           }
         >
           {["gross", "net", "unknown"].map((option) => (
-            <option key={option}>{option}</option>
+            <option key={option} value={option}>
+              {readable(option)}
+            </option>
           ))}
         </NativeSelect>
         <NativeSelect
@@ -574,7 +585,9 @@ export function AdvancedCriteriaFields({
           }
         >
           {["unknown", "fixed", "negotiable"].map((option) => (
-            <option key={option}>{option}</option>
+            <option key={option} value={option}>
+              {readable(option)}
+            </option>
           ))}
         </NativeSelect>
         <FlowField

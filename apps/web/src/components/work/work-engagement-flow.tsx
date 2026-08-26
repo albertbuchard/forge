@@ -5,6 +5,7 @@ import {
 } from "@/components/flows/question-flow-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { readable } from "@/components/work/work-components";
 import {
   lines,
   NativeSelect,
@@ -203,7 +204,7 @@ function RoleFields({
           "other"
         ].map((option) => (
           <option key={option} value={option}>
-            {option.replaceAll("_", " ")}
+            {readable(option)}
           </option>
         ))}
       </NativeSelect>

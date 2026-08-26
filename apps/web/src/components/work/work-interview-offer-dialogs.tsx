@@ -6,6 +6,12 @@ import {
 import type { QuestionFlowStep } from "@/components/flows/question-flow-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { readable } from "@/components/work/work-components";
+import {
+  EntityLinkMultiSelect,
+  type EntityLinkOption
+} from "@/components/psyche/entity-link-multiselect";
+import { searchLocalRecords } from "@/lib/api";
 import {
   createWorkSupportingRecord,
   updateWorkSupportingRecord
@@ -105,6 +111,19 @@ export function InterviewDialog({
   useEffect(() => {
     if (open) setDraft(interviewDraft(interview));
   }, [interview, open]);
+  const searchPeople = async (query: string): Promise<EntityLinkOption[]> => {
+    const response = await searchLocalRecords({
+      query,
+      entityTypes: ["person"],
+      userIds,
+      limit: 20
+    });
+    return response.results.map((person) => ({
+      value: `person:${person.entityId}`,
+      label: person.title,
+      description: person.detail || "Person"
+    }));
+  };
   const steps = useMemo<Array<QuestionFlowStep<InterviewDraft>>>(
     () => [
       {
@@ -112,7 +131,7 @@ export function InterviewDialog({
         eyebrow: "Application interview",
         title: interview ? "Update the interview" : "Record an interview",
         description:
-          "Keep the schedule, preparation, factual outcome, and next action together. Private links and notes remain permissioned.",
+          "Keep the schedule, preparation, factual outcome, and next action together. Private links and notes remain protected.",
         render: (value, setValue) => (
           <div className="grid gap-4 md:grid-cols-2">
             <FlowField label="Stage">
@@ -137,7 +156,7 @@ export function InterviewDialog({
                 "unknown"
               ].map((option) => (
                 <option key={option} value={option}>
-                  {option.replaceAll("_", " ")}
+                  {readable(option)}
                 </option>
               ))}
             </Select>
@@ -169,19 +188,36 @@ export function InterviewDialog({
                 }
               />
             </FlowField>
-            <FlowField
-              label="Participants"
-              hint="One per line: Forge Person ID | interviewer role | display name"
-              className="md:col-span-2"
-            >
-              <Textarea
-                rows={4}
-                value={value.participants}
-                onChange={(event) =>
-                  setValue({ participants: event.target.value })
+            <div className="grid gap-1 text-xs text-[var(--ui-ink-soft)] md:col-span-2">
+              Participants
+              <EntityLinkMultiSelect
+                options={lines(value.participants).map((entry) => {
+                  const [personId = "", , label = ""] = entry
+                    .split("|")
+                    .map((part) => part.trim());
+                  return {
+                    value: `person:${personId}`,
+                    label: label || "Selected person"
+                  };
+                })}
+                selectedValues={lines(value.participants).map(
+                  (entry) => `person:${entry.split("|")[0]?.trim() ?? ""}`
+                )}
+                onSearch={searchPeople}
+                onChange={(selected) =>
+                  setValue({
+                    participants: selected
+                      .map(
+                        (entry) =>
+                          `${entry.replace(/^person:/u, "")} | interviewer |`
+                      )
+                      .join("\n")
+                  })
                 }
+                placeholder="Search people…"
+                emptyMessage="No matching person found."
               />
-            </FlowField>
+            </div>
             <FlowField
               label="Focus areas"
               hint="One per line"
@@ -195,14 +231,19 @@ export function InterviewDialog({
                 }
               />
             </FlowField>
-            <FlowField label="Preparation Artifact ID">
-              <Input
-                value={value.preparationArtifactId}
-                onChange={(event) =>
-                  setValue({ preparationArtifactId: event.target.value })
-                }
-              />
-            </FlowField>
+            <details className="rounded-[16px] border border-[var(--ui-border-subtle)] p-3">
+              <summary className="cursor-pointer text-sm font-medium text-[var(--ui-ink-medium)]">
+                Technical details
+              </summary>
+              <FlowField label="Preparation file ID">
+                <Input
+                  value={value.preparationArtifactId}
+                  onChange={(event) =>
+                    setValue({ preparationArtifactId: event.target.value })
+                  }
+                />
+              </FlowField>
+            </details>
             <FlowField label="Next action">
               <Input
                 value={value.nextAction}
@@ -249,7 +290,7 @@ export function InterviewDialog({
         )
       }
     ],
-    [interview]
+    [interview, userIds]
   );
   return (
     <QuestionFlowDialog
@@ -257,7 +298,7 @@ export function InterviewDialog({
       onOpenChange={onOpenChange}
       eyebrow="Work · Application"
       title={interview ? "Edit interview" : "Add interview"}
-      description="Record a permissioned interview workspace."
+      description="Keep interview plans, preparation, outcomes, and follow-up together."
       value={draft}
       onChange={setDraft}
       steps={steps}
@@ -530,7 +571,9 @@ export function OfferDialog({
             >
               {["unknown", "remote", "hybrid", "on_site", "variable"].map(
                 (option) => (
-                  <option key={option}>{option}</option>
+                  <option key={option} value={option}>
+                    {readable(option)}
+                  </option>
                 )
               )}
             </Select>
@@ -698,7 +741,9 @@ export function OfferDialog({
                 >
                   {["hour", "day", "week", "month", "year", "one_time"].map(
                     (option) => (
-                      <option key={option}>{option}</option>
+                      <option key={option} value={option}>
+                        {readable(option)}
+                      </option>
                     )
                   )}
                 </Select>
@@ -779,19 +824,20 @@ export function OfferDialog({
                 }
               />
             </FlowField>
-            <FlowField
-              label="Offer Artifact IDs"
-              hint="One per line"
-              className="md:col-span-2"
-            >
-              <Textarea
-                rows={3}
-                value={value.artifactIds}
-                onChange={(event) =>
-                  setValue({ artifactIds: event.target.value })
-                }
-              />
-            </FlowField>
+            <details className="rounded-[16px] border border-[var(--ui-border-subtle)] p-3 md:col-span-2">
+              <summary className="cursor-pointer text-sm font-medium text-[var(--ui-ink-medium)]">
+                Technical details
+              </summary>
+              <FlowField label="Offer file IDs" hint="One per line">
+                <Textarea
+                  rows={3}
+                  value={value.artifactIds}
+                  onChange={(event) =>
+                    setValue({ artifactIds: event.target.value })
+                  }
+                />
+              </FlowField>
+            </details>
             <FlowField label="Response" className="md:col-span-2">
               <Textarea
                 rows={3}
@@ -827,11 +873,11 @@ export function OfferDialog({
       onOpenChange={onOpenChange}
       eyebrow="Work · Application"
       title={offer ? "Edit offer" : "Add offer"}
-      description="Version the exact terms and private compensation."
+      description="Save the exact offer terms and private compensation."
       value={draft}
       onChange={setDraft}
       steps={steps}
-      submitLabel={offer ? "Save new offer revision" : "Add offer"}
+      submitLabel={offer ? "Save offer" : "Add offer"}
       pending={pending}
       error={error}
       draftPersistenceKey={`work-offer-${offer?.id ?? applicationId}`}

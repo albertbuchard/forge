@@ -62,7 +62,7 @@ const emptyOpportunity: OpportunityDraft = {
   skills: "",
   unknowns: "",
   redFlags: "",
-  nextAction: "Review fit against the current campaign criteria."
+  nextAction: "Review fit against the current job-search criteria."
 };
 
 export function JobOpportunityDialog({
@@ -82,10 +82,10 @@ export function JobOpportunityDialog({
   const steps: Array<QuestionFlowStep<OpportunityDraft>> = [
     {
       id: "source",
-      eyebrow: "Sourced opportunity",
+      eyebrow: "Role source",
       title: "Where did this role come from?",
       description:
-        "Canonical source identity and provenance let Forge deduplicate the same role across campaigns and search runs.",
+        "The job posting link and source reference help Forge avoid adding the same role twice.",
       render: (value, setValue) => (
         <div className="grid gap-4 md:grid-cols-2">
           <FlowField label="Role title" className="md:col-span-2">
@@ -103,7 +103,7 @@ export function JobOpportunityDialog({
               }
             />
           </FlowField>
-          <FlowField label="Canonical URL">
+          <FlowField label="Job posting URL">
             <Input
               type="url"
               value={value.canonicalUrl}
@@ -118,7 +118,7 @@ export function JobOpportunityDialog({
               onChange={(event) => setValue({ sourceName: event.target.value })}
             />
           </FlowField>
-          <FlowField label="Source identifier">
+          <FlowField label="Source reference">
             <Input
               value={value.sourceIdentifier}
               onChange={(event) =>
@@ -134,7 +134,7 @@ export function JobOpportunityDialog({
       eyebrow: "Role facts",
       title: "What does the source actually say?",
       description:
-        "Unknown values stay unknown. Material claims keep source provenance instead of being guessed.",
+        "Leave facts unknown when the source does not say. Forge will not guess missing information.",
       render: (value, setValue) => (
         <div className="grid gap-4 md:grid-cols-2">
           <FlowField label="Role family">
@@ -256,12 +256,12 @@ export function JobOpportunityDialog({
       open={open}
       onOpenChange={onOpenChange}
       eyebrow="Work · Discovery"
-      title="Add job opportunity"
-      description="Upsert one sourced role with deduplication and explicit unknowns."
+      title="Add role"
+      description="Save a role from a reliable source and keep missing facts clearly marked."
       value={draft}
       onChange={setDraft}
       steps={steps}
-      submitLabel="Add opportunity"
+      submitLabel="Add role"
       pending={pending}
       error={error}
       resolveContinueBlocker={(step) =>
@@ -428,10 +428,10 @@ export function WorkCheckInDialog({
       eyebrow: "Fast check-in",
       title: "Which work arrangement are you checking in on?",
       description:
-        "Each observation remains attached to one engagement, timestamp, timezone, metric definition, and provenance source.",
+        "Each answer stays attached to this work record, the time of the check-in, and the question that was asked.",
       render: (value, setValue) => (
         <NativeSelect
-          label="Work engagement"
+          label="Work"
           value={value.engagementId}
           onChange={(engagementId) => setValue({ engagementId })}
         >
@@ -683,17 +683,17 @@ export function JobApplicationDialog({
     {
       id: "application",
       eyebrow: "Application workspace",
-      title: "Which opportunity and campaign?",
+      title: "Which role and job search?",
       description:
-        "One application has one primary campaign and retains duplicate-submission protection. It can still link to other goals and campaigns.",
+        "Choose the role and the job search this application belongs to. Forge will warn you before creating a duplicate application.",
       render: (current, setValue) => (
         <div className="grid gap-4">
           <NativeSelect
-            label="Opportunity"
+            label="Role"
             value={current.opportunityId}
             onChange={(next) => setValue({ opportunityId: next })}
           >
-            <option value="">Choose an opportunity</option>
+            <option value="">Choose a role</option>
             {opportunities.map((opportunity) => (
               <option key={opportunity.id} value={opportunity.id}>
                 {opportunity.title} ·{" "}
@@ -702,11 +702,11 @@ export function JobApplicationDialog({
             ))}
           </NativeSelect>
           <NativeSelect
-            label="Primary campaign"
+            label="Job search"
             value={current.campaignId}
             onChange={(next) => setValue({ campaignId: next })}
           >
-            <option value="">Choose a campaign</option>
+            <option value="">Choose a job search</option>
             {campaigns.map((campaign) => (
               <option key={campaign.id} value={campaign.id}>
                 {campaign.title}
@@ -756,7 +756,7 @@ export function JobApplicationDialog({
       error={error}
       resolveContinueBlocker={() =>
         !opportunityId || !campaignId
-          ? "Choose both an opportunity and a primary campaign."
+          ? "Choose both a role and a job search."
           : null
       }
       onSubmit={async () => {

@@ -6,6 +6,12 @@ import {
 import type { QuestionFlowStep } from "@/components/flows/question-flow-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { readable } from "@/components/work/work-components";
+import {
+  EntityLinkMultiSelect,
+  type EntityLinkOption
+} from "@/components/psyche/entity-link-multiselect";
+import { searchLocalRecords } from "@/lib/api";
 import {
   createWorkSupportingRecord,
   updateWorkSupportingRecord
@@ -89,6 +95,19 @@ export function OutreachDialog({
   const postSend = ["sent", "replied", "follow_up", "closed"].includes(
     draft.status
   );
+  const searchPeople = async (query: string): Promise<EntityLinkOption[]> => {
+    const response = await searchLocalRecords({
+      query,
+      entityTypes: ["person"],
+      userIds,
+      limit: 20
+    });
+    return response.results.map((person) => ({
+      value: `person:${person.entityId}`,
+      label: person.title,
+      description: person.detail || "Person"
+    }));
+  };
   const steps = useMemo<Array<QuestionFlowStep<OutreachDraft>>>(
     () => [
       {
@@ -96,15 +115,15 @@ export function OutreachDialog({
         eyebrow: "Networking and outreach",
         title: outreach ? "Update outreach" : "Plan an outreach",
         description:
-          "Connect a concrete proposal to a campaign, organization, person, message Artifact, and factual follow-up history.",
+          "Connect a concrete proposal to a job search, organization, person, message file, and factual follow-up history.",
         render: (value, setValue) => (
           <div className="grid gap-4 md:grid-cols-2">
             <Select
-              label="Campaign"
+              label="Job search"
               value={value.campaignId}
               onChange={(campaignId) => setValue({ campaignId })}
             >
-              <option value="">No campaign</option>
+              <option value="">No job search</option>
               {campaigns.map((campaign) => (
                 <option key={campaign.id} value={campaign.id}>
                   {campaign.title}
@@ -123,12 +142,32 @@ export function OutreachDialog({
                 </option>
               ))}
             </Select>
-            <FlowField label="Person ID" hint="Link an existing Forge Person">
-              <Input
-                value={value.personId}
-                onChange={(event) => setValue({ personId: event.target.value })}
+            <div className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+              Person
+              <EntityLinkMultiSelect
+                options={
+                  value.personId
+                    ? [
+                        {
+                          value: `person:${value.personId}`,
+                          label: "Selected person"
+                        }
+                      ]
+                    : []
+                }
+                selectedValues={
+                  value.personId ? [`person:${value.personId}`] : []
+                }
+                onSearch={searchPeople}
+                onChange={(selected) =>
+                  setValue({
+                    personId: selected.at(-1)?.replace(/^person:/u, "") ?? ""
+                  })
+                }
+                placeholder="Search people…"
+                emptyMessage="No matching person found."
               />
-            </FlowField>
+            </div>
             <FlowField label="Channel">
               <Input
                 value={value.channel}
@@ -149,17 +188,24 @@ export function OutreachDialog({
                 "follow_up",
                 "closed"
               ].map((option) => (
-                <option key={option}>{option}</option>
+                <option key={option} value={option}>
+                  {readable(option)}
+                </option>
               ))}
             </Select>
-            <FlowField label="Message Artifact ID">
-              <Input
-                value={value.messageArtifactId}
-                onChange={(event) =>
-                  setValue({ messageArtifactId: event.target.value })
-                }
-              />
-            </FlowField>
+            <details className="rounded-[16px] border border-[var(--ui-border-subtle)] p-3">
+              <summary className="cursor-pointer text-sm font-medium text-[var(--ui-ink-medium)]">
+                Technical details
+              </summary>
+              <FlowField label="Message file ID">
+                <Input
+                  value={value.messageArtifactId}
+                  onChange={(event) =>
+                    setValue({ messageArtifactId: event.target.value })
+                  }
+                />
+              </FlowField>
+            </details>
             <FlowField label="Sent at">
               <Input
                 type="datetime-local"
@@ -204,7 +250,7 @@ export function OutreachDialog({
         )
       }
     ],
-    [campaigns, organizations, outreach]
+    [campaigns, organizations, outreach, userIds]
   );
   return (
     <QuestionFlowDialog
@@ -332,7 +378,7 @@ export function RoleTargetDialog({
     () => [
       {
         id: "target",
-        eyebrow: "Campaign role target",
+        eyebrow: "Job-search role target",
         title: target ? "Update the role target" : "Add a role target",
         description:
           "Separate required qualifications, transferable evidence, known gaps, and evidence-building actions so agents do not collapse them into one fit claim.",
@@ -395,7 +441,7 @@ export function RoleTargetDialog({
                 ["knownGaps", "Known gaps"],
                 ["evidenceActions", "Evidence-building actions"],
                 ["searchTerms", "Search terms"],
-                ["queryFragments", "Canonical query fragments"]
+                ["queryFragments", "Search query phrases"]
               ] as const
             ).map(([key, label]) => (
               <FlowField key={key} label={label} hint="One per line">
@@ -416,13 +462,13 @@ export function RoleTargetDialog({
     <QuestionFlowDialog
       open={open}
       onOpenChange={onOpenChange}
-      eyebrow="Work · Campaign"
+      eyebrow="Work · Job search"
       title={target ? "Edit role target" : "Add role target"}
       description="Build a sourceable role-search target."
       value={draft}
       onChange={setDraft}
       steps={steps}
-      submitLabel={target ? "Save target revision" : "Add role target"}
+      submitLabel={target ? "Save role target" : "Add role target"}
       pending={pending}
       error={error}
       draftPersistenceKey={`work-role-target-${target?.id ?? campaignId}`}
@@ -539,12 +585,12 @@ export function OrganizationTargetDialog({
     () => [
       {
         id: "target",
-        eyebrow: "Campaign organization target",
+        eyebrow: "Job-search organization target",
         title: target
           ? "Update the organization target"
           : "Add an organization target",
         description:
-          "Reuse one Organization record and attach campaign-specific tier, evidence, warm paths, exclusions, application history, and next action.",
+          "Reuse one organization and add its priority, warm introduction paths, exclusions, application history, and next action for this job search.",
         render: (value, setValue) => (
           <div className="grid gap-4 md:grid-cols-2">
             <Select
@@ -580,7 +626,9 @@ export function OrganizationTargetDialog({
                 "excluded",
                 "completed"
               ].map((option) => (
-                <option key={option}>{option}</option>
+                <option key={option} value={option}>
+                  {readable(option)}
+                </option>
               ))}
             </Select>
             <FlowField label="Next action">
@@ -641,13 +689,15 @@ export function OrganizationTargetDialog({
     <QuestionFlowDialog
       open={open}
       onOpenChange={onOpenChange}
-      eyebrow="Work · Campaign"
+      eyebrow="Work · Job search"
       title={target ? "Edit organization target" : "Add organization target"}
-      description="Connect campaign-specific strategy to a reusable Organization."
+      description="Add a reusable organization to this job search."
       value={draft}
       onChange={setDraft}
       steps={steps}
-      submitLabel={target ? "Save target revision" : "Add organization target"}
+      submitLabel={
+        target ? "Save organization target" : "Add organization target"
+      }
       pending={pending}
       error={error}
       draftPersistenceKey={`work-organization-target-${target?.id ?? campaignId}`}

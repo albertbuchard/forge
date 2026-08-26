@@ -8,6 +8,7 @@ import type { QuestionFlowStep } from "@/components/flows/question-flow-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { readable } from "@/components/work/work-components";
 import { getArtifact, listArtifacts, listArtifactVersions } from "@/lib/api";
 import type { ArtifactSummary, ArtifactVersion } from "@/lib/types";
 import {
@@ -113,7 +114,9 @@ export function ReusableResponseDialog({
               onChange={(limitKind) => setValue({ limitKind })}
             >
               {["none", "characters", "words"].map((option) => (
-                <option key={option}>{option}</option>
+                <option key={option} value={option}>
+                  {readable(option)}
+                </option>
               ))}
             </Select>
             <FlowField label="Maximum">
@@ -131,7 +134,9 @@ export function ReusableResponseDialog({
               onChange={(sensitivity) => setValue({ sensitivity })}
             >
               {["normal", "private", "protected"].map((option) => (
-                <option key={option}>{option}</option>
+                <option key={option} value={option}>
+                  {readable(option)}
+                </option>
               ))}
             </Select>
             <Select
@@ -140,7 +145,9 @@ export function ReusableResponseDialog({
               onChange={(reviewState) => setValue({ reviewState })}
             >
               {["draft", "reviewed", "approved", "retired"].map((option) => (
-                <option key={option}>{option}</option>
+                <option key={option} value={option}>
+                  {readable(option)}
+                </option>
               ))}
             </Select>
             <FlowField label="Answer" className="md:col-span-2">
@@ -179,7 +186,7 @@ export function ReusableResponseDialog({
       value={draft}
       onChange={setDraft}
       steps={steps}
-      submitLabel={response ? "Save new answer revision" : "Add answer"}
+      submitLabel={response ? "Save answer" : "Add answer"}
       pending={pending}
       error={error}
       draftPersistenceKey={`work-response-${response?.id ?? "new"}`}
@@ -362,7 +369,9 @@ export function ApplicationQuestionDialog({
               onChange={(limitKind) => setValue({ limitKind })}
             >
               {["none", "characters", "words"].map((option) => (
-                <option key={option}>{option}</option>
+                <option key={option} value={option}>
+                  {readable(option)}
+                </option>
               ))}
             </Select>
             <FlowField label="Maximum">
@@ -380,7 +389,9 @@ export function ApplicationQuestionDialog({
               onChange={(sensitivity) => setValue({ sensitivity })}
             >
               {["normal", "private", "protected"].map((option) => (
-                <option key={option}>{option}</option>
+                <option key={option} value={option}>
+                  {readable(option)}
+                </option>
               ))}
             </Select>
             <Select
@@ -389,7 +400,9 @@ export function ApplicationQuestionDialog({
               onChange={(reviewState) => setValue({ reviewState })}
             >
               {["draft", "reviewed", "approved", "submitted"].map((option) => (
-                <option key={option}>{option}</option>
+                <option key={option} value={option}>
+                  {readable(option)}
+                </option>
               ))}
             </Select>
             <FlowField
@@ -433,7 +446,7 @@ export function ApplicationQuestionDialog({
       value={draft}
       onChange={setDraft}
       steps={steps}
-      submitLabel={question ? "Save answer revision" : "Add question"}
+      submitLabel={question ? "Save answer" : "Add question"}
       pending={pending}
       error={error}
       draftPersistenceKey={`work-question-${question?.id ?? applicationId}`}
@@ -587,14 +600,14 @@ export function ArtifactVersionPicker({
     <div className="grid gap-3">
       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
         <Select
-          label="Artifact"
+          label="File"
           value={artifactId}
           onChange={(id) => {
             setArtifactId(id);
             setVersionId("");
           }}
         >
-          <option value="">Choose an Artifact</option>
+          <option value="">Choose a file</option>
           {artifacts.map((item: ArtifactSummary) => (
             <option key={item.id} value={item.id}>
               {item.title || item.originalFileName}
@@ -605,8 +618,7 @@ export function ArtifactVersionPicker({
           <option value="">Current content</option>
           {versions.map((version: ArtifactVersion) => (
             <option key={version.id} value={version.id}>
-              Version {version.versionNumber} ·{" "}
-              {version.contentSha256.slice(0, 10)}
+              Version {version.versionNumber}
             </option>
           ))}
         </Select>
@@ -638,9 +650,12 @@ export function ArtifactVersionPicker({
               <div className="truncate text-sm font-medium text-[var(--ui-ink-strong)]">
                 {entry.label}
               </div>
-              <div className="mt-1 truncate font-mono text-[11px] text-[var(--ui-ink-faint)]">
-                SHA-256 {entry.contentSha256}
-              </div>
+              <details className="mt-1 text-[11px] text-[var(--ui-ink-faint)]">
+                <summary className="cursor-pointer">Technical details</summary>
+                <div className="truncate font-mono">
+                  SHA-256 {entry.contentSha256}
+                </div>
+              </details>
             </div>
             <Button
               type="button"

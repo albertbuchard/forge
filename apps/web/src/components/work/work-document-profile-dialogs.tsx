@@ -6,6 +6,7 @@ import {
 import type { QuestionFlowStep } from "@/components/flows/question-flow-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { readable } from "@/components/work/work-components";
 import {
   createWorkSupportingRecord,
   updateWorkSupportingRecord
@@ -87,7 +88,7 @@ export function DocumentSetDialog({
           ? "Version the document set"
           : "Create a document set",
         description:
-          "A document set is a named, permissioned bundle of checksum-pinned Artifact versions for one positioning profile.",
+          "A document set groups the exact file versions you plan to use for one positioning profile.",
         render: (value, setValue) => (
           <div className="grid gap-4 md:grid-cols-2">
             <FlowField label="Title">
@@ -123,7 +124,9 @@ export function DocumentSetDialog({
               onChange={(approvalState) => setValue({ approvalState })}
             >
               {["draft", "reviewed", "approved", "retired"].map((option) => (
-                <option key={option}>{option}</option>
+                <option key={option} value={option}>
+                  {readable(option)}
+                </option>
               ))}
             </Select>
             <Select
@@ -132,7 +135,9 @@ export function DocumentSetDialog({
               onChange={(confidentiality) => setValue({ confidentiality })}
             >
               {["private", "restricted", "shareable"].map((option) => (
-                <option key={option}>{option}</option>
+                <option key={option} value={option}>
+                  {readable(option)}
+                </option>
               ))}
             </Select>
             <Check
@@ -164,10 +169,10 @@ export function DocumentSetDialog({
       },
       {
         id: "artifacts",
-        eyebrow: "Exact Artifact versions",
+        eyebrow: "Exact file versions",
         title: "Which files belong to this version?",
         description:
-          "The content checksum prevents a later file update from silently changing what was reviewed or submitted.",
+          "Choosing a specific version prevents a later file update from changing what you reviewed or submitted.",
         render: (value, setValue) => (
           <ArtifactVersionPicker
             value={value.artifactVersions}
@@ -184,13 +189,11 @@ export function DocumentSetDialog({
       onOpenChange={onOpenChange}
       eyebrow="Work · Documents"
       title={documentSet ? "Edit document set" : "Add document set"}
-      description="Pin reusable documents to exact Artifact versions."
+      description="Keep reusable documents tied to the exact file versions you reviewed."
       value={draft}
       onChange={setDraft}
       steps={steps}
-      submitLabel={
-        documentSet ? "Save document-set revision" : "Add document set"
-      }
+      submitLabel={documentSet ? "Save document set" : "Add document set"}
       pending={pending}
       error={error}
       draftPersistenceKey={`work-document-set-${documentSet?.id ?? "new"}`}
@@ -486,21 +489,28 @@ export function PositioningProfileDialog({
                 }
               />
             </FlowField>
-            <FlowField label="Preferred Artifact ID">
-              <Input
-                value={value.preferredDefaultArtifactId}
-                onChange={(event) =>
-                  setValue({ preferredDefaultArtifactId: event.target.value })
-                }
-              />
-            </FlowField>
+            <details className="rounded-[16px] border border-[var(--ui-border-subtle)] p-3 md:col-span-2">
+              <summary className="cursor-pointer text-sm font-medium text-[var(--ui-ink-medium)]">
+                Technical details
+              </summary>
+              <FlowField label="Preferred file ID">
+                <Input
+                  value={value.preferredDefaultArtifactId}
+                  onChange={(event) =>
+                    setValue({ preferredDefaultArtifactId: event.target.value })
+                  }
+                />
+              </FlowField>
+            </details>
             <Select
               label="Approval state"
               value={value.approvalState}
               onChange={(approvalState) => setValue({ approvalState })}
             >
               {["draft", "reviewed", "approved", "retired"].map((option) => (
-                <option key={option}>{option}</option>
+                <option key={option} value={option}>
+                  {readable(option)}
+                </option>
               ))}
             </Select>
             <FlowField label="Valid from">
@@ -537,7 +547,7 @@ export function PositioningProfileDialog({
       value={draft}
       onChange={setDraft}
       steps={steps}
-      submitLabel={profile ? "Save profile revision" : "Add profile"}
+      submitLabel={profile ? "Save profile" : "Add profile"}
       pending={pending}
       error={error}
       draftPersistenceKey={`work-profile-${profile?.id ?? "new"}`}

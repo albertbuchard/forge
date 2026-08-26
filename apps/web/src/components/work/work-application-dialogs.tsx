@@ -6,6 +6,7 @@ import {
 import type { QuestionFlowStep } from "@/components/flows/question-flow-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { readable } from "@/components/work/work-components";
 import {
   createWorkSupportingRecord,
   recordJobApplicationEvent,
@@ -58,10 +59,10 @@ export function ApplicationArtifactDialog({
     () => [
       {
         id: "artifact",
-        eyebrow: "Exact application material",
-        title: "Link an Artifact version",
+        eyebrow: "Application file",
+        title: "Link a specific file version",
         description:
-          "This immutable record preserves the exact checksum and intended use. It is not proof that anything was submitted.",
+          "Forge keeps the exact file version and how you planned to use it. Linking a file does not mean it was submitted.",
         render: (value, setValue) => (
           <div className="grid gap-4">
             <ArtifactVersionPicker
@@ -81,7 +82,9 @@ export function ApplicationArtifactDialog({
                   "transmission",
                   "verified_submission"
                 ].map((option) => (
-                  <option key={option}>{option}</option>
+                  <option key={option} value={option}>
+                    {readable(option)}
+                  </option>
                 ))}
               </Select>
               <Select
@@ -90,7 +93,9 @@ export function ApplicationArtifactDialog({
                 onChange={(approvalState) => setValue({ approvalState })}
               >
                 {["draft", "reviewed", "approved", "sealed"].map((option) => (
-                  <option key={option}>{option}</option>
+                  <option key={option} value={option}>
+                    {readable(option)}
+                  </option>
                 ))}
               </Select>
             </div>
@@ -106,7 +111,7 @@ export function ApplicationArtifactDialog({
       onOpenChange={onOpenChange}
       eyebrow="Work · Application"
       title="Link exact application material"
-      description="Pin a curriculum vitae, cover letter, portfolio, answer set, or receipt to one exact Artifact version."
+      description="Choose the exact curriculum vitae, cover letter, portfolio, answer set, or receipt used for this application."
       value={draft}
       onChange={setDraft}
       steps={steps}
@@ -117,7 +122,7 @@ export function ApplicationArtifactDialog({
       onSubmit={async () => {
         const reference = draft.references[0];
         if (!reference) {
-          setError("Choose one exact Artifact version.");
+          setError("Choose one exact file version.");
           return;
         }
         setPending(true);
@@ -269,7 +274,7 @@ export function ApplicationEventDialog({
     () => [
       {
         id: "activity",
-        eyebrow: "Immutable application history",
+        eyebrow: "Application activity",
         title: "What happened?",
         description:
           "Record factual activity without inventing a lifecycle change. Use the separate stage control when the application stage actually changed.",
@@ -295,7 +300,7 @@ export function ApplicationEventDialog({
                 "note"
               ].map((kind) => (
                 <option key={kind} value={kind}>
-                  {kind.replaceAll("_", " ")}
+                  {readable(kind)}
                 </option>
               ))}
             </Select>
@@ -353,17 +358,22 @@ export function ApplicationEventDialog({
                 onChange={(event) => setValue({ dueAt: event.target.value })}
               />
             </FlowField>
-            <FlowField
-              label="Source Artifact ID"
-              hint="Optional email, screenshot, receipt, or other direct evidence"
-            >
-              <Input
-                value={value.sourceArtifactId}
-                onChange={(event) =>
-                  setValue({ sourceArtifactId: event.target.value })
-                }
-              />
-            </FlowField>
+            <details className="rounded-[16px] border border-[var(--ui-border-subtle)] p-3 md:col-span-2">
+              <summary className="cursor-pointer text-sm font-medium text-[var(--ui-ink-medium)]">
+                Technical details
+              </summary>
+              <FlowField
+                label="Evidence file ID"
+                hint="Optional email, screenshot, receipt, or other direct evidence"
+              >
+                <Input
+                  value={value.sourceArtifactId}
+                  onChange={(event) =>
+                    setValue({ sourceArtifactId: event.target.value })
+                  }
+                />
+              </FlowField>
+            </details>
           </div>
         )
       }
@@ -497,7 +507,9 @@ export function ApplicationWorkspaceDialog({
               onChange={(priority) => setValue({ priority })}
             >
               {["low", "normal", "high", "critical"].map((option) => (
-                <option key={option}>{option}</option>
+                <option key={option} value={option}>
+                  {readable(option)}
+                </option>
               ))}
             </Select>
             <FlowField label="Referral state">
@@ -664,9 +676,9 @@ export function ApplicationWorkspaceDialog({
               />
             </FlowField>
             <p className="text-xs leading-5 text-[var(--ui-ink-faint)] md:col-span-2">
-              These private application fields require Work transmission
-              authority. Credentials, passwords, secret tokens, and protected
-              demographic answers do not belong here.
+              These private application fields require permission to manage
+              application sending. Credentials, passwords, secret tokens, and
+              protected demographic answers do not belong here.
             </p>
           </div>
         )
@@ -680,7 +692,7 @@ export function ApplicationWorkspaceDialog({
       onOpenChange={onOpenChange}
       eyebrow="Work · Application"
       title="Edit application workspace"
-      description="Update permissioned preparation facts without changing the evidence-backed stage timeline."
+      description="Update private preparation details without changing the application stage or activity history."
       value={draft}
       onChange={setDraft}
       steps={steps}

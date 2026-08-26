@@ -7,6 +7,7 @@ import {
 } from "@/components/flows/question-flow-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { readable } from "@/components/work/work-components";
 import {
   createCriteriaVersion,
   createOpportunityCampaign,
@@ -61,7 +62,7 @@ const emptyCampaign: CampaignDraft = {
   longTermDestination: "",
   intermediateRoles: "",
   capabilities: "",
-  nextAction: "Define role targets and review the first opportunity sources.",
+  nextAction: "Define role targets and review the first job sources.",
   criteria: emptyCriteria
 };
 
@@ -122,13 +123,13 @@ export function OpportunityCampaignDialog({
     () => [
       {
         id: "intent",
-        eyebrow: "Opportunity campaign",
-        title: "What search intention should stay coherent?",
+        eyebrow: "Job search",
+        title: "What kind of work are you looking for?",
         description:
-          "Use separate campaigns when the constraints are materially different. A research career search and a part-time shift search can run at the same time.",
+          "Use a separate job search when the goal or constraints are meaningfully different. For example, a research-career search and a part-time shift search can run at the same time.",
         render: (value, setValue) => (
           <div className="grid gap-4 md:grid-cols-2">
-            <FlowField label="Campaign title" className="md:col-span-2">
+            <FlowField label="Job search name" className="md:col-span-2">
               <Input
                 value={value.title}
                 onChange={(event) => setValue({ title: event.target.value })}
@@ -154,7 +155,7 @@ export function OpportunityCampaignDialog({
                 "other"
               ].map((option) => (
                 <option key={option} value={option}>
-                  {option.replaceAll("_", " ")}
+                  {readable(option)}
                 </option>
               ))}
             </NativeSelect>
@@ -181,7 +182,7 @@ export function OpportunityCampaignDialog({
                 {
                   value: "active",
                   label: "Active now",
-                  description: "Start reviewing and recording opportunities."
+                  description: "Start reviewing and recording roles."
                 },
                 {
                   value: "planned",
@@ -256,7 +257,7 @@ export function OpportunityCampaignDialog({
       {
         id: "dates",
         eyebrow: "Window",
-        title: "What is the realistic search window?",
+        title: "When do you want to search and start?",
         description:
           "Dates and cadence make deadlines visible without pretending unknown availability is settled.",
         render: (value, setValue) => (
@@ -304,7 +305,7 @@ export function OpportunityCampaignDialog({
         eyebrow: "Version 1 criteria",
         title: "What are the core role constraints?",
         description:
-          "Forge stores this as a versioned criterion set. Later changes will never rewrite why an earlier role was scored the way it was.",
+          "Forge keeps the criteria used for each earlier role, so later changes do not alter past evaluations.",
         render: (value, setValue) => (
           <CriteriaFields
             value={value.criteria}
@@ -337,14 +338,14 @@ export function OpportunityCampaignDialog({
       open={open}
       onOpenChange={onOpenChange}
       eyebrow="Work · Job searches"
-      title="Create Opportunity Campaign"
-      description="Create one bounded, goal-linked search strategy."
+      title="Create job search"
+      description="Create a focused search for one work goal."
       value={draft}
       onChange={setDraft}
       steps={steps}
-      submitLabel="Create campaign"
+      submitLabel="Create job search"
       pending={pending}
-      pendingLabel="Creating campaign…"
+      pendingLabel="Creating job search…"
       error={error}
       resolveContinueBlocker={(step) =>
         step === "intent" && !draft.title.trim()
@@ -413,7 +414,7 @@ export function CampaignCriteriaDialog({
   const steps: Array<QuestionFlowStep<typeof value>> = [
     {
       id: "criteria",
-      eyebrow: `Campaign · ${campaign.title}`,
+      eyebrow: `Job search · ${campaign.title}`,
       title: "Create a new criteria version",
       description:
         "The current version remains in history and existing evaluations continue to cite it.",
@@ -428,7 +429,7 @@ export function CampaignCriteriaDialog({
     },
     {
       id: "advanced-criteria",
-      eyebrow: `Campaign · ${campaign.title}`,
+      eyebrow: `Job search · ${campaign.title}`,
       title: "Review advanced constraints and evidence rules",
       description:
         "Unchanged criteria that do not have a dedicated control are carried forward exactly; clearing a managed field intentionally removes it from the new version.",
@@ -465,7 +466,7 @@ export function CampaignCriteriaDialog({
       onOpenChange={onOpenChange}
       eyebrow="Work · Criteria"
       title="New criteria version"
-      description="Version the campaign’s structured constraints."
+      description="Save updated criteria without changing earlier evaluations."
       value={value}
       onChange={(next) => {
         setDraft(next.criteria);
