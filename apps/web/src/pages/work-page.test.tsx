@@ -586,6 +586,34 @@ describe("permanent Work experience", () => {
     ).toHaveClass("lg:hidden", "min-h-14");
   });
 
+  it("shows only organizations connected to recorded work on the Current work view", async () => {
+    workApiMocks.listWorkOrganizations.mockResolvedValue(
+      list([
+        ...organizations,
+        {
+          id: "organization_unlinked",
+          name: "Unlinked target organization",
+          domain: "Not connected to recorded work",
+          status: "target",
+          revision: 1
+        }
+      ])
+    );
+
+    renderWork("/work?tab=current");
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Organizations connected to your work"
+      })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Research Laboratory")).toBeInTheDocument();
+    expect(screen.getByText("Product Client")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Unlinked target organization")
+    ).not.toBeInTheDocument();
+  });
+
   it("opens every Work destination from a phone-native menu without a clipped tab rail", async () => {
     renderWork();
 
