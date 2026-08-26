@@ -4,6 +4,7 @@ import {
   fireEvent,
   render,
   screen,
+  within,
   waitFor
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -464,6 +465,12 @@ describe("permanent Work experience", () => {
     expect(workSurface?.className).toContain("[&_button]:min-h-11");
     expect(workSurface?.className).toContain("[&_select]:min-h-11");
     const sections = screen.getByRole("navigation", { name: "Work sections" });
+    const mobileSectionTrigger = screen.getByRole("button", {
+      name: "Work sections: Overview"
+    });
+    expect(mobileSectionTrigger).toHaveClass("md:hidden", "min-h-14");
+    expect(sections).toHaveClass("hidden", "md:block");
+    expect(sections.className).not.toContain("overflow-x");
     for (const label of [
       "Overview",
       "Current work",
@@ -565,8 +572,53 @@ describe("permanent Work experience", () => {
       })
     ).toHaveAttribute("aria-current", "page");
     expect(
-      screen.getByRole("combobox", { name: "Job search views" })
-    ).toHaveValue("searches");
+      screen.getByRole("button", { name: "Job search views: Searches" })
+    ).toHaveClass("lg:hidden", "min-h-14");
+  });
+
+  it("opens every Work destination from a phone-native menu without a clipped tab rail", async () => {
+    renderWork();
+
+    const trigger = await screen.findByRole("button", {
+      name: "Work sections: Overview"
+    });
+    fireEvent.click(trigger);
+
+    const dialog = screen.getByRole("dialog", {
+      name: "Choose work sections"
+    });
+    expect(dialog).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        "Open one focused view. Your other Work information stays available here."
+      )
+    ).toBeInTheDocument();
+    const menu = within(dialog).getByRole("navigation", {
+      name: "Work sections"
+    });
+    expect(
+      within(menu).getAllByRole("button", { current: false })
+    ).toHaveLength(6);
+    expect(
+      within(menu).getByRole("button", { current: "page" })
+    ).toHaveTextContent("Overview");
+    expect(within(menu).getAllByRole("button")).toHaveLength(7);
+
+    fireEvent.click(
+      within(menu).getByRole("button", {
+        name: /Job searches Separate searches, roles, and targets/
+      })
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Run more than one job search clearly"
+      })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Work sections: Job searches" })
+    ).toHaveClass("md:hidden");
   });
 
   it("opens a focused role-review view from its URL without loading target or document collections", async () => {
@@ -574,8 +626,10 @@ describe("permanent Work experience", () => {
 
     expect(await screen.findByText("Filter roles")).toBeInTheDocument();
     expect(
-      screen.getByRole("combobox", { name: "Job search views" })
-    ).toHaveValue("roles");
+      screen.getByRole("button", {
+        name: "Job search views: Roles to review"
+      })
+    ).toHaveClass("lg:hidden");
     expect(workApiMocks.listJobOpportunities).toHaveBeenCalledWith(
       ["user_operator"],
       expect.objectContaining({ limit: 50, sort: "deadline_asc" })
@@ -694,8 +748,8 @@ describe("permanent Work experience", () => {
       await screen.findByRole("heading", { name: "Reusable answers" })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("combobox", { name: "Document views" })
-    ).toHaveValue("answers");
+      screen.getByRole("button", { name: "Document views: Saved answers" })
+    ).toHaveClass("lg:hidden");
     expect(workApiMocks.listWorkSupportingRecords).toHaveBeenCalledTimes(1);
     expect(workApiMocks.listWorkSupportingRecords).toHaveBeenCalledWith(
       ["user_operator"],
