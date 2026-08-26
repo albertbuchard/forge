@@ -296,7 +296,7 @@ export function RelationshipEditor({
         query,
         entityTypes: RELATIONSHIP_SEARCH_TYPES,
         userIds,
-        limit: 24
+        limit: 20
       });
       const options = response.results
         .map((result) => ({ result, targetType: resultTargetType(result) }))

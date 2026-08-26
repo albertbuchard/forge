@@ -784,7 +784,7 @@ describe("permanent Work experience", () => {
       expect.objectContaining({
         query: "publish",
         userIds: ["user_operator"],
-        limit: 24
+        limit: 20
       })
     );
   });
