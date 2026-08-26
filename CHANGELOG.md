@@ -5,7 +5,9 @@
 - Replaced the clipped phone tab rails in Work, Job searches, Documents, and
   record details with one large current-section control that opens a labelled
   bottom-sheet menu. Every destination remains available without requiring
-  horizontal scrolling or squeezing desktop navigation into a phone viewport.
+  horizontal scrolling or squeezing desktop navigation into a phone viewport;
+  an open phone menu closes cleanly if the viewport crosses into desktop
+  navigation.
 - Prevented Work page grids and their children from retaining desktop minimum
   widths on compact screens. Summary cards, filters, engagement lists,
   application workspaces, and detail sections now stay inside the visible phone
