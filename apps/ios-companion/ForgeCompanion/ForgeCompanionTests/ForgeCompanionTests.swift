@@ -1039,6 +1039,63 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
+    func testForgeWebDocumentReadinessRequiresCommittedOrUsableContent() {
+        XCTAssertEqual(
+            ForgeWebDocumentReadiness.classify(
+                runtimeMounted: true,
+                rootExists: true,
+                rootChildren: 1,
+                rootText: ""
+            ),
+            .ready
+        )
+        XCTAssertEqual(
+            ForgeWebDocumentReadiness.classify(
+                runtimeMounted: false,
+                rootExists: true,
+                rootChildren: 1,
+                rootText: "Forge runtime\nForge is starting"
+            ),
+            .bootPlaceholder
+        )
+        XCTAssertEqual(
+            ForgeWebDocumentReadiness.classify(
+                runtimeMounted: false,
+                rootExists: true,
+                rootChildren: 1,
+                rootText: ""
+            ),
+            .emptyRoot
+        )
+        XCTAssertEqual(
+            ForgeWebDocumentReadiness.classify(
+                runtimeMounted: false,
+                rootExists: false,
+                rootChildren: -1,
+                rootText: ""
+            ),
+            .missingRoot
+        )
+        XCTAssertEqual(
+            ForgeWebDocumentReadiness.classify(
+                runtimeMounted: nil,
+                rootExists: true,
+                rootChildren: 1,
+                rootText: "Work"
+            ),
+            .invalidSnapshot
+        )
+        XCTAssertEqual(
+            ForgeWebDocumentReadiness.classify(
+                runtimeMounted: false,
+                rootExists: true,
+                rootChildren: 1,
+                rootText: "Work\nCurrent work"
+            ),
+            .ready
+        )
+    }
+
     func testForgeWebViewHardRefreshClearsOnlyWebCachesAndServiceWorkers() {
         XCTAssertTrue(ForgeWebView.cacheDataTypesForHardRefresh.contains(WKWebsiteDataTypeDiskCache))
         XCTAssertTrue(ForgeWebView.cacheDataTypesForHardRefresh.contains(WKWebsiteDataTypeMemoryCache))
@@ -2922,7 +2979,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(decodedAckBatch.acks.map(\.actionId), ["watch_action_1"])
     }
 
-    func testForegroundDirectBulkRouteUsesAggressiveDirectTimeout() {
+    func testForegroundDirectBulkRouteUsesFullChunkReceiveBudget() {
         let payload = PairingPayload(
             kind: "forge-companion-pairing",
             apiBaseUrl: "forge-iroh://fakednodeid/api/v1",
@@ -2970,7 +3027,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(normalized.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
         XCTAssertFalse(route.usesIroh)
         XCTAssertEqual(timeout, ForgeSyncClient.foregroundDirectBulkHealthSyncChunkTimeout)
-        XCTAssertEqual(ForgeSyncClient.standardHealthSyncChunkTimeout / timeout, 10)
+        XCTAssertEqual(timeout, ForgeSyncClient.standardHealthSyncChunkTimeout)
     }
 
     func testBackgroundDirectBulkRouteKeepsStandardTimeout() {
@@ -3025,7 +3082,7 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
-    func testForegroundDirectHttpRouteUsesShortHealthSyncTimeout() {
+    func testForegroundDirectHttpRouteUsesStandardHealthSyncTimeout() {
         let payload = PairingPayload(
             kind: "forge-companion-pairing",
             apiBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
@@ -3051,6 +3108,39 @@ final class ForgeCompanionTests: XCTestCase {
             ),
             ForgeSyncClient.foregroundDirectBulkHealthSyncChunkTimeout
         )
+    }
+
+
+    func testHealthSyncReconciliationAllowsOneAmbiguousTransportCycleOnly() {
+        let ambiguousErrors: [Error] = [
+            URLError(.timedOut),
+            URLError(.networkConnectionLost),
+            URLError(.notConnectedToInternet),
+            NSError(domain: "ForgeSyncClient", code: 408),
+            NSError(domain: "ForgeSyncClient", code: 500),
+            NSError(domain: "ForgeSyncClient", code: 502),
+            NSError(domain: "ForgeSyncClient", code: 503),
+            NSError(domain: "ForgeSyncClient", code: 504)
+        ]
+        for error in ambiguousErrors {
+            XCTAssertTrue(
+                ForgeSyncClient.shouldReconcileHealthSyncUploadError(error),
+                "Expected ambiguous error to reconcile: \(error)"
+            )
+        }
+        let definitiveErrors: [Error] = [
+            CancellationError() as Error,
+            NSError(domain: "ForgeSyncClient", code: 400),
+            NSError(domain: "ForgeSyncClient", code: 401),
+            NSError(domain: "ForgeSyncClient", code: 409),
+            URLError(.cancelled)
+        ]
+        for error in definitiveErrors {
+            XCTAssertFalse(
+                ForgeSyncClient.shouldReconcileHealthSyncUploadError(error),
+                "Expected definitive error to propagate: \(error)"
+            )
+        }
     }
 
     func testIrohPrimaryRouteKeepsStandardHealthSyncTimeout() {
@@ -7320,6 +7410,30 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(ForgeBackgroundUploadCoordinator.uploadBodyWriteOptions, [])
     }
 
+    func testBackgroundUploadCompletionDistinguishesIntentionalCancellationFromUnknownWaiter() {
+        XCTAssertEqual(
+            ForgeBackgroundUploadCoordinator.completionDisposition(
+                hasPendingUpload: true,
+                wasIntentionallyCancelled: false
+            ),
+            .activeWaiter
+        )
+        XCTAssertEqual(
+            ForgeBackgroundUploadCoordinator.completionDisposition(
+                hasPendingUpload: false,
+                wasIntentionallyCancelled: true
+            ),
+            .intentionalCancellation
+        )
+        XCTAssertEqual(
+            ForgeBackgroundUploadCoordinator.completionDisposition(
+                hasPendingUpload: false,
+                wasIntentionallyCancelled: false
+            ),
+            .unknownWaiter
+        )
+    }
+
     func testWorkoutSyncCursorUsesFrozenExportTimestampForResumeStableChunks() throws {
         struct WorkoutChunkPayload: Encodable {
             let workouts: [Workout]
@@ -8127,7 +8241,7 @@ final class ForgeCompanionTests: XCTestCase {
                 useBackgroundUpload: true,
                 appIsForegroundActive: true
             ),
-            ForgeSyncClient.foregroundHealthSyncChunkUploadConcurrency
+            1
         )
         XCTAssertFalse(
             ForgeSyncClient.effectiveUseBackgroundUploadForTesting(
@@ -8361,8 +8475,7 @@ final class ForgeCompanionTests: XCTestCase {
                 useBackgroundUpload: true,
                 appIsForegroundActive: true
             ),
-            ForgeSyncClient.foregroundHealthSyncChunkUploadConcurrency
-                * ForgeSyncClient.foregroundHealthSyncPreparedChunkPrefetchWindows
+            0
         )
         XCTAssertEqual(
             ForgeSyncClient.healthSyncPreparedChunkPrefetchLimitForTesting(pairing: irohPayload),
@@ -8435,7 +8548,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(foregroundWaveBudgetBytes / previousForegroundWaveBudgetBytes, 2)
     }
 
-    func testForegroundDirectHealthSyncWidensTailscalePipeBeyondIrohWindow() {
+    func testForegroundDirectHealthSyncUsesBoundedTailscaleWindow() {
         let tailscalePayload = PairingPayload(
             kind: "pairing",
             apiBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
@@ -8448,7 +8561,6 @@ final class ForgeCompanionTests: XCTestCase {
             transport: nil
         )
 
-        let oldDirectWindow = 8
         let foregroundConcurrency = ForgeSyncClient.healthSyncChunkUploadConcurrency(
             pairing: tailscalePayload,
             useBackgroundUpload: false,
@@ -8461,19 +8573,11 @@ final class ForgeCompanionTests: XCTestCase {
         )
         let foregroundWaveBudgetBytes = foregroundConcurrency * ForgeSyncClient.foregroundHTTPHealthSyncChunkTargetBytes
 
-        XCTAssertEqual(foregroundConcurrency, 12)
-        XCTAssertEqual(ForgeSyncClient.foregroundHTTPMaximumConnectionsPerHost, 12)
-        XCTAssertEqual(foregroundPreparedLimit, 36)
-        XCTAssertEqual(foregroundWaveBudgetBytes, 30_000_000)
-        XCTAssertEqual(
-            foregroundConcurrency - oldDirectWindow,
-            4
-        )
-        XCTAssertEqual(
-            foregroundPreparedLimit - oldDirectWindow * ForgeSyncClient.foregroundHealthSyncPreparedChunkPrefetchWindows,
-            12
-        )
-        XCTAssertGreaterThan(
+        XCTAssertEqual(foregroundConcurrency, 3)
+        XCTAssertEqual(ForgeSyncClient.foregroundHTTPMaximumConnectionsPerHost, 3)
+        XCTAssertEqual(foregroundPreparedLimit, 9)
+        XCTAssertEqual(foregroundWaveBudgetBytes, 7_500_000)
+        XCTAssertLessThan(
             foregroundConcurrency,
             ForgeSyncClient.foregroundIrohHealthSyncChunkUploadConcurrency
         )

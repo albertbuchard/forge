@@ -230,6 +230,12 @@ struct ForgePairingAuthorizationPrompt: Equatable {
     let expiresAt: Date
 }
 
+enum ForgeBackgroundUploadCompletionDisposition: Equatable {
+    case activeWaiter
+    case intentionalCancellation
+    case unknownWaiter
+}
+
 final class ForgeBackgroundUploadCoordinator: NSObject, URLSessionDataDelegate {
     static let shared = ForgeBackgroundUploadCoordinator()
     static let sessionIdentifier = "com.albertbuchard.ForgeCompanion.healthkit.uploads"
@@ -287,6 +293,18 @@ final class ForgeBackgroundUploadCoordinator: NSObject, URLSessionDataDelegate {
 
     private override init() {
         super.init()
+    }
+
+    static func completionDisposition(
+        hasPendingUpload: Bool,
+        wasIntentionallyCancelled: Bool
+    ) -> ForgeBackgroundUploadCompletionDisposition {
+        if hasPendingUpload {
+            return .activeWaiter
+        }
+        return wasIntentionallyCancelled
+            ? .intentionalCancellation
+            : .unknownWaiter
     }
 
     func upload(request: URLRequest, body: Data) async throws -> (Data, URLResponse) {
@@ -379,16 +397,22 @@ final class ForgeBackgroundUploadCoordinator: NSObject, URLSessionDataDelegate {
             intentionallyCancelledTaskIdentifiers.remove(task.taskIdentifier) != nil
         lock.unlock()
         guard let pending else {
-            if wasIntentionallyCancelled {
+            switch Self.completionDisposition(
+                hasPendingUpload: false,
+                wasIntentionallyCancelled: wasIntentionallyCancelled
+            ) {
+            case .intentionalCancellation:
                 companionDebugLog(
                     "ForgeSyncClient",
                     "background upload completed after intentional cancellation task=\(task.taskIdentifier)"
                 )
-            } else {
+            case .unknownWaiter:
                 companionDebugLog(
                     "ForgeSyncClient",
                     "background upload completed without active waiter task=\(task.taskIdentifier) error=\(error?.localizedDescription ?? "nil"); backend session status refresh will reconcile accepted chunks"
                 )
+            case .activeWaiter:
+                break
             }
             return
         }
@@ -505,11 +529,7 @@ struct ForgeSyncClient {
         useBackgroundUpload: Bool,
         appIsForegroundActive: Bool = true
     ) -> Int {
-        let effectiveUseBackgroundUpload = effectiveUseBackgroundUploadForHealthSyncChunk(
-            requestedBackgroundUpload: useBackgroundUpload,
-            appIsForegroundActive: appIsForegroundActive
-        )
-        guard effectiveUseBackgroundUpload == false else {
+        guard useBackgroundUpload == false else {
             return 0
         }
         return healthSyncChunkUploadConcurrency(

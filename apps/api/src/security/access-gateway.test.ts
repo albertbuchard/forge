@@ -1156,3 +1156,126 @@ test("oversized chunked unauthenticated requests are denied before parser and ha
     await app.close();
   }
 });
+
+test("mobile HealthKit chunks use progress-aware inactivity and hard deadlines while ordinary routes keep an absolute deadline", async () => {
+  const app = Fastify({ logger: false });
+  installAccessGateway(app, {
+    credentials: {
+      authenticate: gatewayAuthentication,
+      verifyProtocolEarly(request, contract) {
+        if (
+          contract.routePath !==
+          "/api/v1/mobile/healthkit/sync-sessions/:id/chunks"
+        ) {
+          return null;
+        }
+        return {
+          principal: principal("companion_session", ["companion"]),
+          mode: "verified_protocol",
+          csrfSatisfied: false
+        };
+      }
+    },
+    payloadReceiveTimeoutMilliseconds: 180,
+    mobileHealthChunkInactivityTimeoutMilliseconds: 250,
+    mobileHealthChunkHardTimeoutMilliseconds: 600
+  });
+  app.post(
+    "/api/v1/mobile/healthkit/sync-sessions/:id/chunks",
+    async (request) => ({ received: request.body })
+  );
+  app.post("/api/v1/write", async (request) => ({ received: request.body }));
+  await app.listen({ host: "127.0.0.1", port: 0 });
+
+  const address = app.server.address() as AddressInfo;
+  const openChunkedRequest = (
+    path: string,
+    headers: Record<string, string> = {}
+  ) => {
+    let resolveResponse!: (value: { statusCode: number; body: string }) => void;
+    let rejectResponse!: (reason?: unknown) => void;
+    const response = new Promise<{ statusCode: number; body: string }>(
+      (resolve, reject) => {
+        resolveResponse = resolve;
+        rejectResponse = reject;
+      }
+    );
+    const request = http.request(
+      {
+        host: "127.0.0.1",
+        port: address.port,
+        method: "POST",
+        path,
+        headers: {
+          "content-type": "application/json",
+          "transfer-encoding": "chunked",
+          ...headers
+        }
+      },
+      (incoming) => {
+        let body = "";
+        incoming.setEncoding("utf8");
+        incoming.on("data", (chunk) => {
+          body += chunk;
+        });
+        incoming.once("end", () => {
+          resolveResponse({
+            statusCode: incoming.statusCode ?? 0,
+            body
+          });
+        });
+      }
+    );
+    request.once("error", rejectResponse);
+    return { request, response };
+  };
+  const wait = (milliseconds: number) =>
+    new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+  try {
+    const progressing = openChunkedRequest(
+      "/api/v1/mobile/healthkit/sync-sessions/upload_1/chunks"
+    );
+    progressing.request.write('{"ok"');
+    await wait(100);
+    progressing.request.write(":true");
+    await wait(100);
+    progressing.request.end("}");
+    const progressingResponse = await progressing.response;
+    assert.equal(progressingResponse.statusCode, 200, progressingResponse.body);
+
+    const inactive = openChunkedRequest(
+      "/api/v1/mobile/healthkit/sync-sessions/upload_2/chunks"
+    );
+    inactive.request.write('{"ok":');
+    const inactiveResponse = await inactive.response;
+    assert.equal(inactiveResponse.statusCode, 408, inactiveResponse.body);
+    inactive.request.destroy();
+
+    const ordinary = openChunkedRequest("/api/v1/write", {
+      authorization: "Bearer paired"
+    });
+    ordinary.request.write('{"ok":');
+    const ordinaryKeepalive = setInterval(() => {
+      ordinary.request.write(" ");
+    }, 60);
+    const ordinaryResponse = await ordinary.response;
+    clearInterval(ordinaryKeepalive);
+    assert.equal(ordinaryResponse.statusCode, 408, ordinaryResponse.body);
+    ordinary.request.destroy();
+
+    const hardBounded = openChunkedRequest(
+      "/api/v1/mobile/healthkit/sync-sessions/upload_3/chunks"
+    );
+    hardBounded.request.write('{"ok":');
+    const mobileKeepalive = setInterval(() => {
+      hardBounded.request.write(" ");
+    }, 100);
+    const hardBoundedResponse = await hardBounded.response;
+    clearInterval(mobileKeepalive);
+    assert.equal(hardBoundedResponse.statusCode, 408, hardBoundedResponse.body);
+    hardBounded.request.destroy();
+  } finally {
+    await app.close();
+  }
+});

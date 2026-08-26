@@ -4308,6 +4308,102 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       progressAfterSummary.updated_at
     );
 
+    getDatabase()
+      .prepare(
+        `UPDATE health_mobile_sync_sessions
+         SET received_counts_json = '{"workout_summaries":999}',
+             byte_totals_json = '{"workout_summaries":1}'
+         WHERE id = ?`
+      )
+      .run(syncSessionId);
+    const authoritativeDuplicateResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: summaryChunk
+    });
+    assert.equal(
+      authoritativeDuplicateResponse.statusCode,
+      200,
+      authoritativeDuplicateResponse.body
+    );
+    const authoritativeDuplicate = authoritativeDuplicateResponse.json() as {
+      chunk: {
+        duplicate: boolean;
+        receivedCount: number;
+        receivedBytes: number;
+      };
+    };
+    assert.equal(authoritativeDuplicate.chunk.duplicate, true);
+    assert.equal(authoritativeDuplicate.chunk.receivedCount, 1);
+    assert.equal(
+      authoritativeDuplicate.chunk.receivedBytes,
+      summaryChunk.byteCount
+    );
+    const repairedProgress = getDatabase()
+      .prepare(
+        `SELECT received_counts_json, byte_totals_json
+         FROM health_mobile_sync_sessions
+         WHERE id = ?`
+      )
+      .get(syncSessionId) as {
+      received_counts_json: string;
+      byte_totals_json: string;
+    };
+    assert.equal(
+      JSON.parse(repairedProgress.received_counts_json).workout_summaries,
+      1
+    );
+    assert.equal(
+      JSON.parse(repairedProgress.byte_totals_json).workout_summaries,
+      summaryChunk.byteCount
+    );
+
+    const concurrentVitalsPayload = {
+      vitals: {
+        daySummaries: [],
+        metadata: { source: "authoritative-progress-test" }
+      }
+    };
+    const concurrentVitalsEncoding = healthChunkPayloadJsonBase64(
+      concurrentVitalsPayload
+    );
+    const concurrentChunkResponses = await Promise.all(
+      [100, 101].map((sequence) =>
+        app.inject({
+          method: "POST",
+          url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+          payload: {
+            chunkId: `chunk-concurrent-vitals-${sequence}`,
+            sequence,
+            family: "vitals",
+            recordCount: 0,
+            ...concurrentVitalsEncoding
+          }
+        })
+      )
+    );
+    for (const response of concurrentChunkResponses) {
+      assert.equal(response.statusCode, 200, response.body);
+    }
+    const concurrentProgress = getDatabase()
+      .prepare(
+        `SELECT received_counts_json, byte_totals_json
+         FROM health_mobile_sync_sessions
+         WHERE id = ?`
+      )
+      .get(syncSessionId) as {
+      received_counts_json: string;
+      byte_totals_json: string;
+    };
+    assert.equal(
+      JSON.parse(concurrentProgress.received_counts_json).workout_summaries,
+      1
+    );
+    assert.equal(
+      JSON.parse(concurrentProgress.byte_totals_json).vitals,
+      concurrentVitalsEncoding.byteCount * 2
+    );
+
     const conflictResponse = await app.inject({
       method: "POST",
       url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,

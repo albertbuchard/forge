@@ -6115,6 +6115,23 @@ function updateMobileSyncSessionProgress(
   syncSessionId: string,
   progress = mobileSyncSessionProgress(syncSessionId)
 ) {
+  const receivedCountsJson = JSON.stringify(progress.receivedCounts);
+  const byteTotalsJson = JSON.stringify(progress.byteTotals);
+  const current = getDatabase()
+    .prepare(
+      `SELECT received_counts_json, byte_totals_json
+       FROM health_mobile_sync_sessions
+       WHERE id = ?`
+    )
+    .get(syncSessionId) as
+    | { received_counts_json: string; byte_totals_json: string }
+    | undefined;
+  if (
+    current?.received_counts_json === receivedCountsJson &&
+    current.byte_totals_json === byteTotalsJson
+  ) {
+    return progress;
+  }
   getDatabase()
     .prepare(
       `UPDATE health_mobile_sync_sessions
@@ -6122,8 +6139,8 @@ function updateMobileSyncSessionProgress(
        WHERE id = ?`
     )
     .run(
-      JSON.stringify(progress.receivedCounts),
-      JSON.stringify(progress.byteTotals),
+      receivedCountsJson,
+      byteTotalsJson,
       nowIso(),
       syncSessionId
     );
