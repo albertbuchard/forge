@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -657,6 +658,48 @@ describe("permanent Work experience", () => {
     expect(
       screen.getByRole("button", { name: "Work sections: Job searches" })
     ).toHaveClass("md:hidden");
+  });
+
+  it("closes the phone section menu when the viewport crosses into desktop navigation", async () => {
+    let desktopChange:
+      | ((event: Pick<MediaQueryListEvent, "matches">) => void)
+      | undefined;
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(
+          (
+            eventName: string,
+            listener: (event: Pick<MediaQueryListEvent, "matches">) => void
+          ) => {
+            if (eventName === "change" && query === "(min-width: 768px)") {
+              desktopChange = listener;
+            }
+          }
+        ),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn()
+      }))
+    });
+
+    renderWork();
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Work sections: Overview"
+      })
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Choose work sections" })
+    ).toBeInTheDocument();
+
+    act(() => desktopChange?.({ matches: true }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("opens a focused role-review view from its URL without loading target or document collections", async () => {
