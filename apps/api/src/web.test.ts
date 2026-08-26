@@ -430,8 +430,9 @@ test("missing built hashed assets return 404 instead of Vite HTML", async () => 
       stop: async () => {}
     },
     devAssetProxy: {
-      fetch: async () => {
+      fetch: async ({ reply }) => {
         devProxyCalls += 1;
+        reply.code(200).type("text/html; charset=utf-8");
         return "<!doctype html><title>Vite fallback</title>";
       },
       close: () => {}
@@ -451,7 +452,53 @@ test("missing built hashed assets return 404 instead of Vite HTML", async () => 
     assert.equal(response.statusCode, 404);
     assert.equal(response.json().error, "Asset not found");
     assert.doesNotMatch(response.headers["content-type"] ?? "", /text\/html/);
-    assert.equal(devProxyCalls, 0);
+    assert.equal(devProxyCalls, 1);
+  } finally {
+    await app.close();
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("missing local hashed assets use the matching development build asset", async () => {
+  const tempDir = mkdtempSync(path.join(tmpdir(), "forge-dev-built-assets-"));
+  let devProxyCalls = 0;
+  const app = fastify();
+  await registerWebRoutes(app, {
+    devWebRuntime: {
+      ensureReady: async () => new URL("http://127.0.0.1:3027/forge/"),
+      stop: async () => {}
+    },
+    devAssetProxy: {
+      fetch: async ({ reply }) => {
+        devProxyCalls += 1;
+        reply.code(200).type("application/javascript; charset=utf-8");
+        return "export const source = 'matching-development-build';";
+      },
+      close: () => {}
+    },
+    resolveWebAssetLocation: async (requestPath) => ({
+      assetPath: path.join(tempDir, requestPath.replace(/^\/+/, "")),
+      clientDir: tempDir
+    })
+  });
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/forge/assets/index-ABCDEFGH.js"
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(
+      response.body,
+      "export const source = 'matching-development-build';"
+    );
+    assert.match(response.headers["content-type"] ?? "", /javascript/);
+    assert.equal(
+      response.headers["cache-control"],
+      "public, max-age=31536000, immutable"
+    );
+    assert.equal(devProxyCalls, 1);
   } finally {
     await app.close();
     rmSync(tempDir, { recursive: true, force: true });

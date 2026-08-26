@@ -820,7 +820,46 @@ async function serveAsset(
       );
       return payload;
     } catch {
+      const devWebOrigin = await options.devWebRuntime.ensureReady();
+      if (devWebOrigin) {
+        try {
+          const devTarget = buildDevWebTarget(
+            devWebOrigin,
+            normalizedRequestPath,
+            requestTarget.search
+          );
+          const assertion =
+            options.issueDevProxyAssertion?.(
+              options.request,
+              `${devTarget.pathname}${devTarget.search}`
+            ) ?? null;
+          const payload = await options.devAssetProxy.fetch({
+            origin: devWebOrigin,
+            pathname: normalizedRequestPath,
+            search: requestTarget.search,
+            reply,
+            assertion
+          });
+          const contentTypeHeader = reply.getHeader("content-type");
+          const contentType =
+            typeof contentTypeHeader === "number"
+              ? String(contentTypeHeader)
+              : contentTypeHeader;
+          if (
+            reply.statusCode < 400 &&
+            !isHtmlResponse(contentType)
+          ) {
+            reply.header("Cache-Control", immutableCacheControl);
+            return payload;
+          }
+        } catch {
+          options.devWebRuntime.invalidateReady?.();
+        }
+      }
+
       reply.code(404);
+      reply.type("application/json; charset=utf-8");
+      reply.header("Cache-Control", noStoreCacheControl);
       return { error: "Asset not found" };
     }
   }
