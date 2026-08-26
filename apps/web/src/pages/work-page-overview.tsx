@@ -117,12 +117,12 @@ export function LookingControl({
     >
       <span className="min-w-0">
         <span className="block text-sm font-semibold text-[var(--ui-ink-strong)]">
-          Looking for opportunities
+          Looking for work
         </span>
         <span className="mt-0.5 block text-xs leading-5 text-[var(--ui-ink-soft)]">
           {looking
             ? "Job searches and applications are foregrounded. Each search keeps its own criteria and history."
-            : "Search history remains available. Turn this on when you want to create or resume a campaign."}
+            : "Your search history remains available. Turn this on when you want to create or resume a job search."}
         </span>
       </span>
       {looking ? (
@@ -199,7 +199,7 @@ export function OverviewTab({
           {
             label: "Active searches",
             value: activeCampaigns.length,
-            detail: looking ? "Opportunity mode on" : "Opportunity mode off"
+            detail: looking ? "Job searching" : "Not actively searching"
           },
           {
             label: "Open applications",
@@ -213,7 +213,7 @@ export function OverviewTab({
             value: opportunities.filter((item) =>
               ["discovered", "reviewing"].includes(String(item.disposition))
             ).length,
-            detail: "Discovery inbox"
+            detail: "New roles"
           }
         ]}
       />
@@ -241,7 +241,7 @@ export function OverviewTab({
         />
         {current.length ? (
           <div className="grid gap-4 lg:grid-cols-2">
-            {current.map((engagement) => (
+            {current.slice(0, 3).map((engagement) => (
               <EngagementCard
                 key={engagement.id}
                 engagement={engagement}
@@ -265,9 +265,9 @@ export function OverviewTab({
       </section>
       <section className="grid gap-4">
         <SectionHeading
-          eyebrow="Opportunity state"
+          eyebrow="Job search"
           title="Current work and future options, together"
-          description="Turning opportunity mode off never deletes or rewrites previous searches, roles, applications, or outcomes."
+          description="Pausing job searching never deletes or changes your previous searches, roles, applications, or outcomes."
         />
         <div className="grid gap-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
           <Card>
@@ -285,24 +285,25 @@ export function OverviewTab({
                 disabled={!mutationEnabled}
               >
                 <Plus className="size-4" />
-                Create another campaign
+                Create another job search
               </Button>
             ) : null}
           </Card>
           <div className="grid gap-4 md:grid-cols-2">
-            {(looking ? activeCampaigns : campaigns.slice(0, 2)).map(
-              (campaign) => (
-                <CampaignCard key={campaign.id} campaign={campaign} />
-              )
-            )}
+            {(looking
+              ? activeCampaigns.slice(0, 2)
+              : campaigns.slice(0, 2)
+            ).map((campaign) => (
+              <CampaignCard key={campaign.id} campaign={campaign} />
+            ))}
             {campaigns.length === 0 ? (
               <Card>
                 <h3 className="font-semibold text-[var(--ui-ink-strong)]">
-                  No search campaigns yet
+                  No job searches yet
                 </h3>
                 <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                  When you decide to look, create distinct campaigns for
-                  intentions with materially different constraints.
+                  When you decide to look, create a separate job search for each
+                  goal with materially different constraints.
                 </p>
               </Card>
             ) : null}
@@ -344,12 +345,22 @@ export function CurrentWorkTab({
     { id: "past", title: "Past", statuses: ["ended", "archived"] },
     { id: "archived", title: "Archived and restorable", statuses: [] }
   ];
+  const populatedGroups = groups
+    .map((group) => ({
+      ...group,
+      items: engagements.filter((engagement) =>
+        group.id === "archived"
+          ? Boolean(engagement.deletedAt)
+          : !engagement.deletedAt && group.statuses.includes(engagement.status)
+      )
+    }))
+    .filter((group) => group.items.length > 0);
   return (
     <div className="grid gap-7">
       <SectionHeading
         eyebrow="Current work"
         title="All work arrangements"
-        description="Dates, workload, notice periods, objectives, people, documents, and long-term direction remain attached to each engagement."
+        description="Open a role to see its schedule, terms, check-ins, activity, and connections in separate sections."
         actions={
           <>
             <Button
@@ -362,18 +373,13 @@ export function CurrentWorkTab({
             </Button>
             <Button onClick={onAddEngagement} disabled={!mutationEnabled}>
               <Plus className="size-4" />
-              Work engagement
+              Work
             </Button>
           </>
         }
       />
-      {groups.map((group) => {
-        const items = engagements.filter((engagement) =>
-          group.id === "archived"
-            ? Boolean(engagement.deletedAt)
-            : !engagement.deletedAt &&
-              group.statuses.includes(engagement.status)
-        );
+      {populatedGroups.map((group) => {
+        const { items } = group;
         return (
           <section key={group.id} className="grid gap-3">
             <div className="flex items-center justify-between gap-3">
@@ -382,56 +388,58 @@ export function CurrentWorkTab({
               </h3>
               <Badge tone="meta">{items.length}</Badge>
             </div>
-            {items.length ? (
-              <div className="grid gap-4 lg:grid-cols-2">
-                {items.map((engagement) => (
-                  <EngagementCard
-                    key={engagement.id}
-                    engagement={engagement}
-                    organizations={organizations}
-                    onCheckIn={group.id === "current" ? onCheckIn : undefined}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-[20px] border border-dashed border-[var(--ui-border-subtle)] px-4 py-6 text-sm text-[var(--ui-ink-faint)]">
-                No {group.title.toLowerCase()} work arrangements.
-              </div>
-            )}
+            <div className="grid gap-4 lg:grid-cols-2">
+              {items.map((engagement) => (
+                <EngagementCard
+                  key={engagement.id}
+                  engagement={engagement}
+                  organizations={organizations}
+                  onCheckIn={group.id === "current" ? onCheckIn : undefined}
+                />
+              ))}
+            </div>
           </section>
         );
       })}
-      <section className="grid gap-3">
-        <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-soft)]">
-          Organizations
-        </h3>
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {organizations.map((organization) => (
-            <Link
-              key={organization.id}
-              to={`/work/organizations/${organization.id}`}
-              className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate font-medium text-[var(--ui-ink-strong)]">
-                    {String(organization.name ?? "Organization")}
+      {populatedGroups.length === 0 ? (
+        <EmptyState
+          title="No work recorded"
+          description="Add current, planned, past, contract, freelance, or self-employed work when it applies."
+          action={
+            <Button onClick={onAddEngagement} disabled={!mutationEnabled}>
+              Add work
+            </Button>
+          }
+        />
+      ) : null}
+      {organizations.length ? (
+        <section className="grid gap-3">
+          <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-soft)]">
+            Organizations
+          </h3>
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {organizations.map((organization) => (
+              <Link
+                key={organization.id}
+                to={`/work/organizations/${organization.id}`}
+                className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium text-[var(--ui-ink-strong)]">
+                      {String(organization.name ?? "Organization")}
+                    </div>
+                    <div className="mt-1 truncate text-xs text-[var(--ui-ink-soft)]">
+                      {String(organization.domain ?? organization.status ?? "")}
+                    </div>
                   </div>
-                  <div className="mt-1 truncate text-xs text-[var(--ui-ink-soft)]">
-                    {String(organization.domain ?? organization.status ?? "")}
-                  </div>
+                  <WorkStatusBadge status={organization.status} />
                 </div>
-                <WorkStatusBadge status={organization.status} />
-              </div>
-            </Link>
-          ))}
-          {organizations.length === 0 ? (
-            <p className="text-sm text-[var(--ui-ink-faint)]">
-              No employer, client, or target organization records yet.
-            </p>
-          ) : null}
-        </div>
-      </section>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

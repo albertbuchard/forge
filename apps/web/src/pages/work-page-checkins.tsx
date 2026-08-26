@@ -293,8 +293,8 @@ export function CheckInsTab({
               Check-in metrics
             </h3>
             <p className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-              Enable, rename, or supplement the canonical metrics. Every change
-              creates a new version and preserves earlier observations.
+              Choose which questions appear in check-ins, rename them, or add
+              your own. Earlier observations keep their original meaning.
             </p>
           </div>
           <Button
@@ -325,10 +325,15 @@ export function CheckInsTab({
                   <div className="truncate text-sm font-medium text-[var(--ui-ink-strong)]">
                     {String(definition.displayName)}
                   </div>
-                  <div className="mt-1 truncate text-xs text-[var(--ui-ink-faint)]">
-                    {String(definition.canonicalKey)} · version{" "}
-                    {String(definition.version)}
-                  </div>
+                  <details className="mt-1 text-xs text-[var(--ui-ink-faint)]">
+                    <summary className="cursor-pointer">
+                      Technical details
+                    </summary>
+                    <div className="truncate">
+                      {String(definition.canonicalKey)} · version{" "}
+                      {String(definition.version)}
+                    </div>
+                  </details>
                 </div>
                 <Badge tone={definition.enabled === false ? "meta" : "signal"}>
                   {definition.enabled === false ? "Disabled" : "Enabled"}

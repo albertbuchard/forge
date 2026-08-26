@@ -107,7 +107,7 @@ export function ApplicationsTab({
                   <div className="flex flex-wrap items-center gap-2">
                     <WorkStatusBadge status={application.status} />
                     <Badge tone="meta">
-                      {campaign?.title ?? "Campaign unavailable"}
+                      {campaign?.title ?? "Job search unavailable"}
                     </Badge>
                   </div>
                   <div className="mt-2 truncate font-semibold text-[var(--ui-ink-strong)]">
@@ -133,8 +133,8 @@ export function ApplicationsTab({
     <div className="grid gap-6">
       <SectionHeading
         eyebrow="Applications"
-        title="Truthful application pipeline"
-        description="Preparation, external transmission, and verified submission are separate states. Forge never marks an application submitted from a prepared package alone."
+        title="Applications"
+        description="See what you are preparing, what has been sent, and what needs your attention. Forge only marks an application as submitted when there is direct confirmation."
         actions={
           <>
             <div className="flex rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-1">
@@ -176,17 +176,17 @@ export function ApplicationsTab({
         }
       />
       {applicationList}
-      <section className="grid gap-3">
-        <div>
-          <h3 className="font-semibold text-[var(--ui-ink-strong)]">
-            Upcoming interviews
-          </h3>
-          <p className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-            Scheduled preparation and follow-up stay connected to the exact
-            application.
-          </p>
-        </div>
-        {upcomingInterviews.length ? (
+      {upcomingInterviews.length ? (
+        <section className="grid gap-3">
+          <div>
+            <h3 className="font-semibold text-[var(--ui-ink-strong)]">
+              Upcoming interviews
+            </h3>
+            <p className="mt-1 text-sm text-[var(--ui-ink-soft)]">
+              Scheduled preparation and follow-up stay connected to the exact
+              application.
+            </p>
+          </div>
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {upcomingInterviews.map((interview) => {
               const application = applicationById.get(
@@ -219,23 +219,19 @@ export function ApplicationsTab({
               );
             })}
           </div>
-        ) : (
-          <p className="rounded-[18px] border border-dashed border-[var(--ui-border-subtle)] px-4 py-5 text-sm text-[var(--ui-ink-faint)]">
-            No upcoming interview is recorded.
-          </p>
-        )}
-      </section>
-      <section className="grid gap-3">
-        <div>
-          <h3 className="font-semibold text-[var(--ui-ink-strong)]">
-            Compare offers
-          </h3>
-          <p className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-            Compare exact terms without inventing a winner. Every offer retains
-            the campaign criteria version used for its review.
-          </p>
-        </div>
-        {offers.length ? (
+        </section>
+      ) : null}
+      {offers.length ? (
+        <section className="grid gap-3">
+          <div>
+            <h3 className="font-semibold text-[var(--ui-ink-strong)]">
+              Compare offers
+            </h3>
+            <p className="mt-1 text-sm text-[var(--ui-ink-soft)]">
+              Compare the terms that matter to you. Forge keeps the job-search
+              criteria used for each review.
+            </p>
+          </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {offers.map((offer) => {
               const application = applicationById.get(
@@ -283,25 +279,13 @@ export function ApplicationsTab({
                         {formatDate(terms.startDate, "Unknown")}
                       </dd>
                     </div>
-                    <div>
-                      <dt className="text-[var(--ui-ink-faint)]">
-                        Criteria basis
-                      </dt>
-                      <dd className="mt-0.5 truncate font-mono text-[var(--ui-ink-strong)]">
-                        {String(offer.criteriaVersionId ?? "Not linked")}
-                      </dd>
-                    </div>
                   </dl>
                 </Link>
               );
             })}
           </div>
-        ) : (
-          <p className="rounded-[18px] border border-dashed border-[var(--ui-border-subtle)] px-4 py-5 text-sm text-[var(--ui-ink-faint)]">
-            No offer is recorded yet.
-          </p>
-        )}
-      </section>
+        </section>
+      ) : null}
     </div>
   );
 }

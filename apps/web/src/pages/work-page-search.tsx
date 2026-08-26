@@ -19,6 +19,7 @@ import {
   CampaignCard,
   OpportunityComparison,
   OpportunityInbox,
+  WorkSectionNav,
   WorkStatusBadge,
   formatDate,
   readable
@@ -36,11 +37,16 @@ import type {
   OpportunityCampaign,
   WorkRecord
 } from "@/lib/work-api";
-import { cn } from "@/lib/utils";
 import { SectionHeading, LookingControl } from "./work-page-overview";
 import { workObject } from "./work-page-applications";
 
-type SearchView = "campaigns" | "discovery" | "targets" | "automation";
+export type SearchView = "searches" | "roles" | "targets" | "activity";
+
+export function resolveSearchView(value: string | null): SearchView {
+  return ["searches", "roles", "targets", "activity"].includes(value ?? "")
+    ? (value as SearchView)
+    : "searches";
+}
 
 function searchRunSummary(run: WorkRecord) {
   const counts = workObject(run.counts);
@@ -104,7 +110,7 @@ function SearchRunHistoryCard({ run }: { run: WorkRecord }) {
                   className="truncate text-[var(--primary)]"
                   to={`/work/opportunities/${String(item.opportunityId)}`}
                 >
-                  {String(item.opportunityId)}
+                  Open role
                 </Link>
               ) : (
                 <span className="text-[var(--ui-ink-faint)]">
@@ -196,11 +202,10 @@ function OpportunityFilterBar({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold text-[var(--ui-ink-strong)]">
-            Filter discovery
+            Filter roles
           </h3>
           <p className="mt-1 text-xs text-[var(--ui-ink-soft)]">
-            Filters run on the server, so results stay stable as the opportunity
-            library grows.
+            Narrow the role list without loading every saved role at once.
           </p>
         </div>
         {active ? (
@@ -215,7 +220,7 @@ function OpportunityFilterBar({
       </div>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <Input
-          aria-label="Search opportunities"
+          aria-label="Search roles"
           placeholder="Title, employer, source…"
           value={value.query}
           onChange={(event) => set({ query: event.target.value })}
@@ -262,7 +267,7 @@ function OpportunityFilterBar({
           ))}
         </select>
         <Input
-          aria-label="Minimum campaign score"
+          aria-label="Minimum job-search score"
           type="number"
           min="0"
           max="100"
@@ -365,12 +370,12 @@ export function ApplicationFilterBar({
           onChange={(event) => set({ employer: event.target.value })}
         />
         <select
-          aria-label="Filter applications by campaign"
+          aria-label="Filter applications by job search"
           value={value.campaignId}
           onChange={(event) => set({ campaignId: event.target.value })}
           className={selectClass}
         >
-          <option value="">Any campaign</option>
+          <option value="">Any job search</option>
           {campaigns.map((campaign) => (
             <option key={campaign.id} value={campaign.id}>
               {campaign.title}
@@ -437,6 +442,7 @@ export function ApplicationFilterBar({
 }
 
 export function SearchTab({
+  view,
   looking,
   settingsRevision,
   campaigns,
@@ -453,6 +459,7 @@ export function SearchTab({
   hasMore,
   selectedCampaignId,
   onSelectCampaign,
+  onViewChange,
   onToggle,
   onFiltersChange,
   onCreateCampaign,
@@ -460,6 +467,7 @@ export function SearchTab({
   onStartApplication,
   onRefresh
 }: {
+  view: SearchView;
   looking: boolean;
   settingsRevision: number;
   campaigns: OpportunityCampaign[];
@@ -476,6 +484,7 @@ export function SearchTab({
   hasMore: boolean;
   selectedCampaignId: string;
   onSelectCampaign: (id: string) => void;
+  onViewChange: (view: SearchView) => void;
   onToggle: (value: boolean) => void;
   onFiltersChange: (value: OpportunityFilters) => void;
   onCreateCampaign: () => void;
@@ -483,7 +492,6 @@ export function SearchTab({
   onStartApplication: (id: string) => void;
   onRefresh: () => Promise<void>;
 }) {
-  const [view, setView] = useState<SearchView>("campaigns");
   const [compareIds, setCompareIds] = useState<Set<string>>(new Set());
   const selectedCampaign =
     campaigns.find((campaign) => campaign.id === selectedCampaignId) ??
@@ -545,15 +553,14 @@ export function SearchTab({
   const organizationName = (id: unknown) =>
     String(
       organizations.find((organization) => organization.id === id)?.name ??
-        id ??
-        "Organization"
+        "Unknown organization"
     );
   return (
     <div className="grid gap-6">
       <SectionHeading
         eyebrow="Job searches"
-        title="Concurrent Opportunity Campaigns"
-        description="Each campaign is a bounded search strategy with its own versioned criteria, targets, automation policy, pipeline, and history."
+        title="Run more than one job search clearly"
+        description="Keep searches for different goals separate. Each one has its own criteria, roles, targets, saved searches, and history."
         actions={
           <>
             <Button
@@ -562,11 +569,11 @@ export function SearchTab({
               disabled={!mutationEnabled}
             >
               <Plus className="size-4" />
-              Add opportunity
+              Add role
             </Button>
             <Button onClick={onCreateCampaign} disabled={!mutationEnabled}>
               <Plus className="size-4" />
-              Campaign
+              Job search
             </Button>
           </>
         }
@@ -586,40 +593,47 @@ export function SearchTab({
               Search is not currently foregrounded
             </h3>
             <p className="mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]">
-              All past and paused campaigns, roles, applications, documents, and
-              outcomes below remain available.
+              All past and paused job searches, roles, applications, documents,
+              and outcomes below remain available.
             </p>
           </div>
         </Card>
       ) : null}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex overflow-x-auto rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-1">
-          {(
-            ["campaigns", "discovery", "targets", "automation"] as SearchView[]
-          ).map((id) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setView(id)}
-              aria-pressed={view === id}
-              className={cn(
-                "min-h-11 whitespace-nowrap rounded-[14px] px-3 text-sm capitalize",
-                view === id
-                  ? "bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
-                  : "text-[var(--ui-ink-soft)]"
-              )}
-            >
-              {id}
-            </button>
-          ))}
-        </div>
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <WorkSectionNav
+          label="Job search views"
+          active={view}
+          onChange={onViewChange}
+          options={[
+            {
+              id: "searches",
+              label: "Searches",
+              description: "Goals and criteria"
+            },
+            {
+              id: "roles",
+              label: "Roles to review",
+              description: "New and shortlisted roles"
+            },
+            {
+              id: "targets",
+              label: "Targets and outreach",
+              description: "People and organizations"
+            },
+            {
+              id: "activity",
+              label: "Search activity",
+              description: "Sources, saved searches, and runs"
+            }
+          ]}
+        />
         {campaigns.length ? (
-          <label className="flex items-center gap-2 text-xs text-[var(--ui-ink-soft)]">
-            Campaign
+          <label className="grid gap-1 text-xs font-medium text-[var(--ui-ink-soft)]">
+            Job search
             <select
               value={selectedCampaign?.id ?? ""}
               onChange={(event) => onSelectCampaign(event.target.value)}
-              className="min-h-11 min-w-56 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)]"
+              className="min-h-11 w-full rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)] lg:min-w-56"
             >
               {campaigns.map((campaign) => (
                 <option key={campaign.id} value={campaign.id}>
@@ -630,23 +644,23 @@ export function SearchTab({
           </label>
         ) : null}
       </div>
-      {view === "campaigns" ? (
+      {view === "searches" ? (
         <div className="grid gap-4 lg:grid-cols-2">
           {campaigns.map((campaign) => (
             <CampaignCard key={campaign.id} campaign={campaign} />
           ))}
           {campaigns.length === 0 ? (
             <EmptyState
-              title="No Opportunity Campaign yet"
-              description="Create one for each materially distinct search intention. A side job and a long-term research role should not be forced into one criteria set."
+              title="No job search yet"
+              description="Create one for each distinct goal. A side job and a long-term research role should not share one set of criteria."
               action={
-                <Button onClick={onCreateCampaign}>Create campaign</Button>
+                <Button onClick={onCreateCampaign}>Create job search</Button>
               }
             />
           ) : null}
         </div>
       ) : null}
-      {view === "discovery" ? (
+      {view === "roles" ? (
         <div className="grid gap-4">
           <OpportunityFilterBar
             value={filters}
@@ -701,9 +715,12 @@ export function SearchTab({
                   </div>
                 ))}
                 {!selectedCampaign.roleTargets?.length ? (
-                  <p className="text-sm text-[var(--ui-ink-faint)]">
-                    No role targets yet.
-                  </p>
+                  <Link
+                    to={`/work/campaigns/${selectedCampaign.id}?section=targets`}
+                    className="text-sm font-medium text-[var(--primary)]"
+                  >
+                    Add role targets
+                  </Link>
                 ) : null}
               </div>
               <Link
@@ -732,9 +749,12 @@ export function SearchTab({
                   </div>
                 ))}
                 {!selectedCampaign.organizationTargets?.length ? (
-                  <p className="text-sm text-[var(--ui-ink-faint)]">
-                    No organization targets yet.
-                  </p>
+                  <Link
+                    to={`/work/campaigns/${selectedCampaign.id}?section=targets`}
+                    className="text-sm font-medium text-[var(--primary)]"
+                  >
+                    Add organization targets
+                  </Link>
                 ) : null}
               </div>
             </Card>
@@ -782,7 +802,7 @@ export function SearchTab({
                 ))}
                 {campaignOutreach.length === 0 ? (
                   <p className="text-sm text-[var(--ui-ink-faint)]">
-                    No outreach for this campaign.
+                    No outreach for this job search.
                   </p>
                 ) : null}
               </div>
@@ -790,12 +810,12 @@ export function SearchTab({
           </div>
         ) : (
           <EmptyState
-            title="Choose a campaign"
-            description="Targets and outreach belong to one campaign’s coherent search intention."
+            title="Choose a job search"
+            description="Targets and outreach belong to one focused job search."
           />
         )
       ) : null}
-      {view === "automation" ? (
+      {view === "activity" ? (
         selectedCampaign ? (
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
@@ -834,7 +854,7 @@ export function SearchTab({
                 ))}
                 {!selectedCampaign.searchSources?.length ? (
                   <p className="text-sm text-[var(--ui-ink-faint)]">
-                    No campaign search source.
+                    No search source has been added.
                   </p>
                 ) : null}
               </div>
@@ -844,7 +864,7 @@ export function SearchTab({
                 <div className="flex items-center gap-2">
                   <Settings2 className="size-4 text-[var(--primary)]" />
                   <h3 className="font-semibold text-[var(--ui-ink-strong)]">
-                    Authority policy
+                    Agent permissions
                   </h3>
                 </div>
                 <Button
@@ -864,17 +884,15 @@ export function SearchTab({
                 selectedCampaign.automationPolicies.map((policy) => (
                   <dl key={policy.id} className="mt-3 grid gap-2 text-sm">
                     {[
-                      "researchAuthority",
-                      "preparationAuthority",
-                      "uploadAuthority",
-                      "submissionAuthority",
-                      "duplicatePrevention",
-                      "maximumApplications"
-                    ].map((key) => (
+                      ["researchAuthority", "Find roles"],
+                      ["preparationAuthority", "Prepare materials"],
+                      ["uploadAuthority", "Upload files"],
+                      ["submissionAuthority", "Send applications"],
+                      ["duplicatePrevention", "Prevent duplicates"],
+                      ["maximumApplications", "Application limit"]
+                    ].map(([key, label]) => (
                       <div key={key} className="flex justify-between gap-3">
-                        <dt className="text-[var(--ui-ink-soft)]">
-                          {readable(key)}
-                        </dt>
+                        <dt className="text-[var(--ui-ink-soft)]">{label}</dt>
                         <dd className="text-right font-medium text-[var(--ui-ink-strong)]">
                           {readable(policy[key])}
                         </dd>
@@ -884,8 +902,8 @@ export function SearchTab({
                 ))
               ) : (
                 <p className="mt-3 text-sm text-[var(--ui-ink-faint)]">
-                  No policy. External submission still requires exact central
-                  approval.
+                  No custom permissions have been set. Sending an application
+                  still requires your approval.
                 </p>
               )}
             </Card>
@@ -952,7 +970,7 @@ export function SearchTab({
                 ))}
                 {!selectedCampaign.recentSearchRuns?.length ? (
                   <p className="text-sm text-[var(--ui-ink-faint)]">
-                    No durable search run evidence.
+                    No search activity has been recorded.
                   </p>
                 ) : null}
               </div>
@@ -960,8 +978,8 @@ export function SearchTab({
           </div>
         ) : (
           <EmptyState
-            title="Choose a campaign"
-            description="Automation sources, queries, policy, and durable run evidence are campaign-specific."
+            title="Choose a job search"
+            description="Sources, saved searches, permissions, and run history belong to one job search."
           />
         )
       ) : null}

@@ -24,6 +24,7 @@ import {
 } from "@/components/work/work-pipeline-dialogs";
 import {
   getWorkContext,
+  getWorkSettings,
   listJobApplications,
   listJobOpportunities,
   listOpportunityCampaigns,
@@ -53,21 +54,29 @@ import {
   EMPTY_OPPORTUNITY_FILTERS,
   EMPTY_APPLICATION_FILTERS,
   ApplicationFilterBar,
+  resolveSearchView,
   SearchTab
 } from "./work-page-search";
 import type {
   OpportunityFilters,
-  ApplicationFilters
+  ApplicationFilters,
+  SearchView
 } from "./work-page-search";
 import { ApplicationsTab } from "./work-page-applications";
-import { DocumentsOperationalTab } from "./work-page-documents";
+import {
+  DocumentsOperationalTab,
+  resolveDocumentsView
+} from "./work-page-documents";
+import type { DocumentsView } from "./work-page-documents";
 
 export function WorkPage() {
   const shell = useForgeShell();
   const location = useLocation();
   const detail = parseDetail(location.pathname);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const tab = resolveTab(searchParams.get("tab"));
+  const searchView = resolveSearchView(searchParams.get("view"));
+  const documentsView = resolveDocumentsView(searchParams.get("view"));
   const queryClient = useQueryClient();
   const userIds = selectedOwners(shell);
   const mutationEnabled = userIds.length === 1;
@@ -78,26 +87,100 @@ export function WorkPage() {
   const [applicationFilters, setApplicationFilters] =
     useState<ApplicationFilters>(EMPTY_APPLICATION_FILTERS);
   const [trendWindowDays, setTrendWindowDays] = useState<TrendWindowDays>(90);
+  const [organizationOpen, setOrganizationOpen] = useState(false);
+  const [engagementOpen, setEngagementOpen] = useState(false);
+  const [campaignOpen, setCampaignOpen] = useState(false);
+  const [opportunityOpen, setOpportunityOpen] = useState(false);
+  const [applicationOpen, setApplicationOpen] = useState(false);
+  const [applicationOpportunityId, setApplicationOpportunityId] = useState<
+    string | undefined
+  >();
+  const [checkInOpen, setCheckInOpen] = useState(false);
+  const [checkInEngagementId, setCheckInEngagementId] = useState<
+    string | undefined
+  >();
+  const hasUsers = userIds.length > 0;
+  const detailKind = detail?.kind;
+  const needsContext =
+    (!detail && ["overview", "check-ins"].includes(tab)) ||
+    detailKind === "engagements";
+  const needsEngagements =
+    (!detail && ["current", "check-ins", "plans"].includes(tab)) ||
+    campaignOpen ||
+    checkInOpen;
+  const needsOrganizations =
+    (!detail && ["overview", "current"].includes(tab)) ||
+    (!detail && tab === "searches" && searchView === "targets") ||
+    [
+      "engagements",
+      "campaigns",
+      "opportunities",
+      "interviews",
+      "offers",
+      "outreach"
+    ].includes(detailKind ?? "") ||
+    engagementOpen;
+  const needsCampaigns =
+    (!detail && ["plans", "searches", "applications"].includes(tab)) ||
+    ["campaigns", "opportunities", "interviews", "offers", "outreach"].includes(
+      detailKind ?? ""
+    ) ||
+    applicationOpen;
+  const needsOpportunities =
+    (!detail && tab === "overview") ||
+    (!detail && tab === "searches" && searchView === "roles") ||
+    (!detail && tab === "applications") ||
+    detailKind === "campaigns" ||
+    applicationOpen;
+  const needsApplications =
+    (!detail && tab === "overview") ||
+    (!detail && tab === "searches" && searchView === "roles") ||
+    (!detail && tab === "applications") ||
+    ["campaigns", "interviews", "offers", "outreach"].includes(
+      detailKind ?? ""
+    );
+  const needsMetrics = (!detail && tab === "check-ins") || checkInOpen;
+  const needsProfiles =
+    (!detail && tab === "searches" && searchView === "activity") ||
+    (!detail &&
+      tab === "documents" &&
+      ["positioning", "documents"].includes(documentsView)) ||
+    detailKind === "applications";
+  const needsDocuments =
+    (!detail && tab === "searches" && searchView === "activity") ||
+    (!detail && tab === "documents" && documentsView === "documents") ||
+    detailKind === "applications";
+  const needsResponses =
+    (!detail && tab === "documents" && documentsView === "answers") ||
+    detailKind === "applications";
+  const needsOutreach =
+    !detail && tab === "searches" && searchView === "targets";
+  const needsApplicationActivity = !detail && tab === "applications";
   const overviewQuery = useQuery({
     queryKey: ["work", "overview", scopeKey, trendWindowDays],
     queryFn: () => getWorkContext(userIds, { trendWindowDays }),
-    enabled: userIds.length > 0
+    enabled: hasUsers && needsContext
+  });
+  const settingsQuery = useQuery({
+    queryKey: ["work", "settings", scopeKey],
+    queryFn: () => getWorkSettings(userIds),
+    enabled: hasUsers && !detail
   });
   const engagementQuery = useQuery({
     queryKey: ["work", "engagements", scopeKey],
     queryFn: () =>
       listWorkEngagements(userIds, { limit: 50, archived: "include" }),
-    enabled: userIds.length > 0
+    enabled: hasUsers && needsEngagements
   });
   const organizationQuery = useQuery({
     queryKey: ["work", "organizations", scopeKey],
     queryFn: () => listWorkOrganizations(userIds, { limit: 50 }),
-    enabled: userIds.length > 0
+    enabled: hasUsers && needsOrganizations
   });
   const campaignQuery = useQuery({
     queryKey: ["work", "campaigns", scopeKey],
     queryFn: () => listOpportunityCampaigns(userIds, { limit: 50 }),
-    enabled: userIds.length > 0
+    enabled: hasUsers && needsCampaigns
   });
   const selectedCampaignForQuery =
     selectedCampaignId ||
@@ -106,7 +189,7 @@ export function WorkPage() {
     campaignQuery.data?.items[0]?.id ||
     "";
   const opportunityListInput =
-    detail || tab !== "searches"
+    detail || tab !== "searches" || searchView !== "roles"
       ? {}
       : {
           query: opportunityFilters.query || undefined,
@@ -144,7 +227,7 @@ export function WorkPage() {
         sort: "deadline_asc",
         ...opportunityListInput
       }),
-    enabled: userIds.length > 0
+    enabled: hasUsers && needsOpportunities
   });
   const applicationQuery = useQuery({
     queryKey: ["work", "applications", scopeKey, applicationListInput],
@@ -154,47 +237,47 @@ export function WorkPage() {
         sort: "priority_desc",
         ...applicationListInput
       }),
-    enabled: userIds.length > 0
+    enabled: hasUsers && needsApplications
   });
   const metricQuery = useQuery({
     queryKey: ["work", "metric-definitions", scopeKey],
     queryFn: () => listWorkMetricDefinitions(userIds),
-    enabled: userIds.length > 0
+    enabled: hasUsers && needsMetrics
   });
   const profileQuery = useQuery({
     queryKey: ["work", "positioning-profiles", scopeKey],
     queryFn: () =>
       listWorkSupportingRecords(userIds, "positioningProfile", { limit: 50 }),
-    enabled: userIds.length > 0
+    enabled: hasUsers && needsProfiles
   });
   const documentQuery = useQuery({
     queryKey: ["work", "document-sets", scopeKey],
     queryFn: () =>
       listWorkSupportingRecords(userIds, "documentSet", { limit: 50 }),
-    enabled: userIds.length > 0
+    enabled: hasUsers && needsDocuments
   });
   const responseQuery = useQuery({
     queryKey: ["work", "responses", scopeKey],
     queryFn: () =>
       listWorkSupportingRecords(userIds, "reusableResponse", { limit: 50 }),
-    enabled: userIds.length > 0
+    enabled: hasUsers && needsResponses
   });
   const outreachQuery = useQuery({
     queryKey: ["work", "outreach", scopeKey],
     queryFn: () =>
       listWorkSupportingRecords(userIds, "outreach", { limit: 50 }),
-    enabled: userIds.length > 0
+    enabled: hasUsers && needsOutreach
   });
   const interviewQuery = useQuery({
     queryKey: ["work", "interviews", scopeKey],
     queryFn: () =>
       listWorkSupportingRecords(userIds, "interview", { limit: 50 }),
-    enabled: userIds.length > 0
+    enabled: hasUsers && needsApplicationActivity
   });
   const offerQuery = useQuery({
     queryKey: ["work", "offers", scopeKey],
     queryFn: () => listWorkSupportingRecords(userIds, "offer", { limit: 50 }),
-    enabled: userIds.length > 0
+    enabled: hasUsers && needsApplicationActivity
   });
   const context = overviewQuery.data;
   const engagements = uniqueById<WorkEngagement>(
@@ -224,29 +307,17 @@ export function WorkPage() {
   const trends =
     context?.engagements.flatMap((engagement) => engagement.trends ?? []) ?? [];
   const definitions = metricQuery.data?.definitions ?? [];
-  const settings = context?.settings[0] ?? {
-    lookingForOpportunities: false,
-    revision: 0
-  };
+  const settings = settingsQuery.data?.settings[0] ??
+    context?.settings[0] ?? {
+      lookingForOpportunities: false,
+      revision: 0
+    };
   const looking = settings.lookingForOpportunities;
   const selectedCampaign =
     selectedCampaignForQuery ||
     campaigns.find((campaign) => campaign.status === "active")?.id ||
     campaigns[0]?.id ||
     "";
-  const [organizationOpen, setOrganizationOpen] = useState(false);
-  const [engagementOpen, setEngagementOpen] = useState(false);
-  const [campaignOpen, setCampaignOpen] = useState(false);
-  const [opportunityOpen, setOpportunityOpen] = useState(false);
-  const [applicationOpen, setApplicationOpen] = useState(false);
-  const [applicationOpportunityId, setApplicationOpportunityId] = useState<
-    string | undefined
-  >();
-  const [checkInOpen, setCheckInOpen] = useState(false);
-  const [checkInEngagementId, setCheckInEngagementId] = useState<
-    string | undefined
-  >();
-
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["work"] });
   };
@@ -266,6 +337,12 @@ export function WorkPage() {
   const openApplication = (opportunityId?: string) => {
     setApplicationOpportunityId(opportunityId);
     setApplicationOpen(true);
+  };
+  const setActiveView = (view: SearchView | DocumentsView) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", tab);
+    next.set("view", view);
+    setSearchParams(next, { replace: true });
   };
 
   if (detail)
@@ -302,12 +379,16 @@ export function WorkPage() {
     );
   const primaryError =
     overviewQuery.error ??
+    settingsQuery.error ??
     engagementQuery.error ??
     organizationQuery.error ??
     campaignQuery.error ??
     opportunityQuery.error ??
     applicationQuery.error ??
     metricQuery.error ??
+    profileQuery.error ??
+    documentQuery.error ??
+    responseQuery.error ??
     outreachQuery.error ??
     interviewQuery.error ??
     offerQuery.error;
@@ -322,15 +403,26 @@ export function WorkPage() {
     );
   if (
     overviewQuery.isLoading ||
+    settingsQuery.isLoading ||
     engagementQuery.isLoading ||
-    campaignQuery.isLoading
+    organizationQuery.isLoading ||
+    campaignQuery.isLoading ||
+    opportunityQuery.isLoading ||
+    applicationQuery.isLoading ||
+    metricQuery.isLoading ||
+    profileQuery.isLoading ||
+    documentQuery.isLoading ||
+    responseQuery.isLoading ||
+    outreachQuery.isLoading ||
+    interviewQuery.isLoading ||
+    offerQuery.isLoading
   )
     return (
       <div className="p-6">
         <LoadingState
           eyebrow="Work"
           title="Loading current work…"
-          description="Reading engagements, check-ins, campaigns, opportunities, applications, and next actions."
+          description="Loading only the records needed for this view."
         />
       </div>
     );
@@ -390,6 +482,7 @@ export function WorkPage() {
   else if (tab === "searches")
     content = (
       <SearchTab
+        view={searchView}
         looking={looking}
         settingsRevision={settings.revision}
         campaigns={campaigns}
@@ -406,6 +499,7 @@ export function WorkPage() {
         hasMore={Boolean(opportunityQuery.data?.hasMore)}
         selectedCampaignId={selectedCampaign}
         onSelectCampaign={setSelectedCampaignId}
+        onViewChange={setActiveView}
         onToggle={(value) => toggle.mutate(value)}
         onFiltersChange={setOpportunityFilters}
         onCreateCampaign={() => setCampaignOpen(true)}
@@ -437,12 +531,14 @@ export function WorkPage() {
   else
     content = (
       <DocumentsOperationalTab
+        view={documentsView}
         profiles={profileQuery.data?.items ?? []}
         documentSets={documentQuery.data?.items ?? []}
         responses={responseQuery.data?.items ?? []}
         mutationEnabled={mutationEnabled}
         userIds={userIds}
         onRefresh={refresh}
+        onViewChange={setActiveView}
       />
     );
 
@@ -454,8 +550,8 @@ export function WorkPage() {
       <PageHero
         entityKind="work_engagement"
         title="Work"
-        description="Current jobs, work experience over time, career direction, opportunity searches, applications, and exact documents in one connected view."
-        badge={looking ? "Looking for opportunities" : "Permanent work context"}
+        description="Current work, career direction, job searches, applications, and the documents used for them."
+        badge={looking ? "Looking for work" : "Work history saved"}
         actions={
           !mutationEnabled ? (
             <Badge tone="meta" wrap>
@@ -467,8 +563,8 @@ export function WorkPage() {
       <WorkTabBar active={tab} />
       {context?.contextTruncated ? (
         <div className="mx-4 mt-4 rounded-[18px] border border-[color-mix(in_srgb,var(--warning)_30%,var(--ui-border-subtle))] bg-[color-mix(in_srgb,var(--warning)_7%,var(--ui-surface-1))] px-4 py-3 text-sm text-[var(--ui-ink-medium)]">
-          The compound Work context was safely bounded. Open a specific role or
-          campaign for its complete nested context.
+          This page is showing a shorter summary. Open a specific role or job
+          search to see all of its details.
         </div>
       ) : null}
       <main className="grid min-w-0 gap-6 px-4 py-6 sm:px-6 lg:py-7">

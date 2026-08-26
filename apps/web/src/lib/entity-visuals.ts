@@ -303,28 +303,28 @@ const ENTITY_VISUAL_SEEDS: ReadonlyArray<EntityVisualSeed> = [
   },
   {
     kind: "work_organization",
-    label: "Work organization",
+    label: "Organization",
     icon: FolderOpen,
     iconName: "FolderOpen",
     accentRgb: [125, 211, 252]
   },
   {
     kind: "work_engagement",
-    label: "Work engagement",
+    label: "Work",
     icon: Handshake,
     iconName: "Handshake",
     accentRgb: [45, 212, 191]
   },
   {
     kind: "opportunity_campaign",
-    label: "Opportunity campaign",
+    label: "Job search",
     icon: Compass,
     iconName: "Compass",
     accentRgb: [250, 204, 21]
   },
   {
     kind: "job_opportunity",
-    label: "Job opportunity",
+    label: "Role",
     icon: Sparkles,
     iconName: "Sparkles",
     accentRgb: [251, 146, 60]

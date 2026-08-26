@@ -29,7 +29,8 @@ import type {
 import {
   RelationshipEditor,
   EventTimeline,
-  FactsGrid
+  FactsGrid,
+  WorkDetailSections
 } from "./work-detail-shared";
 
 type CampaignEditDraft = {
@@ -211,7 +212,7 @@ export function CampaignDetail({
               variant="secondary"
               onClick={() => setEditing((current) => !current)}
             >
-              {editing ? "Cancel edit" : "Edit campaign"}
+              {editing ? "Cancel edit" : "Edit job search"}
             </Button>
             <Button variant="secondary" onClick={() => setCriteriaOpen(true)}>
               <ListChecks className="size-4" />
@@ -245,558 +246,617 @@ export function CampaignDetail({
           <ArrowLeft className="size-4" />
           Back to Job searches
         </Link>
-        {editing ? (
-          <Card className="grid gap-5">
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Title
-                <Input
-                  value={draft.title}
-                  onChange={(event) =>
-                    setCampaignDraft({ title: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Lifecycle status
-                <select
-                  value={draft.status}
-                  onChange={(event) =>
-                    setCampaignDraft({
-                      status: event.target
-                        .value as OpportunityCampaign["status"]
-                    })
-                  }
-                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
-                >
-                  {[
-                    "draft",
-                    "planned",
-                    "active",
-                    "paused",
-                    "completed",
-                    "abandoned",
-                    "archived"
-                  ].map((value) => (
-                    <option key={value} value={value}>
-                      {readable(value)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Search intent
-                <select
-                  value={draft.searchIntent}
-                  onChange={(event) =>
-                    setCampaignDraft({ searchIntent: event.target.value })
-                  }
-                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
-                >
-                  {[
-                    "full_time_employment",
-                    "part_time_employment",
-                    "contract",
-                    "freelance",
-                    "fractional",
-                    "internship",
-                    "shift_work",
-                    "seasonal",
-                    "board_advisory",
-                    "other"
-                  ].map((value) => (
-                    <option key={value}>{readable(value)}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)] md:col-span-2">
-                Purpose
-                <Textarea
-                  rows={3}
-                  value={draft.purpose}
-                  onChange={(event) =>
-                    setCampaignDraft({ purpose: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)] md:col-span-2">
-                Description
-                <Textarea
-                  rows={4}
-                  value={draft.description}
-                  onChange={(event) =>
-                    setCampaignDraft({ description: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Priority
-                <select
-                  value={draft.priority}
-                  onChange={(event) =>
-                    setCampaignDraft({ priority: event.target.value })
-                  }
-                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
-                >
-                  {["low", "normal", "high", "critical"].map((value) => (
-                    <option key={value}>{readable(value)}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Health
-                <select
-                  value={draft.health}
-                  onChange={(event) =>
-                    setCampaignDraft({ health: event.target.value })
-                  }
-                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
-                >
-                  {["unknown", "healthy", "attention", "blocked"].map(
-                    (value) => (
-                      <option key={value}>{readable(value)}</option>
-                    )
-                  )}
-                </select>
-              </label>
-              {(
-                [
-                  ["activeFrom", "Active from"],
-                  ["activeUntil", "Active until"],
-                  ["targetStartDate", "Target start"],
-                  ["searchDeadline", "Search deadline"]
-                ] as const
-              ).map(([key, label]) => (
-                <label
-                  key={key}
-                  className="grid gap-1 text-xs text-[var(--ui-ink-soft)]"
-                >
-                  {label}
-                  <Input
-                    type="date"
-                    value={draft[key]}
-                    onChange={(event) =>
-                      setCampaignDraft({ [key]: event.target.value })
-                    }
-                  />
-                </label>
-              ))}
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Urgency
-                <select
-                  value={draft.urgency}
-                  onChange={(event) =>
-                    setCampaignDraft({ urgency: event.target.value })
-                  }
-                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
-                >
-                  {["low", "normal", "high", "urgent"].map((value) => (
-                    <option key={value}>{readable(value)}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Review cadence
-                <Input
-                  value={draft.reviewCadence}
-                  onChange={(event) =>
-                    setCampaignDraft({ reviewCadence: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Timezone
-                <Input
-                  value={draft.timezone}
-                  onChange={(event) =>
-                    setCampaignDraft({ timezone: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Current stage
-                <Input
-                  value={draft.currentStage}
-                  onChange={(event) =>
-                    setCampaignDraft({ currentStage: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)] md:col-span-2">
-                Completion criteria, one per line
-                <Textarea
-                  rows={3}
-                  value={draft.completionCriteria}
-                  onChange={(event) =>
-                    setCampaignDraft({ completionCriteria: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)] md:col-span-2">
-                Long-term destination
-                <Textarea
-                  rows={3}
-                  value={draft.longTermDestination}
-                  onChange={(event) =>
-                    setCampaignDraft({
-                      longTermDestination: event.target.value
-                    })
-                  }
-                />
-              </label>
-              {(
-                [
-                  ["intermediateRoles", "Intermediate roles"],
-                  ["capabilitiesToAcquire", "Capabilities to acquire"],
-                  ["blockers", "Blockers"]
-                ] as const
-              ).map(([key, label]) => (
-                <label
-                  key={key}
-                  className="grid gap-1 text-xs text-[var(--ui-ink-soft)]"
-                >
-                  {label}, one per line
-                  <Textarea
-                    rows={4}
-                    value={draft[key]}
-                    onChange={(event) =>
-                      setCampaignDraft({ [key]: event.target.value })
-                    }
-                  />
-                </label>
-              ))}
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Stepping-stone assessment
-                <select
-                  value={draft.steppingStoneAssessment}
-                  onChange={(event) =>
-                    setCampaignDraft({
-                      steppingStoneAssessment: event.target.value
-                    })
-                  }
-                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
-                >
-                  {[
-                    "unknown",
-                    "stepping_stone",
-                    "neutral",
-                    "dead_end_risk"
-                  ].map((value) => (
-                    <option key={value}>{readable(value)}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)] md:col-span-2">
-                Next action
-                <Textarea
-                  rows={3}
-                  value={draft.nextAction}
-                  onChange={(event) =>
-                    setCampaignDraft({ nextAction: event.target.value })
-                  }
-                />
-              </label>
-            </div>
-            <div>
-              <Button
-                disabled={!draft.title.trim()}
-                pending={editMutation.isPending}
-                onClick={() => editMutation.mutate()}
-              >
-                <Save className="size-4" />
-                Save campaign facts
-              </Button>
-              {editMutation.error ? (
-                <p className="mt-2 text-sm text-[var(--danger)]">
-                  {editMutation.error.message}
-                </p>
-              ) : null}
-            </div>
-          </Card>
-        ) : null}
-        <FactsGrid
-          facts={[
-            { label: "Search intent", value: campaign.searchIntent },
-            { label: "Current stage", value: campaign.currentStage },
-            { label: "Urgency", value: campaign.urgency },
-            { label: "Active from", value: formatDate(campaign.activeFrom) },
-            {
-              label: "Search deadline",
-              value: formatDate(campaign.searchDeadline)
-            },
-            {
-              label: "Target start",
-              value: formatDate(campaign.targetStartDate)
-            },
-            { label: "Review cadence", value: campaign.reviewCadence },
-            {
-              label: "Criteria version",
-              value: currentCriteria?.version ?? "None"
-            },
-            {
-              label: "Stepping-stone assessment",
-              value: campaign.steppingStoneAssessment
-            }
+        <WorkDetailSections
+          defaultSection="summary"
+          options={[
+            { id: "summary", label: "Summary" },
+            { id: "criteria", label: "Criteria" },
+            { id: "targets", label: "Targets" },
+            { id: "activity", label: "Activity" },
+            { id: "connections", label: "Connections" }
           ]}
-        />
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(20rem,0.7fr)]">
-          <div className="grid gap-5">
-            <Card>
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="font-semibold text-[var(--ui-ink-strong)]">
-                    Current criteria matrix
-                  </h2>
-                  <p className="mt-1 text-xs text-[var(--ui-ink-soft)]">
-                    Every evaluation cites an immutable criteria version.
-                  </p>
-                </div>
-                <Badge tone="meta">
-                  v{String(currentCriteria?.version ?? "—")}
-                </Badge>
-              </div>
-              {criteria?.length ? (
-                <div
-                  className="mt-4 overflow-x-auto"
-                  tabIndex={0}
-                  aria-label="Campaign criteria matrix"
-                >
-                  <table className="w-full min-w-[38rem] text-left text-sm">
-                    <thead>
-                      <tr className="text-xs text-[var(--ui-ink-faint)]">
-                        <th className="pb-2">Criterion</th>
-                        <th className="pb-2">Gate</th>
-                        <th className="pb-2">Rule</th>
-                        <th className="pb-2">Weight</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {criteria.map((criterion) => (
-                        <tr
-                          key={String(criterion.key)}
-                          className="border-t border-[var(--ui-border-subtle)]"
-                        >
-                          <td className="py-3 font-medium text-[var(--ui-ink-strong)]">
-                            {readable(criterion.field ?? criterion.key)}
-                          </td>
-                          <td className="py-3">
-                            <Badge
-                              tone={
-                                criterion.importance === "hard"
-                                  ? "signal"
-                                  : "meta"
-                              }
-                            >
-                              {String(criterion.importance)}
-                            </Badge>
-                          </td>
-                          <td className="py-3 text-[var(--ui-ink-soft)]">
-                            {readable(criterion.operator)}{" "}
-                            {typeof criterion.value === "object"
-                              ? JSON.stringify(criterion.value)
-                              : String(criterion.value ?? "")}
-                          </td>
-                          <td className="py-3 tabular-nums text-[var(--ui-ink-soft)]">
-                            {String(criterion.weight ?? 50)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="mt-4 text-sm text-[var(--ui-ink-soft)]">
-                  No structured criteria are stored. Create the first version
-                  before evaluating roles.
-                </p>
-              )}
-            </Card>
-            <Card>
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="font-semibold text-[var(--ui-ink-strong)]">
-                  Role targets
-                </h2>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => {
-                    setRoleTarget(undefined);
-                    setRoleOpen(true);
-                  }}
-                >
-                  <Plus className="size-3.5" />
-                  Role target
-                </Button>
-              </div>
-              <div className="mt-3 grid gap-2">
-                {((campaign.roleTargets as WorkRecord[] | undefined) ?? []).map(
-                  (target) => (
-                    <button
-                      key={target.id}
-                      type="button"
-                      onClick={() => {
-                        setRoleTarget(target);
-                        setRoleOpen(true);
-                      }}
-                      className="rounded-[16px] bg-[var(--ui-surface-2)] p-3 text-left"
+        >
+          {(section) => (
+            <>
+              {section === "summary" && editing ? (
+                <Card className="grid gap-5">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                      Title
+                      <Input
+                        value={draft.title}
+                        onChange={(event) =>
+                          setCampaignDraft({ title: event.target.value })
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                      Lifecycle status
+                      <select
+                        value={draft.status}
+                        onChange={(event) =>
+                          setCampaignDraft({
+                            status: event.target
+                              .value as OpportunityCampaign["status"]
+                          })
+                        }
+                        className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                      >
+                        {[
+                          "draft",
+                          "planned",
+                          "active",
+                          "paused",
+                          "completed",
+                          "abandoned",
+                          "archived"
+                        ].map((value) => (
+                          <option key={value} value={value}>
+                            {readable(value)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                      Search intent
+                      <select
+                        value={draft.searchIntent}
+                        onChange={(event) =>
+                          setCampaignDraft({ searchIntent: event.target.value })
+                        }
+                        className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                      >
+                        {[
+                          "full_time_employment",
+                          "part_time_employment",
+                          "contract",
+                          "freelance",
+                          "fractional",
+                          "internship",
+                          "shift_work",
+                          "seasonal",
+                          "board_advisory",
+                          "other"
+                        ].map((value) => (
+                          <option key={value}>{readable(value)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)] md:col-span-2">
+                      Purpose
+                      <Textarea
+                        rows={3}
+                        value={draft.purpose}
+                        onChange={(event) =>
+                          setCampaignDraft({ purpose: event.target.value })
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)] md:col-span-2">
+                      Description
+                      <Textarea
+                        rows={4}
+                        value={draft.description}
+                        onChange={(event) =>
+                          setCampaignDraft({ description: event.target.value })
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                      Priority
+                      <select
+                        value={draft.priority}
+                        onChange={(event) =>
+                          setCampaignDraft({ priority: event.target.value })
+                        }
+                        className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                      >
+                        {["low", "normal", "high", "critical"].map((value) => (
+                          <option key={value}>{readable(value)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                      Health
+                      <select
+                        value={draft.health}
+                        onChange={(event) =>
+                          setCampaignDraft({ health: event.target.value })
+                        }
+                        className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                      >
+                        {["unknown", "healthy", "attention", "blocked"].map(
+                          (value) => (
+                            <option key={value}>{readable(value)}</option>
+                          )
+                        )}
+                      </select>
+                    </label>
+                    {(
+                      [
+                        ["activeFrom", "Active from"],
+                        ["activeUntil", "Active until"],
+                        ["targetStartDate", "Target start"],
+                        ["searchDeadline", "Search deadline"]
+                      ] as const
+                    ).map(([key, label]) => (
+                      <label
+                        key={key}
+                        className="grid gap-1 text-xs text-[var(--ui-ink-soft)]"
+                      >
+                        {label}
+                        <Input
+                          type="date"
+                          value={draft[key]}
+                          onChange={(event) =>
+                            setCampaignDraft({ [key]: event.target.value })
+                          }
+                        />
+                      </label>
+                    ))}
+                    <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                      Urgency
+                      <select
+                        value={draft.urgency}
+                        onChange={(event) =>
+                          setCampaignDraft({ urgency: event.target.value })
+                        }
+                        className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                      >
+                        {["low", "normal", "high", "urgent"].map((value) => (
+                          <option key={value}>{readable(value)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                      Review cadence
+                      <Input
+                        value={draft.reviewCadence}
+                        onChange={(event) =>
+                          setCampaignDraft({
+                            reviewCadence: event.target.value
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                      Timezone
+                      <Input
+                        value={draft.timezone}
+                        onChange={(event) =>
+                          setCampaignDraft({ timezone: event.target.value })
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                      Current stage
+                      <Input
+                        value={draft.currentStage}
+                        onChange={(event) =>
+                          setCampaignDraft({ currentStage: event.target.value })
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)] md:col-span-2">
+                      Completion criteria, one per line
+                      <Textarea
+                        rows={3}
+                        value={draft.completionCriteria}
+                        onChange={(event) =>
+                          setCampaignDraft({
+                            completionCriteria: event.target.value
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)] md:col-span-2">
+                      Long-term destination
+                      <Textarea
+                        rows={3}
+                        value={draft.longTermDestination}
+                        onChange={(event) =>
+                          setCampaignDraft({
+                            longTermDestination: event.target.value
+                          })
+                        }
+                      />
+                    </label>
+                    {(
+                      [
+                        ["intermediateRoles", "Intermediate roles"],
+                        ["capabilitiesToAcquire", "Capabilities to acquire"],
+                        ["blockers", "Blockers"]
+                      ] as const
+                    ).map(([key, label]) => (
+                      <label
+                        key={key}
+                        className="grid gap-1 text-xs text-[var(--ui-ink-soft)]"
+                      >
+                        {label}, one per line
+                        <Textarea
+                          rows={4}
+                          value={draft[key]}
+                          onChange={(event) =>
+                            setCampaignDraft({ [key]: event.target.value })
+                          }
+                        />
+                      </label>
+                    ))}
+                    <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                      Stepping-stone assessment
+                      <select
+                        value={draft.steppingStoneAssessment}
+                        onChange={(event) =>
+                          setCampaignDraft({
+                            steppingStoneAssessment: event.target.value
+                          })
+                        }
+                        className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                      >
+                        {[
+                          "unknown",
+                          "stepping_stone",
+                          "neutral",
+                          "dead_end_risk"
+                        ].map((value) => (
+                          <option key={value}>{readable(value)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)] md:col-span-2">
+                      Next action
+                      <Textarea
+                        rows={3}
+                        value={draft.nextAction}
+                        onChange={(event) =>
+                          setCampaignDraft({ nextAction: event.target.value })
+                        }
+                      />
+                    </label>
+                  </div>
+                  <div>
+                    <Button
+                      disabled={!draft.title.trim()}
+                      pending={editMutation.isPending}
+                      onClick={() => editMutation.mutate()}
                     >
-                      <div className="font-medium text-[var(--ui-ink-strong)]">
-                        {String(target.titleFamily)}
-                      </div>
-                      <div className="mt-1 text-xs text-[var(--ui-ink-soft)]">
-                        {readable(target.seniority)} · priority{" "}
-                        {String(target.priority)} ·{" "}
-                        {Array.isArray(target.knownGaps)
-                          ? target.knownGaps.length
-                          : 0}{" "}
-                        known gaps
-                      </div>
-                    </button>
-                  )
-                )}
-                {!campaign.roleTargets?.length ? (
-                  <p className="text-sm text-[var(--ui-ink-faint)]">
-                    No role targets yet.
-                  </p>
-                ) : null}
-              </div>
-            </Card>
-            <Card>
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="font-semibold text-[var(--ui-ink-strong)]">
-                  Organization targets
-                </h2>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => {
-                    setOrganizationTarget(undefined);
-                    setOrganizationOpen(true);
-                  }}
-                >
-                  <Plus className="size-3.5" />
-                  Organization
-                </Button>
-              </div>
-              <div className="mt-3 grid gap-2">
-                {(
-                  (campaign.organizationTargets as WorkRecord[] | undefined) ??
-                  []
-                ).map((target) => (
-                  <button
-                    key={target.id}
-                    type="button"
-                    onClick={() => {
-                      setOrganizationTarget(target);
-                      setOrganizationOpen(true);
-                    }}
-                    className="rounded-[16px] bg-[var(--ui-surface-2)] p-3 text-left"
-                  >
-                    <div className="font-medium text-[var(--ui-ink-strong)]">
-                      {String(
-                        organizations.find(
-                          (organization) =>
-                            organization.id === target.organizationId
-                        )?.name ?? target.organizationId
-                      )}
-                    </div>
-                    <div className="mt-1 text-xs text-[var(--ui-ink-soft)]">
-                      {readable(target.targetTier)} · {readable(target.status)}{" "}
-                      · {String(target.nextAction ?? "No next action")}
-                    </div>
-                  </button>
-                ))}
-                {!campaign.organizationTargets?.length ? (
-                  <p className="text-sm text-[var(--ui-ink-faint)]">
-                    No organization targets yet.
-                  </p>
-                ) : null}
-              </div>
-            </Card>
-            <Card>
-              <h2 className="font-semibold text-[var(--ui-ink-strong)]">
-                Campaign opportunities
-              </h2>
-              <div className="mt-3 divide-y divide-[var(--ui-border-subtle)]">
-                {campaignOpportunities.map((opportunity) => (
-                  <Link
-                    key={opportunity.id}
-                    to={`/work/opportunities/${opportunity.id}`}
-                    className="flex items-center justify-between gap-3 py-3"
-                  >
-                    <span>
-                      <span className="block text-sm font-medium text-[var(--ui-ink-strong)]">
-                        {opportunity.title}
-                      </span>
-                      <span className="block text-xs text-[var(--ui-ink-soft)]">
-                        {opportunity.employerName || "Employer unknown"}
-                      </span>
-                    </span>
-                    <WorkStatusBadge status={opportunity.disposition} />
-                  </Link>
-                ))}
-                {campaignOpportunities.length === 0 ? (
-                  <p className="py-4 text-sm text-[var(--ui-ink-soft)]">
-                    No evaluated or applied opportunities yet.
-                  </p>
-                ) : null}
-              </div>
-            </Card>
-            <EventTimeline
-              events={campaign.history}
-              empty="No campaign history has been recorded."
-            />
-          </div>
-          <div className="grid content-start gap-5">
-            <Card>
-              <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
-                Next action
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-strong)]">
-                {campaign.nextAction || "No next action recorded."}
-              </p>
-              {campaign.blockers?.length ? (
-                <div className="mt-4">
-                  <EvidenceList
-                    title="Blockers"
-                    items={campaign.blockers}
-                    tone="warning"
-                  />
-                </div>
+                      <Save className="size-4" />
+                      Save job search
+                    </Button>
+                    {editMutation.error ? (
+                      <p className="mt-2 text-sm text-[var(--danger)]">
+                        {editMutation.error.message}
+                      </p>
+                    ) : null}
+                  </div>
+                </Card>
               ) : null}
-            </Card>
-            <Card>
-              <EvidenceList
-                title="Long-term destination"
-                items={
-                  campaign.longTermDestination
-                    ? [campaign.longTermDestination]
-                    : []
+              {section === "summary" ? (
+                <FactsGrid
+                  facts={[
+                    { label: "Search intent", value: campaign.searchIntent },
+                    { label: "Current stage", value: campaign.currentStage },
+                    { label: "Urgency", value: campaign.urgency },
+                    {
+                      label: "Active from",
+                      value: formatDate(campaign.activeFrom)
+                    },
+                    {
+                      label: "Search deadline",
+                      value: formatDate(campaign.searchDeadline)
+                    },
+                    {
+                      label: "Target start",
+                      value: formatDate(campaign.targetStartDate)
+                    },
+                    { label: "Review cadence", value: campaign.reviewCadence },
+                    {
+                      label: "Criteria version",
+                      value: currentCriteria?.version ?? "None"
+                    },
+                    {
+                      label: "Stepping-stone assessment",
+                      value: campaign.steppingStoneAssessment
+                    }
+                  ]}
+                />
+              ) : null}
+              <div
+                className={
+                  section === "summary"
+                    ? "grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(20rem,0.7fr)]"
+                    : "grid gap-5"
                 }
-              />
-              <div className="mt-4">
-                <EvidenceList
-                  title="Intermediate roles"
-                  items={campaign.intermediateRoles}
-                />
+              >
+                <div className="grid gap-5">
+                  {section === "criteria" ? (
+                    <Card>
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h2 className="font-semibold text-[var(--ui-ink-strong)]">
+                            Current criteria matrix
+                          </h2>
+                          <p className="mt-1 text-xs text-[var(--ui-ink-soft)]">
+                            Each role evaluation keeps the criteria used at that
+                            time.
+                          </p>
+                        </div>
+                        <Badge tone="meta">
+                          v{String(currentCriteria?.version ?? "—")}
+                        </Badge>
+                      </div>
+                      {criteria?.length ? (
+                        <div
+                          className="mt-4 overflow-x-auto"
+                          tabIndex={0}
+                          aria-label="Job search criteria"
+                        >
+                          <table className="w-full min-w-[38rem] text-left text-sm">
+                            <thead>
+                              <tr className="text-xs text-[var(--ui-ink-faint)]">
+                                <th className="pb-2">Criterion</th>
+                                <th className="pb-2">Gate</th>
+                                <th className="pb-2">Rule</th>
+                                <th className="pb-2">Weight</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {criteria.map((criterion) => (
+                                <tr
+                                  key={String(criterion.key)}
+                                  className="border-t border-[var(--ui-border-subtle)]"
+                                >
+                                  <td className="py-3 font-medium text-[var(--ui-ink-strong)]">
+                                    {readable(criterion.field ?? criterion.key)}
+                                  </td>
+                                  <td className="py-3">
+                                    <Badge
+                                      tone={
+                                        criterion.importance === "hard"
+                                          ? "signal"
+                                          : "meta"
+                                      }
+                                    >
+                                      {String(criterion.importance)}
+                                    </Badge>
+                                  </td>
+                                  <td className="py-3 text-[var(--ui-ink-soft)]">
+                                    {readable(criterion.operator)}{" "}
+                                    {typeof criterion.value === "object"
+                                      ? JSON.stringify(criterion.value)
+                                      : String(criterion.value ?? "")}
+                                  </td>
+                                  <td className="py-3 tabular-nums text-[var(--ui-ink-soft)]">
+                                    {String(criterion.weight ?? 50)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="mt-4 text-sm text-[var(--ui-ink-soft)]">
+                          No structured criteria are stored. Create the first
+                          version before evaluating roles.
+                        </p>
+                      )}
+                    </Card>
+                  ) : null}
+                  {section === "targets" ? (
+                    <>
+                      <Card>
+                        <div className="flex items-center justify-between gap-3">
+                          <h2 className="font-semibold text-[var(--ui-ink-strong)]">
+                            Role targets
+                          </h2>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => {
+                              setRoleTarget(undefined);
+                              setRoleOpen(true);
+                            }}
+                          >
+                            <Plus className="size-3.5" />
+                            Role target
+                          </Button>
+                        </div>
+                        <div className="mt-3 grid gap-2">
+                          {(
+                            (campaign.roleTargets as
+                              | WorkRecord[]
+                              | undefined) ?? []
+                          ).map((target) => (
+                            <button
+                              key={target.id}
+                              type="button"
+                              onClick={() => {
+                                setRoleTarget(target);
+                                setRoleOpen(true);
+                              }}
+                              className="rounded-[16px] bg-[var(--ui-surface-2)] p-3 text-left"
+                            >
+                              <div className="font-medium text-[var(--ui-ink-strong)]">
+                                {String(target.titleFamily)}
+                              </div>
+                              <div className="mt-1 text-xs text-[var(--ui-ink-soft)]">
+                                {readable(target.seniority)} · priority{" "}
+                                {String(target.priority)} ·{" "}
+                                {Array.isArray(target.knownGaps)
+                                  ? target.knownGaps.length
+                                  : 0}{" "}
+                                known gaps
+                              </div>
+                            </button>
+                          ))}
+                          {!campaign.roleTargets?.length ? (
+                            <p className="text-sm text-[var(--ui-ink-faint)]">
+                              No role targets yet.
+                            </p>
+                          ) : null}
+                        </div>
+                      </Card>
+                      <Card>
+                        <div className="flex items-center justify-between gap-3">
+                          <h2 className="font-semibold text-[var(--ui-ink-strong)]">
+                            Organization targets
+                          </h2>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => {
+                              setOrganizationTarget(undefined);
+                              setOrganizationOpen(true);
+                            }}
+                          >
+                            <Plus className="size-3.5" />
+                            Organization
+                          </Button>
+                        </div>
+                        <div className="mt-3 grid gap-2">
+                          {(
+                            (campaign.organizationTargets as
+                              | WorkRecord[]
+                              | undefined) ?? []
+                          ).map((target) => (
+                            <button
+                              key={target.id}
+                              type="button"
+                              onClick={() => {
+                                setOrganizationTarget(target);
+                                setOrganizationOpen(true);
+                              }}
+                              className="rounded-[16px] bg-[var(--ui-surface-2)] p-3 text-left"
+                            >
+                              <div className="font-medium text-[var(--ui-ink-strong)]">
+                                {String(
+                                  organizations.find(
+                                    (organization) =>
+                                      organization.id === target.organizationId
+                                  )?.name ?? target.organizationId
+                                )}
+                              </div>
+                              <div className="mt-1 text-xs text-[var(--ui-ink-soft)]">
+                                {readable(target.targetTier)} ·{" "}
+                                {readable(target.status)} ·{" "}
+                                {String(target.nextAction ?? "No next action")}
+                              </div>
+                            </button>
+                          ))}
+                          {!campaign.organizationTargets?.length ? (
+                            <p className="text-sm text-[var(--ui-ink-faint)]">
+                              No organization targets yet.
+                            </p>
+                          ) : null}
+                        </div>
+                      </Card>
+                      <Card>
+                        <h2 className="font-semibold text-[var(--ui-ink-strong)]">
+                          Roles in this job search
+                        </h2>
+                        <div className="mt-3 divide-y divide-[var(--ui-border-subtle)]">
+                          {campaignOpportunities.map((opportunity) => (
+                            <Link
+                              key={opportunity.id}
+                              to={`/work/opportunities/${opportunity.id}`}
+                              className="flex items-center justify-between gap-3 py-3"
+                            >
+                              <span>
+                                <span className="block text-sm font-medium text-[var(--ui-ink-strong)]">
+                                  {opportunity.title}
+                                </span>
+                                <span className="block text-xs text-[var(--ui-ink-soft)]">
+                                  {opportunity.employerName ||
+                                    "Employer unknown"}
+                                </span>
+                              </span>
+                              <WorkStatusBadge
+                                status={opportunity.disposition}
+                              />
+                            </Link>
+                          ))}
+                          {campaignOpportunities.length === 0 ? (
+                            <p className="py-4 text-sm text-[var(--ui-ink-soft)]">
+                              No roles have been evaluated or used in an
+                              application yet.
+                            </p>
+                          ) : null}
+                        </div>
+                      </Card>
+                    </>
+                  ) : null}
+                  {section === "activity" ? (
+                    <EventTimeline
+                      events={campaign.history}
+                      empty="No job-search activity has been recorded."
+                    />
+                  ) : null}
+                </div>
+                {section === "summary" || section === "connections" ? (
+                  <div className="grid content-start gap-5">
+                    {section === "summary" ? (
+                      <>
+                        <Card>
+                          <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+                            Next action
+                          </h2>
+                          <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-strong)]">
+                            {campaign.nextAction || "No next action recorded."}
+                          </p>
+                          {campaign.blockers?.length ? (
+                            <div className="mt-4">
+                              <EvidenceList
+                                title="Blockers"
+                                items={campaign.blockers}
+                                tone="warning"
+                              />
+                            </div>
+                          ) : null}
+                        </Card>
+                        {campaign.longTermDestination ||
+                        campaign.intermediateRoles?.length ||
+                        campaign.capabilitiesToAcquire?.length ? (
+                          <Card>
+                            <EvidenceList
+                              title="Long-term destination"
+                              items={
+                                campaign.longTermDestination
+                                  ? [campaign.longTermDestination]
+                                  : []
+                              }
+                            />
+                            <div className="mt-4">
+                              <EvidenceList
+                                title="Intermediate roles"
+                                items={campaign.intermediateRoles}
+                              />
+                            </div>
+                            <div className="mt-4">
+                              <EvidenceList
+                                title="Capabilities to acquire"
+                                items={campaign.capabilitiesToAcquire}
+                              />
+                            </div>
+                          </Card>
+                        ) : null}
+                      </>
+                    ) : null}
+                    {section === "connections" ? (
+                      <RelationshipEditor
+                        links={campaign.links}
+                        entityType="opportunity_campaign"
+                        entityId={campaign.id}
+                        revision={Number(campaign.revision)}
+                        userIds={userIds}
+                        onRefresh={onRefresh}
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
-              <div className="mt-4">
-                <EvidenceList
-                  title="Capabilities to acquire"
-                  items={campaign.capabilitiesToAcquire}
-                />
-              </div>
-            </Card>
-            <RelationshipEditor
-              links={campaign.links}
-              entityType="opportunity_campaign"
-              entityId={campaign.id}
-              revision={Number(campaign.revision)}
-              userIds={userIds}
-              onRefresh={onRefresh}
-            />
-          </div>
-        </div>
+            </>
+          )}
+        </WorkDetailSections>
       </div>
       <CampaignCriteriaDialog
         open={criteriaOpen}

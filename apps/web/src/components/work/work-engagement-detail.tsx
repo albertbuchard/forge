@@ -34,7 +34,8 @@ import {
   record,
   RelationshipEditor,
   EventTimeline,
-  FactsGrid
+  FactsGrid,
+  WorkDetailSections
 } from "./work-detail-shared";
 import {
   editDraft,
@@ -256,747 +257,841 @@ export function EngagementDetail({
             {archiveMutation.error.message}
           </p>
         ) : null}
-        {editing ? (
-          <Card className="mb-5 grid gap-5">
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className={field}>
-                Title
-                <Input
-                  value={draft.title}
-                  onChange={(event) => set({ title: event.target.value })}
-                />
-              </label>
-              <label className={field}>
-                Role or function
-                <Input
-                  value={draft.roleFunction}
-                  onChange={(event) =>
-                    set({ roleFunction: event.target.value })
-                  }
-                />
-              </label>
-              <label className={field}>
-                Organization
-                <select
-                  value={draft.organizationId}
-                  onChange={(event) =>
-                    set({ organizationId: event.target.value })
-                  }
-                  className={selectClass}
-                >
-                  <option value="">No organization</option>
-                  {organizations.map((organization) => (
-                    <option key={organization.id} value={organization.id}>
-                      {String(organization.name ?? organization.id)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={field}>
-                Status
-                <select
-                  value={draft.status}
-                  onChange={(event) =>
-                    set({
-                      status: event.target.value as WorkEngagement["status"]
-                    })
-                  }
-                  className={selectClass}
-                >
-                  {[
-                    "planned",
-                    "current",
-                    "on_leave",
-                    "transitioning",
-                    "ended",
-                    "archived"
-                  ].map((value) => (
-                    <option key={value} value={value}>
-                      {readable(value)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={field}>
-                Arrangement
-                <select
-                  value={draft.engagementType}
-                  onChange={(event) =>
-                    set({ engagementType: event.target.value })
-                  }
-                  className={selectClass}
-                >
-                  {[
-                    "employment",
-                    "appointment",
-                    "contract",
-                    "freelance",
-                    "fractional",
-                    "shift",
-                    "self_employment",
-                    "advisory",
-                    "internship",
-                    "seasonal",
-                    "other"
-                  ].map((value) => (
-                    <option key={value} value={value}>
-                      {readable(value)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={field}>
-                Priority
-                <select
-                  value={draft.priority}
-                  onChange={(event) => set({ priority: event.target.value })}
-                  className={selectClass}
-                >
-                  {["low", "normal", "high", "critical"].map((value) => (
-                    <option key={value} value={value}>
-                      {readable(value)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={`${field} md:col-span-2`}>
-                Description
-                <Textarea
-                  rows={3}
-                  value={draft.description}
-                  onChange={(event) => set({ description: event.target.value })}
-                />
-              </label>
-            </div>
-            <div>
-              <h2 className="mb-3 font-semibold text-[var(--ui-ink-strong)]">
-                Dates, place, and workload
-              </h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {(
-                  [
-                    ["startDate", "Start date"],
-                    ["expectedEndDate", "Expected end"],
-                    ["actualEndDate", "Actual end"],
-                    ["probationEndDate", "Probation end"],
-                    ["renewalDate", "Renewal"],
-                    ["contractDeadline", "Contract deadline"],
-                    ["earliestDepartureDate", "Earliest departure"]
-                  ] as const
-                ).map(([key, label]) => (
-                  <label key={key} className={field}>
-                    {label}
-                    <Input
-                      type="date"
-                      value={draft[key]}
-                      onChange={(event) => set({ [key]: event.target.value })}
-                    />
-                  </label>
-                ))}
-                <label className={field}>
-                  Work model
-                  <select
-                    value={draft.workModel}
-                    onChange={(event) => set({ workModel: event.target.value })}
-                    className={selectClass}
-                  >
-                    {["unknown", "remote", "hybrid", "on_site", "variable"].map(
-                      (value) => (
-                        <option key={value} value={value}>
-                          {readable(value)}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </label>
-                <label className={field}>
-                  Location
-                  <Input
-                    value={draft.location}
-                    onChange={(event) => set({ location: event.target.value })}
-                  />
-                </label>
-                <label className={field}>
-                  Contracted hours/week
-                  <Input
-                    type="number"
-                    min="0"
-                    max="168"
-                    value={draft.contractedHours}
-                    onChange={(event) =>
-                      set({ contractedHours: event.target.value })
-                    }
-                  />
-                </label>
-                <label className={field}>
-                  Actual hours/week
-                  <Input
-                    type="number"
-                    min="0"
-                    max="168"
-                    value={draft.actualHours}
-                    onChange={(event) =>
-                      set({ actualHours: event.target.value })
-                    }
-                  />
-                </label>
-                <label className={field}>
-                  Full-time equivalent
-                  <Input
-                    type="number"
-                    min="0"
-                    max="5"
-                    step="0.1"
-                    value={draft.fullTimeEquivalent}
-                    onChange={(event) =>
-                      set({ fullTimeEquivalent: event.target.value })
-                    }
-                  />
-                </label>
-                <label className={`${field} sm:col-span-2`}>
-                  Schedule summary
-                  <Textarea
-                    rows={3}
-                    value={draft.schedule}
-                    onChange={(event) => set({ schedule: event.target.value })}
-                  />
-                </label>
-                <label className={field}>
-                  Timezone
-                  <Input
-                    value={draft.timezone}
-                    onChange={(event) => set({ timezone: event.target.value })}
-                  />
-                </label>
-                <div className="grid gap-1 sm:col-span-2 lg:col-span-3">
-                  <span className="text-xs text-[var(--ui-ink-soft)]">
-                    Working days
-                  </span>
-                  <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
-                    {workDays.map(([day, label]) => {
-                      const selected = draft.workingDays.includes(day);
-                      return (
-                        <button
-                          key={day}
-                          type="button"
-                          aria-pressed={selected}
-                          onClick={() =>
-                            set({
-                              workingDays: selected
-                                ? draft.workingDays.filter(
-                                    (entry) => entry !== day
-                                  )
-                                : [...draft.workingDays, day]
-                            })
-                          }
-                          className={`min-h-11 rounded-[14px] border px-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] ${selected ? "border-[var(--primary)] bg-[color-mix(in_srgb,var(--primary)_14%,transparent)] text-[var(--ui-ink-strong)]" : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]"}`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
+        <WorkDetailSections
+          defaultSection="summary"
+          options={[
+            { id: "summary", label: "Summary" },
+            { id: "schedule", label: "Schedule and terms" },
+            { id: "check-ins", label: "Check-ins" },
+            { id: "activity", label: "Activity" },
+            { id: "connections", label: "Connections" }
+          ]}
+        >
+          {(section) => (
+            <>
+              {section === "summary" && editing ? (
+                <Card className="mb-5 grid gap-5">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className={field}>
+                      Title
+                      <Input
+                        value={draft.title}
+                        onChange={(event) => set({ title: event.target.value })}
+                      />
+                    </label>
+                    <label className={field}>
+                      Role or function
+                      <Input
+                        value={draft.roleFunction}
+                        onChange={(event) =>
+                          set({ roleFunction: event.target.value })
+                        }
+                      />
+                    </label>
+                    <label className={field}>
+                      Organization
+                      <select
+                        value={draft.organizationId}
+                        onChange={(event) =>
+                          set({ organizationId: event.target.value })
+                        }
+                        className={selectClass}
+                      >
+                        <option value="">No organization</option>
+                        {organizations.map((organization) => (
+                          <option key={organization.id} value={organization.id}>
+                            {String(organization.name ?? organization.id)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className={field}>
+                      Status
+                      <select
+                        value={draft.status}
+                        onChange={(event) =>
+                          set({
+                            status: event.target
+                              .value as WorkEngagement["status"]
+                          })
+                        }
+                        className={selectClass}
+                      >
+                        {[
+                          "planned",
+                          "current",
+                          "on_leave",
+                          "transitioning",
+                          "ended",
+                          "archived"
+                        ].map((value) => (
+                          <option key={value} value={value}>
+                            {readable(value)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className={field}>
+                      Arrangement
+                      <select
+                        value={draft.engagementType}
+                        onChange={(event) =>
+                          set({ engagementType: event.target.value })
+                        }
+                        className={selectClass}
+                      >
+                        {[
+                          "employment",
+                          "appointment",
+                          "contract",
+                          "freelance",
+                          "fractional",
+                          "shift",
+                          "self_employment",
+                          "advisory",
+                          "internship",
+                          "seasonal",
+                          "other"
+                        ].map((value) => (
+                          <option key={value} value={value}>
+                            {readable(value)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className={field}>
+                      Priority
+                      <select
+                        value={draft.priority}
+                        onChange={(event) =>
+                          set({ priority: event.target.value })
+                        }
+                        className={selectClass}
+                      >
+                        {["low", "normal", "high", "critical"].map((value) => (
+                          <option key={value} value={value}>
+                            {readable(value)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className={`${field} md:col-span-2`}>
+                      Description
+                      <Textarea
+                        rows={3}
+                        value={draft.description}
+                        onChange={(event) =>
+                          set({ description: event.target.value })
+                        }
+                      />
+                    </label>
                   </div>
-                </div>
-                <label className={field}>
-                  Office days per week
-                  <Input
-                    type="number"
-                    min="0"
-                    max="7"
-                    step="0.5"
-                    value={draft.officeDays}
-                    onChange={(event) =>
-                      set({ officeDays: event.target.value })
-                    }
-                  />
-                </label>
-                <label className={field}>
-                  Travel percent
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={draft.travelPercent}
-                    onChange={(event) =>
-                      set({ travelPercent: event.target.value })
-                    }
-                  />
-                </label>
-                <label className={field}>
-                  Commute minutes each way
-                  <Input
-                    type="number"
-                    min="0"
-                    value={draft.commuteMinutes}
-                    onChange={(event) =>
-                      set({ commuteMinutes: event.target.value })
-                    }
-                  />
-                </label>
-                <label className={field}>
-                  Shifts or working windows, one per line
-                  <Textarea
-                    rows={3}
-                    value={draft.shifts}
-                    onChange={(event) => set({ shifts: event.target.value })}
-                  />
-                </label>
-                <label className={field}>
-                  On-call responsibility
-                  <Textarea
-                    rows={3}
-                    value={draft.onCallResponsibility}
-                    onChange={(event) =>
-                      set({ onCallResponsibility: event.target.value })
-                    }
-                  />
-                </label>
-                <label className={`${field} sm:col-span-2`}>
-                  Flexibility and control over time
-                  <Textarea
-                    rows={3}
-                    value={draft.flexibility}
-                    onChange={(event) =>
-                      set({ flexibility: event.target.value })
-                    }
-                  />
-                </label>
-              </div>
-            </div>
-            <div className="grid gap-5 lg:grid-cols-2">
-              <div>
-                <h2 className="mb-3 font-semibold text-[var(--ui-ink-strong)]">
-                  Notice and transition
-                </h2>
-                <div className="grid gap-3">
-                  <label className="flex min-h-11 items-center gap-3 text-sm text-[var(--ui-ink-strong)]">
-                    <input
-                      type="checkbox"
-                      checked={draft.noticeUnknown}
-                      onChange={(event) =>
-                        set({ noticeUnknown: event.target.checked })
-                      }
-                    />
-                    Notice period is unknown
-                  </label>
-                  {!draft.noticeUnknown ? (
-                    <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <h2 className="mb-3 font-semibold text-[var(--ui-ink-strong)]">
+                      Dates, place, and workload
+                    </h2>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {(
+                        [
+                          ["startDate", "Start date"],
+                          ["expectedEndDate", "Expected end"],
+                          ["actualEndDate", "Actual end"],
+                          ["probationEndDate", "Probation end"],
+                          ["renewalDate", "Renewal"],
+                          ["contractDeadline", "Contract deadline"],
+                          ["earliestDepartureDate", "Earliest departure"]
+                        ] as const
+                      ).map(([key, label]) => (
+                        <label key={key} className={field}>
+                          {label}
+                          <Input
+                            type="date"
+                            value={draft[key]}
+                            onChange={(event) =>
+                              set({ [key]: event.target.value })
+                            }
+                          />
+                        </label>
+                      ))}
                       <label className={field}>
-                        Notice value
-                        <Input
-                          type="number"
-                          min="0"
-                          value={draft.noticeValue}
-                          onChange={(event) =>
-                            set({ noticeValue: event.target.value })
-                          }
-                        />
-                      </label>
-                      <label className={field}>
-                        Unit
+                        Work model
                         <select
-                          value={draft.noticeUnit}
+                          value={draft.workModel}
                           onChange={(event) =>
-                            set({
-                              noticeUnit: event.target
-                                .value as EngagementEditDraft["noticeUnit"]
-                            })
-                          }
-                          className={selectClass}
-                        >
-                          {["days", "weeks", "months"].map((value) => (
-                            <option key={value}>{value}</option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                  ) : null}
-                  <label className={field}>
-                    Transition intentions
-                    <Textarea
-                      rows={3}
-                      value={draft.transitionIntentions}
-                      onChange={(event) =>
-                        set({ transitionIntentions: event.target.value })
-                      }
-                    />
-                  </label>
-                </div>
-              </div>
-              <div>
-                <h2 className="mb-3 font-semibold text-[var(--ui-ink-strong)]">
-                  Private compensation
-                </h2>
-                <div className="grid gap-3">
-                  <label className="flex min-h-11 items-center gap-3 text-sm text-[var(--ui-ink-strong)]">
-                    <input
-                      type="checkbox"
-                      checked={draft.compensationUnknown}
-                      onChange={(event) =>
-                        set({ compensationUnknown: event.target.checked })
-                      }
-                    />
-                    Base compensation is unknown
-                  </label>
-                  {!draft.compensationUnknown ? (
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <label className={field}>
-                        Gross base amount
-                        <Input
-                          type="number"
-                          min="0"
-                          value={draft.compensationAmount}
-                          onChange={(event) =>
-                            set({ compensationAmount: event.target.value })
-                          }
-                        />
-                      </label>
-                      <label className={field}>
-                        Currency
-                        <Input
-                          maxLength={3}
-                          value={draft.compensationCurrency}
-                          onChange={(event) =>
-                            set({
-                              compensationCurrency:
-                                event.target.value.toUpperCase()
-                            })
-                          }
-                        />
-                      </label>
-                      <label className={field}>
-                        Period
-                        <select
-                          value={draft.compensationPeriod}
-                          onChange={(event) =>
-                            set({
-                              compensationPeriod: event.target
-                                .value as EngagementEditDraft["compensationPeriod"]
-                            })
+                            set({ workModel: event.target.value })
                           }
                           className={selectClass}
                         >
                           {[
-                            "hour",
-                            "day",
-                            "week",
-                            "month",
-                            "year",
-                            "one_time"
+                            "unknown",
+                            "remote",
+                            "hybrid",
+                            "on_site",
+                            "variable"
                           ].map((value) => (
-                            <option key={value}>{value}</option>
+                            <option key={value} value={value}>
+                              {readable(value)}
+                            </option>
                           ))}
                         </select>
                       </label>
                       <label className={field}>
-                        Gross total compensation/year
+                        Location
+                        <Input
+                          value={draft.location}
+                          onChange={(event) =>
+                            set({ location: event.target.value })
+                          }
+                        />
+                      </label>
+                      <label className={field}>
+                        Contracted hours/week
                         <Input
                           type="number"
                           min="0"
-                          value={draft.totalCompensation}
+                          max="168"
+                          value={draft.contractedHours}
                           onChange={(event) =>
-                            set({ totalCompensation: event.target.value })
+                            set({ contractedHours: event.target.value })
                           }
                         />
                       </label>
                       <label className={field}>
-                        Hourly rate
+                        Actual hours/week
                         <Input
                           type="number"
                           min="0"
-                          value={draft.hourlyRate}
+                          max="168"
+                          value={draft.actualHours}
                           onChange={(event) =>
-                            set({ hourlyRate: event.target.value })
+                            set({ actualHours: event.target.value })
                           }
                         />
                       </label>
                       <label className={field}>
-                        Daily rate
+                        Full-time equivalent
                         <Input
                           type="number"
                           min="0"
-                          value={draft.dailyRate}
+                          max="5"
+                          step="0.1"
+                          value={draft.fullTimeEquivalent}
                           onChange={(event) =>
-                            set({ dailyRate: event.target.value })
+                            set({ fullTimeEquivalent: event.target.value })
+                          }
+                        />
+                      </label>
+                      <label className={`${field} sm:col-span-2`}>
+                        Schedule summary
+                        <Textarea
+                          rows={3}
+                          value={draft.schedule}
+                          onChange={(event) =>
+                            set({ schedule: event.target.value })
                           }
                         />
                       </label>
                       <label className={field}>
-                        Bonus
+                        Timezone
                         <Input
-                          value={draft.bonus}
+                          value={draft.timezone}
                           onChange={(event) =>
-                            set({ bonus: event.target.value })
+                            set({ timezone: event.target.value })
                           }
                         />
                       </label>
+                      <div className="grid gap-1 sm:col-span-2 lg:col-span-3">
+                        <span className="text-xs text-[var(--ui-ink-soft)]">
+                          Working days
+                        </span>
+                        <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+                          {workDays.map(([day, label]) => {
+                            const selected = draft.workingDays.includes(day);
+                            return (
+                              <button
+                                key={day}
+                                type="button"
+                                aria-pressed={selected}
+                                onClick={() =>
+                                  set({
+                                    workingDays: selected
+                                      ? draft.workingDays.filter(
+                                          (entry) => entry !== day
+                                        )
+                                      : [...draft.workingDays, day]
+                                  })
+                                }
+                                className={`min-h-11 rounded-[14px] border px-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] ${selected ? "border-[var(--primary)] bg-[color-mix(in_srgb,var(--primary)_14%,transparent)] text-[var(--ui-ink-strong)]" : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]"}`}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                       <label className={field}>
-                        Commission
-                        <Input
-                          value={draft.commission}
-                          onChange={(event) =>
-                            set({ commission: event.target.value })
-                          }
-                        />
-                      </label>
-                      <label className={field}>
-                        Equity
-                        <Input
-                          value={draft.equity}
-                          onChange={(event) =>
-                            set({ equity: event.target.value })
-                          }
-                        />
-                      </label>
-                      <label className={field}>
-                        Pension
-                        <Input
-                          value={draft.pension}
-                          onChange={(event) =>
-                            set({ pension: event.target.value })
-                          }
-                        />
-                      </label>
-                      <label className={field}>
-                        Paid leave days
+                        Office days per week
                         <Input
                           type="number"
                           min="0"
-                          value={draft.paidLeaveDays}
+                          max="7"
+                          step="0.5"
+                          value={draft.officeDays}
                           onChange={(event) =>
-                            set({ paidLeaveDays: event.target.value })
+                            set({ officeDays: event.target.value })
                           }
                         />
                       </label>
                       <label className={field}>
-                        Annual education budget
+                        Travel percent
                         <Input
                           type="number"
                           min="0"
-                          value={draft.educationBudget}
+                          max="100"
+                          value={draft.travelPercent}
                           onChange={(event) =>
-                            set({ educationBudget: event.target.value })
+                            set({ travelPercent: event.target.value })
+                          }
+                        />
+                      </label>
+                      <label className={field}>
+                        Commute minutes each way
+                        <Input
+                          type="number"
+                          min="0"
+                          value={draft.commuteMinutes}
+                          onChange={(event) =>
+                            set({ commuteMinutes: event.target.value })
+                          }
+                        />
+                      </label>
+                      <label className={field}>
+                        Shifts or working windows, one per line
+                        <Textarea
+                          rows={3}
+                          value={draft.shifts}
+                          onChange={(event) =>
+                            set({ shifts: event.target.value })
+                          }
+                        />
+                      </label>
+                      <label className={field}>
+                        On-call responsibility
+                        <Textarea
+                          rows={3}
+                          value={draft.onCallResponsibility}
+                          onChange={(event) =>
+                            set({ onCallResponsibility: event.target.value })
+                          }
+                        />
+                      </label>
+                      <label className={`${field} sm:col-span-2`}>
+                        Flexibility and control over time
+                        <Textarea
+                          rows={3}
+                          value={draft.flexibility}
+                          onChange={(event) =>
+                            set({ flexibility: event.target.value })
                           }
                         />
                       </label>
                     </div>
-                  ) : null}
-                  <label className={field}>
-                    Other benefits and perks, one per line
-                    <Textarea
-                      rows={3}
-                      value={draft.benefits}
-                      onChange={(event) =>
-                        set({ benefits: event.target.value })
-                      }
-                    />
-                  </label>
-                </div>
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className={`${field} md:col-span-2`}>
-                Why this role matters
-                <Textarea
-                  rows={3}
-                  value={draft.purpose}
-                  onChange={(event) => set({ purpose: event.target.value })}
-                />
-              </label>
-              {(
-                [
-                  ["responsibilities", "Responsibilities"],
-                  ["successCriteria", "Success criteria"],
-                  ["desiredOutcomes", "Desired outcomes"],
-                  ["risks", "Risks"],
-                  ["constraints", "Constraints"]
-                ] as const
-              ).map(([key, label]) => (
-                <label key={key} className={field}>
-                  {label}, one per line
-                  <Textarea
-                    rows={4}
-                    value={draft[key]}
-                    onChange={(event) => set({ [key]: event.target.value })}
-                  />
-                </label>
-              ))}
-              <label className={field}>
-                Exit reason
-                <Textarea
-                  rows={3}
-                  value={draft.exitReason}
-                  onChange={(event) => set({ exitReason: event.target.value })}
-                />
-              </label>
-              <label className={field}>
-                Exit outcome
-                <Textarea
-                  rows={3}
-                  value={draft.exitOutcome}
-                  onChange={(event) => set({ exitOutcome: event.target.value })}
-                />
-              </label>
-              <label className={`${field} md:col-span-2`}>
-                Next action
-                <Textarea
-                  rows={3}
-                  value={draft.nextAction}
-                  onChange={(event) => set({ nextAction: event.target.value })}
-                />
-              </label>
-            </div>
-            <div>
-              <Button
-                disabled={!draft.title.trim()}
-                pending={save.isPending}
-                pendingLabel="Saving…"
-                onClick={() => save.mutate()}
-              >
-                <Save className="size-4" />
-                Save work facts
-              </Button>
-              {save.error ? (
-                <p className="mt-2 text-sm text-[var(--danger)]">
-                  {save.error.message}
-                </p>
-              ) : null}
-            </div>
-          </Card>
-        ) : null}
-        {editing ? <RoleFactsEditor draft={draft} onChange={set} /> : null}
-        <FactsGrid
-          facts={[
-            { label: "Role or function", value: engagement.roleFunction },
-            {
-              label: "Seniority",
-              value: record(engagement.roleFacts).seniority
-            },
-            {
-              label: "Role family",
-              value: record(engagement.roleFacts).roleFamily
-            },
-            { label: "Arrangement", value: engagement.engagementType },
-            { label: "Work model", value: engagement.workModel },
-            { label: "Location", value: record(engagement.location).label },
-            {
-              label: "Contracted hours",
-              value:
-                record(engagement.workload).contractedWeeklyHours == null
-                  ? "Unknown"
-                  : `${String(record(engagement.workload).contractedWeeklyHours)} / week`
-            },
-            {
-              label: "Working days",
-              value: Array.isArray(record(engagement.schedule).workingDays)
-                ? (record(engagement.schedule).workingDays as unknown[])
-                    .map((day) => readable(day))
-                    .join(", ") || "Not set"
-                : "Not set"
-            },
-            {
-              label: "Timezone",
-              value: record(engagement.schedule).timezone || "Not set"
-            },
-            {
-              label: "Start",
-              value: formatDate(engagement.startDate, "Unknown")
-            },
-            {
-              label: "Expected end",
-              value: formatDate(
-                engagement.expectedEndDate,
-                "Open-ended or unknown"
-              )
-            },
-            {
-              label: "Renewal",
-              value: formatDate(engagement.renewalDate, "Not set")
-            },
-            {
-              label: "Contract deadline",
-              value: formatDate(engagement.contractDeadline, "Not set")
-            },
-            {
-              label: "Earliest departure",
-              value: formatDate(engagement.earliestDepartureDate, "Not known")
-            },
-            { label: "Priority", value: engagement.priority }
-          ]}
-        />
-        <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
-          <div className="grid gap-5">
-            <Card className="grid gap-5">
-              <EvidenceList
-                title="Responsibilities"
-                items={engagement.responsibilities}
-              />
-              <EvidenceList
-                title="Success criteria"
-                items={engagement.successCriteria}
-                tone="positive"
-              />
-              <EvidenceList
-                title="Desired outcomes"
-                items={engagement.desiredOutcomes}
-              />
-              <EvidenceList
-                title="Risks and constraints"
-                items={[
-                  ...(engagement.risks ?? []),
-                  ...(engagement.constraints ?? [])
-                ]}
-                tone="warning"
-              />
-            </Card>
-            <RoleFactsSummary value={engagement.roleFacts} />
-            {engagement.compensation || engagement.benefits ? (
-              <CompensationSummary engagement={engagement} />
-            ) : null}
-            <div className="grid gap-4 md:grid-cols-2">
-              {trends.slice(0, 8).map((series) => (
-                <WorkTrendChart
-                  key={`${series.engagementId}-${series.metricKey}`}
-                  series={series}
-                />
-              ))}
-              {trends.length === 0 ? (
-                <Card className="md:col-span-2">
-                  <h2 className="font-semibold text-[var(--ui-ink-strong)]">
-                    No check-in trends yet
-                  </h2>
-                  <p className="mt-2 text-sm text-[var(--ui-ink-soft)]">
-                    Record one or more anchored 1–5 observations. Forge will
-                    show actual points and meaningful changes without inventing
-                    values between them.
-                  </p>
-                  <Button className="mt-4" onClick={onCheckIn}>
-                    Record first check-in
-                  </Button>
+                  </div>
+                  <div className="grid gap-5 lg:grid-cols-2">
+                    <div>
+                      <h2 className="mb-3 font-semibold text-[var(--ui-ink-strong)]">
+                        Notice and transition
+                      </h2>
+                      <div className="grid gap-3">
+                        <label className="flex min-h-11 items-center gap-3 text-sm text-[var(--ui-ink-strong)]">
+                          <input
+                            type="checkbox"
+                            checked={draft.noticeUnknown}
+                            onChange={(event) =>
+                              set({ noticeUnknown: event.target.checked })
+                            }
+                          />
+                          Notice period is unknown
+                        </label>
+                        {!draft.noticeUnknown ? (
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <label className={field}>
+                              Notice value
+                              <Input
+                                type="number"
+                                min="0"
+                                value={draft.noticeValue}
+                                onChange={(event) =>
+                                  set({ noticeValue: event.target.value })
+                                }
+                              />
+                            </label>
+                            <label className={field}>
+                              Unit
+                              <select
+                                value={draft.noticeUnit}
+                                onChange={(event) =>
+                                  set({
+                                    noticeUnit: event.target
+                                      .value as EngagementEditDraft["noticeUnit"]
+                                  })
+                                }
+                                className={selectClass}
+                              >
+                                {["days", "weeks", "months"].map((value) => (
+                                  <option key={value} value={value}>
+                                    {readable(value)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+                        ) : null}
+                        <label className={field}>
+                          Transition intentions
+                          <Textarea
+                            rows={3}
+                            value={draft.transitionIntentions}
+                            onChange={(event) =>
+                              set({ transitionIntentions: event.target.value })
+                            }
+                          />
+                        </label>
+                      </div>
+                    </div>
+                    <div>
+                      <h2 className="mb-3 font-semibold text-[var(--ui-ink-strong)]">
+                        Private compensation
+                      </h2>
+                      <div className="grid gap-3">
+                        <label className="flex min-h-11 items-center gap-3 text-sm text-[var(--ui-ink-strong)]">
+                          <input
+                            type="checkbox"
+                            checked={draft.compensationUnknown}
+                            onChange={(event) =>
+                              set({ compensationUnknown: event.target.checked })
+                            }
+                          />
+                          Base compensation is unknown
+                        </label>
+                        {!draft.compensationUnknown ? (
+                          <div className="grid gap-3 sm:grid-cols-3">
+                            <label className={field}>
+                              Gross base amount
+                              <Input
+                                type="number"
+                                min="0"
+                                value={draft.compensationAmount}
+                                onChange={(event) =>
+                                  set({
+                                    compensationAmount: event.target.value
+                                  })
+                                }
+                              />
+                            </label>
+                            <label className={field}>
+                              Currency
+                              <Input
+                                maxLength={3}
+                                value={draft.compensationCurrency}
+                                onChange={(event) =>
+                                  set({
+                                    compensationCurrency:
+                                      event.target.value.toUpperCase()
+                                  })
+                                }
+                              />
+                            </label>
+                            <label className={field}>
+                              Period
+                              <select
+                                value={draft.compensationPeriod}
+                                onChange={(event) =>
+                                  set({
+                                    compensationPeriod: event.target
+                                      .value as EngagementEditDraft["compensationPeriod"]
+                                  })
+                                }
+                                className={selectClass}
+                              >
+                                {[
+                                  "hour",
+                                  "day",
+                                  "week",
+                                  "month",
+                                  "year",
+                                  "one_time"
+                                ].map((value) => (
+                                  <option key={value} value={value}>
+                                    {readable(value)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className={field}>
+                              Gross total compensation/year
+                              <Input
+                                type="number"
+                                min="0"
+                                value={draft.totalCompensation}
+                                onChange={(event) =>
+                                  set({ totalCompensation: event.target.value })
+                                }
+                              />
+                            </label>
+                            <label className={field}>
+                              Hourly rate
+                              <Input
+                                type="number"
+                                min="0"
+                                value={draft.hourlyRate}
+                                onChange={(event) =>
+                                  set({ hourlyRate: event.target.value })
+                                }
+                              />
+                            </label>
+                            <label className={field}>
+                              Daily rate
+                              <Input
+                                type="number"
+                                min="0"
+                                value={draft.dailyRate}
+                                onChange={(event) =>
+                                  set({ dailyRate: event.target.value })
+                                }
+                              />
+                            </label>
+                            <label className={field}>
+                              Bonus
+                              <Input
+                                value={draft.bonus}
+                                onChange={(event) =>
+                                  set({ bonus: event.target.value })
+                                }
+                              />
+                            </label>
+                            <label className={field}>
+                              Commission
+                              <Input
+                                value={draft.commission}
+                                onChange={(event) =>
+                                  set({ commission: event.target.value })
+                                }
+                              />
+                            </label>
+                            <label className={field}>
+                              Equity
+                              <Input
+                                value={draft.equity}
+                                onChange={(event) =>
+                                  set({ equity: event.target.value })
+                                }
+                              />
+                            </label>
+                            <label className={field}>
+                              Pension
+                              <Input
+                                value={draft.pension}
+                                onChange={(event) =>
+                                  set({ pension: event.target.value })
+                                }
+                              />
+                            </label>
+                            <label className={field}>
+                              Paid leave days
+                              <Input
+                                type="number"
+                                min="0"
+                                value={draft.paidLeaveDays}
+                                onChange={(event) =>
+                                  set({ paidLeaveDays: event.target.value })
+                                }
+                              />
+                            </label>
+                            <label className={field}>
+                              Annual education budget
+                              <Input
+                                type="number"
+                                min="0"
+                                value={draft.educationBudget}
+                                onChange={(event) =>
+                                  set({ educationBudget: event.target.value })
+                                }
+                              />
+                            </label>
+                          </div>
+                        ) : null}
+                        <label className={field}>
+                          Other benefits and perks, one per line
+                          <Textarea
+                            rows={3}
+                            value={draft.benefits}
+                            onChange={(event) =>
+                              set({ benefits: event.target.value })
+                            }
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className={`${field} md:col-span-2`}>
+                      Why this role matters
+                      <Textarea
+                        rows={3}
+                        value={draft.purpose}
+                        onChange={(event) =>
+                          set({ purpose: event.target.value })
+                        }
+                      />
+                    </label>
+                    {(
+                      [
+                        ["responsibilities", "Responsibilities"],
+                        ["successCriteria", "Success criteria"],
+                        ["desiredOutcomes", "Desired outcomes"],
+                        ["risks", "Risks"],
+                        ["constraints", "Constraints"]
+                      ] as const
+                    ).map(([key, label]) => (
+                      <label key={key} className={field}>
+                        {label}, one per line
+                        <Textarea
+                          rows={4}
+                          value={draft[key]}
+                          onChange={(event) =>
+                            set({ [key]: event.target.value })
+                          }
+                        />
+                      </label>
+                    ))}
+                    <label className={field}>
+                      Exit reason
+                      <Textarea
+                        rows={3}
+                        value={draft.exitReason}
+                        onChange={(event) =>
+                          set({ exitReason: event.target.value })
+                        }
+                      />
+                    </label>
+                    <label className={field}>
+                      Exit outcome
+                      <Textarea
+                        rows={3}
+                        value={draft.exitOutcome}
+                        onChange={(event) =>
+                          set({ exitOutcome: event.target.value })
+                        }
+                      />
+                    </label>
+                    <label className={`${field} md:col-span-2`}>
+                      Next action
+                      <Textarea
+                        rows={3}
+                        value={draft.nextAction}
+                        onChange={(event) =>
+                          set({ nextAction: event.target.value })
+                        }
+                      />
+                    </label>
+                  </div>
+                  <div>
+                    <Button
+                      disabled={!draft.title.trim()}
+                      pending={save.isPending}
+                      pendingLabel="Saving…"
+                      onClick={() => save.mutate()}
+                    >
+                      <Save className="size-4" />
+                      Save work facts
+                    </Button>
+                    {save.error ? (
+                      <p className="mt-2 text-sm text-[var(--danger)]">
+                        {save.error.message}
+                      </p>
+                    ) : null}
+                  </div>
                 </Card>
               ) : null}
-            </div>
-            <EventTimeline events={engagement.events} />
-          </div>
-          <div className="grid content-start gap-5">
-            <Card>
-              <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
-                Next action
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-strong)]">
-                {engagement.nextAction || "No next action recorded."}
-              </p>
-            </Card>
-            <RelationshipEditor
-              links={engagement.links}
-              entityType="work_engagement"
-              entityId={engagement.id}
-              revision={Number(engagement.revision)}
-              userIds={userIds}
-              onRefresh={onRefresh}
-            />
-          </div>
-        </div>
+              {section === "summary" && editing ? (
+                <RoleFactsEditor draft={draft} onChange={set} />
+              ) : null}
+              {section === "summary" ? (
+                <FactsGrid
+                  facts={[
+                    {
+                      label: "Role or function",
+                      value: engagement.roleFunction
+                    },
+                    {
+                      label: "Seniority",
+                      value: record(engagement.roleFacts).seniority
+                    },
+                    {
+                      label: "Role family",
+                      value: record(engagement.roleFacts).roleFamily
+                    },
+                    { label: "Arrangement", value: engagement.engagementType },
+                    { label: "Work model", value: engagement.workModel },
+                    {
+                      label: "Location",
+                      value: record(engagement.location).label
+                    },
+                    { label: "Priority", value: engagement.priority }
+                  ]}
+                />
+              ) : null}
+              {section === "schedule" ? (
+                <FactsGrid
+                  facts={[
+                    {
+                      label: "Contracted hours",
+                      value:
+                        record(engagement.workload).contractedWeeklyHours ==
+                        null
+                          ? "Unknown"
+                          : `${String(record(engagement.workload).contractedWeeklyHours)} / week`
+                    },
+                    {
+                      label: "Working days",
+                      value: Array.isArray(
+                        record(engagement.schedule).workingDays
+                      )
+                        ? (record(engagement.schedule).workingDays as unknown[])
+                            .map((day) => readable(day))
+                            .join(", ") || "Not set"
+                        : "Not set"
+                    },
+                    {
+                      label: "Timezone",
+                      value: record(engagement.schedule).timezone || "Not set"
+                    },
+                    {
+                      label: "Start",
+                      value: formatDate(engagement.startDate, "Unknown")
+                    },
+                    {
+                      label: "Expected end",
+                      value: formatDate(
+                        engagement.expectedEndDate,
+                        "Open-ended or unknown"
+                      )
+                    },
+                    {
+                      label: "Renewal",
+                      value: formatDate(engagement.renewalDate, "Not set")
+                    },
+                    {
+                      label: "Contract deadline",
+                      value: formatDate(engagement.contractDeadline, "Not set")
+                    },
+                    {
+                      label: "Earliest departure",
+                      value: formatDate(
+                        engagement.earliestDepartureDate,
+                        "Not known"
+                      )
+                    }
+                  ]}
+                />
+              ) : null}
+              <div
+                className={
+                  section === "summary"
+                    ? "mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]"
+                    : "mt-5 grid gap-5"
+                }
+              >
+                <div className="grid gap-5">
+                  {section === "summary" ? (
+                    <>
+                      <Card className="grid gap-5">
+                        <EvidenceList
+                          title="Responsibilities"
+                          items={engagement.responsibilities}
+                        />
+                        <EvidenceList
+                          title="Success criteria"
+                          items={engagement.successCriteria}
+                          tone="positive"
+                        />
+                        <EvidenceList
+                          title="Desired outcomes"
+                          items={engagement.desiredOutcomes}
+                        />
+                        <EvidenceList
+                          title="Risks and constraints"
+                          items={[
+                            ...(engagement.risks ?? []),
+                            ...(engagement.constraints ?? [])
+                          ]}
+                          tone="warning"
+                        />
+                      </Card>
+                      <RoleFactsSummary value={engagement.roleFacts} />
+                    </>
+                  ) : null}
+                  {section === "schedule" &&
+                  (engagement.compensation || engagement.benefits) ? (
+                    <CompensationSummary engagement={engagement} />
+                  ) : null}
+                  {section === "check-ins" ? (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {trends.slice(0, 8).map((series) => (
+                        <WorkTrendChart
+                          key={`${series.engagementId}-${series.metricKey}`}
+                          series={series}
+                        />
+                      ))}
+                      {trends.length === 0 ? (
+                        <Card className="md:col-span-2">
+                          <h2 className="font-semibold text-[var(--ui-ink-strong)]">
+                            No check-in trends yet
+                          </h2>
+                          <p className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+                            Record your first check-in to begin seeing changes
+                            over time.
+                          </p>
+                          <Button className="mt-4" onClick={onCheckIn}>
+                            Record first check-in
+                          </Button>
+                        </Card>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {section === "activity" ? (
+                    <EventTimeline events={engagement.events} />
+                  ) : null}
+                </div>
+                {section === "summary" || section === "connections" ? (
+                  <div className="grid content-start gap-5">
+                    {section === "summary" ? (
+                      <Card>
+                        <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+                          Next action
+                        </h2>
+                        <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-strong)]">
+                          {engagement.nextAction || "No next action recorded."}
+                        </p>
+                      </Card>
+                    ) : null}
+                    {section === "connections" ? (
+                      <RelationshipEditor
+                        links={engagement.links}
+                        entityType="work_engagement"
+                        entityId={engagement.id}
+                        revision={Number(engagement.revision)}
+                        userIds={userIds}
+                        onRefresh={onRefresh}
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            </>
+          )}
+        </WorkDetailSections>
       </div>
     </div>
   );

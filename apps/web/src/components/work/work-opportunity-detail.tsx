@@ -26,6 +26,7 @@ import {
   RelationshipEditor,
   EventTimeline,
   FactsGrid,
+  WorkDetailSections,
   OpportunitySourceEvidence,
   record
 } from "./work-detail-shared";
@@ -476,684 +477,817 @@ export function OpportunityDetail({
       />
       <div className="grid gap-5 px-4 sm:px-6">
         <Link
-          to="/work?tab=searches"
+          to="/work?tab=searches&view=roles"
           className="inline-flex items-center gap-2 text-sm text-[var(--primary)]"
         >
           <ArrowLeft className="size-4" />
-          Back to opportunity inbox
+          Back to roles to review
         </Link>
-        <SourceFreshness opportunity={opportunity} />
-        {editing ? (
-          <Card className="grid gap-5">
-            <div>
-              <h2 className="font-semibold text-[var(--ui-ink-strong)]">
-                Edit sourced opportunity
-              </h2>
-              <p className="mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                Preserve explicit unknowns and source provenance. Changing
-                source identity runs duplicate protection before saving.
-              </p>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Title
-                <Input
-                  value={draft.title}
-                  onChange={(event) => set({ title: event.target.value })}
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Employer
-                <Input
-                  value={draft.employerName}
-                  onChange={(event) =>
-                    set({ employerName: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Organization
-                <select
-                  value={draft.organizationId}
-                  onChange={(event) =>
-                    set({ organizationId: event.target.value })
-                  }
-                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
-                >
-                  <option value="">No linked organization</option>
-                  {organizations.map((organization) => (
-                    <option key={organization.id} value={organization.id}>
-                      {String(organization.name ?? organization.id)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Role family
-                <Input
-                  value={draft.roleFamily}
-                  onChange={(event) => set({ roleFamily: event.target.value })}
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Seniority
-                <Input
-                  value={draft.seniority}
-                  onChange={(event) => set({ seniority: event.target.value })}
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Sector
-                <Input
-                  value={draft.sector}
-                  onChange={(event) => set({ sector: event.target.value })}
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Canonical URL
-                <Input
-                  type="url"
-                  value={draft.canonicalUrl}
-                  onChange={(event) =>
-                    set({ canonicalUrl: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Source
-                <Input
-                  value={draft.sourceName}
-                  onChange={(event) => set({ sourceName: event.target.value })}
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Source identifier
-                <Input
-                  value={draft.sourceIdentifier}
-                  onChange={(event) =>
-                    set({ sourceIdentifier: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Source snapshot Artifact ID
-                <Input
-                  value={draft.sourceSnapshotArtifactId}
-                  onChange={(event) =>
-                    set({ sourceSnapshotArtifactId: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Location
-                <Input
-                  value={draft.location}
-                  onChange={(event) => set({ location: event.target.value })}
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Work model
-                <select
-                  value={draft.workModel}
-                  onChange={(event) => set({ workModel: event.target.value })}
-                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
-                >
-                  {["unknown", "remote", "hybrid", "on_site", "variable"].map(
-                    (value) => (
-                      <option key={value} value={value}>
-                        {readable(value)}
-                      </option>
-                    )
-                  )}
-                </select>
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Employment type
-                <Input
-                  value={draft.employmentType}
-                  onChange={(event) =>
-                    set({ employmentType: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Minimum weekly hours
-                <Input
-                  type="number"
-                  min="0"
-                  max="168"
-                  value={draft.weeklyHoursMinimum}
-                  onChange={(event) =>
-                    set({ weeklyHoursMinimum: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Maximum weekly hours
-                <Input
-                  type="number"
-                  min="0"
-                  max="168"
-                  value={draft.weeklyHoursMaximum}
-                  onChange={(event) =>
-                    set({ weeklyHoursMaximum: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Duration
-                <Input
-                  value={draft.duration}
-                  onChange={(event) => set({ duration: event.target.value })}
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Start date
-                <Input
-                  type="date"
-                  value={draft.startDate}
-                  onChange={(event) => set({ startDate: event.target.value })}
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Published at
-                <Input
-                  type="datetime-local"
-                  value={draft.publishedAt}
-                  onChange={(event) => set({ publishedAt: event.target.value })}
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Application deadline
-                <Input
-                  type="date"
-                  value={draft.applicationDeadline}
-                  onChange={(event) =>
-                    set({ applicationDeadline: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Availability
-                <select
-                  value={draft.availabilityStatus}
-                  onChange={(event) =>
-                    set({ availabilityStatus: event.target.value })
-                  }
-                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
-                >
-                  {["unknown", "live", "stale", "closed", "filled"].map(
-                    (value) => (
-                      <option key={value}>{value}</option>
-                    )
-                  )}
-                </select>
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Disposition
-                <select
-                  value={draft.disposition}
-                  onChange={(event) => set({ disposition: event.target.value })}
-                  className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
-                >
-                  {[
-                    "discovered",
-                    "reviewing",
-                    "shortlisted",
-                    "qualified",
-                    "rejected_by_user",
-                    "disqualified",
-                    "applied",
-                    "stale",
-                    "closed",
-                    "archived"
-                  ].map((value) => (
-                    <option key={value}>{readable(value)}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Source confidence (0–100%)
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={draft.confidencePercent}
-                  onChange={(event) =>
-                    set({ confidencePercent: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)] md:col-span-2 lg:col-span-3">
-                Description
-                <Textarea
-                  rows={8}
-                  value={draft.description}
-                  onChange={(event) => set({ description: event.target.value })}
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Responsibilities · one per line
-                <Textarea
-                  rows={6}
-                  value={draft.responsibilities}
-                  onChange={(event) =>
-                    set({ responsibilities: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Required qualifications · one per line
-                <Textarea
-                  rows={6}
-                  value={draft.requirements}
-                  onChange={(event) =>
-                    set({ requirements: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Preferred qualifications · one per line
-                <Textarea
-                  rows={6}
-                  value={draft.preferredQualifications}
-                  onChange={(event) =>
-                    set({ preferredQualifications: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Skills · one per line
-                <Textarea
-                  rows={5}
-                  value={draft.skills}
-                  onChange={(event) => set({ skills: event.target.value })}
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Technologies · one per line
-                <Textarea
-                  rows={5}
-                  value={draft.technologies}
-                  onChange={(event) =>
-                    set({ technologies: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Benefits · one per line
-                <Textarea
-                  rows={5}
-                  value={draft.benefits}
-                  onChange={(event) => {
-                    setCompensationEdited(true);
-                    set({ benefits: event.target.value });
-                  }}
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Travel
-                <Input
-                  value={draft.travel}
-                  onChange={(event) => set({ travel: event.target.value })}
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Sponsorship or authorization
-                <Input
-                  value={draft.sponsorship}
-                  onChange={(event) => set({ sponsorship: event.target.value })}
-                />
-              </label>
-              <div className="grid gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] p-3">
-                <label className="flex items-center gap-2 text-sm text-[var(--ui-ink-medium)]">
-                  <input
-                    type="checkbox"
-                    checked={draft.compensationUnknown}
-                    onChange={(event) => {
-                      setCompensationEdited(true);
-                      set({ compensationUnknown: event.target.checked });
-                    }}
-                  />
-                  Compensation is unknown
-                </label>
-                {!draft.compensationUnknown ? (
-                  <div className="grid grid-cols-3 gap-2">
-                    <Input
-                      aria-label="Compensation amount"
-                      type="number"
-                      min="0"
-                      value={draft.compensationAmount}
-                      onChange={(event) => {
-                        setCompensationEdited(true);
-                        set({ compensationAmount: event.target.value });
-                      }}
-                    />
-                    <Input
-                      aria-label="Compensation currency"
-                      maxLength={3}
-                      value={draft.compensationCurrency}
-                      onChange={(event) => {
-                        setCompensationEdited(true);
-                        set({ compensationCurrency: event.target.value });
-                      }}
-                    />
-                    <select
-                      aria-label="Compensation period"
-                      value={draft.compensationPeriod}
-                      onChange={(event) => {
-                        setCompensationEdited(true);
-                        set({ compensationPeriod: event.target.value });
-                      }}
-                      className="min-h-11 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-2 text-sm"
-                    >
-                      {["hour", "day", "week", "month", "year"].map((value) => (
-                        <option key={value}>{value}</option>
-                      ))}
-                    </select>
-                  </div>
-                ) : null}
-                <p className="text-xs text-[var(--ui-ink-faint)]">
-                  Changes here require the separate Work compensation
-                  permission. Leaving this section untouched does not request
-                  that permission.
-                </p>
-              </div>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Explicit unknowns · one per line
-                <Textarea
-                  rows={5}
-                  value={draft.unknowns}
-                  onChange={(event) => set({ unknowns: event.target.value })}
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Eligibility uncertainties · one per line
-                <Textarea
-                  rows={5}
-                  value={draft.eligibilityUncertainties}
-                  onChange={(event) =>
-                    set({ eligibilityUncertainties: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Red flags · one per line
-                <Textarea
-                  rows={5}
-                  value={draft.redFlags}
-                  onChange={(event) => set({ redFlags: event.target.value })}
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                User decision
-                <Textarea
-                  rows={3}
-                  value={draft.decision}
-                  onChange={(event) => set({ decision: event.target.value })}
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Decision rationale
-                <Textarea
-                  rows={3}
-                  value={draft.decisionRationale}
-                  onChange={(event) =>
-                    set({ decisionRationale: event.target.value })
-                  }
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
-                Next action
-                <Textarea
-                  rows={3}
-                  value={draft.nextAction}
-                  onChange={(event) => set({ nextAction: event.target.value })}
-                />
-              </label>
-            </div>
-            <div>
-              <Button
-                disabled={
-                  !draft.title.trim() || Object.keys(editPatch).length === 0
-                }
-                pending={save.isPending}
-                onClick={() => save.mutate()}
-              >
-                <Save className="size-4" />
-                Save opportunity facts
-              </Button>
-              {save.error ? (
-                <p className="mt-2 text-sm text-[var(--danger)]">
-                  {save.error.message}
-                </p>
-              ) : null}
-            </div>
-          </Card>
-        ) : null}
-        <FactsGrid
-          facts={[
-            { label: "Employer", value: opportunity.employerName },
-            { label: "Role family", value: opportunity.roleFamily },
-            { label: "Seniority", value: opportunity.seniority },
-            { label: "Work model", value: opportunity.workModel },
-            { label: "Employment type", value: opportunity.employmentType },
-            {
-              label: "Application deadline",
-              value: formatDate(opportunity.applicationDeadline)
-            },
-            { label: "Source", value: opportunity.sourceName },
-            {
-              label: "Confidence",
-              value:
-                opportunity.confidence === null ||
-                opportunity.confidence === undefined
-                  ? "Unknown"
-                  : `${Math.round(opportunity.confidence * 100)}%`
-            },
-            {
-              label: "Excitement",
-              value: opportunity.excitement
-                ? `${opportunity.excitement} / 5`
-                : "Not rated"
-            }
+        <WorkDetailSections
+          defaultSection="summary"
+          options={[
+            { id: "summary", label: "Summary" },
+            { id: "fit", label: "Fit" },
+            { id: "application", label: "Application context" },
+            { id: "activity", label: "Activity" },
+            { id: "connections", label: "Connections" }
           ]}
-        />
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(20rem,0.7fr)]">
-          <div className="grid gap-5">
-            <Card>
-              <h2 className="font-semibold text-[var(--ui-ink-strong)]">
-                Role facts
-              </h2>
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[var(--ui-ink-medium)]">
-                {opportunity.description || "No source description stored."}
-              </p>
-              <div className="mt-5 grid gap-5 md:grid-cols-2">
-                <EvidenceList
-                  title="Responsibilities"
-                  items={opportunity.responsibilities}
-                />
-                <EvidenceList
-                  title="Requirements"
-                  items={opportunity.requirements}
-                />
-                <EvidenceList
-                  title="Preferred qualifications"
-                  items={opportunity.preferredQualifications}
-                />
-                <EvidenceList
-                  title="Skills and technologies"
-                  items={[
-                    ...(opportunity.skills ?? []),
-                    ...(opportunity.technologies ?? [])
-                  ]}
-                />
-              </div>
-            </Card>
-            <OpportunitySourceEvidence sources={opportunity.sources ?? []} />
-            <Card>
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="font-semibold text-[var(--ui-ink-strong)]">
-                    Campaign-specific evaluation
-                  </h2>
-                  <p className="mt-1 text-xs text-[var(--ui-ink-soft)]">
-                    Scored against one exact criteria version.
-                  </p>
-                </div>
-                {evaluation ? (
-                  <div className="flex gap-2">
-                    <Badge tone="signal">
-                      {String(evaluation.overallScore ?? "—")} / 100
-                    </Badge>
-                    <WorkStatusBadge status={evaluation.hardGateResult} />
+        >
+          {(section) => (
+            <>
+              {section === "summary" ? (
+                <>
+                  <SourceFreshness opportunity={opportunity} />
+                  {editing ? (
+                    <Card className="grid gap-5">
+                      <div>
+                        <h2 className="font-semibold text-[var(--ui-ink-strong)]">
+                          Edit role
+                        </h2>
+                        <p className="mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                          Keep the role facts and source link accurate. Forge
+                          checks for duplicates when the source changes.
+                        </p>
+                      </div>
+                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Title
+                          <Input
+                            value={draft.title}
+                            onChange={(event) =>
+                              set({ title: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Employer
+                          <Input
+                            value={draft.employerName}
+                            onChange={(event) =>
+                              set({ employerName: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Organization
+                          <select
+                            value={draft.organizationId}
+                            onChange={(event) =>
+                              set({ organizationId: event.target.value })
+                            }
+                            className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                          >
+                            <option value="">No linked organization</option>
+                            {organizations.map((organization) => (
+                              <option
+                                key={organization.id}
+                                value={organization.id}
+                              >
+                                {String(organization.name ?? organization.id)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Role family
+                          <Input
+                            value={draft.roleFamily}
+                            onChange={(event) =>
+                              set({ roleFamily: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Seniority
+                          <Input
+                            value={draft.seniority}
+                            onChange={(event) =>
+                              set({ seniority: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Sector
+                          <Input
+                            value={draft.sector}
+                            onChange={(event) =>
+                              set({ sector: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Job posting URL
+                          <Input
+                            type="url"
+                            value={draft.canonicalUrl}
+                            onChange={(event) =>
+                              set({ canonicalUrl: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Source
+                          <Input
+                            value={draft.sourceName}
+                            onChange={(event) =>
+                              set({ sourceName: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Source reference
+                          <Input
+                            value={draft.sourceIdentifier}
+                            onChange={(event) =>
+                              set({ sourceIdentifier: event.target.value })
+                            }
+                          />
+                        </label>
+                        <details className="rounded-[18px] border border-[var(--ui-border-subtle)] p-3 md:col-span-2 lg:col-span-3">
+                          <summary className="cursor-pointer text-sm font-medium text-[var(--ui-ink-medium)]">
+                            Technical details
+                          </summary>
+                          <label className="mt-3 grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                            Source snapshot file ID
+                            <Input
+                              value={draft.sourceSnapshotArtifactId}
+                              onChange={(event) =>
+                                set({
+                                  sourceSnapshotArtifactId: event.target.value
+                                })
+                              }
+                            />
+                          </label>
+                        </details>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Location
+                          <Input
+                            value={draft.location}
+                            onChange={(event) =>
+                              set({ location: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Work model
+                          <select
+                            value={draft.workModel}
+                            onChange={(event) =>
+                              set({ workModel: event.target.value })
+                            }
+                            className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                          >
+                            {[
+                              "unknown",
+                              "remote",
+                              "hybrid",
+                              "on_site",
+                              "variable"
+                            ].map((value) => (
+                              <option key={value} value={value}>
+                                {readable(value)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Employment type
+                          <Input
+                            value={draft.employmentType}
+                            onChange={(event) =>
+                              set({ employmentType: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Minimum weekly hours
+                          <Input
+                            type="number"
+                            min="0"
+                            max="168"
+                            value={draft.weeklyHoursMinimum}
+                            onChange={(event) =>
+                              set({ weeklyHoursMinimum: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Maximum weekly hours
+                          <Input
+                            type="number"
+                            min="0"
+                            max="168"
+                            value={draft.weeklyHoursMaximum}
+                            onChange={(event) =>
+                              set({ weeklyHoursMaximum: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Duration
+                          <Input
+                            value={draft.duration}
+                            onChange={(event) =>
+                              set({ duration: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Start date
+                          <Input
+                            type="date"
+                            value={draft.startDate}
+                            onChange={(event) =>
+                              set({ startDate: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Published at
+                          <Input
+                            type="datetime-local"
+                            value={draft.publishedAt}
+                            onChange={(event) =>
+                              set({ publishedAt: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Application deadline
+                          <Input
+                            type="date"
+                            value={draft.applicationDeadline}
+                            onChange={(event) =>
+                              set({ applicationDeadline: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Availability
+                          <select
+                            value={draft.availabilityStatus}
+                            onChange={(event) =>
+                              set({ availabilityStatus: event.target.value })
+                            }
+                            className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                          >
+                            {[
+                              "unknown",
+                              "live",
+                              "stale",
+                              "closed",
+                              "filled"
+                            ].map((value) => (
+                              <option key={value} value={value}>
+                                {readable(value)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Disposition
+                          <select
+                            value={draft.disposition}
+                            onChange={(event) =>
+                              set({ disposition: event.target.value })
+                            }
+                            className="min-h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm"
+                          >
+                            {[
+                              "discovered",
+                              "reviewing",
+                              "shortlisted",
+                              "qualified",
+                              "rejected_by_user",
+                              "disqualified",
+                              "applied",
+                              "stale",
+                              "closed",
+                              "archived"
+                            ].map((value) => (
+                              <option key={value}>{readable(value)}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Source confidence (0–100%)
+                          <Input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={draft.confidencePercent}
+                            onChange={(event) =>
+                              set({ confidencePercent: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)] md:col-span-2 lg:col-span-3">
+                          Description
+                          <Textarea
+                            rows={8}
+                            value={draft.description}
+                            onChange={(event) =>
+                              set({ description: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Responsibilities · one per line
+                          <Textarea
+                            rows={6}
+                            value={draft.responsibilities}
+                            onChange={(event) =>
+                              set({ responsibilities: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Required qualifications · one per line
+                          <Textarea
+                            rows={6}
+                            value={draft.requirements}
+                            onChange={(event) =>
+                              set({ requirements: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Preferred qualifications · one per line
+                          <Textarea
+                            rows={6}
+                            value={draft.preferredQualifications}
+                            onChange={(event) =>
+                              set({
+                                preferredQualifications: event.target.value
+                              })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Skills · one per line
+                          <Textarea
+                            rows={5}
+                            value={draft.skills}
+                            onChange={(event) =>
+                              set({ skills: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Technologies · one per line
+                          <Textarea
+                            rows={5}
+                            value={draft.technologies}
+                            onChange={(event) =>
+                              set({ technologies: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Benefits · one per line
+                          <Textarea
+                            rows={5}
+                            value={draft.benefits}
+                            onChange={(event) => {
+                              setCompensationEdited(true);
+                              set({ benefits: event.target.value });
+                            }}
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Travel
+                          <Input
+                            value={draft.travel}
+                            onChange={(event) =>
+                              set({ travel: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Sponsorship or authorization
+                          <Input
+                            value={draft.sponsorship}
+                            onChange={(event) =>
+                              set({ sponsorship: event.target.value })
+                            }
+                          />
+                        </label>
+                        <div className="grid gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] p-3">
+                          <label className="flex items-center gap-2 text-sm text-[var(--ui-ink-medium)]">
+                            <input
+                              type="checkbox"
+                              checked={draft.compensationUnknown}
+                              onChange={(event) => {
+                                setCompensationEdited(true);
+                                set({
+                                  compensationUnknown: event.target.checked
+                                });
+                              }}
+                            />
+                            Compensation is unknown
+                          </label>
+                          {!draft.compensationUnknown ? (
+                            <div className="grid grid-cols-3 gap-2">
+                              <Input
+                                aria-label="Compensation amount"
+                                type="number"
+                                min="0"
+                                value={draft.compensationAmount}
+                                onChange={(event) => {
+                                  setCompensationEdited(true);
+                                  set({
+                                    compensationAmount: event.target.value
+                                  });
+                                }}
+                              />
+                              <Input
+                                aria-label="Compensation currency"
+                                maxLength={3}
+                                value={draft.compensationCurrency}
+                                onChange={(event) => {
+                                  setCompensationEdited(true);
+                                  set({
+                                    compensationCurrency: event.target.value
+                                  });
+                                }}
+                              />
+                              <select
+                                aria-label="Compensation period"
+                                value={draft.compensationPeriod}
+                                onChange={(event) => {
+                                  setCompensationEdited(true);
+                                  set({
+                                    compensationPeriod: event.target.value
+                                  });
+                                }}
+                                className="min-h-11 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-2 text-sm"
+                              >
+                                {["hour", "day", "week", "month", "year"].map(
+                                  (value) => (
+                                    <option key={value} value={value}>
+                                      {readable(value)}
+                                    </option>
+                                  )
+                                )}
+                              </select>
+                            </div>
+                          ) : null}
+                          <p className="text-xs text-[var(--ui-ink-faint)]">
+                            Changes here require the separate Work compensation
+                            permission. Leaving this section untouched does not
+                            request that permission.
+                          </p>
+                        </div>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Explicit unknowns · one per line
+                          <Textarea
+                            rows={5}
+                            value={draft.unknowns}
+                            onChange={(event) =>
+                              set({ unknowns: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Eligibility uncertainties · one per line
+                          <Textarea
+                            rows={5}
+                            value={draft.eligibilityUncertainties}
+                            onChange={(event) =>
+                              set({
+                                eligibilityUncertainties: event.target.value
+                              })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Red flags · one per line
+                          <Textarea
+                            rows={5}
+                            value={draft.redFlags}
+                            onChange={(event) =>
+                              set({ redFlags: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          User decision
+                          <Textarea
+                            rows={3}
+                            value={draft.decision}
+                            onChange={(event) =>
+                              set({ decision: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Decision rationale
+                          <Textarea
+                            rows={3}
+                            value={draft.decisionRationale}
+                            onChange={(event) =>
+                              set({ decisionRationale: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs text-[var(--ui-ink-soft)]">
+                          Next action
+                          <Textarea
+                            rows={3}
+                            value={draft.nextAction}
+                            onChange={(event) =>
+                              set({ nextAction: event.target.value })
+                            }
+                          />
+                        </label>
+                      </div>
+                      <div>
+                        <Button
+                          disabled={
+                            !draft.title.trim() ||
+                            Object.keys(editPatch).length === 0
+                          }
+                          pending={save.isPending}
+                          onClick={() => save.mutate()}
+                        >
+                          <Save className="size-4" />
+                          Save role
+                        </Button>
+                        {save.error ? (
+                          <p className="mt-2 text-sm text-[var(--danger)]">
+                            {save.error.message}
+                          </p>
+                        ) : null}
+                      </div>
+                    </Card>
+                  ) : null}
+                  <FactsGrid
+                    facts={[
+                      { label: "Employer", value: opportunity.employerName },
+                      { label: "Role family", value: opportunity.roleFamily },
+                      { label: "Seniority", value: opportunity.seniority },
+                      { label: "Work model", value: opportunity.workModel },
+                      {
+                        label: "Employment type",
+                        value: opportunity.employmentType
+                      },
+                      {
+                        label: "Application deadline",
+                        value: formatDate(opportunity.applicationDeadline)
+                      },
+                      { label: "Source", value: opportunity.sourceName },
+                      {
+                        label: "Confidence",
+                        value:
+                          opportunity.confidence === null ||
+                          opportunity.confidence === undefined
+                            ? "Unknown"
+                            : `${Math.round(opportunity.confidence * 100)}%`
+                      },
+                      {
+                        label: "Excitement",
+                        value: opportunity.excitement
+                          ? `${opportunity.excitement} / 5`
+                          : "Not rated"
+                      }
+                    ]}
+                  />
+                </>
+              ) : null}
+              <div
+                className={
+                  ["summary", "fit"].includes(section)
+                    ? "grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(20rem,0.7fr)]"
+                    : "grid gap-5"
+                }
+              >
+                {["summary", "fit", "application", "activity"].includes(
+                  section
+                ) ? (
+                  <div className="grid gap-5">
+                    {section === "summary" ? (
+                      <Card>
+                        <h2 className="font-semibold text-[var(--ui-ink-strong)]">
+                          Role facts
+                        </h2>
+                        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[var(--ui-ink-medium)]">
+                          {opportunity.description ||
+                            "No source description stored."}
+                        </p>
+                        <div className="mt-5 grid gap-5 md:grid-cols-2">
+                          <EvidenceList
+                            title="Responsibilities"
+                            items={opportunity.responsibilities}
+                          />
+                          <EvidenceList
+                            title="Requirements"
+                            items={opportunity.requirements}
+                          />
+                          <EvidenceList
+                            title="Preferred qualifications"
+                            items={opportunity.preferredQualifications}
+                          />
+                          <EvidenceList
+                            title="Skills and technologies"
+                            items={[
+                              ...(opportunity.skills ?? []),
+                              ...(opportunity.technologies ?? [])
+                            ]}
+                          />
+                        </div>
+                      </Card>
+                    ) : null}
+                    {section === "application" ? (
+                      <OpportunitySourceEvidence
+                        sources={opportunity.sources ?? []}
+                      />
+                    ) : null}
+                    {section === "fit" ? (
+                      <Card>
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <h2 className="font-semibold text-[var(--ui-ink-strong)]">
+                              Fit for this job search
+                            </h2>
+                            <p className="mt-1 text-xs text-[var(--ui-ink-soft)]">
+                              Scored against one exact criteria version.
+                            </p>
+                          </div>
+                          {evaluation ? (
+                            <div className="flex gap-2">
+                              <Badge tone="signal">
+                                {String(evaluation.overallScore ?? "—")} / 100
+                              </Badge>
+                              <WorkStatusBadge
+                                status={evaluation.hardGateResult}
+                              />
+                            </div>
+                          ) : null}
+                        </div>
+                        {evaluation ? (
+                          <>
+                            <div className="mt-4 grid gap-2">
+                              {scores.map((score, index) => (
+                                <div
+                                  key={String(score.criterionKey ?? index)}
+                                  className="grid gap-2 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3 sm:grid-cols-[minmax(0,1fr)_auto]"
+                                >
+                                  <div>
+                                    <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
+                                      {readable(
+                                        score.criterionKey,
+                                        "Criterion"
+                                      )}
+                                    </div>
+                                    <div className="mt-1 text-xs text-[var(--ui-ink-soft)]">
+                                      {String(
+                                        score.explanation ||
+                                          (Array.isArray(score.failureReasons)
+                                            ? score.failureReasons[0]
+                                            : "") ||
+                                          (Array.isArray(score.gaps)
+                                            ? score.gaps[0]
+                                            : "") ||
+                                          "No evaluation explanation"
+                                      )}
+                                    </div>
+                                    <div className="mt-2 text-[10px] text-[var(--ui-ink-faint)]">
+                                      {Array.isArray(score.matchedEvidence)
+                                        ? score.matchedEvidence.length
+                                        : 0}{" "}
+                                      evidence item
+                                      {Array.isArray(score.matchedEvidence) &&
+                                      score.matchedEvidence.length === 1
+                                        ? ""
+                                        : "s"}
+                                      {typeof score.confidence === "number"
+                                        ? ` · ${Math.round(score.confidence * 100)}% confidence`
+                                        : ""}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-start gap-2">
+                                    <WorkStatusBadge status={score.result} />
+                                    <Badge tone="meta">
+                                      {score.score == null
+                                        ? "No score"
+                                        : `${String(score.score)} / 100`}
+                                    </Badge>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-5 grid gap-5 md:grid-cols-2">
+                              <EvaluationEvidenceList
+                                title="Matched evidence"
+                                items={evaluation.matchedEvidence}
+                              />
+                              <EvidenceList
+                                title="Gaps"
+                                items={evaluation.gaps}
+                                tone="warning"
+                              />
+                              <EvidenceList
+                                title="Failure reasons"
+                                items={evaluation.failureReasons}
+                                tone="warning"
+                              />
+                              <EvidenceList
+                                title="Trade-offs"
+                                items={evaluation.tradeoffs}
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <p className="mt-4 text-sm text-[var(--ui-ink-soft)]">
+                            No evaluation has been recorded. An authorized agent
+                            can evaluate it against the saved job-search
+                            criteria with source evidence.
+                          </p>
+                        )}
+                      </Card>
+                    ) : null}
+                    {section === "activity" ? (
+                      <EventTimeline
+                        events={opportunity.history}
+                        empty="No role activity has been recorded."
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
+                {["summary", "fit", "connections"].includes(section) ? (
+                  <div className="grid content-start gap-5">
+                    {section === "fit" ? (
+                      <Card>
+                        <EvidenceList
+                          title="Unknown facts"
+                          items={opportunity.unknowns}
+                          empty="No unknowns recorded."
+                        />
+                        <div className="mt-5">
+                          <EvidenceList
+                            title="Eligibility uncertainties"
+                            items={opportunity.eligibilityUncertainties}
+                            tone="warning"
+                          />
+                        </div>
+                        <div className="mt-5">
+                          <EvidenceList
+                            title="Red flags"
+                            items={opportunity.redFlags}
+                            tone="warning"
+                          />
+                        </div>
+                      </Card>
+                    ) : null}
+                    {section === "summary" ? (
+                      <Card>
+                        <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+                          Decision and next action
+                        </h2>
+                        <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-strong)]">
+                          {opportunity.decision || "No decision recorded."}
+                        </p>
+                        <p className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                          {opportunity.nextAction || "No next action recorded."}
+                        </p>
+                        <div className="mt-4">
+                          <label className="text-xs text-[var(--ui-ink-faint)]">
+                            Personal excitement
+                          </label>
+                          <div className="mt-2 grid grid-cols-5 gap-2">
+                            {[1, 2, 3, 4, 5].map((score) => (
+                              <button
+                                key={score}
+                                type="button"
+                                aria-pressed={opportunity.excitement === score}
+                                onClick={() =>
+                                  mutation.mutate({ excitement: score })
+                                }
+                                className={`min-h-11 rounded-xl border text-sm ${opportunity.excitement === score ? "border-[var(--primary)] bg-[var(--ui-accent-soft)]" : "border-[var(--ui-border-subtle)]"}`}
+                              >
+                                {score}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </Card>
+                    ) : null}
+                    {section === "connections" ? (
+                      <RelationshipEditor
+                        links={opportunity.links}
+                        entityType="job_opportunity"
+                        entityId={opportunity.id}
+                        revision={Number(opportunity.revision)}
+                        userIds={userIds}
+                        onRefresh={onRefresh}
+                      />
+                    ) : null}
                   </div>
                 ) : null}
               </div>
-              {evaluation ? (
-                <>
-                  <div className="mt-4 grid gap-2">
-                    {scores.map((score, index) => (
-                      <div
-                        key={String(score.criterionKey ?? index)}
-                        className="grid gap-2 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3 sm:grid-cols-[minmax(0,1fr)_auto]"
-                      >
-                        <div>
-                          <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
-                            {readable(score.criterionKey, "Criterion")}
-                          </div>
-                          <div className="mt-1 text-xs text-[var(--ui-ink-soft)]">
-                            {String(
-                              score.explanation ||
-                                (Array.isArray(score.failureReasons)
-                                  ? score.failureReasons[0]
-                                  : "") ||
-                                (Array.isArray(score.gaps)
-                                  ? score.gaps[0]
-                                  : "") ||
-                                "No evaluation explanation"
-                            )}
-                          </div>
-                          <div className="mt-2 text-[10px] text-[var(--ui-ink-faint)]">
-                            {Array.isArray(score.matchedEvidence)
-                              ? score.matchedEvidence.length
-                              : 0}{" "}
-                            evidence item
-                            {Array.isArray(score.matchedEvidence) &&
-                            score.matchedEvidence.length === 1
-                              ? ""
-                              : "s"}
-                            {typeof score.confidence === "number"
-                              ? ` · ${Math.round(score.confidence * 100)}% confidence`
-                              : ""}
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <WorkStatusBadge status={score.result} />
-                          <Badge tone="meta">
-                            {score.score == null
-                              ? "No score"
-                              : `${String(score.score)} / 100`}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-5 grid gap-5 md:grid-cols-2">
-                    <EvaluationEvidenceList
-                      title="Matched evidence"
-                      items={evaluation.matchedEvidence}
-                    />
-                    <EvidenceList
-                      title="Gaps"
-                      items={evaluation.gaps}
-                      tone="warning"
-                    />
-                    <EvidenceList
-                      title="Failure reasons"
-                      items={evaluation.failureReasons}
-                      tone="warning"
-                    />
-                    <EvidenceList
-                      title="Trade-offs"
-                      items={evaluation.tradeoffs}
-                    />
-                  </div>
-                </>
-              ) : (
-                <p className="mt-4 text-sm text-[var(--ui-ink-soft)]">
-                  No evaluation has been recorded. An authorized agent can
-                  evaluate it against an exact campaign criteria version with
-                  sourced evidence.
-                </p>
-              )}
-            </Card>
-            <EventTimeline
-              events={opportunity.history}
-              empty="No opportunity history has been recorded."
-            />
-          </div>
-          <div className="grid content-start gap-5">
-            <Card>
-              <EvidenceList
-                title="Unknown facts"
-                items={opportunity.unknowns}
-                empty="No unknowns recorded."
-              />
-              <div className="mt-5">
-                <EvidenceList
-                  title="Eligibility uncertainties"
-                  items={opportunity.eligibilityUncertainties}
-                  tone="warning"
-                />
-              </div>
-              <div className="mt-5">
-                <EvidenceList
-                  title="Red flags"
-                  items={opportunity.redFlags}
-                  tone="warning"
-                />
-              </div>
-            </Card>
-            <Card>
-              <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
-                Decision and next action
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-strong)]">
-                {opportunity.decision || "No decision recorded."}
-              </p>
-              <p className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                {opportunity.nextAction || "No next action recorded."}
-              </p>
-              <div className="mt-4">
-                <label className="text-xs text-[var(--ui-ink-faint)]">
-                  Personal excitement
-                </label>
-                <div className="mt-2 grid grid-cols-5 gap-2">
-                  {[1, 2, 3, 4, 5].map((score) => (
-                    <button
-                      key={score}
-                      type="button"
-                      aria-pressed={opportunity.excitement === score}
-                      onClick={() => mutation.mutate({ excitement: score })}
-                      className={`min-h-11 rounded-xl border text-sm ${opportunity.excitement === score ? "border-[var(--primary)] bg-[var(--ui-accent-soft)]" : "border-[var(--ui-border-subtle)]"}`}
-                    >
-                      {score}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </Card>
-            <RelationshipEditor
-              links={opportunity.links}
-              entityType="job_opportunity"
-              entityId={opportunity.id}
-              revision={Number(opportunity.revision)}
-              userIds={userIds}
-              onRefresh={onRefresh}
-            />
-          </div>
-        </div>
+            </>
+          )}
+        </WorkDetailSections>
       </div>
       <JobApplicationDialog
         open={applicationOpen}

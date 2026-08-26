@@ -15,7 +15,6 @@ import type {
   WorkRecord,
   WorkTrendSeries
 } from "@/lib/work-api";
-import { EventTimeline } from "./work-detail-shared";
 import type { WorkDetailKind } from "./work-detail-shared";
 import { EngagementDetail } from "./work-engagement-detail";
 import { CampaignDetail } from "./work-campaign-detail";
@@ -180,22 +179,14 @@ export function WorkDetail({
   }
   if (kind === "organizations" && organizationQuery.data)
     return (
-      <div className="grid gap-5">
-        <OrganizationOperationalDetail
-          organization={{
-            ...organizationQuery.data.organization,
-            links: organizationQuery.data.links
-          }}
-          userIds={userIds}
-          onRefresh={onRefresh}
-        />
-        <div className="px-4 sm:px-6">
-          <EventTimeline
-            events={organizationQuery.data.organization.history}
-            empty="No organization history has been recorded."
-          />
-        </div>
-      </div>
+      <OrganizationOperationalDetail
+        organization={{
+          ...organizationQuery.data.organization,
+          links: organizationQuery.data.links
+        }}
+        userIds={userIds}
+        onRefresh={onRefresh}
+      />
     );
   if (kind === "campaigns" && campaignQuery.data)
     return (
