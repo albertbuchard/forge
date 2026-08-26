@@ -22,6 +22,7 @@ import {
 } from "../lib/remote-pairing.mjs";
 import { executePairingDecision } from "../lib/pairing-command.mjs";
 import { writeCompanionPairingPayloadFile } from "../lib/pairing-payload-file.mjs";
+import { reconcileOpenClawPluginLoadPaths } from "../lib/openclaw-load-paths.mjs";
 import YAML from "yaml";
 import qrcode from "qrcode-terminal";
 import open from "open";
@@ -2330,11 +2331,11 @@ async function patchOpenClawConfig(config, options) {
       plugins.load && typeof plugins.load === "object"
         ? { ...plugins.load }
         : {};
-    const loadPaths = Array.isArray(load.paths) ? [...load.paths] : [];
-    if (!loadPaths.some((entry) => path.resolve(entry) === pluginRoot)) {
-      loadPaths.push(pluginRoot);
-    }
-    load.paths = loadPaths;
+    load.paths = reconcileOpenClawPluginLoadPaths(
+      load.paths,
+      pluginRoot,
+      FORGE_PLUGIN_ID
+    );
     plugins.load = load;
     const allow = Array.isArray(plugins.allow) ? [...plugins.allow] : [];
     if (!allow.includes(FORGE_PLUGIN_ID)) allow.push(FORGE_PLUGIN_ID);

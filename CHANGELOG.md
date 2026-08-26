@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.80
+
+- Made Forge Memory replace obsolete Forge OpenClaw development load paths
+  when the authoritative source checkout changes. Configuration now identifies
+  paths by the exact Forge plugin manifest, removes only older paths for that
+  plugin ID, preserves unrelated OpenClaw plugins, and leaves exactly one
+  canonical Forge path. An older release clone can no longer shadow the current
+  plugin after Forge itself has moved back to the canonical repository.
+
+## 0.3.79
+
+- Corrected the public master-password OpenAPI contract to match the shipped
+  policy. Forge accepts any matching 15-to-128-character value, password
+  strength remains advisory, and no hidden composition or predictability rule
+  can be inferred from the generated API documentation.
+
 ## 0.3.78
 
 - Fixed the development client WebSocket address when Forge is served through
