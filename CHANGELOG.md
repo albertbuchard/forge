@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.76
+
+- Fixed Forge pages that could remain on “Forge is starting” after a fresh web
+  build. When the active preview and the local fallback contain different
+  hashed JavaScript or CSS files, Forge now serves the exact asset referenced
+  by the active page instead of returning a stale-build 404. HTML fallbacks
+  are still rejected for hashed assets, so a missing file remains a clear,
+  non-cacheable error rather than executable HTML with the wrong content type.
+
 ## 0.3.75
 
 - Replaced the clipped phone tab rails in Work, Job searches, Documents, and
