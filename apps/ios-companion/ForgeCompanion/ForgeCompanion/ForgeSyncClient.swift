@@ -466,6 +466,9 @@ struct ForgeSyncClient {
     static let foregroundHTTPMaximumConnectionsPerHost = 3
     static let foregroundDirectBulkHealthSyncChunkTimeout: TimeInterval = 120
     static let standardHealthSyncChunkTimeout: TimeInterval = 120
+    static let durableBackgroundRequestProtocol = "forge-mobile-request/v2"
+    static let durableBackgroundRequestMaximumLifetimeSeconds: TimeInterval = 86_400
+    static let healthSyncCompletionRetryDelays: [TimeInterval] = [1, 3]
     private static let workoutTimeSeriesEstimatedBytesPerRecord = 640
     private static let workoutRouteEstimatedBytesPerRecord = 520
     private static let healthSyncMinimumCompressionBytes = 256
@@ -877,6 +880,8 @@ struct ForgeSyncClient {
         let chunkPayloadEncoding: String?
         let acceptedPayloadEncodings: [String]?
         let supportsCompression: Bool
+        let backgroundRequestProtocol: String?
+        let backgroundRequestMaximumLifetimeSeconds: Int?
         let acceptedFamilies: [String]
         let acceptedFamilySet: Set<String>
         let receivedChunkIds: [String]
@@ -893,6 +898,8 @@ struct ForgeSyncClient {
             case chunkPayloadEncoding
             case acceptedPayloadEncodings
             case supportsCompression
+            case backgroundRequestProtocol
+            case backgroundRequestMaximumLifetimeSeconds
             case acceptedFamilies
             case receivedChunkIds
             case workoutImportState
@@ -908,6 +915,8 @@ struct ForgeSyncClient {
             chunkPayloadEncoding: String?,
             acceptedPayloadEncodings: [String]?,
             supportsCompression: Bool,
+            backgroundRequestProtocol: String? = nil,
+            backgroundRequestMaximumLifetimeSeconds: Int? = nil,
             acceptedFamilies: [String],
             receivedChunkIds: [String],
             workoutImportState: HealthSyncWorkoutImportState? = nil,
@@ -921,6 +930,8 @@ struct ForgeSyncClient {
             self.chunkPayloadEncoding = chunkPayloadEncoding
             self.acceptedPayloadEncodings = acceptedPayloadEncodings
             self.supportsCompression = supportsCompression
+            self.backgroundRequestProtocol = backgroundRequestProtocol
+            self.backgroundRequestMaximumLifetimeSeconds = backgroundRequestMaximumLifetimeSeconds
             self.acceptedFamilies = acceptedFamilies
             self.acceptedFamilySet = Set(acceptedFamilies)
             self.receivedChunkIds = receivedChunkIds
@@ -944,6 +955,14 @@ struct ForgeSyncClient {
                 chunkPayloadEncoding: try container.decodeIfPresent(String.self, forKey: .chunkPayloadEncoding),
                 acceptedPayloadEncodings: try container.decodeIfPresent([String].self, forKey: .acceptedPayloadEncodings),
                 supportsCompression: try container.decode(Bool.self, forKey: .supportsCompression),
+                backgroundRequestProtocol: try container.decodeIfPresent(
+                    String.self,
+                    forKey: .backgroundRequestProtocol
+                ),
+                backgroundRequestMaximumLifetimeSeconds: try container.decodeIfPresent(
+                    Int.self,
+                    forKey: .backgroundRequestMaximumLifetimeSeconds
+                ),
                 acceptedFamilies: try container.decode([String].self, forKey: .acceptedFamilies),
                 receivedChunkIds: receivedChunkIds,
                 workoutImportState: try container.decodeIfPresent(
@@ -957,6 +976,19 @@ struct ForgeSyncClient {
         var supportsByteStablePayloadEncoding: Bool {
             chunkPayloadEncoding == "payload_json_base64" ||
                 (acceptedPayloadEncodings ?? []).contains("payload_json_base64")
+        }
+
+        var durableBackgroundRequestProofLifetimeSeconds: TimeInterval? {
+            guard backgroundRequestProtocol == ForgeSyncClient.durableBackgroundRequestProtocol,
+                  let advertisedMaximum = backgroundRequestMaximumLifetimeSeconds,
+                  advertisedMaximum > 0
+            else {
+                return nil
+            }
+            return min(
+                TimeInterval(advertisedMaximum),
+                ForgeSyncClient.durableBackgroundRequestMaximumLifetimeSeconds
+            )
         }
 
         var acceptedChunkCount: Int {
@@ -976,6 +1008,8 @@ struct ForgeSyncClient {
                 chunkPayloadEncoding: chunkPayloadEncoding,
                 acceptedPayloadEncodings: acceptedPayloadEncodings,
                 supportsCompression: supportsCompression,
+                backgroundRequestProtocol: backgroundRequestProtocol,
+                backgroundRequestMaximumLifetimeSeconds: backgroundRequestMaximumLifetimeSeconds,
                 acceptedFamilies: acceptedFamilies,
                 receivedChunkIds: previous.receivedChunkIds,
                 workoutImportState: workoutImportState,
@@ -999,6 +1033,8 @@ struct ForgeSyncClient {
                 chunkPayloadEncoding: chunkPayloadEncoding,
                 acceptedPayloadEncodings: acceptedPayloadEncodings,
                 supportsCompression: supportsCompression,
+                backgroundRequestProtocol: backgroundRequestProtocol,
+                backgroundRequestMaximumLifetimeSeconds: backgroundRequestMaximumLifetimeSeconds,
                 acceptedFamilies: acceptedFamilies,
                 receivedChunkIds: receivedChunkIds,
                 workoutImportState: preservedWorkoutImportState,
@@ -1019,6 +1055,8 @@ struct ForgeSyncClient {
                 chunkPayloadEncoding: chunkPayloadEncoding,
                 acceptedPayloadEncodings: acceptedPayloadEncodings,
                 supportsCompression: supportsCompression,
+                backgroundRequestProtocol: backgroundRequestProtocol,
+                backgroundRequestMaximumLifetimeSeconds: backgroundRequestMaximumLifetimeSeconds,
                 acceptedFamilies: acceptedFamilies,
                 receivedChunkIds: receivedChunkIds,
                 workoutImportState: previousWorkoutImportState,
@@ -2307,8 +2345,11 @@ struct ForgeSyncClient {
     }
 
     static func shouldReconcileHealthSyncUploadError(_ error: Error) -> Bool {
-        if error is CancellationError || Task.isCancelled {
+        if Task.isCancelled {
             return false
+        }
+        if error is CancellationError {
+            return true
         }
         let nsError = error as NSError
         if [408, 500, 502, 503, 504].contains(nsError.code) {
@@ -2433,22 +2474,62 @@ struct ForgeSyncClient {
             "ForgeSyncClient",
             "completeHealthSyncSession start uploadSession=\(uploadSession.syncSessionId)"
         )
-        let envelope: SyncEnvelope = try await sendRequest(
-            path: "/mobile/healthkit/sync-sessions/\(uploadSession.syncSessionId)/complete",
-            apiBaseUrl: pairing.apiBaseUrl,
-            body: HealthSyncSessionCompleteRequest(
-                finalCursor: [:],
-                expectedCounts: expectedCounts
-            ),
-            transport: pairing.transport,
-            mobilePairing: pairing,
-            timeoutInterval: 60
+        let request = HealthSyncSessionCompleteRequest(
+            finalCursor: [:],
+            expectedCounts: expectedCounts
         )
-        companionDebugLog(
-            "ForgeSyncClient",
-            "completeHealthSyncSession success created=\(envelope.sync.imported.createdCount) updated=\(envelope.sync.imported.updatedCount) merged=\(envelope.sync.imported.mergedCount)"
-        )
-        return envelope.sync
+        for attempt in 0...Self.healthSyncCompletionRetryDelays.count {
+            do {
+                let envelope: SyncEnvelope = try await sendRequest(
+                    path: "/mobile/healthkit/sync-sessions/\(uploadSession.syncSessionId)/complete",
+                    apiBaseUrl: pairing.apiBaseUrl,
+                    body: request,
+                    transport: pairing.transport,
+                    mobilePairing: pairing,
+                    timeoutInterval: 60
+                )
+                companionDebugLog(
+                    "ForgeSyncClient",
+                    "completeHealthSyncSession success attempt=\(attempt + 1) created=\(envelope.sync.imported.createdCount) updated=\(envelope.sync.imported.updatedCount) merged=\(envelope.sync.imported.mergedCount)"
+                )
+                return envelope.sync
+            } catch {
+                guard attempt < Self.healthSyncCompletionRetryDelays.count,
+                      Self.shouldRetryHealthSyncCompletion(error)
+                else {
+                    throw error
+                }
+                let delay = Self.healthSyncCompletionRetryDelays[attempt]
+                companionDebugLog(
+                    "ForgeSyncClient",
+                    "completeHealthSyncSession retry attempt=\(attempt + 1) delaySeconds=\(delay) error=\(error.localizedDescription)"
+                )
+                try await pairingSleep(delay)
+            }
+        }
+        throw URLError(.unknown)
+    }
+
+    static func shouldRetryHealthSyncCompletion(_ error: Error) -> Bool {
+        if Task.isCancelled {
+            return false
+        }
+        if error is CancellationError {
+            return true
+        }
+        let nsError = error as NSError
+        if nsError.domain == "ForgeSyncClient" {
+            return [408, 502, 503, 504].contains(nsError.code)
+        }
+        guard nsError.domain == NSURLErrorDomain else {
+            return false
+        }
+        return [
+            URLError.timedOut.rawValue,
+            URLError.cannotConnectToHost.rawValue,
+            URLError.networkConnectionLost.rawValue,
+            URLError.notConnectedToInternet.rawValue
+        ].contains(nsError.code)
     }
 
     func abortHealthSyncSession(uploadSession: HealthSyncUploadSession, pairing: PairingPayload) async {
@@ -3702,6 +3783,9 @@ struct ForgeSyncClient {
                 mobilePairing: pairing,
                 timeoutInterval: timeoutInterval,
                 useBackgroundUpload: useBackgroundUpload,
+                durableBackgroundRequestProofLifetimeSeconds: useBackgroundUpload
+                    ? uploadSession.durableBackgroundRequestProofLifetimeSeconds
+                    : nil,
                 responseHeaderObserver: { response in
                     timingSummary = Self.irohTransportTimingSummary(from: response)
                 }
@@ -4480,6 +4564,7 @@ struct ForgeSyncClient {
         mobilePairing: PairingPayload? = nil,
         timeoutInterval: TimeInterval = 20,
         useBackgroundUpload: Bool = false,
+        durableBackgroundRequestProofLifetimeSeconds: TimeInterval? = nil,
         responseHeaderObserver: ((HTTPURLResponse) -> Void)? = nil
     ) async throws -> Response {
         let data = try await sendRequestData(
@@ -4492,6 +4577,7 @@ struct ForgeSyncClient {
             mobilePairing: mobilePairing,
             timeoutInterval: timeoutInterval,
             useBackgroundUpload: useBackgroundUpload,
+            durableBackgroundRequestProofLifetimeSeconds: durableBackgroundRequestProofLifetimeSeconds,
             responseHeaderObserver: responseHeaderObserver
         )
         companionDebugLog(
@@ -4520,6 +4606,7 @@ struct ForgeSyncClient {
             mobilePairing: mobilePairing,
             timeoutInterval: timeoutInterval,
             useBackgroundUpload: false,
+            durableBackgroundRequestProofLifetimeSeconds: nil,
             responseHeaderObserver: nil
         )
     }
@@ -4534,6 +4621,7 @@ struct ForgeSyncClient {
         mobilePairing: PairingPayload?,
         timeoutInterval: TimeInterval,
         useBackgroundUpload: Bool,
+        durableBackgroundRequestProofLifetimeSeconds: TimeInterval?,
         responseHeaderObserver: ((HTTPURLResponse) -> Void)?
     ) async throws -> Data {
         guard let url = URL(string: "\(apiBaseUrl)\(path)") else {
@@ -4572,7 +4660,8 @@ struct ForgeSyncClient {
                     path: requestTarget,
                     body: requestBody,
                     sessionId: requestPairing.sessionId,
-                    pairingToken: requestPairing.pairingToken
+                    pairingToken: requestPairing.pairingToken,
+                    durableBackgroundLifetimeSeconds: durableBackgroundRequestProofLifetimeSeconds
                 )
             ) { _, new in new }
         }
@@ -4721,22 +4810,49 @@ struct ForgeSyncClient {
         path: String,
         body: Data?,
         sessionId: String,
-        pairingToken: String
+        pairingToken: String,
+        durableBackgroundLifetimeSeconds: TimeInterval? = nil,
+        now: Date = Date(),
+        nonce: String? = nil
     ) -> [String: String] {
-        let issuedAt = ISO8601DateFormatter().string(from: Date())
-        let nonce = UUID().uuidString
+        let formatter = ISO8601DateFormatter()
+        let issuedAt = formatter.string(from: now)
+        let requestNonce = (nonce ?? UUID().uuidString)
             .replacingOccurrences(of: "-", with: "")
             .lowercased()
         let bodySha256 = sha256Hex(body ?? Data())
-        let canonical = [
-            "FORGE-MOBILE-REQUEST/1",
-            method.uppercased(),
-            path,
-            sessionId,
-            issuedAt,
-            nonce,
-            bodySha256
-        ].joined(separator: "\n")
+        let durableLifetime = durableBackgroundLifetimeSeconds.map {
+            min(max(1, $0), durableBackgroundRequestMaximumLifetimeSeconds)
+        }
+        let expiresAt = durableLifetime.map {
+            formatter.string(from: now.addingTimeInterval($0))
+        }
+        let canonical: String
+        let protocolName: String
+        if let expiresAt {
+            protocolName = durableBackgroundRequestProtocol
+            canonical = [
+                "FORGE-MOBILE-REQUEST/2",
+                method.uppercased(),
+                path,
+                sessionId,
+                issuedAt,
+                expiresAt,
+                requestNonce,
+                bodySha256
+            ].joined(separator: "\n")
+        } else {
+            protocolName = "forge-mobile-request/v1"
+            canonical = [
+                "FORGE-MOBILE-REQUEST/1",
+                method.uppercased(),
+                path,
+                sessionId,
+                issuedAt,
+                requestNonce,
+                bodySha256
+            ].joined(separator: "\n")
+        }
         let signature = HMAC<SHA256>.authenticationCode(
             for: Data(canonical.utf8),
             using: SymmetricKey(data: Data(pairingToken.utf8))
@@ -4744,14 +4860,40 @@ struct ForgeSyncClient {
         let signatureHex = signature
             .map { String(format: "%02x", $0) }
             .joined()
-        return [
-            "X-Forge-Mobile-Request-Protocol": "forge-mobile-request/v1",
+        var headers = [
+            "X-Forge-Mobile-Request-Protocol": protocolName,
             "X-Forge-Mobile-Session-Id": sessionId,
             "X-Forge-Mobile-Request-Issued-At": issuedAt,
-            "X-Forge-Mobile-Request-Nonce": nonce,
+            "X-Forge-Mobile-Request-Nonce": requestNonce,
             "X-Forge-Mobile-Body-SHA256": bodySha256,
             "X-Forge-Mobile-Request-Signature": signatureHex
         ]
+        if let expiresAt {
+            headers["X-Forge-Mobile-Request-Expires-At"] = expiresAt
+        }
+        return headers
+    }
+
+    static func mobileRequestHeadersForTesting(
+        method: String,
+        path: String,
+        body: Data?,
+        sessionId: String,
+        pairingToken: String,
+        durableBackgroundLifetimeSeconds: TimeInterval? = nil,
+        now: Date,
+        nonce: String
+    ) -> [String: String] {
+        mobileRequestHeaders(
+            method: method,
+            path: path,
+            body: body,
+            sessionId: sessionId,
+            pairingToken: pairingToken,
+            durableBackgroundLifetimeSeconds: durableBackgroundLifetimeSeconds,
+            now: now,
+            nonce: nonce
+        )
     }
 
     private static func healthSyncChunkTransportRoute(

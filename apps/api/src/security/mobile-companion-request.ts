@@ -7,8 +7,10 @@ import type { VerifiedProtocolPrincipal } from "./application-security-runtime.j
 import type { MobilePairingCredentialVault } from "./mobile-pairing-credential-vault.js";
 
 export const MOBILE_REQUEST_PROTOCOL = "forge-mobile-request/v1";
+export const MOBILE_BACKGROUND_REQUEST_PROTOCOL = "forge-mobile-request/v2";
 export const MOBILE_REQUEST_MAXIMUM_SKEW_MS = 2 * 60_000;
 export const MOBILE_REQUEST_NONCE_TTL_MS = 5 * 60_000;
+export const MOBILE_BACKGROUND_REQUEST_MAXIMUM_LIFETIME_MS = 24 * 60 * 60_000;
 
 type PairingRow = {
   id: string;
@@ -44,9 +46,29 @@ export function canonicalMobileRequest(input: {
   path: string;
   sessionId: string;
   issuedAt: string;
+  expiresAt?: string;
   nonce: string;
   bodySha256: string;
+  protocol?:
+    | typeof MOBILE_REQUEST_PROTOCOL
+    | typeof MOBILE_BACKGROUND_REQUEST_PROTOCOL;
 }) {
+  const protocol = input.protocol ?? MOBILE_REQUEST_PROTOCOL;
+  if (protocol === MOBILE_BACKGROUND_REQUEST_PROTOCOL) {
+    if (!input.expiresAt) {
+      throw new Error("A durable mobile request proof requires an expiry.");
+    }
+    return [
+      "FORGE-MOBILE-REQUEST/2",
+      input.method.toUpperCase(),
+      input.path,
+      input.sessionId,
+      input.issuedAt,
+      input.expiresAt,
+      input.nonce,
+      input.bodySha256
+    ].join("\n");
+  }
   return [
     "FORGE-MOBILE-REQUEST/1",
     input.method.toUpperCase(),
@@ -64,6 +86,7 @@ function claimNonce(
     sessionId: string;
     nonce: string;
     issuedAt: string;
+    expiresAt: string;
     now: Date;
   }
 ) {
@@ -89,14 +112,43 @@ function claimNonce(
         input.sessionId,
         nonceDigest,
         input.issuedAt,
-        new Date(
-          Date.parse(input.issuedAt) + MOBILE_REQUEST_NONCE_TTL_MS
-        ).toISOString(),
+        input.expiresAt,
         input.now.toISOString()
       );
     database.exec("COMMIT");
-  } catch {
-    database.exec("ROLLBACK");
+  } catch (error) {
+    try {
+      database.exec("ROLLBACK");
+    } catch {
+      // Preserve the original SQLite result when BEGIN or the transaction failed.
+    }
+    const sqliteError = error as {
+      code?: unknown;
+      errno?: unknown;
+      message?: unknown;
+    };
+    const sqliteCode =
+      typeof sqliteError?.code === "string" ? sqliteError.code : "";
+    const sqliteErrno =
+      typeof sqliteError?.errno === "number" ? sqliteError.errno : null;
+    const sqliteMessage =
+      typeof sqliteError?.message === "string"
+        ? sqliteError.message.toLowerCase()
+        : "";
+    if (
+      sqliteCode === "SQLITE_BUSY" ||
+      sqliteCode === "SQLITE_LOCKED" ||
+      sqliteErrno === 5 ||
+      sqliteErrno === 6 ||
+      sqliteMessage.includes("database is locked") ||
+      sqliteMessage.includes("database table is locked")
+    ) {
+      throw new HttpError(
+        503,
+        "mobile_request_auth_busy",
+        "Forge is temporarily busy authenticating this mobile request. It can be retried safely."
+      );
+    }
     throw new HttpError(
       409,
       "mobile_request_replayed",
@@ -136,7 +188,10 @@ export function authenticateMobileCompanionRequest(
   if (!protocol) {
     return null;
   }
-  if (protocol !== MOBILE_REQUEST_PROTOCOL) {
+  if (
+    protocol !== MOBILE_REQUEST_PROTOCOL &&
+    protocol !== MOBILE_BACKGROUND_REQUEST_PROTOCOL
+  ) {
     throw new HttpError(
       401,
       "mobile_request_protocol_unsupported",
@@ -145,6 +200,7 @@ export function authenticateMobileCompanionRequest(
   }
   const sessionId = header(request, "x-forge-mobile-session-id");
   const issuedAt = header(request, "x-forge-mobile-request-issued-at");
+  const expiresAt = header(request, "x-forge-mobile-request-expires-at");
   const nonce = header(request, "x-forge-mobile-request-nonce");
   const bodySha256 = header(request, "x-forge-mobile-body-sha256");
   const signature = header(request, "x-forge-mobile-request-signature");
@@ -167,10 +223,21 @@ export function authenticateMobileCompanionRequest(
   }
   const now = input.now?.() ?? new Date();
   const issuedAtMs = Date.parse(issuedAt);
-  if (
-    !Number.isFinite(issuedAtMs) ||
-    Math.abs(now.getTime() - issuedAtMs) > MOBILE_REQUEST_MAXIMUM_SKEW_MS
-  ) {
+  const durableBackgroundProof = protocol === MOBILE_BACKGROUND_REQUEST_PROTOCOL;
+  const expiresAtMs = expiresAt ? Date.parse(expiresAt) : Number.NaN;
+  const invalidV1Proof =
+    !durableBackgroundProof &&
+    (!Number.isFinite(issuedAtMs) ||
+      Math.abs(now.getTime() - issuedAtMs) > MOBILE_REQUEST_MAXIMUM_SKEW_MS);
+  const invalidV2Proof =
+    durableBackgroundProof &&
+    (!Number.isFinite(issuedAtMs) ||
+      !Number.isFinite(expiresAtMs) ||
+      issuedAtMs > now.getTime() + MOBILE_REQUEST_MAXIMUM_SKEW_MS ||
+      expiresAtMs <= now.getTime() ||
+      expiresAtMs <= issuedAtMs ||
+      expiresAtMs - issuedAtMs > MOBILE_BACKGROUND_REQUEST_MAXIMUM_LIFETIME_MS);
+  if (invalidV1Proof || invalidV2Proof) {
     throw new HttpError(
       401,
       "mobile_request_expired",
@@ -210,8 +277,10 @@ export function authenticateMobileCompanionRequest(
         path,
         sessionId,
         issuedAt,
+        expiresAt: durableBackgroundProof ? expiresAt ?? undefined : undefined,
         nonce,
-        bodySha256
+        bodySha256,
+        protocol
       }),
       "utf8"
     )
@@ -223,7 +292,15 @@ export function authenticateMobileCompanionRequest(
       "The mobile request signature is invalid."
     );
   }
-  claimNonce(input.database, { sessionId, nonce, issuedAt, now });
+  claimNonce(input.database, {
+    sessionId,
+    nonce,
+    issuedAt,
+    expiresAt: durableBackgroundProof
+      ? new Date(expiresAtMs).toISOString()
+      : new Date(issuedAtMs + MOBILE_REQUEST_NONCE_TTL_MS).toISOString(),
+    now
+  });
 
   return {
     kind: "companion_session",

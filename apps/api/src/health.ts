@@ -33,6 +33,10 @@ import {
   screenTimeSyncPayloadSchema
 } from "./screen-time.js";
 import { isSecuredMobilePairingMarker } from "./security/mobile-pairing-credential-vault.js";
+import {
+  MOBILE_BACKGROUND_REQUEST_MAXIMUM_LIFETIME_MS,
+  MOBILE_BACKGROUND_REQUEST_PROTOCOL
+} from "./security/mobile-companion-request.js";
 import { recordActivityEvent } from "./repositories/activity-events.js";
 import { recordHabitGeneratedWorkoutReward } from "./repositories/rewards.js";
 import { resolveUserForMutation } from "./repositories/users.js";
@@ -441,7 +445,13 @@ const mobileHealthSyncChunkPayloadSchema = z.object({
   screenTime: screenTimeSyncPayloadSchema.optional()
 });
 
+const mobileHealthSyncAuthenticatedFields = {
+  sessionId: z.string().trim().min(1),
+  pairingToken: z.string().trim().min(1)
+};
+
 export const mobileHealthSyncChunkSchema = z.object({
+  ...mobileHealthSyncAuthenticatedFields,
   chunkId: z.string().trim().min(1),
   sequence: z.number().int().nonnegative(),
   family: mobileHealthSyncFamilySchema,
@@ -455,6 +465,7 @@ export const mobileHealthSyncChunkSchema = z.object({
 });
 
 export const mobileHealthSyncSessionCompleteSchema = z.object({
+  ...mobileHealthSyncAuthenticatedFields,
   finalCursor: z.record(z.string(), z.unknown()).default({}),
   expectedCounts: z
     .record(z.string(), z.number().int().nonnegative())
@@ -664,6 +675,7 @@ type MobileSyncSessionRow = {
   byte_totals_json: string;
   affected_workout_ids_json: string;
   error_json: string;
+  completion_receipt_json: string | null;
   started_at: string;
   completed_at: string | null;
   failed_at: string | null;
@@ -5498,6 +5510,9 @@ function mobileSyncSessionUploadPayload(
     acceptedPayloadEncodings:
       HEALTH_MOBILE_SYNC_ACCEPTED_CHUNK_PAYLOAD_ENCODINGS,
     supportsCompression: true,
+    backgroundRequestProtocol: MOBILE_BACKGROUND_REQUEST_PROTOCOL,
+    backgroundRequestMaximumLifetimeSeconds:
+      MOBILE_BACKGROUND_REQUEST_MAXIMUM_LIFETIME_MS / 1_000,
     acceptedFamilies: safeJsonParse<MobileHealthSyncFamily[]>(
       session.requested_families_json,
       []
@@ -5552,10 +5567,16 @@ export function getMobileHealthSyncSessionStatus(
   });
 }
 
-function ensureRunningMobileSyncSession(syncSessionId: string) {
+function ensureRunningMobileSyncSession(
+  syncSessionId: string,
+  pairingSessionId?: string
+) {
   expireStaleMobileSyncSessions();
   const session = readMobileSyncSession(syncSessionId);
-  if (!session) {
+  if (
+    !session ||
+    (pairingSessionId && session.pairing_session_id !== pairingSessionId)
+  ) {
     throw new HttpError(
       404,
       "sync_session_not_found",
@@ -6247,7 +6268,8 @@ export function ingestMobileHealthSyncChunk(
 ) {
   const parsed = mobileHealthSyncChunkSchema.parse(payload);
   const clientChecksum = normalizedChunkChecksum(parsed.checksumSha256);
-  const session = ensureRunningMobileSyncSession(syncSessionId);
+  const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+  const session = ensureRunningMobileSyncSession(syncSessionId, pairing.id);
   const requestedFamilies = safeJsonParse<MobileHealthSyncFamily[]>(
     session.requested_families_json,
     []
@@ -6921,12 +6943,68 @@ function markMobileSyncSessionFailed(
     .run(errorMessage, now, session.pairing_session_id);
 }
 
-export function completeMobileHealthSyncSession(
-  syncSessionId: string,
-  payload: z.infer<typeof mobileHealthSyncSessionCompleteSchema>
-) {
-  const parsed = mobileHealthSyncSessionCompleteSchema.parse(payload);
-  const session = ensureRunningMobileSyncSession(syncSessionId);
+type MobileHealthSyncCompletionReceipt = ReturnType<
+  typeof ingestMobileHealthSync
+> & {
+  upload: {
+    syncSessionId: string;
+    chunks: number;
+    effectiveChunks: number;
+    supersededChunks: number;
+    deletedWorkoutCount: number;
+  };
+};
+
+const MOBILE_HEALTH_SYNC_COMPLETION_RETRY_DELAYS_MS = [150, 450, 900] as const;
+
+export function isRetryableMobileHealthSyncCompletionError(error: unknown) {
+  const candidate = error as {
+    code?: unknown;
+    errno?: unknown;
+    message?: unknown;
+  };
+  const code = typeof candidate?.code === "string" ? candidate.code : "";
+  const errno = typeof candidate?.errno === "number" ? candidate.errno : null;
+  const message =
+    typeof candidate?.message === "string" ? candidate.message.toLowerCase() : "";
+  return (
+    code === "SQLITE_BUSY" ||
+    code === "SQLITE_LOCKED" ||
+    errno === 5 ||
+    errno === 6 ||
+    message.includes("database is locked") ||
+    message.includes("database table is locked")
+  );
+}
+
+function isRecoverableMobileHealthSyncCompletionError(error: unknown) {
+  return (
+    isRetryableMobileHealthSyncCompletionError(error) ||
+    (error instanceof HttpError && error.code === "missing_required_chunks")
+  );
+}
+
+function storedMobileHealthSyncCompletionReceipt(
+  session: MobileSyncSessionRow
+): MobileHealthSyncCompletionReceipt | null {
+  if (!session.completion_receipt_json) {
+    return null;
+  }
+  return safeJsonParse<MobileHealthSyncCompletionReceipt | null>(
+    session.completion_receipt_json,
+    null
+  );
+}
+
+function delayMobileHealthSyncCompletionRetry(milliseconds: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function completeRunningMobileHealthSyncSession(
+  session: MobileSyncSessionRow,
+  parsed: z.infer<typeof mobileHealthSyncSessionCompleteSchema>
+): MobileHealthSyncCompletionReceipt {
+  const syncSessionId = session.id;
   const chunks = listMobileSyncCompletionChunks(syncSessionId);
   if (chunks.length === 0) {
     throw new HttpError(
@@ -6939,49 +7017,135 @@ export function completeMobileHealthSyncSession(
   const pairing = getDatabase()
     .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
     .get(session.pairing_session_id) as PairingSessionRow;
-  try {
-    return runInTransaction(() => {
-      validateMobileSyncExpectedCounts(
+  return runInTransaction(() => {
+    validateMobileSyncExpectedCounts(
+      syncSessionId,
+      parsed.expectedCounts,
+      completionChunks
+    );
+    const { assembled, tombstones } = mergeMobileHealthSyncChunks(
+      session,
+      completionChunks,
+      { skipImmediatelyApplied: true }
+    );
+    const sync = ingestMobileHealthSync(assembled);
+    const deletedWorkoutCount = applyWorkoutTombstones(pairing, tombstones);
+    upsertMobileSyncFamilyCursors(pairing, parsed.finalCursor);
+    const receipt: MobileHealthSyncCompletionReceipt = {
+      ...syncReceiptWithChunkCounts(sync, completionChunks),
+      upload: {
         syncSessionId,
-        parsed.expectedCounts,
-        completionChunks
+        chunks: chunks.length,
+        effectiveChunks: completionChunks.length,
+        supersededChunks: chunks.length - completionChunks.length,
+        deletedWorkoutCount
+      }
+    };
+    const now = nowIso();
+    getDatabase()
+      .prepare(
+        `UPDATE health_mobile_sync_sessions
+         SET status = 'completed', expected_counts_json = ?, completed_at = ?,
+             completion_receipt_json = ?, error_json = '{}', updated_at = ?
+         WHERE id = ? AND status = 'running'`
+      )
+      .run(
+        JSON.stringify(parsed.expectedCounts),
+        now,
+        JSON.stringify(receipt),
+        now,
+        syncSessionId
       );
-      const { assembled, tombstones } = mergeMobileHealthSyncChunks(
-        session,
-        completionChunks,
-        { skipImmediatelyApplied: true }
-      );
-      const sync = ingestMobileHealthSync(assembled);
-      const deletedWorkoutCount = applyWorkoutTombstones(pairing, tombstones);
-      upsertMobileSyncFamilyCursors(pairing, parsed.finalCursor);
-      const now = nowIso();
-      getDatabase()
-        .prepare(
-          `UPDATE health_mobile_sync_sessions
-           SET status = 'completed', expected_counts_json = ?, completed_at = ?,
-               updated_at = ?
-           WHERE id = ?`
-        )
-        .run(JSON.stringify(parsed.expectedCounts), now, now, syncSessionId);
-      return {
-        ...syncReceiptWithChunkCounts(sync, completionChunks),
-        upload: {
-          syncSessionId,
-          chunks: chunks.length,
-          effectiveChunks: completionChunks.length,
-          supersededChunks: chunks.length - completionChunks.length,
-          deletedWorkoutCount
-        }
-      };
-    });
-  } catch (error) {
-    markMobileSyncSessionFailed(session, error);
-    throw error;
-  }
+    return receipt;
+  });
 }
 
-export function abortMobileHealthSyncSession(syncSessionId: string) {
-  const session = ensureRunningMobileSyncSession(syncSessionId);
+export async function completeMobileHealthSyncSession(
+  syncSessionId: string,
+  payload: z.infer<typeof mobileHealthSyncSessionCompleteSchema>
+) {
+  const parsed = mobileHealthSyncSessionCompleteSchema.parse(payload);
+  const callerPairing = requireValidPairing(
+    parsed.sessionId,
+    parsed.pairingToken
+  );
+  for (
+    let attempt = 0;
+    attempt <= MOBILE_HEALTH_SYNC_COMPLETION_RETRY_DELAYS_MS.length;
+    attempt += 1
+  ) {
+    const session = readMobileSyncSession(syncSessionId);
+    if (!session || session.pairing_session_id !== callerPairing.id) {
+      throw new HttpError(
+        404,
+        "sync_session_not_found",
+        "The HealthKit sync session does not exist."
+      );
+    }
+    if (session.status === "completed") {
+      const storedReceipt = storedMobileHealthSyncCompletionReceipt(session);
+      if (storedReceipt) {
+        return storedReceipt;
+      }
+      throw new HttpError(
+        409,
+        "sync_session_completion_receipt_unavailable",
+        "This HealthKit sync completed before idempotent receipts were available."
+      );
+    }
+    if (session.status !== "running") {
+      throw new HttpError(
+        409,
+        "sync_session_closed",
+        "The HealthKit sync session is no longer accepting completion.",
+        { status: session.status }
+      );
+    }
+    try {
+      return completeRunningMobileHealthSyncSession(session, parsed);
+    } catch (error) {
+      if (!isRecoverableMobileHealthSyncCompletionError(error)) {
+        markMobileSyncSessionFailed(session, error);
+        throw error;
+      }
+      if (!isRetryableMobileHealthSyncCompletionError(error)) {
+        throw error;
+      }
+      const retryDelay = MOBILE_HEALTH_SYNC_COMPLETION_RETRY_DELAYS_MS[attempt];
+      console.warn("[healthkit-sync] completion delayed by SQLite contention", {
+        syncSessionId,
+        attempt: attempt + 1,
+        retrying: retryDelay !== undefined,
+        code:
+          typeof (error as { code?: unknown }).code === "string"
+            ? (error as { code: string }).code
+            : null,
+        message: error instanceof Error ? error.message : String(error)
+      });
+      if (retryDelay === undefined) {
+        throw new HttpError(
+          503,
+          "health_sync_completion_busy",
+          "Forge is temporarily busy finalizing this HealthKit sync. The accepted chunks remain safe and the same session can be retried.",
+          { retryable: true, syncSessionId }
+        );
+      }
+      await delayMobileHealthSyncCompletionRetry(retryDelay);
+    }
+  }
+  throw new HttpError(
+    503,
+    "health_sync_completion_busy",
+    "Forge is temporarily busy finalizing this HealthKit sync."
+  );
+}
+
+export function abortMobileHealthSyncSession(
+  syncSessionId: string,
+  payload: { sessionId: string; pairingToken: string }
+) {
+  const pairing = requireValidPairing(payload.sessionId, payload.pairingToken);
+  const session = ensureRunningMobileSyncSession(syncSessionId, pairing.id);
   const now = nowIso();
   getDatabase()
     .prepare(

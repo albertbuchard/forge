@@ -18001,7 +18001,7 @@ export async function buildServer(
     async (request) => {
       const { id } = request.params as { id: string };
       return {
-        sync: completeMobileHealthSyncSession(
+        sync: await completeMobileHealthSyncSession(
           id,
           mobileHealthSyncSessionCompleteSchema.parse(request.body ?? {})
         )
@@ -18010,7 +18010,13 @@ export async function buildServer(
   );
   app.delete("/api/v1/mobile/healthkit/sync-sessions/:id", async (request) => {
     const { id } = request.params as { id: string };
-    return { upload: abortMobileHealthSyncSession(id) };
+    const pairing = z
+      .object({
+        sessionId: z.string().trim().min(1),
+        pairingToken: z.string().trim().min(1)
+      })
+      .parse(request.query ?? {});
+    return { upload: abortMobileHealthSyncSession(id, pairing) };
   });
   app.post(
     "/api/v1/mobile/healthkit/sync",
