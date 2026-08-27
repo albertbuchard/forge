@@ -4906,6 +4906,33 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
     };
     assert.equal(receipt.sync.imported.workouts, 1);
 
+    const repeatedCompleteResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/complete`,
+      payload: {
+        finalCursor: {
+          workout_summaries: { lastWorkoutEndedAt: "2026-04-07T08:00:00.000Z" }
+        }
+      }
+    });
+    assert.equal(
+      repeatedCompleteResponse.statusCode,
+      200,
+      repeatedCompleteResponse.body
+    );
+    assert.deepEqual(repeatedCompleteResponse.json(), completeResponse.json());
+    const storedCompletionReceipt = getDatabase()
+      .prepare(
+        `SELECT completion_receipt_json
+         FROM health_mobile_sync_sessions
+         WHERE id = ?`
+      )
+      .get(syncSessionId) as { completion_receipt_json: string };
+    assert.deepEqual(
+      JSON.parse(storedCompletionReceipt.completion_receipt_json),
+      receipt.sync
+    );
+
     const fitnessResponse = await app.inject({
       method: "GET",
       url: "/api/v1/health/fitness"
@@ -5848,7 +5875,7 @@ test("mobile health chunked sync implicitly resumes compatible running sessions 
   }
 });
 
-test("mobile health chunked sync rejects incomplete expected counts without advancing pairing sync state", async () => {
+test("mobile health chunked sync preserves incomplete sessions without advancing pairing sync state", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-health-incomplete-chunked-")
   );
@@ -5942,8 +5969,8 @@ test("mobile health chunked sync rejects incomplete expected counts without adva
          WHERE id = ?`
       )
       .get(syncSessionId) as { status: string; error_json: string };
-    assert.equal(syncSession.status, "failed");
-    assert.match(syncSession.error_json, /missing required chunks/i);
+    assert.equal(syncSession.status, "running");
+    assert.deepEqual(JSON.parse(syncSession.error_json), {});
 
     const pairing = getDatabase()
       .prepare(
@@ -5956,7 +5983,7 @@ test("mobile health chunked sync rejects incomplete expected counts without adva
       last_sync_error: string | null;
     };
     assert.equal(pairing.last_sync_at, null);
-    assert.match(pairing.last_sync_error ?? "", /missing required chunks/i);
+    assert.equal(pairing.last_sync_error, null);
   } finally {
     await app.close();
     closeDatabase();

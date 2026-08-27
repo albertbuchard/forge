@@ -94,8 +94,8 @@ function claimNonce(
     .update("forge-mobile-request-nonce/v1\0", "utf8")
     .update(input.nonce, "utf8")
     .digest("hex");
-  database.exec("BEGIN IMMEDIATE");
   try {
+    database.exec("BEGIN IMMEDIATE");
     database
       .prepare(
         `DELETE FROM security_mobile_request_nonces

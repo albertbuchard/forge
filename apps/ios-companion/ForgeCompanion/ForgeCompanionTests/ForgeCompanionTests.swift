@@ -3113,6 +3113,7 @@ final class ForgeCompanionTests: XCTestCase {
 
     func testHealthSyncReconciliationAllowsOneAmbiguousTransportCycleOnly() {
         let ambiguousErrors: [Error] = [
+            CancellationError(),
             URLError(.timedOut),
             URLError(.networkConnectionLost),
             URLError(.notConnectedToInternet),
@@ -3129,7 +3130,6 @@ final class ForgeCompanionTests: XCTestCase {
             )
         }
         let definitiveErrors: [Error] = [
-            CancellationError() as Error,
             NSError(domain: "ForgeSyncClient", code: 400),
             NSError(domain: "ForgeSyncClient", code: 401),
             NSError(domain: "ForgeSyncClient", code: 409),
@@ -3141,6 +3141,105 @@ final class ForgeCompanionTests: XCTestCase {
                 "Expected definitive error to propagate: \(error)"
             )
         }
+    }
+
+    func testHealthSyncCompletionRetriesOnlyAmbiguousFailures() {
+        let retryableErrors: [Error] = [
+            CancellationError(),
+            NSError(domain: "ForgeSyncClient", code: 503),
+            URLError(.timedOut),
+            URLError(.networkConnectionLost)
+        ]
+        for error in retryableErrors {
+            XCTAssertTrue(
+                ForgeSyncClient.shouldRetryHealthSyncCompletion(error),
+                "Expected ambiguous completion failure to retry: \(error)"
+            )
+        }
+
+        let definitiveErrors: [Error] = [
+            NSError(domain: "ForgeSyncClient", code: 400),
+            NSError(domain: "ForgeSyncClient", code: 401),
+            NSError(domain: "ForgeSyncClient", code: 409),
+            URLError(.cancelled)
+        ]
+        for error in definitiveErrors {
+            XCTAssertFalse(
+                ForgeSyncClient.shouldRetryHealthSyncCompletion(error),
+                "Expected definitive completion failure to propagate: \(error)"
+            )
+        }
+    }
+
+    func testDurableBackgroundRequestProofIsBoundedAndSigned() throws {
+        let now = Date(timeIntervalSince1970: 1_788_000_000)
+        let body = Data("{\"chunk\":1}".utf8)
+        let sessionId = "pair_durable_proof"
+        let pairingToken = "durable-proof-secret"
+        let nonce = "0123456789abcdef0123456789abcdef"
+        let headers = ForgeSyncClient.mobileRequestHeadersForTesting(
+            method: "POST",
+            path: "/api/v1/mobile/healthkit/sync-sessions/hms_1/chunks",
+            body: body,
+            sessionId: sessionId,
+            pairingToken: pairingToken,
+            durableBackgroundLifetimeSeconds: 172_800,
+            now: now,
+            nonce: nonce
+        )
+
+        XCTAssertEqual(
+            headers["X-Forge-Mobile-Request-Protocol"],
+            ForgeSyncClient.durableBackgroundRequestProtocol
+        )
+        let issuedAt = try XCTUnwrap(headers["X-Forge-Mobile-Request-Issued-At"])
+        let expiresAt = try XCTUnwrap(headers["X-Forge-Mobile-Request-Expires-At"])
+        let formatter = ISO8601DateFormatter()
+        XCTAssertEqual(
+            try XCTUnwrap(formatter.date(from: expiresAt)).timeIntervalSince(
+                try XCTUnwrap(formatter.date(from: issuedAt))
+            ),
+            ForgeSyncClient.durableBackgroundRequestMaximumLifetimeSeconds,
+            accuracy: 0.001
+        )
+        let bodyDigest = SHA256.hash(data: body)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        let canonical = [
+            "FORGE-MOBILE-REQUEST/2",
+            "POST",
+            "/api/v1/mobile/healthkit/sync-sessions/hms_1/chunks",
+            sessionId,
+            issuedAt,
+            expiresAt,
+            nonce,
+            bodyDigest
+        ].joined(separator: "\n")
+        let expectedSignature = HMAC<SHA256>.authenticationCode(
+            for: Data(canonical.utf8),
+            using: SymmetricKey(data: Data(pairingToken.utf8))
+        )
+        .map { String(format: "%02x", $0) }
+        .joined()
+        XCTAssertEqual(
+            headers["X-Forge-Mobile-Request-Signature"],
+            expectedSignature
+        )
+
+        let legacyHeaders = ForgeSyncClient.mobileRequestHeadersForTesting(
+            method: "POST",
+            path: "/api/v1/mobile/pairing/heartbeat",
+            body: body,
+            sessionId: sessionId,
+            pairingToken: pairingToken,
+            now: now,
+            nonce: nonce
+        )
+        XCTAssertEqual(
+            legacyHeaders["X-Forge-Mobile-Request-Protocol"],
+            "forge-mobile-request/v1"
+        )
+        XCTAssertNil(legacyHeaders["X-Forge-Mobile-Request-Expires-At"])
     }
 
     func testIrohPrimaryRouteKeepsStandardHealthSyncTimeout() {
@@ -6842,6 +6941,8 @@ final class ForgeCompanionTests: XCTestCase {
               "chunkPayloadEncoding": "payload_json_base64",
               "acceptedPayloadEncodings": ["payload_json_base64"],
               "supportsCompression": true,
+              "backgroundRequestProtocol": "forge-mobile-request/v2",
+              "backgroundRequestMaximumLifetimeSeconds": 86400,
               "acceptedFamilies": ["workout_summaries"],
               "progress": {
                 "chunkCount": 12,
@@ -6861,6 +6962,10 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(session.syncSessionId, "hms_light")
         XCTAssertEqual(session.receivedChunkIds, [])
         XCTAssertEqual(session.acceptedChunkCount, 12)
+        XCTAssertEqual(
+            session.durableBackgroundRequestProofLifetimeSeconds,
+            86_400
+        )
         XCTAssertEqual(session.progress?.receivedCounts?["workout_summaries"], 8)
     }
 
