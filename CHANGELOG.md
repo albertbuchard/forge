@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.81
+
+- Fixed the Companion sync failure that could leave HealthKit data stale for
+  days after Forge reported `database table is locked`. Finalization now
+  retries transient SQLite contention, keeps the upload session and every
+  accepted chunk available when Forge is still busy, and stores one immutable
+  completion receipt so a lost response can be retried without importing the
+  data twice.
+- Added a negotiated, replay-protected background-request proof with a maximum
+  24-hour lifetime. iOS background uploads no longer fail merely because the
+  system delivered them more than two minutes after they were queued; current
+  foreground and older Companion requests remain compatible with the existing
+  short-lived proof.
+- Made system-cancelled HealthKit transfers converge on Forge's durable chunk
+  records while preserving deliberate whole-sync cancellation. Incomplete
+  expected counts remain resumable instead of permanently failing the session,
+  and upload, completion, status, and abort operations are bound to the exact
+  paired device.
+
 ## 0.3.80
 
 - Made Forge Memory replace obsolete Forge OpenClaw development load paths

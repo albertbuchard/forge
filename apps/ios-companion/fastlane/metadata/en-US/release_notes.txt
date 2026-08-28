@@ -1,7 +1,5 @@
-Forge Companion 1.0.178 improves HealthKit sync and embedded Forge startup reliability.
+Forge Companion 1.0.179 repairs HealthKit sync sessions that could remain stale after a delayed upload or a temporary Forge database lock.
 
-Large HealthKit uploads now use a smaller direct-transfer window and enough time for normal phone-to-Mac network delay. Background uploads remain serial. If a temporary failure leaves the result uncertain, the app checks what Forge already accepted and retries only the missing chunks once, without changing their identities.
+Background transfers now use a replay-protected proof that remains valid when iOS defers delivery. A system-cancelled transfer checks Forge's accepted chunks and resumes only what is missing, while a deliberate sync cancellation still stops normally.
 
-Successful sync cancellation no longer depends on decoding an optional response body. Expected iOS background-task cancellation also no longer appears as a missing upload waiter.
-
-The embedded Forge interface now reports ready only after React finishes its first render. If startup remains on the loading placeholder or an empty page, the app performs one fresh recovery load and then shows a clear native error instead of looping indefinitely.
+Forge now retries temporary database contention during finalization and keeps every accepted chunk safe if it is still busy. If a completion response is lost, the app can retry and receive the same stored receipt without importing the data twice.

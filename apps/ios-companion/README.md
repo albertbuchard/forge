@@ -104,7 +104,11 @@ npx forge-memory pair-ios --manual-http
 Large HealthKit transfers are resumable. Direct HTTPS uploads use a bounded
 3-request window, background uploads remain serial, and one session-status refresh
 reconciles an ambiguous timeout or temporary server failure before the app retries
-only missing chunks. The embedded Forge view also waits for a committed React render;
+only missing chunks. Forge advertises a replay-protected 24-hour request proof for
+uploads that iOS may defer; ordinary foreground calls keep the short-lived proof.
+Session completion retries temporary SQLite contention, preserves accepted chunks
+instead of closing the session, and returns the same stored receipt after an
+uncertain response. The embedded Forge view also waits for a committed React render;
 it attempts one cache-bypassing reload when startup stalls and then presents a clear
 native error instead of looping.
 

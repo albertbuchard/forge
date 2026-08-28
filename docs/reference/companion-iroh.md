@@ -193,8 +193,27 @@ upload. A direct request has the same 120-second budget as other HealthKit chunk
 If a timeout, connection loss, or temporary 408, 500, 502, 503, or 504 response makes
 the result uncertain, the app refreshes the session once and retries only chunks that
 the server has not accepted. Chunk ids remain content-addressed, so that replay is
-byte-stable. Authentication failures, invalid input, conflicts, and cancellation do
-not enter this reconciliation cycle.
+byte-stable. A system-generated transfer cancellation enters the same reconciliation
+cycle unless the parent sync task itself was cancelled, so one interrupted request
+does not discard its siblings' accepted evidence. Authentication failures, invalid
+input, and conflicts do not enter this cycle.
+
+When the server advertises `forge-mobile-request/v2`, the iPhone signs a background
+upload with both an issue time and an expiry, bounded to 24 hours. The signature binds
+the HTTP method, exact path, pairing, body digest, nonce, and both timestamps. Forge
+stores the nonce until that expiry, so a request delayed by iOS can arrive after the
+ordinary two-minute foreground window without becoming replayable. Clients and
+foreground calls that use `forge-mobile-request/v1` retain the existing short window.
+
+Completion is a separate recoverable transaction. Forge retries transient
+`SQLITE_BUSY` and `SQLITE_LOCKED` results, never marks the session failed for those
+conditions, and returns `health_sync_completion_busy` only after the bounded server
+attempts are exhausted. The iPhone then makes its own bounded retry. A successful
+completion stores its exact import receipt in the same transaction as the completed
+state; repeating the request returns that receipt without importing a second time.
+Missing expected chunks also leave the session running so a later resume can supply
+them. Status, chunk, completion, and abort operations are restricted to the pairing
+that created the session.
 
 A successful session-abort response is accepted from its HTTP status and does not
 depend on an optional response body. Intentional cancellation of an iOS background

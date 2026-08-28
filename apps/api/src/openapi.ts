@@ -115,9 +115,11 @@ const mobileHealthSyncUploadSchema = {
     "syncSessionId",
     "schemaVersion",
     "status",
-    "targetChunkBytes",
-    "maxChunkBytes",
-    "payloadEncodings",
+    "chunkTargetBytes",
+    "chunkMaxBytes",
+    "supportsCompression",
+    "backgroundRequestProtocol",
+    "backgroundRequestMaximumLifetimeSeconds",
     "acceptedFamilies",
     "receivedChunkIds",
     "progress"
@@ -129,9 +131,19 @@ const mobileHealthSyncUploadSchema = {
       type: "string",
       enum: ["running", "completed", "failed", "aborted"]
     },
-    targetChunkBytes: { type: "number" },
-    maxChunkBytes: { type: "number" },
-    payloadEncodings: arrayOf({ type: "string" }),
+    chunkTargetBytes: { type: "number" },
+    chunkMaxBytes: { type: "number" },
+    chunkPayloadEncoding: nullable({ type: "string" }),
+    acceptedPayloadEncodings: arrayOf({ type: "string" }),
+    supportsCompression: { type: "boolean" },
+    backgroundRequestProtocol: {
+      type: "string",
+      enum: ["forge-mobile-request/v2"]
+    },
+    backgroundRequestMaximumLifetimeSeconds: {
+      type: "number",
+      enum: [86400]
+    },
     acceptedFamilies: arrayOf({ type: "string" }),
     receivedChunkIds: arrayOf({ type: "string" }),
     progress: mobileHealthSyncProgressSchema
@@ -15721,6 +15733,37 @@ export function buildOpenApiDocument() {
               "Upload session status and accepted chunk progress"
             )
           }
+        },
+        delete: {
+          summary:
+            "Abort a running mobile HealthKit upload without deleting accepted audit rows",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["upload"],
+                properties: {
+                  upload: {
+                    type: "object",
+                    required: ["syncSessionId", "status"],
+                    properties: {
+                      syncSessionId: { type: "string" },
+                      status: { type: "string", enum: ["aborted"] }
+                    }
+                  }
+                }
+              },
+              "Aborted upload-session receipt"
+            )
+          }
         }
       },
       "/api/v1/mobile/healthkit/sync-sessions/{id}/chunks": {
@@ -15747,9 +15790,9 @@ export function buildOpenApiDocument() {
                     "chunkId",
                     "family",
                     "sequence",
-                    "records",
+                    "recordCount",
                     "byteCount",
-                    "checksum"
+                    "checksumSha256"
                   ],
                   properties: {
                     sessionId: { type: "string" },
@@ -15757,12 +15800,13 @@ export function buildOpenApiDocument() {
                     chunkId: { type: "string" },
                     family: { type: "string" },
                     sequence: { type: "number" },
-                    records: { type: "number" },
+                    recordCount: { type: "number" },
                     byteCount: { type: "number" },
-                    checksum: { type: "string" },
-                    compression: nullable({ type: "string" }),
-                    payloadEncoding: nullable({ type: "string" }),
-                    payload: {}
+                    compressedByteCount: { type: "number" },
+                    checksumSha256: { type: "string" },
+                    payloadJsonBase64: { type: "string" },
+                    payloadJsonDeflateBase64: { type: "string" },
+                    payload: { type: "object", additionalProperties: true }
                   }
                 }
               }
@@ -15787,6 +15831,71 @@ export function buildOpenApiDocument() {
                 }
               },
               "Chunk receipt with duplicate detection and aggregate progress"
+            )
+          }
+        }
+      },
+      "/api/v1/mobile/healthkit/sync-sessions/{id}/complete": {
+        post: {
+          summary:
+            "Finalize a resumable HealthKit session and replay its immutable receipt safely",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    finalCursor: {
+                      type: "object",
+                      additionalProperties: true
+                    },
+                    expectedCounts: {
+                      type: "object",
+                      additionalProperties: { type: "number" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["sync"],
+                properties: {
+                  sync: {
+                    type: "object",
+                    additionalProperties: true,
+                    description:
+                      "The durable completion receipt. Repeating completion returns this same receipt without importing data twice."
+                  }
+                }
+              },
+              "Idempotent HealthKit import and upload receipt"
+            ),
+            "503": jsonResponse(
+              {
+                type: "object",
+                required: ["code", "error"],
+                properties: {
+                  code: {
+                    type: "string",
+                    enum: ["health_sync_completion_busy"]
+                  },
+                  error: { type: "string" }
+                }
+              },
+              "Retryable completion contention; accepted chunks and the running session are preserved"
             )
           }
         }
