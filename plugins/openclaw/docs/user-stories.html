@@ -47,8 +47,8 @@
           <a class="story-metric " href="?scope=current" data-metric-scope="current"><strong>222</strong><span>Current product</span></a>
           <a class="story-metric metric-planned" href="?scope=planned" data-metric-scope="planned"><strong>0</strong><span>Planned</span></a>
           <a class="story-metric metric-verified" href="?readiness=Verified" data-metric-readiness="Verified"><strong>26</strong><span>Verified</span></a>
-          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>180</strong><span>In review</span></a>
-          <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>13</strong><span>Needs audit</span></a>
+          <a class="story-metric " href="?readiness=In%20review" data-metric-readiness="In review"><strong>181</strong><span>In review</span></a>
+          <a class="story-metric " href="?readiness=Needs%20audit" data-metric-readiness="Needs audit"><strong>12</strong><span>Needs audit</span></a>
           <a class="story-metric " href="#story-families" data-metric-family-picker><strong>24</strong><span>Story families</span></a>
         </section>
 
@@ -3261,17 +3261,17 @@
                   </div>
                 </details>
 
-                <details class="story-card" id="story-ios-09" data-story-id="IOS-09" data-lifecycle="current" data-readiness="Needs audit" data-family="IOS">
+                <details class="story-card" id="story-ios-09" data-story-id="IOS-09" data-lifecycle="current" data-readiness="In review" data-family="IOS">
                   <summary class="story-summary">
                     <span class="story-id">IOS-09</span>
                     <span class="story-summary-outcome">As a user, foreground and background sync are idempotent, resumable, observable, and battery-conscious.</span>
-                    <span class="story-state state-needs-audit">Needs audit</span>
+                    <span class="story-state state-in-review">In review</span>
                   </summary>
                   <div class="story-expanded">
                     <p class="story-expanded-outcome">As a user, foreground and background sync are idempotent, resumable, observable, and battery-conscious.</p>
                     <dl class="story-details">
                       <div><dt>Where it lives</dt><dd>BackgroundTasks, sync queue, backend receipts.</dd></div>
-                      <div><dt>Current evidence and next check</dt><dd>measure battery/network behavior and test kill/relaunch, offline, and race conditions.</dd></div>
+                      <div><dt>Current evidence and next check</dt><dd>direct uploads use a three-request window and background uploads remain serial. Content-addressed chunks, authoritative status reconciliation, a negotiated 24-hour replay-protected background proof, recoverable SQLite completion, pairing-bound sessions, and immutable completion receipts now cover delayed delivery, cancellation cascades, response loss, and duplicate finalization. Focused API and iOS tests pass, including a competing SQLite writer. Complete physical-device kill/relaunch, long suspension, battery, and network-transition evidence before promotion to <code>Verified</code>.</dd></div>
                     </dl>
                   </div>
                 </details>
