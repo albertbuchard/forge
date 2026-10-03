@@ -3,6 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
 const require = createRequire(import.meta.url);
 
@@ -152,6 +153,7 @@ export interface ScanOptions {
 interface AdapterReadResult {
   conversations: ConversationRecord[];
   warnings: ReaderWarning[];
+  projectedOffsets?: Map<string, number>;
 }
 
 interface Adapter {
@@ -165,6 +167,10 @@ interface AdapterReadOptions {
   maxRecordChars: number;
   maxScanBytes: number;
   scannedBytes: number;
+  roles: Set<MessageRole>;
+  earliestFileTimestamp?: number;
+  sinceTimestamp?: number;
+  untilTimestamp?: number;
 }
 
 interface SwearEntry {
@@ -305,7 +311,9 @@ export async function scanConversations(
     maxFileBytes: options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES,
     maxRecordChars: options.maxRecordChars ?? DEFAULT_MAX_RECORD_CHARS,
     maxScanBytes: options.maxScanBytes ?? DEFAULT_MAX_SCAN_BYTES,
-    scannedBytes: 0
+    scannedBytes: 0,
+    roles: options.roles,
+    ...scanReadWindow(options)
   };
 
   for (const adapter of adapters) {
@@ -586,6 +594,57 @@ function codexAdapter(): Adapter {
   return {
     source: "codex",
     async read(options) {
+      const projected = readCodexMessageProjection(options);
+      if (projected) {
+        const files = await globFiles(
+          [
+            join(homedir(), ".codex", "sessions", "**/*.jsonl"),
+            join(homedir(), ".codex", "archived_sessions", "**/*.jsonl")
+          ],
+          { signal: options.signal }
+        );
+        for (const filePath of files) {
+          if (!fileMayContainRequestedDates(filePath, options)) continue;
+          throwIfAborted(options.signal);
+          const conversationId =
+            basename(filePath, ".jsonl").match(
+              /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+            )?.[0] ?? basename(filePath, ".jsonl");
+          const start = projected.projectedOffsets?.get(conversationId) ?? 0;
+          const fileBytes = statSync(filePath).size;
+          if (start === fileBytes) continue;
+          if (start > fileBytes) {
+            projected.warnings.push({
+              file: filePath,
+              line: 0,
+              reason:
+                "Codex transcript was truncated after projection; coverage is uncertain."
+            });
+            continue;
+          }
+          // Projection and offset are one database snapshot. Read only its unprojected tail.
+          const tail = await readJsonlFile(
+            "codex",
+            filePath,
+            parseCodexLine,
+            options,
+            {
+              start,
+              end: fileBytes - 1,
+              conversationId
+            }
+          );
+          for (const conversation of tail.conversations) {
+            const existing = projected.conversations.find(
+              (entry) => entry.conversationId === conversationId
+            );
+            if (existing) existing.messages.push(...conversation.messages);
+            else projected.conversations.push(conversation);
+          }
+          projected.warnings.push(...tail.warnings);
+        }
+        return projected;
+      }
       return readJsonlTree(
         "codex",
         [
@@ -597,6 +656,159 @@ function codexAdapter(): Adapter {
       );
     }
   };
+}
+
+function scanReadWindow(options: ScanOptions): {
+  earliestFileTimestamp?: number;
+  sinceTimestamp?: number;
+  untilTimestamp?: number;
+} {
+  const dateStart = options.date
+    ? Date.parse(`${options.date}T00:00:00.000Z`)
+    : undefined;
+  // This conservative window covers all local UTC offsets, including DST.
+  const sinceTimestamp =
+    dateStart !== undefined
+      ? dateStart - 24 * 60 * 60 * 1000
+      : options.since?.getTime();
+  const untilTimestamp =
+    dateStart !== undefined
+      ? dateStart + 48 * 60 * 60 * 1000
+      : options.until?.getTime();
+  return {
+    earliestFileTimestamp: sinceTimestamp,
+    sinceTimestamp,
+    untilTimestamp
+  };
+}
+
+function fileMayContainRequestedDates(
+  filePath: string,
+  options: AdapterReadOptions
+): boolean {
+  if (options.earliestFileTimestamp === undefined) return true;
+  try {
+    return statSync(filePath).mtimeMs >= options.earliestFileTimestamp;
+  } catch {
+    // An unreadable candidate must still produce a failure, not disappear from coverage.
+    return true;
+  }
+}
+
+export function readCodexMessageProjection(
+  options: AdapterReadOptions,
+  databasePath = join(homedir(), ".codex", "thread_history_1.sqlite")
+): AdapterReadResult | null {
+  if (
+    !existsSync(databasePath) ||
+    options.sinceTimestamp === undefined ||
+    options.roles.size !== 1 ||
+    !options.roles.has("user")
+  ) {
+    return null;
+  }
+  const database = new DatabaseSync(databasePath, { readOnly: true });
+  try {
+    database.exec("BEGIN");
+    const columns = database.prepare("PRAGMA table_info(thread_items)").all();
+    if (
+      ![
+        "thread_id",
+        "item_type",
+        "item_json",
+        "created_at_ms",
+        "rollout_ordinal"
+      ].every((name) => columns.some((column) => column.name === name))
+    )
+      return null;
+    const offsetColumns = database
+      .prepare("PRAGMA table_info(thread_history_projection_state)")
+      .all();
+    if (
+      !["thread_id", "next_rollout_byte_offset"].every((name) =>
+        offsetColumns.some((column) => column.name === name)
+      )
+    )
+      return null;
+    const projectedOffsets = new Map(
+      database
+        .prepare(
+          "SELECT thread_id, next_rollout_byte_offset FROM thread_history_projection_state"
+        )
+        .all()
+        .map((row) => [
+          String(row.thread_id),
+          Number(row.next_rollout_byte_offset)
+        ])
+    );
+    const byThread = new Map<string, ConversationMessage[]>();
+    const warnings: ReaderWarning[] = [];
+    // Query only user items. Tool results, images and assistant analysis never enter this budget.
+    const rows = database
+      .prepare(
+        `SELECT thread_id, created_at_ms, item_json FROM thread_items
+       WHERE item_type = 'userMessage' AND created_at_ms >= ? AND created_at_ms < ?
+       ORDER BY thread_id, rollout_ordinal`
+      )
+      .iterate(
+        options.sinceTimestamp ?? 0,
+        options.untilTimestamp ?? Number.MAX_SAFE_INTEGER
+      );
+    for (const row of rows) {
+      throwIfAborted(options.signal);
+      const item = JSON.parse(String(row.item_json)) as unknown;
+      if (!isObject(item) || item.type !== "userMessage") {
+        warnings.push({
+          file: databasePath,
+          line: 0,
+          reason: "Invalid Codex user-message projection."
+        });
+        continue;
+      }
+      const text = extractText(item.content).join("\n").trim();
+      if (!text || isContextInjection("user", text)) continue;
+      const bytes = Buffer.byteLength(text, "utf8");
+      if (
+        text.length > options.maxRecordChars ||
+        options.scannedBytes + bytes > options.maxScanBytes
+      ) {
+        warnings.push({
+          file: databasePath,
+          line: 0,
+          reason: "Codex user messages exceed the bounded scan budget."
+        });
+        break;
+      }
+      options.scannedBytes += bytes;
+      const conversationId = String(row.thread_id);
+      const messages = byThread.get(conversationId) ?? [];
+      messages.push({
+        agent: "codex",
+        source: "codex",
+        conversationId,
+        role: "user",
+        text,
+        timestamp: new Date(Number(row.created_at_ms)).toISOString(),
+        sourceFile: databasePath
+      });
+      byThread.set(conversationId, messages);
+    }
+    return {
+      conversations: [...byThread.entries()].map(
+        ([conversationId, messages]) => ({
+          source: "codex",
+          conversationId,
+          sourceFile: databasePath,
+          updatedAt: maxTimestamp(messages) ?? fileTimestamp(databasePath),
+          messages
+        })
+      ),
+      warnings,
+      projectedOffsets
+    };
+  } finally {
+    database.close();
+  }
 }
 
 function claudeAdapter(): Adapter {
@@ -635,6 +847,7 @@ function clineAdapter(): Adapter {
           { signal: options.signal }
         );
         for (const filePath of files) {
+          if (!fileMayContainRequestedDates(filePath, options)) continue;
           const sizeWarning = boundedFileWarning(filePath, options);
           if (sizeWarning) {
             warnings.push(sizeWarning);
@@ -693,6 +906,9 @@ function opencodeAdapter(): Adapter {
       if (!dbPath) {
         return { conversations: [], warnings: [] };
       }
+      if (!fileMayContainRequestedDates(dbPath, options)) {
+        return { conversations: [], warnings: [] };
+      }
       const sizeWarning = boundedFileWarning(dbPath, options);
       if (sizeWarning) {
         return { conversations: [], warnings: [sizeWarning] };
@@ -744,7 +960,9 @@ function opencodeAdapter(): Adapter {
           if (text.length > options.maxRecordChars) {
             return {
               conversations: [],
-              warnings: [boundedRecordWarning(dbPath, 0, options.maxRecordChars)]
+              warnings: [
+                boundedRecordWarning(dbPath, 0, options.maxRecordChars)
+              ]
             };
           }
           const conversationId = String(row.sessionId || "unknown");
@@ -796,6 +1014,7 @@ function zedAdapter(): Adapter {
       });
 
       for (const filePath of jsonFiles) {
+        if (!fileMayContainRequestedDates(filePath, options)) continue;
         const sizeWarning = boundedFileWarning(filePath, options);
         if (sizeWarning) {
           warnings.push(sizeWarning);
@@ -841,6 +1060,7 @@ function jsonThreadAdapter(source: DevrageSource, patterns: string[]): Adapter {
       const warnings: ReaderWarning[] = [];
 
       for (const filePath of files) {
+        if (!fileMayContainRequestedDates(filePath, options)) continue;
         const sizeWarning = boundedFileWarning(filePath, options);
         if (sizeWarning) {
           warnings.push(sizeWarning);
@@ -895,6 +1115,7 @@ function genericLocalLogAdapter(
       const warnings: ReaderWarning[] = [];
 
       for (const filePath of files) {
+        if (!fileMayContainRequestedDates(filePath, options)) continue;
         throwIfAborted(options.signal);
         if (filePath.endsWith(".jsonl")) {
           const result = await readJsonlFile(
@@ -1031,9 +1252,17 @@ async function readJsonlFile(
   source: DevrageSource,
   filePath: string,
   parser: JsonlParser,
-  options: AdapterReadOptions
+  options: AdapterReadOptions,
+  range?: { start: number; end: number; conversationId: string }
 ): Promise<AdapterReadResult> {
-  const sizeWarning = boundedFileWarning(filePath, options);
+  if (!fileMayContainRequestedDates(filePath, options)) {
+    return { conversations: [], warnings: [] };
+  }
+  const sizeWarning = boundedFileWarning(
+    filePath,
+    options,
+    range ? range.end - range.start + 1 : undefined
+  );
   if (sizeWarning) {
     return { conversations: [], warnings: [sizeWarning] };
   }
@@ -1041,11 +1270,15 @@ async function readJsonlFile(
   const messages: ConversationMessage[] = [];
   const warnings: ReaderWarning[] = [];
   const fallbackTimestamp = fileTimestamp(filePath);
-  const conversationId = basename(filePath, ".jsonl");
-  for await (const record of readBoundedJsonlLines(filePath, options)) {
+  const conversationId = range?.conversationId ?? basename(filePath, ".jsonl");
+  for await (const record of readBoundedJsonlLines(filePath, options, range)) {
     if (record.text === null) {
       warnings.push(
-        boundedRecordWarning(filePath, record.lineNumber, options.maxRecordChars)
+        boundedRecordWarning(
+          filePath,
+          record.lineNumber,
+          options.maxRecordChars
+        )
       );
       continue;
     }
@@ -1093,12 +1326,14 @@ async function readJsonlFile(
 
 async function* readBoundedJsonlLines(
   filePath: string,
-  options: AdapterReadOptions
+  options: AdapterReadOptions,
+  range?: { start: number; end: number }
 ): AsyncGenerator<{ lineNumber: number; text: string | null }> {
   const input = createReadStream(filePath, {
     encoding: "utf8",
     highWaterMark: READ_STREAM_CHUNK_BYTES,
-    signal: options.signal
+    signal: options.signal,
+    ...(range ? { start: range.start, end: range.end } : {})
   });
   let buffer = "";
   let discarding = false;
@@ -1344,6 +1579,8 @@ function isContextInjection(role: MessageRole, text: string): boolean {
     trimmed.startsWith("<environment_context>") ||
     trimmed.startsWith("<permissions instructions>") ||
     trimmed.startsWith("# AGENTS.md instructions for ") ||
+    trimmed.startsWith("<heartbeat>") ||
+    trimmed.startsWith("<codex_delegation>") ||
     (trimmed.includes("<environment_context>") &&
       trimmed.includes("<INSTRUCTIONS>"))
   );
@@ -1660,10 +1897,11 @@ function scanCancelledWarning(
 
 function boundedFileWarning(
   filePath: string,
-  options: AdapterReadOptions
+  options: AdapterReadOptions,
+  rangeBytes?: number
 ): ReaderWarning | null {
   try {
-    const fileBytes = statSync(filePath).size;
+    const fileBytes = rangeBytes ?? statSync(filePath).size;
     if (fileBytes > options.maxFileBytes) {
       return {
         file: filePath,

@@ -1,7 +1,35 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { TSchema } from "@sinclair/typebox";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
-import type { InternalHookEvent } from "openclaw/plugin-sdk/hook-runtime";
+import type {
+  AgentBootstrapHookEvent,
+  InternalHookEvent
+} from "openclaw/plugin-sdk/hook-runtime";
+
+// Keep the published event shape guard local; newer hosts no longer export it.
+export function isForgeAgentBootstrapEvent(
+  event: unknown
+): event is AgentBootstrapHookEvent {
+  if (
+    !event ||
+    typeof event !== "object" ||
+    !("type" in event) ||
+    !("action" in event) ||
+    !("context" in event) ||
+    event.type !== "agent" ||
+    event.action !== "bootstrap"
+  )
+    return false;
+  const context = event.context;
+  return Boolean(
+    context &&
+    typeof context === "object" &&
+    "workspaceDir" in context &&
+    typeof context.workspaceDir === "string" &&
+    "bootstrapFiles" in context &&
+    Array.isArray(context.bootstrapFiles)
+  );
+}
 
 export type ForgePluginConfigSchema = {
   parse(value: unknown): unknown;
@@ -21,7 +49,10 @@ export type ForgeRegisteredHttpRoute = {
   path: string;
   auth: "plugin" | "gateway";
   match?: "exact" | "prefix";
-  handler: (request: IncomingMessage, response: ServerResponse) => Promise<boolean | void> | boolean | void;
+  handler: (
+    request: IncomingMessage,
+    response: ServerResponse
+  ) => Promise<boolean | void> | boolean | void;
 };
 
 export type ForgeRegisteredTool = {
@@ -29,7 +60,10 @@ export type ForgeRegisteredTool = {
   label: string;
   description: string;
   parameters: TSchema;
-  execute: (toolCallId: string, params: unknown) => Promise<AgentToolResult<unknown>>;
+  execute: (
+    toolCallId: string,
+    params: unknown
+  ) => Promise<AgentToolResult<unknown>>;
 };
 
 export type ForgeCliProgram = {
@@ -83,7 +117,10 @@ export type ForgePluginRegistrationApi = {
     debug?(message: string): void;
   };
   registerHttpRoute(route: ForgeRegisteredHttpRoute): void;
-  registerTool(tool: ForgeRegisteredTool, options?: { optional?: boolean }): void;
+  registerTool(
+    tool: ForgeRegisteredTool,
+    options?: { optional?: boolean }
+  ): void;
   registerHook?(
     events: string | string[],
     handler: (event: InternalHookEvent) => Promise<void> | void,
@@ -96,6 +133,12 @@ export type ForgePluginRegistrationApi = {
   registerService?(service: ForgeRegisteredService): void;
 };
 
-export type ForgePluginRouteApi = Pick<ForgePluginRegistrationApi, "registerHttpRoute">;
-export type ForgePluginToolApi = Pick<ForgePluginRegistrationApi, "registerTool">;
+export type ForgePluginRouteApi = Pick<
+  ForgePluginRegistrationApi,
+  "registerHttpRoute"
+>;
+export type ForgePluginToolApi = Pick<
+  ForgePluginRegistrationApi,
+  "registerTool"
+>;
 export type ForgePluginCliApi = Pick<ForgePluginRegistrationApi, "registerCli">;

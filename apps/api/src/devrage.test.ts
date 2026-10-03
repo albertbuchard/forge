@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { DatabaseSync } from "node:sqlite";
 import {
   analyzeConversations,
   parseOpenClawTrajectoryLine,
+  readCodexMessageProjection,
   scanConversations,
   type ConversationRecord,
   type DevrageReport,
@@ -1289,4 +1291,234 @@ test("devrage sync still starts with a full import and rolls to a new day", () =
     new Date("2026-05-19T10:00:00.000Z")
   );
   assert.deepEqual(nextDay, { dateKey: "2026-05-19" });
+});
+
+test("dated Codex scans use projected user messages rather than tool-output file size", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-devrage-projection-")
+  );
+  const databasePath = path.join(rootDir, "thread_history_1.sqlite");
+  const database = new DatabaseSync(databasePath);
+  try {
+    database.exec(`CREATE TABLE thread_items (
+      thread_id TEXT, item_type TEXT, item_json TEXT, created_at_ms INTEGER, rollout_ordinal INTEGER
+    ); CREATE TABLE thread_history_projection_state (
+      thread_id TEXT PRIMARY KEY, next_rollout_byte_offset INTEGER
+    )`);
+    const insert = database.prepare(
+      "INSERT INTO thread_items VALUES (?, ?, ?, ?, ?)"
+    );
+    const timestamp = Date.parse("2026-10-03T10:00:00Z");
+    insert.run(
+      "thread",
+      "userMessage",
+      JSON.stringify({
+        type: "userMessage",
+        content: [{ text: "fucking blocked" }]
+      }),
+      timestamp,
+      1
+    );
+    insert.run(
+      "thread",
+      "userMessage",
+      JSON.stringify({ type: "userMessage", content: [{ text: "resolved" }] }),
+      timestamp + 1,
+      2
+    );
+    insert.run(
+      "thread",
+      "userMessage",
+      JSON.stringify({
+        type: "userMessage",
+        content: [{ text: "<heartbeat>" + "x".repeat(4000) }]
+      }),
+      timestamp,
+      3
+    );
+    insert.run(
+      "thread",
+      "toolCall",
+      JSON.stringify({ text: "x".repeat(20000) }),
+      timestamp,
+      4
+    );
+    insert.run(
+      "old",
+      "userMessage",
+      JSON.stringify({ type: "userMessage", content: [{ text: "shit" }] }),
+      timestamp - 86400000,
+      1
+    );
+    const options = {
+      roles: new Set<MessageRole>(["user"]),
+      maxFileBytes: 64,
+      maxRecordChars: 1024,
+      maxScanBytes: 1024,
+      scannedBytes: 0,
+      sinceTimestamp: timestamp,
+      untilTimestamp: timestamp + 1000
+    };
+    const result = readCodexMessageProjection(options, databasePath);
+    assert.ok(result);
+    assert.deepEqual(result.warnings, []);
+    assert.equal(result.conversations.length, 1);
+    assert.equal(result.conversations[0]?.messages.length, 2);
+    assert.ok(options.scannedBytes < 100);
+    const report = analyzeConversations(result.conversations, {
+      roles: options.roles,
+      date: "2026-10-03",
+      timeZone: "UTC"
+    });
+    assert.equal(report.messagesScanned, 2);
+    assert.equal(report.totalSwears, 1);
+    assert.equal(report.maxCumulativeRage, 1);
+    const limited = readCodexMessageProjection(
+      { ...options, scannedBytes: 0, maxScanBytes: 1 },
+      databasePath
+    );
+    assert.equal(limited?.warnings.length, 1);
+    assert.equal(
+      readCodexMessageProjection(
+        { ...options, sinceTimestamp: undefined },
+        databasePath
+      ),
+      null
+    );
+    assert.equal(
+      readCodexMessageProjection(
+        { ...options, roles: new Set<MessageRole>(["assistant"]) },
+        databasePath
+      ),
+      null
+    );
+    database.exec("DROP TABLE thread_items");
+    assert.equal(readCodexMessageProjection(options, databasePath), null);
+  } finally {
+    database.close();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("daily scans exclude obsolete logs before applying byte limits and retain local midnight coverage", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-devrage-date-pruning-")
+  );
+  const previousHome = process.env["HOME"];
+  try {
+    const sessionDir = path.join(rootDir, ".codex", "sessions");
+    await mkdir(sessionDir, { recursive: true });
+    const oldFile = path.join(sessionDir, "old.jsonl");
+    await writeFile(oldFile, "x".repeat(10000));
+    await utimes(oldFile, new Date("2026-07-01"), new Date("2026-07-01"));
+    await writeFile(
+      path.join(sessionDir, "recent.jsonl"),
+      JSON.stringify({
+        timestamp: "2026-10-02T22:30:00Z",
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: "shit" }]
+        }
+      }) + "\n"
+    );
+    process.env["HOME"] = rootDir;
+    const report = await scanConversations({
+      roles: new Set<MessageRole>(["user"]),
+      sources: new Set(["codex"]),
+      date: "2026-10-03",
+      timeZone: "Europe/Zurich",
+      maxFileBytes: 1024,
+      maxScanBytes: 2048
+    });
+    assert.equal(report.scanStatus, "complete");
+    assert.equal(report.messagesScanned, 1);
+    assert.equal(report.totalSwears, 1);
+    const full = await scanConversations({
+      roles: new Set<MessageRole>(["user"]),
+      sources: new Set(["codex"]),
+      maxFileBytes: 1024
+    });
+    assert.equal(full.scanStatus, "partial");
+    assert.match(full.warnings[0]?.reason ?? "", /file skipped/i);
+  } finally {
+    if (previousHome === undefined) delete process.env["HOME"];
+    else process.env["HOME"] = previousHome;
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("empty or stale Codex projections read uncovered transcript tails without duplicate messages", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-devrage-projection-coverage-")
+  );
+  const previousHome = process.env["HOME"];
+  const codexDir = path.join(rootDir, ".codex");
+  const sessionDir = path.join(codexDir, "sessions");
+  await mkdir(sessionDir, { recursive: true });
+  const database = new DatabaseSync(
+    path.join(codexDir, "thread_history_1.sqlite")
+  );
+  try {
+    database.exec(`CREATE TABLE thread_items (
+      thread_id TEXT, item_type TEXT, item_json TEXT, created_at_ms INTEGER, rollout_ordinal INTEGER
+    ); CREATE TABLE thread_history_projection_state (
+      thread_id TEXT PRIMARY KEY, next_rollout_byte_offset INTEGER
+    )`);
+    const timestamp = "2026-10-03T10:00:00Z";
+    const line = (text: string) =>
+      JSON.stringify({
+        timestamp,
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text }]
+        }
+      }) + "\n";
+    const first = line("blocked");
+    const second = line("fucking blocked");
+    await writeFile(path.join(sessionDir, "thread.jsonl"), first + second);
+    process.env["HOME"] = rootDir;
+    const options = {
+      roles: new Set<MessageRole>(["user"]),
+      sources: new Set(["codex"] as const),
+      date: "2026-10-03",
+      timeZone: "UTC"
+    };
+    const empty = await scanConversations(options);
+    assert.equal(empty.scanStatus, "complete");
+    assert.equal(empty.messagesScanned, 2);
+    database
+      .prepare("INSERT INTO thread_items VALUES (?, ?, ?, ?, ?)")
+      .run(
+        "thread",
+        "userMessage",
+        JSON.stringify({ type: "userMessage", content: [{ text: "blocked" }] }),
+        Date.parse(timestamp),
+        1
+      );
+    database
+      .prepare("INSERT INTO thread_history_projection_state VALUES (?, ?)")
+      .run("thread", Buffer.byteLength(first));
+    const stale = await scanConversations(options);
+    assert.equal(stale.scanStatus, "complete");
+    assert.equal(stale.conversationsScanned, 1);
+    assert.equal(stale.messagesScanned, 2);
+    assert.equal(stale.totalSwears, 1);
+    database
+      .prepare(
+        "UPDATE thread_history_projection_state SET next_rollout_byte_offset = ?"
+      )
+      .run(10000);
+    const truncated = await scanConversations(options);
+    assert.equal(truncated.scanStatus, "partial");
+    assert.match(truncated.warnings[0]?.reason ?? "", /truncated/i);
+  } finally {
+    database.close();
+    if (previousHome === undefined) delete process.env["HOME"];
+    else process.env["HOME"] = previousHome;
+    await rm(rootDir, { recursive: true, force: true });
+  }
 });

@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { isAgentBootstrapEvent } from "openclaw/plugin-sdk/hook-runtime";
 import type { InternalHookEvent } from "openclaw/plugin-sdk/hook-runtime";
 import {
   callConfiguredForgeApi,
@@ -7,7 +6,10 @@ import {
   resolveConfiguredForgeActorLabel,
   type ForgePluginConfig
 } from "./api-client.js";
-import type { ForgePluginRegistrationApi } from "./plugin-sdk-types.js";
+import {
+  isForgeAgentBootstrapEvent,
+  type ForgePluginRegistrationApi
+} from "./plugin-sdk-types.js";
 
 const SESSION_IDS = new Map<string, string>();
 const SESSION_PROVIDER = "openclaw";
@@ -53,7 +55,7 @@ function getSessionKey(event: InternalHookEvent) {
 }
 
 function getAgentBootstrapMetadata(event: InternalHookEvent) {
-  if (!isAgentBootstrapEvent(event)) {
+  if (!isForgeAgentBootstrapEvent(event)) {
     return {};
   }
   return {
@@ -73,7 +75,8 @@ async function registerSession(
     path: "/api/v1/agents/sessions",
     body: {
       provider: SESSION_PROVIDER,
-      agentLabel: process.env.FORGE_AGENT_LABEL?.trim() || DEFAULT_RUNTIME_AGENT_LABEL,
+      agentLabel:
+        process.env.FORGE_AGENT_LABEL?.trim() || DEFAULT_RUNTIME_AGENT_LABEL,
       agentType: SESSION_PROVIDER,
       agentIdentityKey: buildStableAgentIdentityKey(config),
       machineKey: buildStableMachineKey(config),
@@ -89,7 +92,8 @@ async function registerSession(
       staleAfterSeconds: 120,
       metadata: {
         ...metadata,
-        actorSource: config.actorLabel.trim().length > 0 ? "configured" : "inherited"
+        actorSource:
+          config.actorLabel.trim().length > 0 ? "configured" : "inherited"
       }
     }
   });
@@ -201,7 +205,7 @@ export function registerForgeSessionRegistryHooks(
   api.registerHook(
     "agent:bootstrap",
     async (event: InternalHookEvent) => {
-      if (!isAgentBootstrapEvent(event)) {
+      if (!isForgeAgentBootstrapEvent(event)) {
         return;
       }
       const sessionKey = getSessionKey(event);
@@ -269,7 +273,9 @@ export function registerForgeSessionRegistryHooks(
         }
 
         if (eventName === "message:sent") {
-          const messages = Array.isArray((event as { messages?: unknown }).messages)
+          const messages = Array.isArray(
+            (event as { messages?: unknown }).messages
+          )
             ? ((event as { messages: unknown[] }).messages ?? [])
             : [];
           const summary = excerpt(messages.at(-1));
@@ -285,11 +291,16 @@ export function registerForgeSessionRegistryHooks(
         const context = isRecord((event as { context?: unknown }).context)
           ? ((event as { context: Record<string, unknown> }).context ?? {})
           : {};
-        await heartbeatSession(config, sessionKey, "Session compaction completed.", {
-          compactedCount: context.compactedCount,
-          tokensBefore: context.tokensBefore,
-          tokensAfter: context.tokensAfter
-        });
+        await heartbeatSession(
+          config,
+          sessionKey,
+          "Session compaction completed.",
+          {
+            compactedCount: context.compactedCount,
+            tokensBefore: context.tokensBefore,
+            tokensAfter: context.tokensAfter
+          }
+        );
         await appendSessionEvent(config, sessionKey, {
           eventType: "session_compacted",
           title: "Session compacted",

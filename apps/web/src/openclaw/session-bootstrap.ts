@@ -1,14 +1,17 @@
 import path from "node:path";
-import { isAgentBootstrapEvent } from "openclaw/plugin-sdk/hook-runtime";
 import type { InternalHookEvent } from "openclaw/plugin-sdk/hook-runtime";
 import {
   callConfiguredForgeApi,
   expectForgeSuccess,
   type ForgePluginConfig
 } from "./api-client.js";
-import type { ForgePluginRegistrationApi } from "./plugin-sdk-types.js";
+import {
+  isForgeAgentBootstrapEvent,
+  type ForgePluginRegistrationApi
+} from "./plugin-sdk-types.js";
 
-const FORGE_SESSION_BOOTSTRAP_PATH = ".forge/generated/FORGE_SESSION_BOOTSTRAP.md";
+const FORGE_SESSION_BOOTSTRAP_PATH =
+  ".forge/generated/FORGE_SESSION_BOOTSTRAP.md";
 const FORGE_SESSION_BOOTSTRAP_NAME = "forge-session-bootstrap";
 
 type ForgeGoalRecord = {
@@ -131,11 +134,7 @@ function cleanInline(value: string | null | undefined) {
   return (value ?? "").replace(/\s+/g, " ").trim();
 }
 
-function clampBudget(
-  value: unknown,
-  fallback: number,
-  max: number
-) {
+function clampBudget(value: unknown, fallback: number, max: number) {
   const numeric = typeof value === "number" ? value : Number(value);
   return Math.min(
     Math.max(Number.isFinite(numeric) ? numeric : fallback, 0),
@@ -231,8 +230,11 @@ function formatProject(
 ) {
   const linkedGoal =
     cleanInline(project.goalTitle) ||
-    (project.goalId ? goalTitles.get(project.goalId) ?? project.goalId : "");
-  const meta = formatMeta([project.status, linkedGoal ? `goal: ${linkedGoal}` : ""]);
+    (project.goalId ? (goalTitles.get(project.goalId) ?? project.goalId) : "");
+  const meta = formatMeta([
+    project.status,
+    linkedGoal ? `goal: ${linkedGoal}` : ""
+  ]);
   const summary = excerpt(project.description, 140);
   return `- ${project.title}${meta ? ` [${meta}]` : ""}${summary ? ` — ${summary}` : ""}`;
 }
@@ -244,10 +246,12 @@ function formatTask(
 ) {
   const linkedProject =
     cleanInline(task.projectTitle) ||
-    (task.projectId ? projectTitles.get(task.projectId) ?? task.projectId : "");
+    (task.projectId
+      ? (projectTitles.get(task.projectId) ?? task.projectId)
+      : "");
   const linkedGoal =
     cleanInline(task.goalTitle) ||
-    (task.goalId ? goalTitles.get(task.goalId) ?? task.goalId : "");
+    (task.goalId ? (goalTitles.get(task.goalId) ?? task.goalId) : "");
   const meta = formatMeta([
     task.status,
     task.priority,
@@ -321,11 +325,19 @@ export function buildForgeSessionBootstrapContext(
 
   if (overview) {
     lines.push("## Current Forge Snapshot", "");
-    lines.push(`- Active projects in operator view: ${overview.activeProjects?.length ?? 0}`);
-    lines.push(`- Focus tasks in operator view: ${overview.focusTasks?.length ?? 0}`);
-    lines.push(`- Due habits in operator view: ${overview.dueHabits?.length ?? 0}`);
+    lines.push(
+      `- Active projects in operator view: ${overview.activeProjects?.length ?? 0}`
+    );
+    lines.push(
+      `- Focus tasks in operator view: ${overview.focusTasks?.length ?? 0}`
+    );
+    lines.push(
+      `- Due habits in operator view: ${overview.dueHabits?.length ?? 0}`
+    );
     if (overview.recommendedNextTask) {
-      lines.push(`- Recommended next task: ${overview.recommendedNextTask.title}`);
+      lines.push(
+        `- Recommended next task: ${overview.recommendedNextTask.title}`
+      );
     }
     if ((payload.overview?.warnings ?? []).length > 0) {
       lines.push(
@@ -356,7 +368,10 @@ export function buildForgeSessionBootstrapContext(
   if (payload.strategies.length === 0) {
     lines.push("- None.", "");
   } else {
-    lines.push(...payload.strategies.map((strategy) => formatStrategy(strategy)), "");
+    lines.push(
+      ...payload.strategies.map((strategy) => formatStrategy(strategy)),
+      ""
+    );
   }
 
   lines.push(`## Tasks (${payload.tasks.length})`, "");
@@ -436,7 +451,9 @@ function resolveBootstrapPolicy(
   onboardingResponse: { onboarding?: ForgeOnboardingPayload | null } | null
 ) {
   const onboarding =
-    onboardingResponse && isRecord(onboardingResponse) && "onboarding" in onboardingResponse
+    onboardingResponse &&
+    isRecord(onboardingResponse) &&
+    "onboarding" in onboardingResponse
       ? onboardingResponse.onboarding
       : null;
   if (isRecord(onboarding) && isRecord(onboarding.effectiveBootstrapPolicy)) {
@@ -493,8 +510,7 @@ async function loadForgeSessionBootstrapPayload(
     bootstrapPolicy.mode === "full"
       ? withQuery("/api/v1/habits", { limit: 100 })
       : withQuery("/api/v1/habits", {
-          dueToday:
-            bootstrapPolicy.mode === "active_only" ? true : undefined,
+          dueToday: bootstrapPolicy.mode === "active_only" ? true : undefined,
           limit: bootstrapPolicy.habitsLimit
         });
   const strategiesPath =
@@ -532,13 +548,21 @@ async function loadForgeSessionBootstrapPayload(
     readForgePayload<{ projects?: ForgeProjectRecord[] }>(config, projectsPath),
     readForgePayload<{ tasks?: ForgeTaskRecord[] }>(config, tasksPath),
     readForgePayload<{ habits?: ForgeHabitRecord[] }>(config, habitsPath),
-    readForgePayload<{ strategies?: ForgeStrategyRecord[] }>(config, strategiesPath),
+    readForgePayload<{ strategies?: ForgeStrategyRecord[] }>(
+      config,
+      strategiesPath
+    ),
     wikiPagesPath
-      ? readForgePayload<{ pages?: ForgeWikiPageRecord[] }>(config, wikiPagesPath)
+      ? readForgePayload<{ pages?: ForgeWikiPageRecord[] }>(
+          config,
+          wikiPagesPath
+        )
       : Promise.resolve({ pages: [] })
   ]);
 
-  const wikiPages = asArray<ForgeWikiPageRecord>(wikiPagesResponse.pages).filter(
+  const wikiPages = asArray<ForgeWikiPageRecord>(
+    wikiPagesResponse.pages
+  ).filter(
     (page) =>
       isRecord(page) &&
       typeof page.slug === "string" &&
@@ -548,7 +572,9 @@ async function loadForgeSessionBootstrapPayload(
   return {
     bootstrapPolicy,
     overview:
-      overviewResponse && isRecord(overviewResponse) && "overview" in overviewResponse
+      overviewResponse &&
+      isRecord(overviewResponse) &&
+      "overview" in overviewResponse
         ? ((overviewResponse.overview as ForgeOperatorOverview | null) ?? null)
         : null,
     goals:
@@ -587,7 +613,10 @@ async function loadForgeSessionBootstrapPayload(
             bootstrapPolicy.strategiesLimit
           ),
     peoplePages: bootstrapPolicy.includePeoplePages
-      ? listPeopleBranchPages(wikiPages).slice(0, bootstrapPolicy.peoplePageLimit)
+      ? listPeopleBranchPages(wikiPages).slice(
+          0,
+          bootstrapPolicy.peoplePageLimit
+        )
       : []
   };
 }
@@ -619,7 +648,7 @@ export function registerForgeSessionBootstrapHook(
   api.registerHook(
     "agent:bootstrap",
     async (event: InternalHookEvent) => {
-      if (!isAgentBootstrapEvent(event)) {
+      if (!isForgeAgentBootstrapEvent(event)) {
         return;
       }
 
